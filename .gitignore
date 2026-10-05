@@ -1,0 +1,28 @@
+# Local inputs, intermediate frames and generated PDFs
+work/
+artifacts/
+outputs/
+*.mp4
+*.mkv
+*.webm
+*.mov
+*.pdf
+
+# Credentials and local environments
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+auth.json
+cookies.txt
+cookies.json
+.venv/
+__pycache__/
+*.pyc
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
