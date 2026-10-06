@@ -12,7 +12,21 @@ uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py /absolute/path/to/vi
 
 命令需要 `ffmpeg`、`ffprobe`、`uv` 和 Python 3.12 或更高版本。`uv` 在独立环境运行依赖。stdout 输出结构化 JSON，stderr 输出进度；`status` 区分成功、等待确认和失败。
 
-固定谱面检查会采样完整视频及末尾。发现谱面变化时提供编号证据并返回等待状态，不将一个窗口当作整曲。纵向推进恢复、光标处理、疑点回答后继续和 B站匿名获取由后续切片完成。当前不会安装 skill 或修改 Codex 配置。
+固定谱面检查会采样完整视频及末尾。发现谱面变化时提供编号证据并返回等待状态，不将一个窗口当作整曲。纵向推进恢复、光标处理和疑点回答后继续由后续切片完成。当前不会安装 skill 或修改 Codex 配置。
+
+## B站链接输入
+
+同一命令接受 HTTPS BV 视频链接，可用 `?p=2` 指定分 P，省略时选择第一 P。
+
+```sh
+timeout 120s uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibili.com/video/BV1b5411x7Ku' --output /absolute/path/to/new-result
+```
+
+入口只请求公开匿名接口，不登录或读取 Cookie、认证、密钥。取得的视频留在结果目录，随后执行同一个本地转换流程。`manifest.json` 保存规范 BV 链接、分 P、CID、接口画质代码及本地探测的实际宽高，媒体签名地址不会进入记录或日志。
+
+网络、访问限制、接口变化或不支持的媒体地址会立即停止。WSL 中的 `timeout 120s` 给整次链接尝试设置外部时限；若退出码为 124 且尚无 JSON，按网络超时处理并改用本地视频，不继续重试。画质不足时报告实际分辨率，请提供清晰本地视频并重新运行本地命令。请求 1080P 不等于取得 1080P，元数据尺寸也不能代替实际视频尺寸。下载只支持单文件 MP4、HTTPS B站媒体域名，不跟随重定向；因此部分正常 CDN 变化也可能触发本地兜底。
+
+[维护依据与停止条件](skills/bilibili-drum-score-to-pdf/references/anonymous-input.md)说明公开接口限制。
 
 ## 验证
 
