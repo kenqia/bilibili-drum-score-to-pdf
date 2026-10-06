@@ -12,34 +12,83 @@ from quality_score import assess, cursor_regions, printable, quality_report
 
 def comparison_mask(region, group):
     spacing = group['spacing']
-    top = int(round(group['top'] - spacing * 3))
-    bottom = int(round(group['bottom'] + spacing * 5))
-    pixels = np.asarray(region.crop((0, top, region.width, bottom)).convert('RGB'))
+    top = int(round(group['top'] - spacing * 4))
+    bottom = int(round(group['bottom'] + spacing * 6))
+    comparison = Image.new('RGB', (region.width, bottom - top), 'white')
+    start, stop = max(0, top), min(region.height, bottom)
+    comparison.paste(region.crop((0, start, region.width, stop)), (0, start - top))
+    pixels = np.asarray(comparison)
     # Colored notation counts as ink too; only the detected playback cursor is ignored.
     mask = (cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY) < 180) | ((np.ptp(pixels, axis=2) > 20) & (pixels.min(axis=2) < 220))
-    _, ignored = cursor_regions(region.crop((0, top, region.width, bottom)), spacing)
+    _, ignored = cursor_regions(comparison, spacing)
+    # Enlarged comparison margins can leave the actual score window. Such
+    # pixels are unavailable evidence, not PIL's default black crop padding.
+    ignored[:start - top] = True
+    ignored[stop - top:] = True
     return mask, ignored
 
 
-def same_row(left, right):
+def registered_row(left, right):
+    """Bounded, uniquely fitted comparison coordinates; never used for output."""
     a, b = left['mask'], right['mask']
-    if abs(a.shape[0] - b.shape[0]) > 3 or abs(a.shape[1] - b.shape[1]) > 3:
-        return False
-    if a.shape != b.shape:
-        b = cv2.resize(b.astype(np.uint8), (a.shape[1], a.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
-    ignored = left['ignored']
-    other_ignore = right['ignored']
-    if other_ignore.shape != ignored.shape:
-        other_ignore = cv2.resize(other_ignore.astype(np.uint8), (a.shape[1], a.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
-    available = ~(ignored | other_ignore)
-    union = np.count_nonzero((a | b) & available)
-    # Compression may move an existing ink boundary by one pixel. A separate dot
-    # or extended stem must never disappear inside a whole-row percentage budget.
+    height, width = a.shape
+    if abs(height - b.shape[0]) > 3 or abs(width - b.shape[1]) > max(3, width * .005):
+        return None
+    candidates = []
     kernel = np.ones((3, 3), dtype=np.uint8)
     near_a = cv2.dilate(a.astype(np.uint8), kernel).astype(bool)
+    scales = {(1., 1.), (width / b.shape[1], height / b.shape[0])}
+    for sx, sy in sorted(scales):
+        for dy in range(-2, 3):
+            for dx in range(-2, 3):
+                transform = np.float32([[sx, 0, dx], [0, sy, dy]])
+                shifted = cv2.warpAffine(b.astype(np.float32), transform, (width, height), flags=cv2.INTER_LINEAR) >= .5
+                hidden = cv2.warpAffine(right['ignored'].astype(np.float32), transform, (width, height), flags=cv2.INTER_LINEAR, borderValue=1) > 0
+                support = cv2.warpAffine(np.ones(b.shape, dtype=np.uint8), transform, (width, height), flags=cv2.INTER_NEAREST).astype(bool)
+                # Registration cannot crop away visible notation at either edge.
+                if (a & ~left['ignored'] & ~support).any():
+                    continue
+                inverse = cv2.invertAffineTransform(transform)
+                back_support = cv2.warpAffine(np.ones(a.shape, dtype=np.uint8), inverse, (b.shape[1], b.shape[0]), flags=cv2.INTER_NEAREST).astype(bool)
+                if (b & ~right['ignored'] & ~back_support).any():
+                    continue
+                available = ~(left['ignored'] | hidden)
+                near_b = cv2.dilate(shifted.astype(np.uint8), kernel).astype(bool)
+                distant = ((a & ~near_b) | (shifted & ~near_a)) & available
+                cost = (np.count_nonzero(distant), np.count_nonzero((a ^ shifted) & available))
+                candidates.append((cost, dx, dy, shifted, hidden, sx, sy))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda candidate: candidate[0])
+    best = candidates[0]
+    # Equal fits do not establish a unique registration.
+    if any(candidate[0] == best[0] and (not np.array_equal(candidate[3], best[3])
+                                                 or not np.array_equal(candidate[4], best[4]))
+           for candidate in candidates[1:]):
+        return None
+    _, dx, dy, b, hidden, sx, sy = best
+    available = ~(left['ignored'] | hidden)
     near_b = cv2.dilate(b.astype(np.uint8), kernel).astype(bool)
     unmatched = ((a & ~near_b) | (b & ~near_a)) & available
-    return union > 30 and not unmatched.any()
+    if np.count_nonzero((a | b) & available) <= 30 or unmatched.any():
+        return None
+    return dict(right, mask=b, ignored=hidden,
+                registration={'scale_x': sx, 'scale_y': sy, 'dx': dx, 'dy': dy,
+                              'policy': 'unique_bounded_comparison_only'})
+
+
+def same_row(left, right):
+    return registered_row(left, right) is not None
+
+
+def same_cursor_position(left, right):
+    # Content matching cannot assign an observation from a later repeated row.
+    # Cursor recovery supports only a local held window, below half staff spacing.
+    a, b = left['bbox'], right['bbox']
+    allowance = min(left['staff_spacing'], right['staff_spacing']) / 2
+    return (abs(left['staff_top'] - right['staff_top']) < allowance
+            and abs(a[1] - b[1]) < allowance
+            and abs(a[0] - b[0]) <= 3)
 
 
 def save_row(candidate, output, index):
@@ -130,32 +179,37 @@ def restore_rows(source, output, metadata, decisions=None):
                 row['image'].save(output / name)
                 run = {'timestamp': row['timestamp'], 'image': name,
                        'mask': row['mask'].copy(), 'ignored': row['ignored'].copy(),
-                       'bbox': row['bbox'], 'observations': [],
+                       'bbox': row['bbox'], 'staff_top': row['staff_top'],
+                       'staff_spacing': row['staff_spacing'], 'observations': [],
                        'evidence': [{'timestamp': row['timestamp'], 'image': name}]}
                 cursor_runs[position] = run
             else:
-                compatible = row['bbox'] == run['bbox'] and row['mask'].shape == run['mask'].shape
-                if not compatible or not same_row(run, row):
+                aligned = registered_row(run, row) if same_cursor_position(run, row) else None
+                compatible = aligned is not None
+                if not compatible:
                     name = f'evidence/cursor-conflict-{position:04d}-{int(round(row["timestamp"] * 1000)):08d}.png'
                     row['image'].save(output / name)
                     cursor_unproven.setdefault(position, {'timestamp': row['timestamp'], 'image': name})
                 elif compatible:
-                    exposed = run['ignored'] & ~row['ignored']
+                    exposed = run['ignored'] & ~aligned['ignored']
                     if exposed.any():
                         name = f'evidence/cursor-{position:04d}-{int(round(row["timestamp"] * 1000)):08d}.png'
                         row['image'].save(output / name)
-                        run['evidence'].append({'timestamp': row['timestamp'], 'image': name})
-                    run['mask'][exposed] = row['mask'][exposed]
-                    run['ignored'] &= row['ignored']
+                        run['evidence'].append({'timestamp': row['timestamp'], 'image': name,
+                                                'registration': aligned['registration']})
+                    run['mask'][exposed] = aligned['mask'][exposed]
+                    run['ignored'] &= aligned['ignored']
             run['observations'].append(row['timestamp'])
         elif run is not None:
             name = f'evidence/cursor-clear-{position:04d}-{int(round(row["timestamp"] * 1000)):08d}.png'
             row['image'].save(output / name)
+            aligned = registered_row(run, row) if same_cursor_position(run, row) else None
             clear_item = {'timestamp': row['timestamp'], 'image': name}
+            if aligned is not None:
+                clear_item['registration'] = aligned['registration']
             delivered[position].setdefault('cursor_followups', []).append(clear_item)
             item = {'timestamp': run['timestamp'], 'image': run['image']}
-            if (position in cursor_unproven or run['ignored'].any() or row['bbox'] != run['bbox']
-                    or row['mask'].shape != run['mask'].shape or not same_row(run, row)):
+            if (position in cursor_unproven or run['ignored'].any() or aligned is None):
                 cursor_unproven.setdefault(position, item)
             else:
                 delivered[position].setdefault('cursor_recoveries', []).append({
@@ -343,6 +397,9 @@ def restore_rows(source, output, metadata, decisions=None):
                         last = {'timestamp': timestamp, 'file': file, 'partial_bottom': analysis['partial_bottom']}
                         continue
                     seam = {'id': f'seam-{len(seams) + 1:04d}', 'position': len(delivered), 'overlap_rows': count, 'before': previous['evidence'], 'after': item, 'vertical_shift': float(np.median(shifts)) if shifts else None, 'cumulative_vertical_shift': float(np.median(accumulated)) if accumulated else None, 'matched_rows': [row['id'] for row in delivered[-count:]] if count else []}
+                    seam['registrations'] = [dict(row_id=delivered[position]['id'], **match['registration'])
+                                             for position, left, right in zip(current_indices, prior[-count:], current[:count])
+                                             if (match := registered_row(left, right)) is not None] if count else []
                     seams.append(seam)
                     current_indices += [track(row) for row in current[count:]]
                 previous = {'rows': current, 'indices': current_indices, 'anchor_rows': current, 'analysis': analysis, 'evidence': item, 'file': file, 'timestamp': timestamp, 'frame_index': frame_index}
