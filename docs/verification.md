@@ -98,3 +98,11 @@ pdftoppm -png -r 150 /absolute/path/to/result/score.pdf /absolute/path/to/review
 2026-10-06，在独立 worktree 通过统一 CLI 做 TDD。PDF 改写及丢失最初仍返回 success；只添加 PDF hash 后，删除 artifact 清单项仍可跳过校验。补齐清单一致性校验后均返回 failed / invalid_progress。文件系统替换边界的故障注入还复现了 PDF 已替换、旧 waiting 状态仍可被认可的问题，现已拒绝该混代结果。manifest 已提交而 state 未提交的中断也拒绝恢复。
 
 运行 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_resume_conversion.py -v，13 项通过。覆盖 PDF 篡改与丢失、缺少 PDF/证据 hash、旧 schema、绝对与越界引用、提交中断、正常 waiting、重放、补图和回答幂等。此验证没有模拟断电或文件系统持久化顺序，不能据此声称整个目录具备断电原子事务。
+
+## #11 DPI 边界与 #10 纯色边缘补验
+
+2026-10-06，在独立 worktree 用真实编码视频调用统一 CLI。基线 d70408a 的 858 像素谱行约为 118.056 DPI，错误返回 success 和完整 PDF。现有 DPI 门槛另将 1090 像素的 149.978 DPI 舍入成 150.0，错误放行。门槛与质量分类现直接由原生宽度除以 A4 可打印宽度计算，不使用报告中的舍入值。1091 像素的 150.116 DPI 属于最低可打印候选；1453 与 1454 像素分别为 199.925 与 200.063 DPI，分属最低可打印与高质量候选。原生谱行宽度保持不变，低于门槛返回 failed / low_print_resolution，不生成 PDF。
+
+独立 DPI 测试 3 项通过，18.907 秒；集成后重新运行 3 项通过，21.758 秒，既有本地转换 6 项通过，20.768 秒。随后门槛进一步改为使用未舍入的原生宽度，DPI 3 项再次通过，24.640 秒。命令为 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_print_dpi.py -v。
+
+#10 原测试把纯色无文字片头列为等待，与附件要求有差异。补充纯色片头、完整谱面、纯色片尾的 CLI 反例，旧版本返回 unreadable_window。规则只增加 RGB 各通道全图极差不超过 2 级的均匀卡片，用以容忍编码误差；中段卡片、渐变、模糊内容、局部五线及未恢复残行仍保留疑点。全片无谱面仍不能成功。4 项边缘测试通过，70.200 秒，包含低对比度线条、纯色卡接首尾残行及中段纯色卡反例。命令为 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_edge_cards.py -v。这些合成边界验证不能替代真实整曲逐页核查或实物打印。

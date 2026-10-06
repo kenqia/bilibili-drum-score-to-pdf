@@ -81,7 +81,12 @@ def blurred_observation(image, references):
 
 
 def clear_non_score_card(image):
-    """Recognize crisp text on a uniform card; uncertain imagery is not ignorable."""
+    """Recognize a uniform card or crisp text; uncertain imagery is not ignorable."""
+    pixels = np.asarray(image.convert('RGB')).astype(np.int16)
+    # Allow only near-identical pixels, including video encoding variation.
+    # Faint lines, gradients and other low-contrast imagery are still uncertain.
+    if np.max(pixels.max(axis=(0, 1)) - pixels.min(axis=(0, 1))) <= 2:
+        return True
     gray = np.asarray(image.convert('L'))
     background = float(np.median(gray))
     foreground = (np.abs(gray.astype(float) - background) > 35).astype(np.uint8)
@@ -200,7 +205,7 @@ def restore_rows(source, output, metadata, decisions=None):
                     pending.append({'evidence': item, 'file': file, 'error': (error.code, str(error)), 'non_score': clear_non_score_card(image)})
                     continue
                 if pending and not previous and all(entry['non_score'] for entry in pending):
-                    ignored_edges.append({'edge': 'start', 'start_timestamp': pending[0]['evidence']['timestamp'], 'end_timestamp': pending[-1]['evidence']['timestamp'], 'observations': [entry['evidence'] for entry in pending], 'policy': 'crisp_text_card_without_staff_signal'})
+                    ignored_edges.append({'edge': 'start', 'start_timestamp': pending[0]['evidence']['timestamp'], 'end_timestamp': pending[-1]['evidence']['timestamp'], 'observations': [entry['evidence'] for entry in pending], 'policy': 'uniform_or_crisp_text_card_without_staff_signal'})
                     pending.clear()
                 if pending:
                     followup = evidence(image, timestamp, frame_index)
@@ -295,7 +300,7 @@ def restore_rows(source, output, metadata, decisions=None):
             raise ConversionError('decode_failed', '视频中没有可读取的完整谱行。')
         trailing_card = None
         if pending and not last['partial_bottom'] and all(entry['non_score'] for entry in pending):
-            ignored_edges.append({'edge': 'end', 'start_timestamp': pending[0]['evidence']['timestamp'], 'end_timestamp': pending[-1]['evidence']['timestamp'], 'observations': [entry['evidence'] for entry in pending], 'policy': 'crisp_text_card_without_staff_signal'})
+            ignored_edges.append({'edge': 'end', 'start_timestamp': pending[0]['evidence']['timestamp'], 'end_timestamp': pending[-1]['evidence']['timestamp'], 'observations': [entry['evidence'] for entry in pending], 'policy': 'uniform_or_crisp_text_card_without_staff_signal'})
             trailing_card = pending[-1]['evidence']
             pending.clear()
         if pending:
