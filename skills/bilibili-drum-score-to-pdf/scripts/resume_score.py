@@ -31,13 +31,40 @@ def _image_references(value):
     """Yield owners and keys of local image references in a persisted result."""
     if isinstance(value, dict):
         for key, item in value.items():
-            if key in {'image', 'original_image'} and isinstance(item, str) and not Path(item).is_absolute():
+            # Answer image paths point to user input, not persisted evidence.
+            if key == 'decisions':
+                continue
+            if key in {'image', 'original_image'}:
                 yield value, key
             else:
                 yield from _image_references(item)
     elif isinstance(value, list):
         for item in value:
             yield from _image_references(item)
+
+
+def artifact_names(result):
+    names = {owner[key] for owner, key in _image_references(result)}
+    if result.get('pdf'):
+        names.add(result['pdf'])
+    if result.get('status') == 'success' and not result.get('pdf'):
+        raise ValueError('Successful progress requires a PDF reference')
+    return names
+
+
+def artifact_path(output, name):
+    """Reject absolute paths, traversal and linked artifacts before reading."""
+    if not isinstance(name, str):
+        raise ValueError
+    relative = Path(name)
+    if relative.is_absolute() or '..' in relative.parts or relative.suffix.lower() not in {'.png', '.pdf'}:
+        raise ValueError
+    path = output / relative
+    if any((output / Path(*relative.parts[:index])).is_symlink() for index in range(1, len(relative.parts) + 1)):
+        raise ValueError
+    if not path.resolve().is_relative_to(output.resolve()) or not path.is_file():
+        raise ValueError
+    return path
 
 
 def persist(result, source, output, decisions=None, origin=None):
@@ -51,8 +78,8 @@ def persist(result, source, output, decisions=None, origin=None):
         result['state'] = 'state.json'
     atomic_json(output / 'manifest.json', result)
     if result['status'] in {'success', 'waiting'}:
-        artifacts = {owner[key]: digest(output / owner[key]) for owner, key in _image_references(result)}
-        atomic_json(output / 'state.json', {'artifacts': artifacts, 'schema_version': 1, 'manifest_sha256': digest(output / 'manifest.json'), 'source': {'path': result['source']['original_path'], 'sha256': result['source']['fingerprint']}, 'decisions': result['decisions']})
+        artifacts = {name: digest(artifact_path(output, name)) for name in artifact_names(result)}
+        atomic_json(output / 'state.json', {'artifacts': artifacts, 'schema_version': 2, 'manifest_sha256': digest(output / 'manifest.json'), 'source': {'path': result['source']['original_path'], 'sha256': result['source']['fingerprint']}, 'decisions': result['decisions']})
     return result
 
 
@@ -66,11 +93,17 @@ def load(output):
         manifest = json.loads((output / 'manifest.json').read_text())
         if not isinstance(state, dict) or not isinstance(manifest, dict) or not isinstance(state.get('artifacts'), dict) or not isinstance(state.get('decisions'), dict):
             raise ValueError
-        if state['schema_version'] != 1 or digest(output / 'manifest.json') != state['manifest_sha256'] or state['source']['path'] != manifest['source']['original_path'] or state['source']['sha256'] != manifest['source']['fingerprint'] or state['decisions'] != manifest['decisions']:
+        if state['schema_version'] != 2 or digest(output / 'manifest.json') != state['manifest_sha256'] or state['source']['path'] != manifest['source']['original_path'] or state['source']['sha256'] != manifest['source']['fingerprint'] or state['decisions'] != manifest['decisions']:
+            raise ValueError
+        if set(state['artifacts']) != artifact_names(manifest):
+            raise ValueError
+        # A replay can replace the deliverable before committing its manifest.
+        # The prior waiting generation must not silently accept that new PDF.
+        if not manifest.get('pdf') and ((output / 'score.pdf').exists() or (output / 'score.pdf').is_symlink()):
             raise ValueError
         for name, expected in state['artifacts'].items():
-            artifact = (output / name).resolve()
-            if not artifact.is_relative_to(output.resolve()) or artifact.suffix.lower() != '.png' or digest(artifact) != expected:
+            artifact = artifact_path(output, name)
+            if digest(artifact) != expected:
                 raise ValueError
         source = Path(state['source']['path'])
         # Validate a real playable video before hashing the persisted local path.
@@ -87,7 +120,7 @@ def load(output):
                 raise ValueError
         return source, manifest, dict(state['decisions'])
     except (OSError, ValueError, KeyError, TypeError, AttributeError, ConversionError):
-        raise ResumeError('进度或原视频已变更、损坏或不可读取；已保留原结果，请核查后继续。') from None
+        raise ResumeError('进度、PDF、证据或原视频已变更、损坏或不属于同一代结果。旧版缺少完整性记录的状态也不能继续；已保留原目录，请核查后在新的空目录重建。') from None
 
 
 def validate_supplement(path, output, issue):
