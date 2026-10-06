@@ -80,6 +80,8 @@ class LinkInputTests(unittest.TestCase):
             code, result, logs = self.invoke(base / 'result', video)
             self.assertEqual(code, 2)
             self.assertEqual(result['error']['code'], 'media_resolution_mismatch')
+            self.assertEqual(result['origin']['actual_video']['width'], 640)
+            self.assertEqual(result['origin']['actual_video']['height'], 360)
             self.assertFalse(list((base / 'result').glob('*.mp4')))
             self.assertFalse(list((base / 'result').glob('*.partial')))
             self.assertNotIn('DO_NOT_SAVE_TEST_SENTINEL', logs)

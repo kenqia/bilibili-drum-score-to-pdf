@@ -121,7 +121,7 @@ def download(origin, staging):
                 if decode.returncode:
                     raise ValueError
                 if stream['width'] < (fmt.get('width') or 0) or stream['height'] < (fmt.get('height') or 0):
-                    raise InputError('media_resolution_mismatch', '视频实测分辨率低于公开格式标记。请提供清晰的本地视频。')
+                    raise InputError('media_resolution_mismatch', '视频实测分辨率低于公开格式标记。请提供清晰的本地视频。', {**origin, 'backend': 'yt-dlp', 'backend_version': __version__, 'anonymous': True, 'actual_video': stream})
                 return {'backend': 'yt-dlp', 'backend_version': __version__, 'anonymous': True,
                         'single_file_fallback': not bool(independent), 'actual_video': stream,
                         'format_attempts': attempt, 'backup_used': bool(backup),

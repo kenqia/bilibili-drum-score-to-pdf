@@ -65,7 +65,7 @@ def _worker(url, staging, connection):
         details = download(origin, Path(staging))
         connection.send({'ok': True, 'origin': {**origin, **details}})
     except InputError as error:
-        result = {'ok': False, 'code': error.code, 'message': str(error)}
+        result = {'ok': False, 'code': error.code, 'message': str(error), 'origin': error.origin or video_origin(url)}
         if hasattr(error, 'http_status'):
             result['http_status'] = error.http_status
         connection.send(result)
@@ -93,7 +93,7 @@ def acquire(url, output):
             except EOFError:
                 raise InputError('public_api_unavailable', '匿名获取进程未完成。请提供清晰的本地视频。', origin) from None
             if not result['ok']:
-                error = InputError(result['code'], result['message'], origin)
+                error = InputError(result['code'], result['message'], result.get('origin') or origin)
                 if 'http_status' in result:
                     error.http_status = result['http_status']
                 raise error
