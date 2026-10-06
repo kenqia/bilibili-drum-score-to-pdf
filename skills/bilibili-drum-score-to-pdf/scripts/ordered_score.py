@@ -305,7 +305,18 @@ def restore_rows(source, output, metadata, decisions=None):
 
     with tempfile.TemporaryDirectory(prefix='drum-score-') as scratch:
         frames = sample_video(source, scratch)
+        frame_count = 0
+        consumed = []
         for frame_index, (timestamp, file) in enumerate(frames):
+            frame_count = frame_index + 1
+            # Keep just the prior readable reference and current batch. Pending
+            # observations already have durable evidence copies in the task.
+            retained = {item['file'] for item in (previous, last) if item}
+            for old in consumed[:]:
+                if old not in retained:
+                    old.unlink(missing_ok=True)
+                    consumed.remove(old)
+            consumed.append(file)
             with Image.open(file) as image:
                 try:
                     analysis, region, current = window_rows(image, timestamp)
@@ -313,7 +324,7 @@ def restore_rows(source, output, metadata, decisions=None):
                     item = evidence(image, timestamp, frame_index)
                     unreadable.append(dict(item))
                     # Keep the failure value, not its traceback and decoded pixels.
-                    pending.append({'evidence': item, 'file': file, 'error': (error.code, str(error)), 'non_score': clear_non_score_card(image)})
+                    pending.append({'evidence': item, 'file': output / item['image'], 'error': (error.code, str(error)), 'non_score': clear_non_score_card(image)})
                     continue
                 if pending and not previous and all(entry['non_score'] for entry in pending):
                     ignored_edges.append({'edge': 'start', 'start_timestamp': pending[0]['evidence']['timestamp'], 'end_timestamp': pending[-1]['evidence']['timestamp'], 'observations': [entry['evidence'] for entry in pending], 'policy': 'uniform_or_crisp_text_card_without_staff_signal'})
@@ -442,7 +453,7 @@ def restore_rows(source, output, metadata, decisions=None):
             last = {'timestamp': pending[-1]['evidence']['timestamp'], 'file': pending[-1]['file'], 'partial_bottom': False}
             pending.clear()
         with Image.open(last['file']) as image:
-            end = evidence(image, last['timestamp'], len(frames))
+            end = evidence(image, last['timestamp'], frame_count)
         if trailing_card:
             end = trailing_card
         if last['partial_bottom']:
