@@ -4,19 +4,25 @@
 
 ## 当前状态
 
-当前仓库只有需求规格和领域术语，转换 skill 尚未实现，也没有可运行的转换命令。高清视频获取、整曲覆盖、光标处理和打印质量仍需验证。
+仓库已提供可检查的 [skill 文件包](skills/bilibili-drum-score-to-pdf/SKILL.md)。当前支持白底、多行、固定谱面的本地视频，自动裁剪完整谱行并生成 A4 纵向 PDF。PDF 保留视频中可提供的标题、速度和拍号，源视频对应记录保存在 `manifest.json`。
 
-- [需求规格](docs/spec.md)包含用户故事、处理规则、验收标准与测试计划。
-- [领域术语](GLOSSARY.md)定义谱面还原、重复截图、重复段落等概念。
-- GitHub Issues 用于跟踪实施工作。
+```sh
+uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py /absolute/path/to/video.mp4 --output /absolute/path/to/result
+```
 
-## 预期使用方式
+命令需要 `ffmpeg`、`ffprobe`、`uv` 和 Python 3.12 或更高版本。`uv` 在独立环境运行依赖。stdout 输出结构化 JSON，stderr 输出进度；`status` 区分成功、等待确认和失败。
 
-用户在 Codex 中提供 B站视频链接或本地视频。正常情况自动提取、拼接并生成 A4 纵向 PDF；遇到遮挡、缺失或拼接疑点时，展示对应截图和时间，收到文字确认后继续。
+固定谱面检查会采样完整视频及末尾。发现谱面变化时提供编号证据并返回等待状态，不将一个窗口当作整曲。纵向推进恢复、光标处理、疑点回答后继续和 B站匿名获取由后续切片完成。当前不会安装 skill 或修改 Codex 配置。
 
-只去除重复截图，保留真正重复演奏的段落和原谱反复记号。无法恢复的内容明确标出，不猜补音符。
+## 验证
 
-视频处理在本地完成，允许当前 Codex 查看少量谱面截图。不接入额外外部识别 API 或付费服务，不依赖登录态。链接获取失败或画质不足时，使用本地高清视频。
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
+```
+
+验收测试通过统一命令调用转换，使用独立绘制的谱面和真实编码视频，检查 A4、整行分页、标题与源视频时间、低清失败以及动态输入疑点。测试需要 Poppler 的 `pdfinfo` 与 `pdftoppm`。
+
+[需求规格](docs/spec.md)列出整曲验收标准，[领域术语](GLOSSARY.md)区分重复截图和重复段落。固定合成视频的验证不代表真实整曲已经通过。
 
 ## 第一版样本
 
