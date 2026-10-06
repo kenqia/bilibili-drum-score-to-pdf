@@ -10,9 +10,11 @@ yt-dlp 的当前 Bilibili extractor 未输出 DASH 官方备用地址。项目�
 
 传输遵循环境 HTTP CONNECT 代理配置。代理是用户指定的传输端点，可以位于本机；隧道目标使用已验证的公开 IP，避免把源站 DNS 验证委托给代理。源站请求不携带 Cookie、Authorization 或 Proxy-Authorization。代理凭据不写记录，HTTPS 和 SOCKS 代理未专项验证。
 
-连接超时 20 秒，extractor 响应最多 2 MiB，视频最多 2 GiB。独立工作进程总时限 30 分钟，覆盖 DNS、接口、下载及 ffprobe/ffmpeg；探测和首帧解码各最多 30 秒。获取进程组在可捕获的失败或中断后停止。后续谱面转换时限另计。
+连接超时 20 秒，extractor 响应最多 2 MiB，视频最多 2 GiB。独立工作进程默认总时限 30 分钟，可用 `--acquisition-timeout` 指定正数秒值；同一单调时钟 deadline 覆盖 DNS、接口、下载、ffprobe/ffmpeg、目标文件复制/fsync 和工作进程退出；探测和首帧解码各最多 30 秒。获取进程组在可捕获的失败或中断后停止。清理允许最多约 0.4 秒的进程回收等待。后续本地转换另计：ffprobe 最多 30 秒、采样解码最多 600 秒、末帧解码最多 60 秒；谱面分析和 PDF 排版没有整体时限。
 
-下载在系统独立 staging 内完成，签名 URL 只在工作进程内存中存在。ffprobe 记录实际宽高、编码与帧率，ffmpeg 验证首帧可解码。实测尺寸小于格式标记时返回 `media_resolution_mismatch`，不会静默把伪高清输入发布为成功。发布先复制到目标文件系统，再用独占硬链接提交源文件，避免跨文件系统直接 rename。强杀时的发布残留与同目录恢复规则由获取生命周期任务继续完善。
+下载在系统独立 staging 内完成，签名 URL 只在工作进程内存中存在。ffprobe 记录实际宽高、编码与帧率，ffmpeg 验证首帧可解码。实测尺寸小于格式标记时返回 `media_resolution_mismatch`，不会静默把伪高清输入发布为成功。发布复制在受限工作进程内进行，目标 staging 位于结果目录的父目录；工作进程在同一 deadline 内退出后，才用独占硬链接提交完整源文件，避免跨文件系统直接 rename。可捕获中断和超时清理本次 staging。Linux 使用 parent-death signal 在 CLI 强杀后停止工作进程组；其他系统未验证强杀清理。强杀可能留下结果目录之外的 staging，最终目录没有下载 partial。不会自动扫描或删除这些残留及未知文件。
+
+获取失败只写 `phase=acquisition` 的失败 `manifest.json`。当目录仅包含这个普通文件，且没有 source、PDF、state、谱行或疑点时，允许再次运行新转换。其他非空目录及 symlink 均拒绝，不覆盖已有转换或用户文件。探测失败同样可以重试。
 
 只向 CLI 返回固定脱敏原因、HTTP 状态码和安全元数据，不显示第三方异常、服务器自由文本或请求头。获取失败提示清晰本地视频兜底；接口变化、412、格式不支持和解码失败均不能当作本地谱面算法故障。
 

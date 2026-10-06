@@ -7,6 +7,8 @@ import shutil
 import signal
 import sys
 import tempfile
+import time
+import threading
 from urllib.parse import parse_qs, urlsplit
 
 
@@ -50,10 +52,21 @@ ACQUISITION_SECONDS = 1800
 MAX_BYTES = 2 * 1024**3
 
 
-def _worker(url, staging, connection):
+def _worker(url, staging, publication, connection, parent_pid):
     # Third-party exceptions and output can contain signed addresses. Never forward them.
     if hasattr(os, 'setsid'):
         os.setsid()
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    if sys.platform == 'linux':
+        # A killed CLI cannot run finally. Linux asks this worker to stop its group.
+        import ctypes
+        def parent_gone(signum, frame):
+            os.killpg(os.getpid(), signal.SIGKILL)
+        signal.signal(signal.SIGTERM, parent_gone)
+        ctypes.CDLL(None).prctl(1, signal.SIGTERM)
+        if os.getppid() != parent_pid:
+            parent_gone(None, None)
     with open(os.devnull, 'w') as sink:
         os.dup2(sink.fileno(), 1)
         os.dup2(sink.fileno(), 2)
@@ -63,6 +76,12 @@ def _worker(url, staging, connection):
         from anonymous_backend import download
         origin = video_origin(url)
         details = download(origin, Path(staging))
+        # Copy/fsync is part of the same worker deadline. Its temporary file lives
+        # beside the result directory, so even SIGKILL leaves no partial in it.
+        with (Path(publication) / 'video.mp4').open('wb') as destination, (Path(staging) / 'video.mp4').open('rb') as downloaded:
+            shutil.copyfileobj(downloaded, destination)
+            destination.flush()
+            os.fsync(destination.fileno())
         connection.send({'ok': True, 'origin': {**origin, **details}})
     except InputError as error:
         result = {'ok': False, 'code': error.code, 'message': str(error), 'origin': error.origin or video_origin(url)}
@@ -75,23 +94,33 @@ def _worker(url, staging, connection):
         connection.close()
 
 
-def acquire(url, output):
+def acquire(url, output, timeout=ACQUISITION_SECONDS):
     origin = video_origin(url)
     output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
     # Linux uses fork so controlled third-party backends remain usable in CLI tests.
     context = multiprocessing.get_context('fork' if 'fork' in multiprocessing.get_all_start_methods() else 'spawn')
-    with tempfile.TemporaryDirectory(prefix='anonymous-video-') as staging:
+    with tempfile.TemporaryDirectory(prefix='anonymous-video-') as staging, tempfile.TemporaryDirectory(prefix='.anonymous-publish-', dir=output.parent) as publication:
         parent, child = context.Pipe(duplex=False)
-        process = context.Process(target=_worker, args=(origin['url'], staging, child))
-        process.start()
-        child.close()
+        process = context.Process(target=_worker, args=(origin['url'], staging, publication, child, os.getpid()))
+        previous_term = None
+        if threading.current_thread() is threading.main_thread():
+            previous_term = signal.signal(signal.SIGTERM, lambda *args: (_ for _ in ()).throw(KeyboardInterrupt()))
         try:
-            if not parent.poll(ACQUISITION_SECONDS):
+            process.start()
+            child.close()
+            if not parent.poll(max(0, deadline - time.monotonic())):
                 raise InputError('network_timeout', '匿名获取超过处理时限。请提供清晰的本地视频。', origin)
             try:
                 result = parent.recv()
             except EOFError:
                 raise InputError('public_api_unavailable', '匿名获取进程未完成。请提供清晰的本地视频。', origin) from None
+            process.join(timeout=max(0, deadline - time.monotonic()))
+            if process.is_alive() or time.monotonic() >= deadline:
+                raise InputError('network_timeout', '匿名获取超过处理时限。请提供清晰的本地视频。', origin)
+            if process.exitcode != 0:
+                raise InputError('public_api_unavailable', '匿名获取进程未完成。请提供清晰的本地视频。', origin)
             if not result['ok']:
                 error = InputError(result['code'], result['message'], result.get('origin') or origin)
                 if 'http_status' in result:
@@ -102,19 +131,16 @@ def acquire(url, output):
             source = output / f"{origin['bvid']}-p{origin['page']}.mp4"
             if source.exists():
                 raise InputError('source_exists', '结果目录已有下载视频，请选择新的结果目录。', origin)
-            # Copy onto the destination filesystem before an exclusive atomic publication.
-            descriptor, publish = tempfile.mkstemp(prefix='.anonymous-publish-', dir=output)
             try:
-                with os.fdopen(descriptor, 'wb') as destination, (Path(staging) / 'video.mp4').open('rb') as downloaded:
-                    shutil.copyfileobj(downloaded, destination)
-                    destination.flush()
-                    os.fsync(destination.fileno())
-                os.link(publish, source)
-            finally:
-                Path(publish).unlink(missing_ok=True)
+                os.link(Path(publication) / 'video.mp4', source)
+            except FileExistsError:
+                raise InputError('source_exists', '结果目录已有下载视频，请选择新的结果目录。', origin) from None
             return source, origin
+        except KeyboardInterrupt:
+            raise InputError('acquisition_interrupted', '匿名获取已中断。可重试或提供清晰的本地视频。', origin) from None
         finally:
             parent.close()
+            child.close()
             if process.is_alive():
                 if hasattr(os, 'killpg'):
                     try:
@@ -123,10 +149,19 @@ def acquire(url, output):
                         process.terminate()
                 else:
                     process.terminate()
-            process.join(timeout=5)
+            if process.pid is not None:
+                process.join(timeout=.2)
             if process.is_alive():
                 if hasattr(os, 'killpg'):
                     os.killpg(process.pid, signal.SIGKILL)
                 else:
                     process.kill()
-                process.join(timeout=5)
+                process.join(timeout=.2)
+            # Descendants may survive even when the worker already exited.
+            if process.pid is not None and hasattr(os, 'killpg'):
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            if previous_term is not None:
+                signal.signal(signal.SIGTERM, previous_term)
