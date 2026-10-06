@@ -14,10 +14,17 @@ def comparison_mask(region, group):
     spacing = group['spacing']
     top = int(round(group['top'] - spacing * 4))
     bottom = int(round(group['bottom'] + spacing * 6))
-    pixels = np.asarray(region.crop((0, top, region.width, bottom)).convert('RGB'))
+    comparison = Image.new('RGB', (region.width, bottom - top), 'white')
+    start, stop = max(0, top), min(region.height, bottom)
+    comparison.paste(region.crop((0, start, region.width, stop)), (0, start - top))
+    pixels = np.asarray(comparison)
     # Colored notation counts as ink too; only the detected playback cursor is ignored.
     mask = (cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY) < 180) | ((np.ptp(pixels, axis=2) > 20) & (pixels.min(axis=2) < 220))
-    _, ignored = cursor_regions(region.crop((0, top, region.width, bottom)), spacing)
+    _, ignored = cursor_regions(comparison, spacing)
+    # Enlarged comparison margins can leave the actual score window. Such
+    # pixels are unavailable evidence, not PIL's default black crop padding.
+    ignored[:start - top] = True
+    ignored[stop - top:] = True
     return mask, ignored
 
 
