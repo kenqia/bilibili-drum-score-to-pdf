@@ -8,6 +8,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 from drum_score import ConversionError, analyze_frame, sample_video
 from quality_score import assess, cursor_regions, printable, quality_report
+from central_obstruction import split_white_bbox, complementary_windows
 
 
 def comparison_mask(region, group):
@@ -101,6 +102,8 @@ def save_row(candidate, output, index):
 
 
 def window_rows(image, timestamp):
+    if split_white_bbox(image) is not None:
+        raise ConversionError('central_obstruction', '中央遮挡分割白底谱面，需要同处真实互补观察确认。')
     analysis = analyze_frame(image, allow_partial=True)
     region = image.crop(analysis['bbox']).convert('RGB')
     bbox = analysis['bbox']
@@ -327,7 +330,27 @@ def restore_rows(source, output, metadata, decisions=None):
                             if match is None:
                                 break
                             recovered.append(dict(entry['evidence'], **match))
-                    if len(recovered) == len(pending):
+                    central = None
+                    # This limited proof requires a unique held occurrence, a
+                    # bounded run, and complementary real visibility. Identical
+                    # clean brackets alone never establish hidden contents.
+                    unique_rows = same_position and all(
+                        sum(same_row(a, b) for a in previous['rows']) == 1 for b in current)
+                    if unique_rows and timestamp - previous['timestamp'] <= 6:
+                        from contextlib import ExitStack
+                        with ExitStack() as stack:
+                            before = stack.enter_context(Image.open(previous['file']))
+                            observations = [(entry['evidence'], stack.enter_context(Image.open(entry['file']))) for entry in pending]
+                            central = complementary_windows(before, image, observations)
+                    if central is not None:
+                        with Image.open(previous['file']) as before:
+                            before_item = evidence(before, previous['timestamp'], previous['frame_index'])
+                        recoveries.append({'before': before_item, 'after': followup,
+                                           'observations': central, 'coverage_complete': True,
+                                           'row_ids': [delivered[index]['id'] for index in previous['indices']],
+                                           'policy': 'complementary_split_white_windows_then_actual_clean_rows',
+                                           'pixel_mapping': 'actual_clean_row_no_stitching'})
+                    elif len(recovered) == len(pending):
                         with Image.open(previous['file']) as before:
                             before_item = evidence(before, previous['timestamp'], previous['frame_index'])
                         recoveries.append({'before': before_item, 'after': evidence(image, timestamp, frame_index), 'observations': recovered, 'policy': 'same_position_clear_bracket_and_local_blur_residual'})
