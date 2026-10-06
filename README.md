@@ -25,12 +25,16 @@ uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py /absolute/path/to/vi
 同一命令接受 HTTPS BV 视频链接，可用 `?p=2` 指定分 P，省略时选择第一 P。
 
 ```sh
-timeout 120s uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibili.com/video/BV1b5411x7Ku' --output /absolute/path/to/new-result
+uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibili.com/video/BV1b5411x7Ku' --output /absolute/path/to/new-result
 ```
 
-入口只请求公开匿名接口，不登录或读取 Cookie、认证、密钥。取得的视频留在结果目录，随后执行同一个本地转换流程。`manifest.json` 保存规范 BV 链接、分 P、CID、接口画质代码及本地探测的实际宽高，媒体签名地址不会进入记录或日志。
+入口使用固定版本 yt-dlp 的内置 Bilibili extractor 匿名枚举格式，不读取用户配置、Cookie、浏览器登录态、netrc 或插件。按原生分辨率、帧率、编码兼容性和码率选择可解码视频轨，优先 video-only。只有没有独立视频轨时才取含音频的单文件，并记录 `origin.single_file_fallback`。不会另下音轨或混流。
 
-网络、访问限制、接口变化或不支持的媒体地址会立即停止。WSL 中的 `timeout 120s` 给整次链接尝试设置外部时限；若退出码为 124 且尚无 JSON，按网络超时处理并改用本地视频，不继续重试。画质不足时报告实际分辨率，请提供清晰本地视频并重新运行本地命令。请求 1080P 不等于取得 1080P，元数据尺寸也不能代替实际视频尺寸。下载只支持单文件 MP4、HTTPS B站媒体域名，不跟随重定向；因此部分正常 CDN 变化也可能触发本地兜底。
+下载先进入结果目录之外的 staging。ffprobe 测量尺寸、编码和帧率，ffmpeg 验证首帧可解码后才发布源视频，再执行本地谱面还原。`manifest.json` 保存规范 BV 链接、分 P、后端版本、选中格式与实测参数。签名媒体地址、代理认证和后端原始异常不进入输出或记录。
+
+获取工作进程最多运行 30 分钟，包含 DNS、接口请求、下载和探测；连接超时 20 秒，元数据响应上限 2 MiB，视频上限 2 GiB。最多尝试 3 个视频格式，每个格式最多使用 2 个官方备用地址。获取时限与后续本地转换时限分开。媒体地址及每次重定向都检查 HTTPS、无 URL 凭据与公开目标，并在实际连接时固定已验证 IP。环境代理仍可使用。HTTP CONNECT 代理向固定目标 IP 建隧道，TLS 校验原域名。
+
+访问限制、格式失败、不可解码或实测分辨率低于格式标记时返回脱敏原因和本地视频兜底。匿名接口不能保证 1080p，元数据尺寸不能代替实际尺寸。失败后保留诊断，使用清晰本地视频在新的结果目录继续。
 
 [维护依据与停止条件](skills/bilibili-drum-score-to-pdf/references/anonymous-input.md)说明公开接口限制。
 

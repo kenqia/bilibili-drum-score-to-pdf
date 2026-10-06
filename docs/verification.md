@@ -93,6 +93,14 @@ pdftoppm -png -r 150 /absolute/path/to/result/score.pdf /absolute/path/to/review
 
 验证命令 `python -m unittest discover -s tests -p test_edge_cards.py -v`，3 项通过。既有 `test_review_regressions.py` 的 5 项回归也通过。
 
+## 匿名 yt-dlp 获取 #13
+
+2026-10-06 在项目隔离 uv 环境使用 yt-dlp 2026.08.19。统一 CLI 的 DASH-only 测试先在旧路径返回 `invalid_public_response`，确认旧路径仍要求自研单文件响应。替换后，该受控链接取得真实编码视频、输出 PDF，并记录匿名后端和 ffprobe 参数。依赖在 PEP 723 与 requirements 同时固定，没有安装全局依赖或接触真实凭据。
+
+离线获取回归覆盖多个画质、视频与音频轨筛选、单文件兜底、错误分 P、高清标记与实测低清矛盾、不可解码、412、官方备用地址、恶意初始 URL、非 HTTPS 重定向、私有 DNS、5 跳重定向上限及已有文件保护。受控 socket 在真实 urllib HTTPS handler 下验证目标连接使用公开数值 IP，TLS 保留原域名。HTTP CONNECT 代理测试验证代理遵循环境配置、隧道目标固定 IP、代理认证不进入源站请求或输出。配置、Cookie、netrc 与插件均使用独立测试哨兵，未读取真实用户数据。
+
+运行命令为 `uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_link_input.py -v`。真实 B站 smoke check 和整曲验收本轮未执行；合成视频与受控后端通过不能代替现场匿名高清获取。获取目录安全重试及不可捕获强杀的发布残留仍归 #14。
+
 ## Issue 15 恢复完整性
 
 2026-10-06，在独立 worktree 通过统一 CLI 做 TDD。PDF 改写及丢失最初仍返回 success；只添加 PDF hash 后，删除 artifact 清单项仍可跳过校验。补齐清单一致性校验后均返回 failed / invalid_progress。文件系统替换边界的故障注入还复现了 PDF 已替换、旧 waiting 状态仍可被认可的问题，现已拒绝该混代结果。manifest 已提交而 state 未提交的中断也拒绝恢复。

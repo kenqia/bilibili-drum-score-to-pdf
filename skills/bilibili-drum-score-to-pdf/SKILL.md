@@ -27,9 +27,9 @@ uv run /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py /absolute
 
 输入可为 `https://www.bilibili.com/video/BV…`，分 P 使用 `?p=2`，缺省选择第一 P。只使用匿名公开接口，不登录，不读取 Cookie、认证或密钥。媒体地址只在内存中读取，不显示、不持久保存、不传给 ffmpeg 或 ffprobe；这些工具只读取已经下载的本地视频。
 
-链接命令在 WSL 下用 `timeout 120s uv run ...` 限制整次尝试。若退出码为 124 且尚无 JSON，报告网络超时并转本地输入；不要把残留文件当成转换结果。链接取得视频后执行同一个转换入口。查看 `origin` 的 BV、分 P、CID 和 `api_quality`，同时查看 `source.width` 与 `source.height` 的实际尺寸。元数据或请求的画质不能当作实际高清获取证据。失败或低清时说明原因，请用户提供清晰本地视频，在新的结果目录重跑。不要尝试其他登录接口、换认证或绕过限制。
+链接入口使用固定版本 yt-dlp 的内置 Bilibili extractor。查看 `origin.backend_version`、`selected_format`、`actual_video` 与 `single_file_fallback`，同时检查 `source.width` 和 `source.height`。优先选择原生分辨率最高的可解码独立视频轨，无独立轨时才允许单文件兜底，不另下音轨或混流。元数据尺寸不能证明实际高清。失败或低清时说明原因，请用户提供清晰本地视频，在新的结果目录重跑。不尝试登录、换认证或绕过限制。
 
-下载只支持公开单文件 MP4，不跟随重定向。每次阻塞读取设 20 秒 timeout，元数据最多 2 MiB，视频最多 2 GiB，读取循环最多 30 分钟。DNS 等系统操作可能额外等待，不能承诺固定总耗时。任一拒绝或不支持的响应立即停止，不自动重试。接口维护依据见 [references/anonymous-input.md](references/anonymous-input.md)。
+获取工作进程总时限为 30 分钟，覆盖 DNS、接口、传输与探测，后续转换另计时。连接超时 20 秒，元数据最多 2 MiB，视频最多 2 GiB。最多尝试 3 个格式，每个格式最多 2 个官方备用地址。下载只进入独立 staging，经本地 ffprobe 与首帧解码检查后安全发布。每跳重定向与实际连接都验证 HTTPS 和公开目标，遵循环境代理且不输出代理凭据。禁用用户配置、Cookie、netrc、认证和插件。维护依据见 [references/anonymous-input.md](references/anonymous-input.md)。
 
 ## 当前支持范围
 
