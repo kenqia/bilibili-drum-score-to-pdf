@@ -30,7 +30,11 @@ def assess(image, spacing):
     gray = np.asarray(image.convert('L'))
     effective_dpi = image.width / PRINTABLE_WIDTH_INCHES
     band = 'high_quality_candidate' if effective_dpi >= HIGH_QUALITY_DPI else 'printable_candidate' if effective_dpi >= MIN_PRINT_DPI else 'low_print_resolution'
-    return {'cursor_occluded': bool(boxes), 'cursor_boxes': boxes, 'sharpness': float(cv2.Laplacian(gray, cv2.CV_64F).var()), 'native_width': image.width, 'staff_spacing': spacing, 'effective_dpi': round(effective_dpi, 1), 'print_quality': band}
+    # Keep enough precision for the hard gate. Rounding 149.978 DPI to 150.0
+    # would let a row just below the floor through. Three decimals is enough
+    # to distinguish adjacent source pixel widths while keeping manifests
+    # readable.
+    return {'cursor_occluded': bool(boxes), 'cursor_boxes': boxes, 'sharpness': float(cv2.Laplacian(gray, cv2.CV_64F).var()), 'native_width': image.width, 'staff_spacing': spacing, 'effective_dpi': round(effective_dpi, 3), 'print_quality': band}
 
 
 def printable(image):
