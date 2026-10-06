@@ -27,6 +27,19 @@ def atomic_json(path, value):
     temporary.replace(path)
 
 
+def _image_references(value):
+    """Yield owners and keys of local image references in a persisted result."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in {'image', 'original_image'} and isinstance(item, str) and not Path(item).is_absolute():
+                yield value, key
+            else:
+                yield from _image_references(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _image_references(item)
+
+
 def persist(result, source, output, decisions=None, origin=None):
     output = Path(output)
     if origin is not None:
@@ -38,18 +51,7 @@ def persist(result, source, output, decisions=None, origin=None):
         result['state'] = 'state.json'
     atomic_json(output / 'manifest.json', result)
     if result['status'] in {'success', 'waiting'}:
-        artifacts = {}
-        def collect(value):
-            if isinstance(value, dict):
-                for key, item in value.items():
-                    if key in {'image', 'original_image'} and isinstance(item, str) and not Path(item).is_absolute():
-                        artifacts[item] = digest(output / item)
-                    else:
-                        collect(item)
-            elif isinstance(value, list):
-                for item in value:
-                    collect(item)
-        collect(result)
+        artifacts = {owner[key]: digest(output / owner[key]) for owner, key in _image_references(result)}
         atomic_json(output / 'state.json', {'artifacts': artifacts, 'schema_version': 1, 'manifest_sha256': digest(output / 'manifest.json'), 'source': {'path': result['source']['original_path'], 'sha256': result['source']['fingerprint']}, 'decisions': result['decisions']})
     return result
 
@@ -166,17 +168,8 @@ def resume(output, answers=None):
         for folder in ('images', 'evidence'):
             if (replay / folder).exists():
                 shutil.copytree(replay / folder, generation / folder)
-        def relocate(value):
-            if isinstance(value, dict):
-                for key, item in value.items():
-                    if key in {'image', 'original_image'} and isinstance(item, str) and not Path(item).is_absolute():
-                        value[key] = generation.name + '/' + item
-                    else:
-                        relocate(item)
-            elif isinstance(value, list):
-                for item in value:
-                    relocate(item)
-        relocate(result)
+        for owner, key in _image_references(result):
+            owner[key] = generation.name + '/' + owner[key]
         if result.get('pdf'):
             temporary_pdf = generation / 'score.pdf'
             shutil.copy2(replay / result['pdf'], temporary_pdf)
