@@ -80,6 +80,27 @@ def blurred_observation(image, references):
     return None
 
 
+def clear_non_score_card(image):
+    """Recognize crisp text on a uniform card; uncertain imagery is not ignorable."""
+    gray = np.asarray(image.convert('L'))
+    background = float(np.median(gray))
+    foreground = (np.abs(gray.astype(float) - background) > 35).astype(np.uint8)
+    # Even a single partial staff line prevents classification as a title card.
+    horizontal = cv2.morphologyEx(foreground, cv2.MORPH_OPEN,
+                                 np.ones((1, max(35, image.width // 32)), np.uint8))
+    if horizontal.any() or foreground.mean() > .08:
+        return False
+    count, _, stats, _ = cv2.connectedComponentsWithStats(foreground, 8)
+    components = [box for box in stats[1:] if box[4] >= 8]
+    if len(components) < 3:
+        return False
+    if any(box[2] > image.width * .15 or box[3] > image.height * .15 for box in components):
+        return False
+    edges = cv2.Laplacian(gray, cv2.CV_64F)
+    # Sharpness is measured on the actual foreground, not diluted by empty pixels.
+    return float((edges[foreground.astype(bool)] ** 2).mean()) >= 1000
+
+
 def restore_rows(source, output, metadata, decisions=None):
     output = Path(output)
     (output / 'images').mkdir(parents=True, exist_ok=True)
@@ -90,6 +111,7 @@ def restore_rows(source, output, metadata, decisions=None):
     accepted, gaps = {}, []
     best_candidates = {}
     pending, recoveries, unreadable = [], [], []
+    ignored_edges = []
     followup = None
 
     def track(row, position=None):
@@ -162,7 +184,7 @@ def restore_rows(source, output, metadata, decisions=None):
             record['proposed_position'] = position + index
             record['confirmed'] = False
             candidate_rows.append(record)
-        error.progress = {'rows': delivered, 'header': header, 'seams': seams, 'recoveries': recoveries, 'unreadable_observations': unreadable, 'readable_followup': followup, 'boundaries': {'start': first, 'end': item}, 'candidate_rows': candidate_rows, 'continuation': {'requires_original_video': True, 'requires_replay': True, 'stop_timestamp': item['timestamp'], 'confirmed_prefix_rows': len(delivered)}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}
+        error.progress = {'rows': delivered, 'header': header, 'seams': seams, 'recoveries': recoveries, 'unreadable_observations': unreadable, 'ignored_edges': ignored_edges, 'readable_followup': followup, 'boundaries': {'start': first, 'end': item}, 'candidate_rows': candidate_rows, 'continuation': {'requires_original_video': True, 'requires_replay': True, 'stop_timestamp': item['timestamp'], 'confirmed_prefix_rows': len(delivered)}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}
         raise error
 
     with tempfile.TemporaryDirectory(prefix='drum-score-') as scratch:
@@ -175,8 +197,11 @@ def restore_rows(source, output, metadata, decisions=None):
                     item = evidence(image, timestamp, frame_index)
                     unreadable.append(dict(item))
                     # Keep the failure value, not its traceback and decoded pixels.
-                    pending.append({'evidence': item, 'file': file, 'error': (error.code, str(error))})
+                    pending.append({'evidence': item, 'file': file, 'error': (error.code, str(error)), 'non_score': clear_non_score_card(image)})
                     continue
+                if pending and not previous and all(entry['non_score'] for entry in pending):
+                    ignored_edges.append({'edge': 'start', 'start_timestamp': pending[0]['evidence']['timestamp'], 'end_timestamp': pending[-1]['evidence']['timestamp'], 'observations': [entry['evidence'] for entry in pending], 'policy': 'crisp_text_card_without_staff_signal'})
+                    pending.clear()
                 if pending:
                     followup = evidence(image, timestamp, frame_index)
                     recovered = []
@@ -268,16 +293,23 @@ def restore_rows(source, output, metadata, decisions=None):
             if pending:
                 raise ConversionError(*pending[0]['error'])
             raise ConversionError('decode_failed', '视频中没有可读取的完整谱行。')
+        trailing_card = None
+        if pending and not last['partial_bottom'] and all(entry['non_score'] for entry in pending):
+            ignored_edges.append({'edge': 'end', 'start_timestamp': pending[0]['evidence']['timestamp'], 'end_timestamp': pending[-1]['evidence']['timestamp'], 'observations': [entry['evidence'] for entry in pending], 'policy': 'crisp_text_card_without_staff_signal'})
+            trailing_card = pending[-1]['evidence']
+            pending.clear()
         if pending:
             uncertain('unreadable_window', '视频结尾仍不清晰，没有后续真实清晰画面可确认末尾完整。', pending[0]['evidence'], len(delivered), previous['evidence'])
             last = {'timestamp': pending[-1]['evidence']['timestamp'], 'file': pending[-1]['file'], 'partial_bottom': False}
             pending.clear()
         with Image.open(last['file']) as image:
             end = evidence(image, last['timestamp'], len(frames))
+        if trailing_card:
+            end = trailing_card
         if last['partial_bottom']:
             uncertain('end_gap', '视频结尾存在下边缘残行，无法确认末尾谱段完整。', end, len(delivered), previous['evidence'])
     for position, record in enumerate(delivered):
         if record.get('quality', {}).get('cursor_occluded'):
             item = {'timestamp': record['timestamp'], 'image': record['original_image']}
             uncertain('cursor_occlusion', '该谱行没有找到整行无光标遮挡的真实画面。请补充完整谱行，或明确接受此处缺失；不会擦除或猜补被挡音符。', item, position)
-    return header, delivered, {'seams': seams, 'recoveries': recoveries, 'unreadable_observations': unreadable, 'boundaries': {'start': first, 'end': end}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}
+    return header, delivered, {'seams': seams, 'recoveries': recoveries, 'unreadable_observations': unreadable, 'ignored_edges': ignored_edges, 'boundaries': {'start': first, 'end': end}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}
