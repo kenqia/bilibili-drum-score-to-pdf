@@ -131,7 +131,9 @@ def restore_rows(source, output, metadata, decisions=None):
             else:
                 compatible = row['bbox'] == run['bbox'] and row['mask'].shape == run['mask'].shape
                 if not compatible or not same_row(run, row):
-                    cursor_unproven.setdefault(position, {'timestamp': run['timestamp'], 'image': run['image']})
+                    name = f'evidence/cursor-conflict-{position:04d}-{int(round(row["timestamp"] * 1000)):08d}.png'
+                    row['image'].save(output / name)
+                    cursor_unproven.setdefault(position, {'timestamp': row['timestamp'], 'image': name})
                 elif compatible:
                     exposed = run['ignored'] & ~row['ignored']
                     if exposed.any():
@@ -147,7 +149,7 @@ def restore_rows(source, output, metadata, decisions=None):
             clear_item = {'timestamp': row['timestamp'], 'image': name}
             delivered[position].setdefault('cursor_followups', []).append(clear_item)
             item = {'timestamp': run['timestamp'], 'image': run['image']}
-            if (run['ignored'].any() or row['bbox'] != run['bbox']
+            if (position in cursor_unproven or run['ignored'].any() or row['bbox'] != run['bbox']
                     or row['mask'].shape != run['mask'].shape or not same_row(run, row)):
                 cursor_unproven.setdefault(position, item)
             else:

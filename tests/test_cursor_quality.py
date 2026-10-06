@@ -88,6 +88,24 @@ class CursorQualityTests(unittest.TestCase):
             self.assertEqual(result["quality"]["unrecovered_rows"], ["row-0001"])
             self.assertFalse((base / "result/score.pdf").exists())
 
+    def test_moving_cursor_cannot_hide_a_change_from_accumulated_visible_evidence(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            changed = cursor_window(441)
+            ImageDraw.Draw(changed).ellipse((700, 236, 704, 240), fill='black')
+            clean_changed = cursor_window()
+            ImageDraw.Draw(clean_changed).ellipse((700, 236, 704, 240), fill='black')
+            source = sequence_video([cursor_window(211), cursor_window(685), changed, clean_changed], base)
+            run, result = self.run_cli(source, base / 'result')
+            self.assertEqual(run.returncode, 2)
+            self.assertEqual(result['status'], 'waiting', result)
+            self.assertFalse(result['complete'])
+            issue = result['issues'][0]
+            self.assertEqual(issue['kind'], 'cursor_occlusion')
+            self.assertGreaterEqual(issue['timestamp'], 4)
+            self.assertTrue((base / 'result' / issue['image']).exists())
+            self.assertFalse((base / 'result/score.pdf').exists())
+
     def test_hidden_changed_notation_between_identical_clean_frames_remains_unproven(self):
         with tempfile.TemporaryDirectory() as scratch:
             base = Path(scratch)

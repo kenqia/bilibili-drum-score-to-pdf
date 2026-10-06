@@ -17,3 +17,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_resume_conversion.py -k cursor -v
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_ordered_conversion.py -v
 ```
+
+合入边缘卡与恢复状态完整性改动后，五项光标测试再次通过，28.820 秒；三项边缘卡测试通过，35.922 秒，真实末帧和 ignored_edges 保留。补充的链式反例采用光标 211→685→441→clear：小点最初不存在，下一帧在被忽略位置出现，再移开光标让它可见。旧实现单项运行 4.930 秒，错误返回退出码 0；新实现须用累计真实可见证据拒绝该变化，保存实际冲突帧，后续干净候选不能抹掉冲突。
+
+最终六项光标 CLI 测试通过，30.724 秒；最后收紧已有冲突不记录成功恢复后，链式反例再次通过，5.208 秒。未执行整仓完整回归，未访问远端，也没有修改认证、配置或全局依赖。
