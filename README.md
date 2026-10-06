@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+实现候选已提供，30 项统一入口测试通过；《七里香》高清整曲、全部拼接位置和打印可读性仍待验收。#7 与父规格 #1 未完成。
+
 仓库已提供可检查的 [skill 文件包](skills/bilibili-drum-score-to-pdf/SKILL.md)。当前支持白底、多行、固定或纵向推进谱面的本地视频，自动裁剪完整谱行并生成 A4 纵向 PDF。PDF 保留视频中可提供的标题、速度和拍号，源视频对应记录保存在 `manifest.json`。
 
 ```sh
@@ -48,7 +50,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 验收测试通过统一命令调用转换，使用独立绘制的谱面和真实编码视频，检查 A4、整行分页、标题与源视频时间、低清失败、邻接重叠、真正重复段落、连续滚动、首尾疑点、移动与持续光标、原谱蓝色休止记号保留。测试需要 Poppler 的 `pdfinfo` 与 `pdftoppm`。
 
-[需求规格](docs/spec.md)列出整曲验收标准，[领域术语](GLOSSARY.md)区分重复截图和重复段落。固定和滚动合成视频的验证不代表真实整曲已经通过。
+[验证与交付记录](docs/verification.md)列出实测结果、工具版本和复核命令。[需求规格](docs/spec.md)列出整曲验收标准，[领域术语](GLOSSARY.md)区分重复截图和重复段落。固定和滚动合成视频的验证不代表真实整曲已经通过。
 
 ## 第一版样本
 

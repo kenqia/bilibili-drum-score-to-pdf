@@ -19,7 +19,7 @@ uv run /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py /absolute
 
 入口向 stdout 输出 JSON，stderr 提供进度。先检查 `status`，再向用户交付结果。
 
-- `success`：交付 `score.pdf` 和 `manifest.json`，同时检查 `complete`。若为 false，说明用户已明确接受的缺失位置及 `limitations`，不能称为完整还原。后者保存标题图、谱行图片、源画面坐标、视频实际时间和 PDF 页码。
+- `success`：交付 `score.pdf` 和 `manifest.json`，同时检查 `complete`。若为 false，说明用户已明确接受的缺失位置及 `limitations`，不能称为完整还原。`manifest.json` 保存标题图、谱行图片、源画面坐标、视频实际时间和 PDF 页码。
 - `waiting`：展示 `issues` 中编号、截图、源视频时间和具体问题。展示对应证据后等用户在聊天中明确回答；保留结果目录，按下文继续。未解决的疑点不能称为完成。
 - `failed`：说明 `error.message` 和源视频分辨率。无法读取或画质不足时，请用户提供能显示完整谱行的清晰本地视频。
 
@@ -45,7 +45,7 @@ uv run /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py /absolute
 
 ## 本地检查
 
-在仓库根目录运行 CLI 验收测试。夹具独立绘制记谱特征，经真实 ffmpeg 视频编码和 PDF 渲染验证。
+完整仓库包含 CLI 验收测试；单独 skill 文件包用上面的绝对脚本路径转换。随仓库交付时，在仓库根目录运行测试。夹具独立绘制记谱特征，经真实 ffmpeg 视频编码和 PDF 渲染验证。
 
 ```sh
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
@@ -63,8 +63,6 @@ uv run /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py --resume 
 
 没有新回答时仅使用 `--resume`，确认结果仍在等待。不能因等待时间、含糊回复或重试而默认确认。`answer_error` 表示回答无法应用，原进度和此前确认保留。`invalid_progress` 表示原视频、证据或状态已变更，应报告失败并保留目录，不覆盖旧结果。
 
-答案文件按编号映射为对象，`action` 必须是提供的选择。用户确认相邻窗口直接衔接时用 `confirm_join`；明确再次演奏同段用 `confirm_repeat`；明确是停留画面用 `confirm_hold`；确认重叠行数用 `confirm_overlap` 并提供 `overlap`。只有当前疑点提供对应选择时才使用它们。
-
-用户提供可观察的完整单行谱面图片时用 `supplement` 和本地 `image` 路径。补图须有完整五线、符杆边缘和足够源像素，不能由文字猜补音符。补图像素不足、裁剪不完整或仍被光标遮挡时继续等待。原始补图及只转灰度的打印图都保留。用户明确接受无法恢复的内容时用 `accept_missing`，PDF 在对应位置显示 MISSING CONTENT，末尾附限制说明，manifest 的 `complete` 为 false。
+需要把聊天回答写入答案文件时，读取 [references/resume.md](references/resume.md) 的动作含义、补图要求和恢复约定。只使用当前疑点提供的选择；单张补图不能自行证明重复段落或窗口顺序。
 
 恢复前校验原视频指纹和证据。收到有效回答后重放原视频到末尾或下一个疑点，不能直接把此前保存的前缀排成完整 PDF。此前答案、来源和旧证据保留。对同一个答案重复恢复不会插入重复谱行。新转换只接受空结果目录，已有目录使用 `--resume`。
