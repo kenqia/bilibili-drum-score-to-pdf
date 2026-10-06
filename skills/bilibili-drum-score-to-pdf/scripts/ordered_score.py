@@ -115,21 +115,69 @@ def restore_rows(source, output, metadata, decisions=None):
     decisions = decisions or {}
     accepted, gaps = {}, []
     best_candidates = {}
+    cursor_runs, cursor_unproven = {}, {}
     pending, recoveries, unreadable = [], [], []
     ignored_edges = []
     followup = None
+
+    def cursor_observation(row, position):
+        # Masked matching is provisional. A run needs complementary real cursor
+        # positions, all visible pixels consistent, then an actual clear row.
+        run = cursor_runs.get(position)
+        if row['quality']['cursor_occluded']:
+            if run is None:
+                name = f'evidence/cursor-{position:04d}-{int(round(row["timestamp"] * 1000)):08d}.png'
+                row['image'].save(output / name)
+                run = {'timestamp': row['timestamp'], 'image': name,
+                       'mask': row['mask'].copy(), 'ignored': row['ignored'].copy(),
+                       'bbox': row['bbox'], 'observations': [],
+                       'evidence': [{'timestamp': row['timestamp'], 'image': name}]}
+                cursor_runs[position] = run
+            else:
+                compatible = row['bbox'] == run['bbox'] and row['mask'].shape == run['mask'].shape
+                if not compatible or not same_row(run, row):
+                    name = f'evidence/cursor-conflict-{position:04d}-{int(round(row["timestamp"] * 1000)):08d}.png'
+                    row['image'].save(output / name)
+                    cursor_unproven.setdefault(position, {'timestamp': row['timestamp'], 'image': name})
+                elif compatible:
+                    exposed = run['ignored'] & ~row['ignored']
+                    if exposed.any():
+                        name = f'evidence/cursor-{position:04d}-{int(round(row["timestamp"] * 1000)):08d}.png'
+                        row['image'].save(output / name)
+                        run['evidence'].append({'timestamp': row['timestamp'], 'image': name})
+                    run['mask'][exposed] = row['mask'][exposed]
+                    run['ignored'] &= row['ignored']
+            run['observations'].append(row['timestamp'])
+        elif run is not None:
+            name = f'evidence/cursor-clear-{position:04d}-{int(round(row["timestamp"] * 1000)):08d}.png'
+            row['image'].save(output / name)
+            clear_item = {'timestamp': row['timestamp'], 'image': name}
+            delivered[position].setdefault('cursor_followups', []).append(clear_item)
+            item = {'timestamp': run['timestamp'], 'image': run['image']}
+            if (position in cursor_unproven or run['ignored'].any() or row['bbox'] != run['bbox']
+                    or row['mask'].shape != run['mask'].shape or not same_row(run, row)):
+                cursor_unproven.setdefault(position, item)
+            else:
+                delivered[position].setdefault('cursor_recoveries', []).append({
+                    'before': item, 'after': clear_item, 'clear_timestamp': row['timestamp'],
+                    'observations': run['observations'], 'evidence': run['evidence'],
+                    'policy': 'complementary_same_position_visible_pixels_then_clear_row'})
+            del cursor_runs[position]
 
     def track(row, position=None):
         if position is None:
             position = len(delivered)
             delivered.append(save_row(row, output, position + 1))
             best_candidates[position] = row
+            cursor_observation(row, position)
             return position
         record = delivered[position]
         if position not in best_candidates:
             return position  # Explicitly supplied content is never replaced.
         observation = {'timestamp': row['timestamp'], 'bbox': row['bbox'], 'cursor_occluded': row['quality']['cursor_occluded'], 'sharpness': round(row['quality']['sharpness'], 3)}
         observations = record.get('observations', []) + [observation]
+        cursor_recoveries = record.get('cursor_recoveries', [])
+        cursor_followups = record.get('cursor_followups', [])
         old = best_candidates[position]
         def rank(candidate):
             return (not candidate['quality']['cursor_occluded'], candidate['quality']['sharpness'], -candidate['timestamp'])
@@ -137,6 +185,11 @@ def restore_rows(source, output, metadata, decisions=None):
             delivered[position] = save_row(row, output, position + 1)
             best_candidates[position] = row
         delivered[position]['observations'] = observations
+        if cursor_recoveries:
+            delivered[position]['cursor_recoveries'] = cursor_recoveries
+        if cursor_followups:
+            delivered[position]['cursor_followups'] = cursor_followups
+        cursor_observation(row, position)
         return position
 
     def evidence(image, timestamp, index):
@@ -313,8 +366,12 @@ def restore_rows(source, output, metadata, decisions=None):
             end = trailing_card
         if last['partial_bottom']:
             uncertain('end_gap', '视频结尾存在下边缘残行，无法确认末尾谱段完整。', end, len(delivered), previous['evidence'])
+    for position in cursor_unproven.keys() | cursor_runs.keys():
+        delivered[position]['cursor_content_unproven'] = True
     for position, record in enumerate(delivered):
-        if record.get('quality', {}).get('cursor_occluded'):
-            item = {'timestamp': record['timestamp'], 'image': record['original_image']}
-            uncertain('cursor_occlusion', '该谱行没有找到整行无光标遮挡的真实画面。请补充完整谱行，或明确接受此处缺失；不会擦除或猜补被挡音符。', item, position)
+        if record.get('quality', {}).get('cursor_occluded') or position in cursor_unproven or position in cursor_runs:
+            item = cursor_unproven.get(position) or cursor_runs.get(position) or {'timestamp': record['timestamp'], 'image': record['original_image']}
+            item = {'timestamp': item['timestamp'], 'image': item['image']}
+            references = record.get('cursor_followups', [])
+            uncertain('cursor_occlusion', '该谱行的光标遮挡观察没有同位置互补清晰证据，无法证明隐藏内容相同。请补充完整谱行，或明确接受此处缺失；不会擦除或猜补被挡音符。', item, position, references[-1] if references else None)
     return header, delivered, {'seams': seams, 'recoveries': recoveries, 'unreadable_observations': unreadable, 'ignored_edges': ignored_edges, 'boundaries': {'start': first, 'end': end}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}
