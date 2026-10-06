@@ -156,7 +156,9 @@ def analyze_frame(image, allow_partial=False):
     partial_bottom = any(line > groups[-1]['bottom'] + 1 for line in lines)
     if not allow_partial and (partial_top or partial_bottom):
         raise ConversionError('incomplete_rows', '画面边缘包含未恢复的残行。')
-    ink = np.asarray(crop.convert('L')) < 180
+    pixels = np.asarray(crop.convert('RGB'))
+    # Bright colored notation also occupies space, even above the gray threshold.
+    ink = (np.asarray(crop.convert('L')) < 180) | ((np.ptp(pixels, axis=2) > 20) & (pixels.min(axis=2) < 220))
     bounds = []
     for group in groups:
         above = [line for line in lines if line < group['top'] - 1]

@@ -9,6 +9,12 @@ MIN_PRINT_DPI = 150.0
 HIGH_QUALITY_DPI = 200.0
 
 
+def print_quality_band(dpi):
+    if dpi is None or dpi < MIN_PRINT_DPI:
+        return 'low_print_resolution'
+    return 'high_quality_candidate' if dpi >= HIGH_QUALITY_DPI else 'printable_candidate'
+
+
 def cursor_regions(image, spacing):
     pixels = np.asarray(image.convert('RGB'))
     signed = pixels.astype(np.int16)
@@ -29,7 +35,7 @@ def assess(image, spacing):
     boxes, _ = cursor_regions(image, spacing)
     gray = np.asarray(image.convert('L'))
     effective_dpi = image.width / PRINTABLE_WIDTH_INCHES
-    band = 'high_quality_candidate' if effective_dpi >= HIGH_QUALITY_DPI else 'printable_candidate' if effective_dpi >= MIN_PRINT_DPI else 'low_print_resolution'
+    band = print_quality_band(effective_dpi)
     return {'cursor_occluded': bool(boxes), 'cursor_boxes': boxes, 'sharpness': float(cv2.Laplacian(gray, cv2.CV_64F).var()), 'native_width': image.width, 'staff_spacing': spacing, 'effective_dpi': round(effective_dpi, 3), 'print_quality': band}
 
 
@@ -42,7 +48,7 @@ def printable(image):
 def quality_report(metadata, rows):
     dpis = [row['quality']['native_width'] / PRINTABLE_WIDTH_INCHES for row in rows if row.get('quality', {}).get('native_width') is not None]
     minimum = min(dpis) if dpis else None
-    return {'source_width': metadata['width'], 'source_height': metadata['height'], 'policy': 'whole_clean_observed_row_then_highest_sharpness', 'pixel_mapping': 'grayscale_without_erasing_or_drawing', 'unrecovered_rows': [row['id'] for row in rows if row.get('quality', {}).get('cursor_occluded') or row.get('cursor_content_unproven')], 'effective_dpi': {'minimum': round(minimum, 3) if minimum is not None else None, 'printable_width_inches': round(PRINTABLE_WIDTH_INCHES, 3), 'minimum_required': MIN_PRINT_DPI, 'high_quality_target': HIGH_QUALITY_DPI, 'status': 'high_quality_candidate' if minimum is not None and minimum >= HIGH_QUALITY_DPI else 'printable_candidate' if minimum is not None and minimum >= MIN_PRINT_DPI else 'low_print_resolution'}, 'tools': {name: importlib.metadata.version(name) for name in ['pillow', 'numpy', 'opencv-python-headless', 'reportlab']}, 'limits': ['Native pixels and staff spacing are heuristics; final print readability needs visual review.']}
+    return {'source_width': metadata['width'], 'source_height': metadata['height'], 'policy': 'whole_clean_observed_row_then_highest_sharpness', 'pixel_mapping': 'grayscale_without_erasing_or_drawing', 'unrecovered_rows': [row['id'] for row in rows if row.get('quality', {}).get('cursor_occluded') or row.get('cursor_content_unproven')], 'effective_dpi': {'minimum': round(minimum, 3) if minimum is not None else None, 'printable_width_inches': round(PRINTABLE_WIDTH_INCHES, 3), 'minimum_required': MIN_PRINT_DPI, 'high_quality_target': HIGH_QUALITY_DPI, 'status': print_quality_band(minimum)}, 'tools': {name: importlib.metadata.version(name) for name in ['pillow', 'numpy', 'opencv-python-headless', 'reportlab']}, 'limits': ['Native pixels and staff spacing are heuristics; final print readability needs visual review.']}
 
 def validate_print_quality(rows):
     if any(row.get('quality', {}).get('native_width', 0) / PRINTABLE_WIDTH_INCHES < MIN_PRINT_DPI for row in rows):
