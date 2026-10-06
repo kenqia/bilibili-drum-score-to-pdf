@@ -156,20 +156,40 @@ def analyze_frame(image, allow_partial=False):
     return {'bbox': bbox, 'groups': groups, 'row_bounds': bounds, 'cuts': [bounds[0][0]] + [bound[1] for bound in bounds], 'partial_top': partial_top, 'partial_bottom': partial_bottom, 'sharpness': float(cv2.Laplacian(gray, cv2.CV_64F).var())}
 
 
-def extract_rows(source, output, metadata):
+def extract_rows(source, output, metadata, decisions=None):
     from ordered_score import restore_rows
-    return restore_rows(source, output, metadata)
+    return restore_rows(source, output, metadata, decisions)
 
 
-def write_pdf(output, header, rows):
+def write_pdf(output, header, rows, gaps=None):
     """Place each row as one image, preserving aspect ratio and page boundaries."""
     output = Path(output)
     canvas = Canvas(str(output / 'score.pdf'), pagesize=A4, pageCompression=1)
     page_width, page_height = A4
     margin, gap = 36, 12
     position, page = page_height - margin, 1
-    blocks = ([header] if header else []) + rows
+    blocks = [header] if header else []
+    gaps = gaps or []
+    for index in range(len(rows) + 1):
+        here = [gap for gap in gaps if gap['position'] == index]
+        blocks.extend({'missing_marker': f"MISSING CONTENT: {gap['id']} at {gap['timestamp']:.3f}s", 'gap': gap} for gap in here)
+        if index < len(rows) and not any(gap.get('replace_row') for gap in here):
+            blocks.append(rows[index])
+    if gaps:
+        blocks.append({'missing_marker': 'LIMITATIONS: user accepted missing score content. See manifest.json for evidence.'})
     for block in blocks:
+        if 'missing_marker' in block:
+            if position - 36 < margin:
+                canvas.showPage()
+                page += 1
+                position = page_height - margin
+            canvas.setFont('Helvetica', 9)
+            canvas.rect(margin, position - 30, page_width - margin * 2, 30)
+            canvas.drawString(margin + 6, position - 18, block['missing_marker'])
+            if 'gap' in block:
+                block['gap'].update(page=page, pdf_bbox=[margin, position - 30, page_width - margin, position])
+            position -= 36 + gap
+            continue
         with Image.open(output / block['image']) as image:
             width = page_width - margin * 2
             height = image.height * width / image.width
@@ -187,7 +207,7 @@ def write_pdf(output, header, rows):
     return page
 
 
-def convert(source, output):
+def convert(source, output, decisions=None):
     start = time.monotonic()
     source, output = Path(source), Path(output)
     output.mkdir(parents=True, exist_ok=True)
@@ -197,10 +217,10 @@ def convert(source, output):
         result['source'] = {'kind': 'local', 'name': source.name, **metadata}
         if metadata['width'] < 700:
             raise ConversionError('low_resolution', '源视频宽度不足，放大不能恢复音符细节。请提供更清晰的本地视频。')
-        header, rows, evidence = extract_rows(source, output, metadata)
+        header, rows, evidence = extract_rows(source, output, metadata, decisions)
         result.update(evidence)
-        pages = write_pdf(output, header, rows)
-        result.update(status='success', complete=True, header=header, rows=rows, page_count=pages, pdf='score.pdf')
+        pages = write_pdf(output, header, rows, result.get('gaps'))
+        result.update(status='success', complete=not result.get('gaps'), header=header, rows=rows, page_count=pages, pdf='score.pdf')
     except ConversionError as error:
         result['error'] = {'code': error.code, 'message': str(error)}
         if hasattr(error, 'issues'):

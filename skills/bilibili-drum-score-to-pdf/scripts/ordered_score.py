@@ -59,12 +59,14 @@ def window_rows(image, timestamp):
     return analysis, region, rows
 
 
-def restore_rows(source, output, metadata):
+def restore_rows(source, output, metadata, decisions=None):
     output = Path(output)
     (output / 'images').mkdir(parents=True, exist_ok=True)
     (output / 'evidence').mkdir(parents=True, exist_ok=True)
     delivered, seams, header = [], [], None
     previous, first, last = None, None, None
+    decisions = decisions or {}
+    accepted, gaps = {}, []
     best_candidates = {}
 
     def track(row, position=None):
@@ -93,12 +95,42 @@ def restore_rows(source, output, metadata):
         return {'timestamp': timestamp, 'image': name}
 
     def uncertain(kind, question, item, position, reference=None, candidates=None, overlap_counts=None):
-        issue = {'id': f'{kind}-{position:04d}', 'kind': kind, 'question': question, 'timestamp': item['timestamp'], 'image': item['image'], 'position': position, 'status': 'unresolved', 'choices': ['supplement', 'accept_missing']}
-        if reference:
-            issue['reference'] = reference
+        issue = {'id': f'{kind}-{position:04d}' if kind == 'cursor_occlusion' else f'{kind}-{position:04d}-{int(round(item["timestamp"] * 1000)):08d}', 'kind': kind, 'question': question, 'timestamp': item['timestamp'], 'image': item['image'], 'position': position, 'status': 'unresolved', 'choices': ['supplement', 'accept_missing']}
+        if kind in {'ambiguous_overlap', 'ambiguous_motion', 'ambiguous_repeat'}:
+            issue['choices'].remove('supplement')
+        if kind == 'no_overlap':
+            issue['choices'].append('confirm_join')
+        if kind == 'ambiguous_repeat':
+            issue['choices'].extend(['confirm_repeat', 'confirm_hold'])
         if overlap_counts:
             issue['overlap_candidates'] = overlap_counts
             issue['choices'].append('confirm_overlap')
+        decision = decisions.get(issue['id'], {})
+        action = decision.get('action')
+        if action == 'supplement':
+            from resume_score import validate_supplement, digest
+            supplied = None
+            try:
+                if not decision.get('image_sha256') or digest(decision['image']) == decision['image_sha256']:
+                    supplied = validate_supplement(decision.get('image', ''), output, issue)
+            except OSError:
+                pass
+            if supplied is not None:
+                if kind == 'cursor_occlusion':
+                    delivered[position] = supplied
+                else:
+                    delivered.append(supplied)
+                accepted[issue['id']] = dict(decision, image_sha256=digest(decision['image']))
+                return decision
+        elif action == 'accept_missing':
+            gaps.append({'id': issue['id'], 'position': position, 'timestamp': item['timestamp'], 'question': question, 'replace_row': kind == 'cursor_occlusion'})
+            accepted[issue['id']] = decision
+            return decision
+        elif action in issue['choices'] and (action != 'confirm_overlap' or decision.get('overlap') in (overlap_counts or [])):
+            accepted[issue['id']] = decision
+            return decision
+        if reference:
+            issue['reference'] = reference
         error = ConversionError(kind, question)
         error.issues = [issue]
         candidate_rows = []
@@ -107,7 +139,7 @@ def restore_rows(source, output, metadata):
             record['proposed_position'] = position + index
             record['confirmed'] = False
             candidate_rows.append(record)
-        error.progress = {'rows': delivered, 'header': header, 'seams': seams, 'boundaries': {'start': first, 'end': item}, 'candidate_rows': candidate_rows, 'continuation': {'requires_original_video': True, 'requires_replay': True, 'stop_timestamp': item['timestamp'], 'confirmed_prefix_rows': len(delivered)}, 'quality': quality_report(metadata, delivered)}
+        error.progress = {'rows': delivered, 'header': header, 'seams': seams, 'boundaries': {'start': first, 'end': item}, 'candidate_rows': candidate_rows, 'continuation': {'requires_original_video': True, 'requires_replay': True, 'stop_timestamp': item['timestamp'], 'confirmed_prefix_rows': len(delivered)}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}
         raise error
 
     with tempfile.TemporaryDirectory(prefix='drum-score-') as scratch:
@@ -121,6 +153,7 @@ def restore_rows(source, output, metadata):
                         raise
                     item = evidence(image, timestamp, frame_index)
                     uncertain('unreadable_window', '该时间窗口无法确认完整谱行，不能跳过后声称整曲完整。', item, len(delivered), previous['evidence'])
+                    continue
                 item = None
                 if previous is None:
                     item = evidence(image, timestamp, frame_index)
@@ -139,9 +172,13 @@ def restore_rows(source, output, metadata):
                     prior = previous['rows']
                     overlaps = [count for count in range(1, min(len(prior), len(current)) + 1) if all(same_row(a, b) for a, b in zip(prior[-count:], current[:count]))]
                     exact = len(prior) == len(current) and len(current) in overlaps
+                    forced_count = None
                     if exact and len(overlaps) > 1 and abs(prior[0]['staff_top'] - current[0]['staff_top']) >= current[0]['staff_spacing'] * 2:
                         item = evidence(image, timestamp, frame_index)
-                        uncertain('ambiguous_repeat', '重复行在画面中发生位移，无法区分停留画面和再次演奏的段落。', item, len(delivered), previous['evidence'], current)
+                        choice = uncertain('ambiguous_repeat', '重复行在画面中发生位移，无法区分停留画面和再次演奏的段落。', item, len(delivered), previous['evidence'], current)
+                        if choice['action'] != 'confirm_hold':
+                            exact = False
+                            forced_count = 0
                     if exact:
                         for position, row in zip(previous['indices'], current):
                             track(row, position)
@@ -154,25 +191,27 @@ def restore_rows(source, output, metadata):
                     item = evidence(image, timestamp, frame_index)
                     with Image.open(previous['file']) as before_image:
                         previous['evidence'] = evidence(before_image, previous['timestamp'], previous['frame_index'])
-                    if len(overlaps) != 1:
+                    if forced_count is None and len(overlaps) != 1:
                         error_kind = 'no_overlap' if not overlaps else 'ambiguous_overlap'
-                        uncertain(error_kind, '相邻谱面窗口没有唯一可确认的有序重叠，需核对是否缺行或重复段落。', item, len(delivered), previous['evidence'], current, overlaps)
-                    count = overlaps[0]
-                    current_indices = previous['indices'][-count:]
+                        choice = uncertain(error_kind, '相邻谱面窗口没有唯一可确认的有序重叠，需核对是否缺行或重复段落。', item, len(delivered), previous['evidence'], current, overlaps)
+                        forced_count = choice.get('overlap', 0)
+                    count = overlaps[0] if forced_count is None else forced_count
+                    shifts = [a['staff_top'] - b['staff_top'] for a, b in zip(prior[-count:], current[:count])] if count else []
+                    anchor = previous['anchor_rows']
+                    accumulated = [a['staff_top'] - b['staff_top'] for a, b in zip(anchor[-count:], current[:count])] if count else []
+                    if forced_count is None and (min(shifts) < -min(row['staff_spacing'] for row in current) or min(accumulated) < min(row['staff_spacing'] for row in current) * 2):
+                        choice = uncertain('ambiguous_motion', '行内容有重叠，但没有足够的向上推进位置证据，需核对顺序。', item, len(delivered), previous['evidence'], current, [count])
+                        count = choice.get('overlap', 0)
+                    current_indices = previous['indices'][-count:] if count else []
                     for position, row in zip(current_indices, current[:count]):
                         track(row, position)
-                    shifts = [a['staff_top'] - b['staff_top'] for a, b in zip(prior[-count:], current[:count])]
-                    anchor = previous['anchor_rows']
-                    accumulated = [a['staff_top'] - b['staff_top'] for a, b in zip(anchor[-count:], current[:count])]
-                    if min(shifts) < -min(row['staff_spacing'] for row in current) or min(accumulated) < min(row['staff_spacing'] for row in current) * 2:
-                        uncertain('ambiguous_motion', '行内容有重叠，但没有足够的向上推进位置证据，需核对顺序。', item, len(delivered), previous['evidence'], current)
                     if count == len(current):
                         # Rows leaving the top edge add no new content. Keep the
                         # earlier anchor to prove cumulative motion at the next join.
                         previous.update(rows=current, indices=current_indices, analysis=analysis, evidence=item, file=file, timestamp=timestamp, frame_index=frame_index)
                         last = {'timestamp': timestamp, 'file': file, 'partial_bottom': analysis['partial_bottom']}
                         continue
-                    seam = {'id': f'seam-{len(seams) + 1:04d}', 'position': len(delivered), 'overlap_rows': count, 'before': previous['evidence'], 'after': item, 'vertical_shift': float(np.median(shifts)), 'cumulative_vertical_shift': float(np.median(accumulated)), 'matched_rows': [row['id'] for row in delivered[-count:]]}
+                    seam = {'id': f'seam-{len(seams) + 1:04d}', 'position': len(delivered), 'overlap_rows': count, 'before': previous['evidence'], 'after': item, 'vertical_shift': float(np.median(shifts)) if shifts else None, 'cumulative_vertical_shift': float(np.median(accumulated)) if accumulated else None, 'matched_rows': [row['id'] for row in delivered[-count:]] if count else []}
                     seams.append(seam)
                     current_indices += [track(row) for row in current[count:]]
                 previous = {'rows': current, 'indices': current_indices, 'anchor_rows': current, 'analysis': analysis, 'evidence': item, 'file': file, 'timestamp': timestamp, 'frame_index': frame_index}
@@ -187,4 +226,4 @@ def restore_rows(source, output, metadata):
         if record.get('quality', {}).get('cursor_occluded'):
             item = {'timestamp': record['timestamp'], 'image': record['original_image']}
             uncertain('cursor_occlusion', '该谱行没有找到整行无光标遮挡的真实画面。请补充完整谱行，或明确接受此处缺失；不会擦除或猜补被挡音符。', item, position)
-    return header, delivered, {'seams': seams, 'boundaries': {'start': first, 'end': end}, 'quality': quality_report(metadata, delivered)}
+    return header, delivered, {'seams': seams, 'boundaries': {'start': first, 'end': end}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}

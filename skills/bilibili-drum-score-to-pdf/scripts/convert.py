@@ -10,13 +10,32 @@ import sys
 from pathlib import Path
 from public_video import acquire, InputError
 from drum_score import convert
+from resume_score import persist, resume, ResumeError
 
 
 def main():
     parser = argparse.ArgumentParser(description='Restore a local white multi-staff drum score as A4 PDF.')
-    parser.add_argument('input', help='Local video path or HTTPS Bilibili BV video URL')
-    parser.add_argument('--output', required=True, help='Output directory')
+    parser.add_argument('input', nargs='?', help='Local video path or HTTPS Bilibili BV video URL')
+    parser.add_argument('--output', help='Output directory')
+    parser.add_argument('--resume', help='Existing result directory to replay with explicit answers')
+    parser.add_argument('--answers', help='Local JSON file mapping issue IDs to explicit choices')
     args = parser.parse_args()
+    if args.resume:
+        if args.input or args.output:
+            parser.error('--resume uses its existing task directory; do not supply input or --output')
+        try:
+            result = resume(args.resume, args.answers)
+        except ResumeError as error:
+            result = {'status': 'failed', 'complete': False, 'error': {'code': 'invalid_progress', 'message': str(error)}}
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result['status'] == 'success' else 2
+    if not args.input or not args.output or args.answers:
+        parser.error('fresh conversion needs input and --output; answers require --resume')
+    target = Path(args.output)
+    if target.exists() and (not target.is_dir() or any(target.iterdir())):
+        result = {'status': 'failed', 'complete': False, 'error': {'code': 'existing_output', 'message': '结果目录已有内容，请使用 --resume 继续，或选择新的空目录。'}}
+        print(json.dumps(result, ensure_ascii=False))
+        return 2
     print('正在检查视频并提取完整谱行。', file=sys.stderr, flush=True)
     origin = None
     try:
@@ -30,11 +49,9 @@ def main():
         result = {'schema_version': 1, 'status': 'failed', 'complete': False, 'issues': [], 'rows': [], 'error': {'code': error.code, 'message': str(error)}}
         if hasattr(error, 'http_status'):
             result['error']['http_status'] = error.http_status
-    if origin is not None:
-        result['origin'] = origin
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
-    (output / 'manifest.json').write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    result = persist(result, source, output, origin=origin)
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result['status'] == 'success' else 2
 

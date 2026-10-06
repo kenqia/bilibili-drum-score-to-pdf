@@ -19,8 +19,8 @@ uv run /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py /absolute
 
 入口向 stdout 输出 JSON，stderr 提供进度。先检查 `status`，再向用户交付结果。
 
-- `success`：交付 `score.pdf` 和 `manifest.json`。后者保存标题图、谱行图片、源画面坐标、视频实际时间和 PDF 页码。
-- `waiting`：展示 `issues` 中编号、截图、源视频时间和具体问题。保持结果目录供后续继续；未解决的疑点不能称为完成。
+- `success`：交付 `score.pdf` 和 `manifest.json`，同时检查 `complete`。若为 false，说明用户已明确接受的缺失位置及 `limitations`，不能称为完整还原。后者保存标题图、谱行图片、源画面坐标、视频实际时间和 PDF 页码。
+- `waiting`：展示 `issues` 中编号、截图、源视频时间和具体问题。展示对应证据后等用户在聊天中明确回答；保留结果目录，按下文继续。未解决的疑点不能称为完成。
 - `failed`：说明 `error.message` 和源视频分辨率。无法读取或画质不足时，请用户提供能显示完整谱行的清晰本地视频。
 
 ## 匿名链接与本地兜底
@@ -33,13 +33,13 @@ uv run /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py /absolute
 
 ## 当前支持范围
 
-当前切片支持白底、多行、固定或向上推进的本地视频。入口自动定位白底谱面，从完整五线谱行之间的空白裁剪，保留首帧可提供的标题、速度、拍号和行下标记。逐行排入 A4 纵向页面，分页不拆开谱行。
+当前入口支持白底、多行、固定或向上推进的本地视频。入口自动定位白底谱面，从完整五线谱行之间的空白裁剪，保留首帧可提供的标题、速度、拍号和行下标记。逐行排入 A4 纵向页面，分页不拆开谱行。
 
 接续只比较相邻窗口的有序重叠与向上位移。停留画面去重，后续再次出现的相同谱段保留；不进行全局图片去重。连续滚动累积位移，边缘残行待完整出现后才保留。查看 `seams` 的前后截图、时间及匹配谱行，逐个核查；同时检查 `boundaries` 的开头与真实末帧。
 
 无唯一重叠、顺序不明或首尾残行未恢复时返回等待。`candidate_rows` 是未确认候选，不能当成完成曲谱。`continuation` 明确要求恢复时重放原视频，不能仅将已保存前缀排版后声称整曲完整。入口跟踪同一谱行的真实候选，优先选择整行无浅蓝竖块遮挡的画面，再按清晰度选择。`observations` 保存观察时间和质量，`original_image` 保留所选原图，`image` 为只转灰度的打印图。原谱蓝色休止横线和数字保留为灰度墨迹，不按颜色删除。
 
-没有干净整行候选时返回 `cursor_occlusion`，展示原图与源时间。不能靠擦除、补画或放大宣布恢复。`quality` 报告源分辨率、实际谱行宽度/五线间距/打印有效 DPI、工具版本和未恢复行；这些门槛不能代替逐页视觉验收。文字回答后继续仍由后续切片完成。
+没有干净整行候选时返回 `cursor_occlusion`，展示原图与源时间。不能靠擦除、补画或放大宣布恢复。`quality` 报告源分辨率、实际谱行宽度/五线间距/打印有效 DPI、工具版本和未恢复行；这些门槛不能代替逐页视觉验收。
 
 清晰度检查依据源谱面宽度和五线间距。通过检查只表示满足当前启发式门槛，不代替打印验收。输出后渲染 PDF，对照源画面检查每页的五线、符头、符杆、标题和分页；发现缺失时报告疑点。
 
@@ -52,3 +52,19 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 ```
 
 测试还需要 `pdfinfo` 和 `pdftoppm`。合成固定和滚动谱面通过不能替代《七里香》整曲验收。
+
+## 聊天回答与恢复
+
+用户只需在当前聊天中回答，不要求用户填写 JSON。展示疑点编号、源视频时间、截图、相邻参考和具体问题。Codex 仅根据用户明确表达的选择，把回答映射到 `issues[].choices`，写入本地答案文件，再运行：
+
+```sh
+uv run /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py --resume /absolute/path/to/result --answers /absolute/path/to/answers.json
+```
+
+没有新回答时仅使用 `--resume`，确认结果仍在等待。不能因等待时间、含糊回复或重试而默认确认。`answer_error` 表示回答无法应用，原进度和此前确认保留。`invalid_progress` 表示原视频、证据或状态已变更，应报告失败并保留目录，不覆盖旧结果。
+
+答案文件按编号映射为对象，`action` 必须是提供的选择。用户确认相邻窗口直接衔接时用 `confirm_join`；明确再次演奏同段用 `confirm_repeat`；明确是停留画面用 `confirm_hold`；确认重叠行数用 `confirm_overlap` 并提供 `overlap`。只有当前疑点提供对应选择时才使用它们。
+
+用户提供可观察的完整单行谱面图片时用 `supplement` 和本地 `image` 路径。补图须有完整五线、符杆边缘和足够源像素，不能由文字猜补音符。补图像素不足、裁剪不完整或仍被光标遮挡时继续等待。原始补图及只转灰度的打印图都保留。用户明确接受无法恢复的内容时用 `accept_missing`，PDF 在对应位置显示 MISSING CONTENT，末尾附限制说明，manifest 的 `complete` 为 false。
+
+恢复前校验原视频指纹和证据。收到有效回答后重放原视频到末尾或下一个疑点，不能直接把此前保存的前缀排成完整 PDF。此前答案、来源和旧证据保留。对同一个答案重复恢复不会插入重复谱行。新转换只接受空结果目录，已有目录使用 `--resume`。
