@@ -96,10 +96,16 @@ def validate_supplement(path, output, issue):
                 raise ValueError
             bbox = analysis['bbox']
             top, bottom = analysis['row_bounds'][0]
-            row = image.crop((bbox[0], bbox[1] + top, bbox[2], bbox[1] + bottom)).convert('L')
+            row = image.crop((bbox[0], bbox[1] + top, bbox[2], bbox[1] + bottom)).convert('RGB')
+            from quality_score import assess, printable
+            quality = assess(row, analysis['groups'][0]['spacing'])
+            if quality['cursor_occluded']:
+                raise ValueError
             name = 'images/supplement-' + issue['id'] + '.png'
-            row.save(Path(output) / name)
-            return {'id': 'supplement-' + issue['id'], 'image': name, 'timestamp': issue['timestamp'], 'bbox': [bbox[0], bbox[1] + top, bbox[2], bbox[1] + bottom], 'content_sha256': digest(Path(output) / name), 'supplement': {'source_sha256': digest(path), 'user_provided': True}, 'confirmed': True}
+            original = 'images/supplement-original-' + issue['id'] + '.png'
+            row.save(Path(output) / original)
+            printable(row).save(Path(output) / name)
+            return {'id': 'supplement-' + issue['id'], 'image': name, 'original_image': original, 'quality': quality, 'timestamp': issue['timestamp'], 'bbox': [bbox[0], bbox[1] + top, bbox[2], bbox[1] + bottom], 'content_sha256': digest(Path(output) / name), 'supplement': {'source_sha256': digest(path), 'user_provided': True}, 'confirmed': True}
     except (OSError, ValueError, Image.DecompressionBombError, ConversionError):
         return None
 
