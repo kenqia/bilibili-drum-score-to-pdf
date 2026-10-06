@@ -5,7 +5,7 @@ import tempfile
 
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 from drum_score import ConversionError, analyze_frame, sample_video
 from quality_score import assess, cursor_regions, printable, quality_report
 
@@ -15,10 +15,8 @@ def comparison_mask(region, group):
     top = int(round(group['top'] - spacing * 3))
     bottom = int(round(group['bottom'] + spacing * 5))
     pixels = np.asarray(region.crop((0, top, region.width, bottom)).convert('RGB'))
-    mask = cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY) < 180
-    for line in range(5):
-        y = int(round(group['top'] + line * spacing - top))
-        mask[max(0, y - 2):y + 3] = False
+    # Colored notation counts as ink too; only the detected playback cursor is ignored.
+    mask = (cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY) < 180) | ((np.ptp(pixels, axis=2) > 20) & (pixels.min(axis=2) < 220))
     _, ignored = cursor_regions(region.crop((0, top, region.width, bottom)), spacing)
     return mask, ignored
 
@@ -35,7 +33,13 @@ def same_row(left, right):
         other_ignore = cv2.resize(other_ignore.astype(np.uint8), (a.shape[1], a.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
     available = ~(ignored | other_ignore)
     union = np.count_nonzero((a | b) & available)
-    return union > 30 and np.count_nonzero((a ^ b) & available) / union < .08
+    # Compression may move an existing ink boundary by one pixel. A separate dot
+    # or extended stem must never disappear inside a whole-row percentage budget.
+    kernel = np.ones((3, 3), dtype=np.uint8)
+    near_a = cv2.dilate(a.astype(np.uint8), kernel).astype(bool)
+    near_b = cv2.dilate(b.astype(np.uint8), kernel).astype(bool)
+    unmatched = ((a & ~near_b) | (b & ~near_a)) & available
+    return union > 30 and not unmatched.any()
 
 
 def save_row(candidate, output, index):
@@ -59,6 +63,23 @@ def window_rows(image, timestamp):
     return analysis, region, rows
 
 
+def blurred_observation(image, references):
+    """Fit a short blur to actual endpoints for analysis, never for PDF pixels."""
+    observed = np.asarray(image.convert('RGB')).astype(np.int16)
+    # Strong blur can erase a tiny supported mark below the residual threshold.
+    # Do not fit it even when both endpoints look identical.
+    for radius in range(1, 4):
+        residuals = []
+        for reference in references:
+            candidate = np.asarray(reference.filter(ImageFilter.GaussianBlur(radius))).astype(np.int16)
+            residual = np.abs(observed - candidate).max(axis=2).astype(np.float32)
+            # A local bound catches small marks that a whole-window average hides.
+            residuals.append(float(cv2.blur(residual, (3, 3)).max()))
+        if max(residuals) <= 8:
+            return {'blur_radius': radius, 'maximum_local_residual': round(max(residuals), 3)}
+    return None
+
+
 def restore_rows(source, output, metadata, decisions=None):
     output = Path(output)
     (output / 'images').mkdir(parents=True, exist_ok=True)
@@ -68,6 +89,8 @@ def restore_rows(source, output, metadata, decisions=None):
     decisions = decisions or {}
     accepted, gaps = {}, []
     best_candidates = {}
+    pending, recoveries, unreadable = [], [], []
+    followup = None
 
     def track(row, position=None):
         if position is None:
@@ -139,7 +162,7 @@ def restore_rows(source, output, metadata, decisions=None):
             record['proposed_position'] = position + index
             record['confirmed'] = False
             candidate_rows.append(record)
-        error.progress = {'rows': delivered, 'header': header, 'seams': seams, 'boundaries': {'start': first, 'end': item}, 'candidate_rows': candidate_rows, 'continuation': {'requires_original_video': True, 'requires_replay': True, 'stop_timestamp': item['timestamp'], 'confirmed_prefix_rows': len(delivered)}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}
+        error.progress = {'rows': delivered, 'header': header, 'seams': seams, 'recoveries': recoveries, 'unreadable_observations': unreadable, 'readable_followup': followup, 'boundaries': {'start': first, 'end': item}, 'candidate_rows': candidate_rows, 'continuation': {'requires_original_video': True, 'requires_replay': True, 'stop_timestamp': item['timestamp'], 'confirmed_prefix_rows': len(delivered)}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}
         raise error
 
     with tempfile.TemporaryDirectory(prefix='drum-score-') as scratch:
@@ -149,15 +172,40 @@ def restore_rows(source, output, metadata, decisions=None):
                 try:
                     analysis, region, current = window_rows(image, timestamp)
                 except ConversionError as error:
-                    if not previous:
-                        raise
                     item = evidence(image, timestamp, frame_index)
-                    uncertain('unreadable_window', '该时间窗口无法确认完整谱行，不能跳过后声称整曲完整。', item, len(delivered), previous['evidence'])
+                    unreadable.append(dict(item))
+                    # Keep the failure value, not its traceback and decoded pixels.
+                    pending.append({'evidence': item, 'file': file, 'error': (error.code, str(error))})
                     continue
+                if pending:
+                    followup = evidence(image, timestamp, frame_index)
+                    recovered = []
+                    same_position = previous and previous['analysis']['bbox'] == analysis['bbox'] and len(previous['rows']) == len(current) and all(abs(a['staff_top'] - b['staff_top']) <= 1 and same_row(a, b) for a, b in zip(previous['rows'], current))
+                    if same_position and timestamp - previous['timestamp'] <= 3:
+                        with Image.open(previous['file']) as before:
+                            references = [before.convert('RGB'), image.convert('RGB')]
+                        for entry in pending:
+                            with Image.open(entry['file']) as blurred:
+                                match = blurred_observation(blurred, references)
+                            if match is None:
+                                break
+                            recovered.append(dict(entry['evidence'], **match))
+                    if len(recovered) == len(pending):
+                        with Image.open(previous['file']) as before:
+                            before_item = evidence(before, previous['timestamp'], previous['frame_index'])
+                        recoveries.append({'before': before_item, 'after': evidence(image, timestamp, frame_index), 'observations': recovered, 'policy': 'same_position_clear_bracket_and_local_blur_residual'})
+                    else:
+                        if not previous:
+                            first = pending[0]['evidence']
+                        else:
+                            with Image.open(previous['file']) as before:
+                                previous['evidence'] = evidence(before, previous['timestamp'], previous['frame_index'])
+                        uncertain('unreadable_window', '已检查后续清晰画面，但无法用相邻真实观察确认该模糊窗口连续完整。请补图或明确接受缺失。', pending[0]['evidence'], len(delivered), previous['evidence'] if previous else None, current if not previous else None)
+                    pending.clear()
                 item = None
                 if previous is None:
                     item = evidence(image, timestamp, frame_index)
-                    first = item
+                    first = first or item
                     if analysis['partial_top']:
                         uncertain('start_gap', '视频开头存在上边缘残行，无法证明曲谱从完整开头开始。', item, 0, candidates=current)
                     top = analysis['row_bounds'][0][0]
@@ -217,7 +265,13 @@ def restore_rows(source, output, metadata, decisions=None):
                 previous = {'rows': current, 'indices': current_indices, 'anchor_rows': current, 'analysis': analysis, 'evidence': item, 'file': file, 'timestamp': timestamp, 'frame_index': frame_index}
                 last = {'timestamp': timestamp, 'file': file, 'partial_bottom': analysis['partial_bottom']}
         if not previous:
+            if pending:
+                raise ConversionError(*pending[0]['error'])
             raise ConversionError('decode_failed', '视频中没有可读取的完整谱行。')
+        if pending:
+            uncertain('unreadable_window', '视频结尾仍不清晰，没有后续真实清晰画面可确认末尾完整。', pending[0]['evidence'], len(delivered), previous['evidence'])
+            last = {'timestamp': pending[-1]['evidence']['timestamp'], 'file': pending[-1]['file'], 'partial_bottom': False}
+            pending.clear()
         with Image.open(last['file']) as image:
             end = evidence(image, last['timestamp'], len(frames))
         if last['partial_bottom']:
@@ -226,4 +280,4 @@ def restore_rows(source, output, metadata, decisions=None):
         if record.get('quality', {}).get('cursor_occluded'):
             item = {'timestamp': record['timestamp'], 'image': record['original_image']}
             uncertain('cursor_occlusion', '该谱行没有找到整行无光标遮挡的真实画面。请补充完整谱行，或明确接受此处缺失；不会擦除或猜补被挡音符。', item, position)
-    return header, delivered, {'seams': seams, 'boundaries': {'start': first, 'end': end}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}
+    return header, delivered, {'seams': seams, 'recoveries': recoveries, 'unreadable_observations': unreadable, 'boundaries': {'start': first, 'end': end}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}

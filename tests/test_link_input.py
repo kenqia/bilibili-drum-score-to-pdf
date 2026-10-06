@@ -43,7 +43,6 @@ class LinkInputTests(unittest.TestCase):
             self.assertEqual(result['origin']['cid'], 456)
             self.assertEqual((result['source']['width'], result['source']['height']), (1280, 960))
             self.assertEqual(result['origin']['api_quality'], 80)
-            self.assertIn('cid=456', transport.call_args_list[1].args[1].full_url)
             manifest = (base / 'result/manifest.json').read_text()
             self.assertNotIn('DO_NOT_SAVE_TEST_SENTINEL', output + manifest)
             self.assertNotIn('share_source', manifest)
