@@ -11,6 +11,115 @@ from test_ordered_conversion import sequence_video, window
 
 
 class ResumeTests(unittest.TestCase):
+    def test_interrupted_pdf_or_manifest_commit_cannot_be_resumed_as_old_progress(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            source = sequence_video([window('ABC'), window('DEF')], base)
+            output = base / 'result'
+            _, waiting = self.invoke(source, '--output', output)
+            self.assertEqual(waiting['status'], 'waiting')
+            self.assertFalse((output / 'score.pdf').exists())
+            answers = base / 'answers.json'
+            answers.write_text(json.dumps({waiting['issues'][0]['id']: {'action': 'confirm_join'}}))
+            manifest_path, state_path = output / 'manifest.json', output / 'state.json'
+            saved_manifest, saved_state = manifest_path.read_bytes(), state_path.read_bytes()
+            # Inject a process exit at the filesystem replacement boundary.
+            # Then ask the real CLI to inspect the surviving directory.
+            launcher = """
+import os, pathlib, runpy, sys
+cli, destination, *arguments = sys.argv[1:]
+replace = os.replace
+def interrupted(src, dst, *args, **kwargs):
+    result = replace(src, dst, *args, **kwargs)
+    if pathlib.Path(dst).resolve() == pathlib.Path(destination).resolve():
+        os._exit(73)
+    return result
+os.replace = interrupted
+sys.path.insert(0, str(pathlib.Path(cli).parent))
+sys.argv = [cli, *arguments]
+runpy.run_path(cli, run_name='__main__')
+"""
+            for name in ('score.pdf', 'manifest.json'):
+                with self.subTest(interrupted_after=name):
+                    manifest_path.write_bytes(saved_manifest)
+                    state_path.write_bytes(saved_state)
+                    (output / 'score.pdf').unlink(missing_ok=True)
+                    crashed = subprocess.run([sys.executable, '-c', launcher, str(CLI), str(output / name), '--resume', str(output), '--answers', str(answers)], capture_output=True, text=True)
+                    self.assertEqual(crashed.returncode, 73, crashed.stderr)
+                    artifacts_before = {str(path.relative_to(output)): path.read_bytes() for path in output.rglob('*') if path.is_file()}
+                    _, result = self.invoke('--resume', output)
+                    self.assertEqual(result['status'], 'failed')
+                    self.assertEqual(result['error']['code'], 'invalid_progress')
+                    artifacts_after = {str(path.relative_to(output)): path.read_bytes() for path in output.rglob('*') if path.is_file()}
+                    self.assertEqual(artifacts_before, artifacts_after)
+
+    def test_incomplete_legacy_or_escaping_artifact_state_cannot_resume(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            source = sequence_video([window('ABC')], base)
+            output = base / 'result'
+            _, original = self.invoke(source, '--output', output)
+            self.assertEqual(original['status'], 'success')
+            manifest_path, state_path = output / 'manifest.json', output / 'state.json'
+            original_manifest = manifest_path.read_bytes()
+            original_state = state_path.read_bytes()
+            for damage in ('missing_pdf_hash', 'missing_evidence_hash', 'legacy_schema', 'absolute_pdf', 'escaping_image'):
+                with self.subTest(damage=damage):
+                    manifest = json.loads(original_manifest)
+                    state = json.loads(original_state)
+                    if damage == 'missing_pdf_hash':
+                        state['artifacts'].pop(manifest['pdf'], None)
+                    elif damage == 'missing_evidence_hash':
+                        state['artifacts'].pop(manifest['boundaries']['start']['image'])
+                    elif damage == 'legacy_schema':
+                        state['schema_version'] = 1
+                    elif damage == 'absolute_pdf':
+                        manifest['pdf'] = str(output / 'score.pdf')
+                    elif damage == 'escaping_image':
+                        reference = manifest['boundaries']['start']
+                        old_name = reference['image']
+                        external = base / 'external.png'
+                        external.write_bytes((output / old_name).read_bytes())
+                        reference['image'] = '../external.png'
+                        state['artifacts']['../external.png'] = state['artifacts'][old_name]
+                    manifest_path.write_text(json.dumps(manifest))
+                    state['manifest_sha256'] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+                    state_path.write_text(json.dumps(state))
+                    damaged_manifest, damaged_state = manifest_path.read_bytes(), state_path.read_bytes()
+                    _, result = self.invoke('--resume', output)
+                    self.assertEqual(result['status'], 'failed')
+                    self.assertEqual(result['error']['code'], 'invalid_progress')
+                    self.assertEqual(manifest_path.read_bytes(), damaged_manifest)
+                    self.assertEqual(state_path.read_bytes(), damaged_state)
+            manifest_path.write_bytes(original_manifest)
+            state_path.write_bytes(original_state)
+            _, restored = self.invoke('--resume', output)
+            self.assertEqual(restored['status'], 'success')
+
+    def test_pdf_changes_or_loss_refuse_resume_and_preserve_progress(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            source = sequence_video([window('ABC')], base)
+            output = base / 'result'
+            _, original = self.invoke(source, '--output', output)
+            self.assertEqual(original['status'], 'success')
+            pdf = output / original['pdf']
+            saved_pdf = pdf.read_bytes()
+            saved_manifest = (output / 'manifest.json').read_bytes()
+            saved_state = (output / 'state.json').read_bytes()
+            for damaged in (b'replaced-pdf-generation', None):
+                with self.subTest(damaged=damaged):
+                    if damaged is None:
+                        pdf.unlink()
+                    else:
+                        pdf.write_bytes(damaged)
+                    _, result = self.invoke('--resume', output)
+                    self.assertEqual(result['status'], 'failed')
+                    self.assertEqual(result['error']['code'], 'invalid_progress')
+                    self.assertEqual((output / 'manifest.json').read_bytes(), saved_manifest)
+                    self.assertEqual((output / 'state.json').read_bytes(), saved_state)
+                    pdf.write_bytes(saved_pdf)
+
     def invoke(self, *arguments):
         run = subprocess.run([sys.executable, str(CLI), *map(str, arguments)], capture_output=True, text=True)
         self.assertTrue(run.stdout.strip(), run.stderr)
