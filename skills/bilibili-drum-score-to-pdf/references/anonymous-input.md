@@ -1,13 +1,19 @@
 # 匿名视频获取维护说明
 
-普通 BV 链接先请求 `https://api.bilibili.com/x/web-interface/view`，按所选分 P 取得 CID，再请求 `https://api.bilibili.com/x/player/playurl`，参数为 `bvid`、`cid`、`qn=80`、`fnval=1`、`fnver=0`。没有 Cookie、认证、签名密钥、session、try_look 或 high_quality 参数。播放请求返回的质量可能低于 `qn`；下载后以 ffprobe 实际宽高为准。
+入口固定 `yt-dlp==2026.8.19`，使用内置 Bilibili extractor 的匿名格式枚举。Python API 不解析 CLI 配置文件，构造器关闭插件加载，参数禁用 Cookie 文件、浏览器 Cookie、netrc、用户名、密码和缓存。不会读取已有登录态。extractor 的 WBI 与 `try_look=1` 路径只用于公开匿名请求，不能保证取得会员画质。
 
-[社区视频流接口文档](https://github.com/bilibili-plugins/bilibili-api-collect/blob/master/docs/video/videostream_url.md)将旧 playurl 接口标为旧路径，当前新的 WBI 路径要求签名。这份文档不是 B站官方稳定性承诺。旧路径曾在 2026-10-06 对 BV1b5411x7Ku 成功返回匿名 quality=16、实际 640×360，而视频元数据为 1920×1080。这个低清结果不能用于高清打印验收。
+保留 HTTPS BV 和单个正整数 `p` 校验。始终传规范化的显式分 P 链接，拒绝 playlist 或无法匹配所选分 P 的返回。选择原生分辨率最高的 video-only，依次比较帧率、H.264 兼容性和码率。无独立视频轨时才使用含音频的单文件，`single_file_fallback` 明确记录。独立音轨不下载，不混流。多片段旧流暂不支持。
 
-仅处理单个 MP4 地址，允许 HTTPS 且主机为 bilivideo.com、bilivideo.cn 或它们的点分子域。公开 API 地址固定，不使用用户指定主机。禁用自动代理、Cookie 和重定向，拒绝非 HTTPS、userinfo、额外端口和其他媒体主机。下载地址留在内存中，失败消息不输出异常原文或服务器自由文本，源视频文件名只含 BV 和分 P。
+yt-dlp 的当前 Bilibili extractor 未输出 DASH 官方备用地址。项目只在其 `extract_formats` 边界保留官方响应同一视频轨的 `backupUrl`/`backup_url`，同时将无音轨的 DASH 流标为 video-only。媒体候选最多尝试 3 个，每个最多使用 2 个官方备用地址。`format_attempts` 和 `backup_used` 记录是否用了兜底。
 
-[Python urllib.request](https://docs.python.org/3/library/urllib.request.html)提供 opener、socket timeout 与自定义重定向处理。timeout 限制阻塞传输操作，不保证包含 DNS 或多 IP 连接尝试的总墙钟时长。当前 WSL 用 `timeout 120s` 包裹链接命令；外部终止时可能尚无 manifest，按网络获取失败转本地视频。[urllib.parse](https://docs.python.org/3/library/urllib.parse.html)负责拆解 URL，安全检查由调用方显式完成。
+所有 extractor 请求通过受限 urllib transport。初始请求和每跳重定向必须是 HTTPS、无 URL 凭据、默认端口；媒体初始地址还须属于 bilivideo.com 或 bilivideo.cn。解析出的所有 IP 都必须公开，拒绝回环、私有、链路本地及其他非公开地址。实际连接固定解析结果中的数值 IP，TLS 仍校验原域名，避免校验后再次 DNS 解析。重定向最多 5 跳。
 
-任何网络异常、HTTP 拒绝、非零 API code、无效 JSON、分 P 不存在、无单文件 MP4、未知媒体域、重定向、响应超过上限或画质不足都会停止。不给这些失败加自动重试，不迁移到需要认证的新接口。向用户报告原因和实际尺寸，使用用户提供的清晰本地视频继续原来的谱面还原意图。
+传输遵循环境 HTTP CONNECT 代理配置。代理是用户指定的传输端点，可以位于本机；隧道目标使用已验证的公开 IP，避免把源站 DNS 验证委托给代理。源站请求不携带 Cookie、Authorization 或 Proxy-Authorization。代理凭据不写记录，HTTPS 和 SOCKS 代理未专项验证。
 
-离线链接测试替换 urllib 公开传输响应，下载真实编码夹具并调用统一 CLI。它们验证转换集成，不证明外部服务可用。实时 smoke check 必须另记录日期、BV、分 P、quality、实测宽高及处理结果，不保存原始 API 响应或媒体地址。
+连接超时 20 秒，extractor 响应最多 2 MiB，视频最多 2 GiB。独立工作进程总时限 30 分钟，覆盖 DNS、接口、下载及 ffprobe/ffmpeg；探测和首帧解码各最多 30 秒。获取进程组在可捕获的失败或中断后停止。后续谱面转换时限另计。
+
+下载在系统独立 staging 内完成，签名 URL 只在工作进程内存中存在。ffprobe 记录实际宽高、编码与帧率，ffmpeg 验证首帧可解码。实测尺寸小于格式标记时返回 `media_resolution_mismatch`，不会静默把伪高清输入发布为成功。发布先复制到目标文件系统，再用独占硬链接提交源文件，避免跨文件系统直接 rename。强杀时的发布残留与同目录恢复规则由获取生命周期任务继续完善。
+
+只向 CLI 返回固定脱敏原因、HTTP 状态码和安全元数据，不显示第三方异常、服务器自由文本或请求头。获取失败提示清晰本地视频兜底；接口变化、412、格式不支持和解码失败均不能当作本地谱面算法故障。
+
+2026-10-06 使用隔离 uv 环境验证后端版本 2026.08.19。离线统一 CLI 测试使用受控 yt-dlp/HTTP/socket 边界及真实编码 fixture，不能证明 B站现场可用。本轮没有访问真实 B站媒体，也没有验收高清整曲。实时 smoke check 必须另记录日期、BV、分 P、匿名状态、选中格式与实测参数，不保存媒体地址或原始 API 响应。
