@@ -92,3 +92,9 @@ pdftoppm -png -r 150 /absolute/path/to/result/score.pdf /absolute/path/to/review
 新增 3 个测试覆盖 9 类输入，包括中段文字卡、局部五线、末尾残行接结束卡、模糊文字卡、模糊谱面、不可分类空白及全片只有文字卡。无依据的边缘保持等待，全片无谱面不生成 PDF。此轮没有取得真实频道视频，文字卡规则的真实样本验收仍由整体验收任务完成。
 
 验证命令 `python -m unittest discover -s tests -p test_edge_cards.py -v`，3 项通过。既有 `test_review_regressions.py` 的 5 项回归也通过。
+
+## Issue 15 恢复完整性
+
+2026-10-06，在独立 worktree 通过统一 CLI 做 TDD。PDF 改写及丢失最初仍返回 success；只添加 PDF hash 后，删除 artifact 清单项仍可跳过校验。补齐清单一致性校验后均返回 failed / invalid_progress。文件系统替换边界的故障注入还复现了 PDF 已替换、旧 waiting 状态仍可被认可的问题，现已拒绝该混代结果。manifest 已提交而 state 未提交的中断也拒绝恢复。
+
+运行 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_resume_conversion.py -v，13 项通过。覆盖 PDF 篡改与丢失、缺少 PDF/证据 hash、旧 schema、绝对与越界引用、提交中断、正常 waiting、重放、补图和回答幂等。此验证没有模拟断电或文件系统持久化顺序，不能据此声称整个目录具备断电原子事务。
