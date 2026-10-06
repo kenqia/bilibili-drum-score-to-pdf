@@ -12,7 +12,7 @@ uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py /absolute/path/to/vi
 
 命令需要 `ffmpeg`、`ffprobe`、`uv` 和 Python 3.12 或更高版本。`uv` 在独立环境运行依赖。stdout 输出结构化 JSON，stderr 输出进度；`status` 区分成功、等待确认和失败。
 
-入口采样完整视频并核查真实末帧。纵向跳行和滚动只按相邻窗口的唯一有序重叠与向上位移接续；同一处停留画面只保留一次，后续再次出现的谱段仍保留。上下边缘残行不会直接进入 PDF。`seams` 保存每个接续位置的前后截图与时间，`boundaries` 保存开头和结尾。缺少唯一重叠或首尾残行未恢复时，返回编号疑点和未确认候选谱行，不声称完整。光标恢复和疑点回答后继续由后续切片完成。当前不会安装 skill 或修改 Codex 配置。
+入口采样完整视频并核查真实末帧。纵向跳行和滚动只按相邻窗口的唯一有序重叠与向上位移接续；同一处停留画面只保留一次，后续再次出现的谱段仍保留。上下边缘残行不会直接进入 PDF。`seams` 保存每个接续位置的前后截图与时间，`boundaries` 保存开头和结尾。缺少唯一重叠或首尾残行未恢复时，返回编号疑点和未确认候选谱行，不声称完整。光标恢复由后续切片完成。当前不会安装 skill 或修改 Codex 配置。
 
 ## B站链接输入
 
@@ -27,6 +27,18 @@ timeout 120s uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https:
 网络、访问限制、接口变化或不支持的媒体地址会立即停止。WSL 中的 `timeout 120s` 给整次链接尝试设置外部时限；若退出码为 124 且尚无 JSON，按网络超时处理并改用本地视频，不继续重试。画质不足时报告实际分辨率，请提供清晰本地视频并重新运行本地命令。请求 1080P 不等于取得 1080P，元数据尺寸也不能代替实际视频尺寸。下载只支持单文件 MP4、HTTPS B站媒体域名，不跟随重定向；因此部分正常 CDN 变化也可能触发本地兜底。
 
 [维护依据与停止条件](skills/bilibili-drum-score-to-pdf/references/anonymous-input.md)说明公开接口限制。
+
+## 疑点回答后继续
+
+等待时返回稳定编号、截图、源视频时间和可选处理。保留结果目录，在当前 Codex 聊天中明确确认拼接、重复段落、提供完整谱行图片，或接受标有缺失位置的结果。Codex 把明确回答转为本地答案文件，不要求用户写 JSON。
+
+```sh
+uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --resume /absolute/path/to/result --answers /absolute/path/to/answers.json
+```
+
+不提供 `--answers` 会保持已有状态。未知选择、含糊回答或无效补图不能解决疑点。恢复会校验原视频和进度，再重放到视频末尾或下一个问题，保留之前的确认。接受缺失时 PDF 在对应位置插入标记，`complete` 为 false，附限制说明。原视频或状态损坏时保留原目录并报告失败。
+
+新转换必须使用空目录；恢复使用 `--resume`，不会覆盖已有任务。
 
 ## 验证
 

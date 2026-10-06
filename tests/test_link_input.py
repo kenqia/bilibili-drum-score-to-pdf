@@ -116,9 +116,11 @@ class LinkInputTests(unittest.TestCase):
             base = Path(scratch)
             partial = base / 'anonymous-video.partial'
             partial.write_bytes(b'user-file')
-            code, result, _, _ = self.invoke('https://www.bilibili.com/video/BV1b5411x7Ku', base, [HTTPError('https://api.bilibili.com', 412, 'rejected', {}, None)])
+            code, result, transport, _ = self.invoke('https://www.bilibili.com/video/BV1b5411x7Ku', base, [HTTPError('https://api.bilibili.com', 412, 'rejected', {}, None)])
             self.assertEqual(code, 2)
             self.assertEqual(partial.read_bytes(), b'user-file')
+            self.assertEqual(result['error']['code'], 'existing_output')
+            transport.assert_not_called()
 
 
 if __name__ == '__main__':
