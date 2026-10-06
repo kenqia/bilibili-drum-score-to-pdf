@@ -143,7 +143,8 @@ def clear_non_score_card(image):
     background = float(np.median(gray))
     foreground = (np.abs(gray.astype(float) - background) > 35).astype(np.uint8)
     # Even a single partial staff line prevents classification as a title card.
-    horizontal = cv2.morphologyEx(foreground, cv2.MORPH_OPEN,
+    staff_signal = (np.abs(gray.astype(float) - background) > 2).astype(np.uint8)
+    horizontal = cv2.morphologyEx(staff_signal, cv2.MORPH_OPEN,
                                  np.ones((1, max(35, image.width // 32)), np.uint8))
     if horizontal.any() or foreground.mean() > .08:
         return False
