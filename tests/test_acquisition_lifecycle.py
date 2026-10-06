@@ -24,6 +24,9 @@ info = {'id': 'BV1b5411x7Ku_p2', 'formats': [{'url': 'https://cdn.bilivideo.com/
 def stall(*args, **kwargs):
     marker.write_text(str(os.getpid()))
     time.sleep(60)
+def copy_stall(*args, **kwargs):
+    marker.with_name('copy-pid').write_text(str(os.getpid()))
+    stall()
 def dns(*args, **kwargs):
     if mode == 'dns': stall()
     return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]
@@ -41,7 +44,7 @@ def response(*args, **kwargs):
     if mode == 'connection': stall()
     marker.write_text(str(os.getpid()))
     return Body(Path(os.environ['FIXTURE_VIDEO']).read_bytes() if mode == 'copy' else b'invalid-video')
-with patch.object(YoutubeDL, 'extract_info', side_effect=extract), patch('socket.getaddrinfo', side_effect=dns), patch('urllib.request.OpenerDirector.open', side_effect=response), (patch('shutil.copyfileobj', side_effect=stall) if mode == 'copy' else contextlib.nullcontext()):
+with patch.object(YoutubeDL, 'extract_info', side_effect=extract), patch('socket.getaddrinfo', side_effect=dns), patch('urllib.request.OpenerDirector.open', side_effect=response), (patch('shutil.copyfileobj', side_effect=copy_stall) if mode == 'copy' else contextlib.nullcontext()):
     runpy.run_path(sys.argv[0], run_name='__main__')
 '''
 
@@ -150,6 +153,7 @@ class AcquisitionLifecycleTests(unittest.TestCase):
             video = video_from_image(score_frame(), base)
             process = self.start(base, 'copy', timeout='2', env={**os.environ, 'FIXTURE_VIDEO': str(video)})
             stdout, stderr = process.communicate(timeout=6)
+            self.assertTrue((base / 'copy-pid').exists(), 'fixture must reach destination copying')
             self.assertEqual(json.loads(stdout)['error']['code'], 'network_timeout', stderr)
             self.assertEqual({p.name for p in (base / 'result').iterdir()}, {'manifest.json'})
             self.assertFalse([p for p in base.iterdir() if p.is_dir() and p.name not in {'result', 'tools'}])
