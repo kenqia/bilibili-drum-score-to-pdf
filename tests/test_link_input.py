@@ -164,6 +164,61 @@ class LinkInputTests(unittest.TestCase):
             self.assertEqual(result['error']['code'], 'existing_output')
             self.assertEqual(partial.read_bytes(), b'user-file')
 
+    def test_acquisition_failure_can_retry_same_directory_without_overwriting_user_files(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            video = video_from_image(score_frame(), base)
+            output = base / 'result'
+            code, result, _ = self.invoke(output, video, backend_error=RuntimeError('fixture failure'))
+            self.assertEqual(code, 2)
+            self.assertEqual(result['phase'], 'acquisition')
+            self.assertEqual(set(path.name for path in output.iterdir()), {'manifest.json'})
+            code, result, _ = self.invoke(output, video)
+            self.assertEqual(code, 0, result)
+            pdf = (output / 'score.pdf').read_bytes()
+            code, result, _ = self.invoke(output, video)
+            self.assertEqual(result['error']['code'], 'existing_output')
+            self.assertEqual((output / 'score.pdf').read_bytes(), pdf)
+
+    def test_failure_diagnosis_with_unknown_files_cannot_retry(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            output = base / 'result'
+            self.invoke(output, base / 'unused', backend_error=RuntimeError('fixture'))
+            diagnosis = (output / 'manifest.json').read_bytes()
+            user = output / 'notes.txt'
+            user.write_bytes(b'user notes')
+            _, result, _ = self.invoke(output, base / 'unused')
+            self.assertEqual(result['error']['code'], 'existing_output')
+            self.assertEqual((output / 'manifest.json').read_bytes(), diagnosis)
+            self.assertEqual(user.read_bytes(), b'user notes')
+
+    def test_probe_failure_can_retry_the_same_directory(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            invalid = base / 'invalid.mp4'
+            invalid.write_bytes(b'not a video')
+            output = base / 'result'
+            _, result, _ = self.invoke(output, invalid)
+            self.assertEqual(result['error']['code'], 'undecodable_video')
+            self.assertFalse(list(output.glob('*.mp4')))
+            video = video_from_image(score_frame(), base)
+            code, result, _ = self.invoke(output, video)
+            self.assertEqual(code, 0, result)
+
+    @unittest.skipUnless(Path('/dev/shm').is_dir(), 'requires separate destination filesystem')
+    def test_cross_filesystem_publication_uses_exclusive_complete_video(self):
+        with tempfile.TemporaryDirectory() as scratch, tempfile.TemporaryDirectory(dir='/dev/shm') as destination:
+            base = Path(scratch)
+            video = video_from_image(score_frame(), base)
+            output = Path(destination) / 'result'
+            if base.stat().st_dev == Path(destination).stat().st_dev:
+                self.skipTest('fixture and destination are on same filesystem')
+            code, result, _ = self.invoke(output, video)
+            self.assertEqual(code, 0, result)
+            self.assertEqual((output / 'BV1b5411x7Ku-p2.mp4').read_bytes(), video.read_bytes())
+            self.assertEqual({p.name for p in Path(destination).iterdir()}, {'result'})
+
     def test_config_cookie_netrc_and_plugin_sentinels_are_not_read(self):
         from yt_dlp.extractor.bilibili import BiliBiliIE
         def extractor(backend, url):
