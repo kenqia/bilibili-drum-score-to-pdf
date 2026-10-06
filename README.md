@@ -71,3 +71,5 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 ## 项目约定
 
 优先复用已有工具和成熟依赖。新增依赖在独立环境验证，不修改全局 Python 环境。工程技能配置已完成。项目约定见 [AGENTS.md](AGENTS.md)，具体规则见 [docs/agents](docs/agents)。后续工程技能从这些文档读取 GitHub Issues、分诊标签和领域文档约定。可直接修改 docs/agents 中的文档；只有切换 issue tracker 或重新初始化时才需要重跑 setup。
+
+常规采样按 10 秒批次迭代分析并释放临时 PNG，保留上一可读参考及必要证据；不先将完整视频导出成 PNG。各批累计解码进程时间最多 600 秒，末帧核查另限 60 秒，图像分析和 PDF 排版另计。资源验证见 [有界解码记录](docs/verification-bounded-decode.md)。
