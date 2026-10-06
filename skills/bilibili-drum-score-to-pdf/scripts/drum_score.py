@@ -29,35 +29,51 @@ def probe_video(source):
         raise ConversionError('unreadable_input', '无法读取本地视频。请提供可播放的视频文件。') from None
 
 
-def sample_video(source, directory, interval=0.5):
-    """Decode real frames with ffmpeg, retaining their source PTS in seconds."""
+def sample_video(source, directory, interval=0.5, batch_seconds=10):
+    """Yield bounded batches of actual frames, with original source timestamps."""
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     duration = probe_video(source)['duration']
-    selector = f"select='isnan(prev_selected_t)+gte(t-prev_selected_t,{interval})+gte(t,{max(0, duration - .05)})',showinfo"
-    try:
-        process = subprocess.run(['ffmpeg', '-v', 'info', '-nostdin', '-i', str(source), '-vf', selector, '-vsync', '0', '-start_number', '0', str(directory / 'frame-%06d.png')], capture_output=True, check=True, timeout=600)
-    except (subprocess.SubprocessError, OSError):
-        raise ConversionError('decode_failed', '视频解码失败。请提供可播放的本地视频。') from None
-    timestamps = [float(value) for value in re.findall(r'\bpts_time:([0-9.eE+-]+)', process.stderr.decode('utf-8', errors='replace'))]
-    files = sorted(directory.glob('frame-*.png'))
-    if len(timestamps) != len(files):
-        raise ConversionError('decode_failed', '无法建立解码画面与视频时间的对应记录。')
-    sampled = list(zip(timestamps, files))
-    # The duration need not coincide with a frame PTS. Decode the last second
-    # separately so low frame rates and variable frame rates retain the real end.
+    last_timestamp = -1.0
+    decode_seconds = 0.0
+    for batch, start in enumerate(np.arange(0, duration, batch_seconds)):
+        start = float(start)
+        stop = min(duration, start + batch_seconds)
+        selector = f"setpts=PTS+{start}/TB,select='isnan(prev_selected_t)+gte(t-prev_selected_t,{interval})',showinfo"
+        try:
+            budget = min(120, 600 - decode_seconds)
+            if budget <= 0:
+                raise subprocess.TimeoutExpired("ffmpeg", 600)
+            decode_start = time.monotonic()
+            process = subprocess.run(['ffmpeg', '-v', 'info', '-nostdin', '-ss', str(start), '-t', str(stop - start + interval), '-threads', '2', '-i', str(source), '-vf', selector, '-vsync', '0', '-threads', '1', '-start_number', '0', str(directory / f'batch-{batch:04d}-%06d.png')], capture_output=True, check=True, timeout=budget)
+            decode_seconds += time.monotonic() - decode_start
+        except (subprocess.SubprocessError, OSError):
+            raise ConversionError('decode_failed', '视频解码失败。请提供可播放的本地视频。') from None
+        timestamps = [float(value) for value in re.findall(r'\bpts_time:([0-9.eE+-]+)', process.stderr.decode('utf-8', errors='replace'))]
+        files = sorted(directory.glob(f'batch-{batch:04d}-*.png'))
+        if len(timestamps) != len(files):
+            raise ConversionError('decode_failed', '无法建立解码画面与视频时间的对应记录。')
+        for timestamp, file in zip(timestamps, files):
+            if timestamp <= last_timestamp + 1e-6 or timestamp >= stop:
+                file.unlink(missing_ok=True)
+                continue
+            last_timestamp = timestamp
+            yield timestamp, file
     seek_start = max(0, duration - 1)
     try:
-        tail = subprocess.run(['ffmpeg', '-v', 'info', '-nostdin', '-ss', str(seek_start), '-i', str(source), '-vf', f'setpts=PTS+{seek_start}/TB,showinfo', '-vsync', '0', '-start_number', '0', str(directory / 'tail-%06d.png')], capture_output=True, check=True, timeout=60)
-        tail_times = [float(value) for value in re.findall(r'\bpts_time:([0-9.eE+-]+)', tail.stderr.decode('utf-8', errors='replace'))]
-        tail_files = sorted(directory.glob('tail-*.png'))
-        if not tail_times or len(tail_times) != len(tail_files):
+        tail = subprocess.run(['ffmpeg', '-v', 'info', '-nostdin', '-ss', str(seek_start), '-threads', '2', '-i', str(source), '-vf', f'setpts=PTS+{seek_start}/TB,showinfo', '-vsync', '0', '-threads', '1', '-start_number', '0', str(directory / 'tail-%06d.png')], capture_output=True, check=True, timeout=60)
+        times = [float(value) for value in re.findall(r'\bpts_time:([0-9.eE+-]+)', tail.stderr.decode('utf-8', errors='replace'))]
+        files = sorted(directory.glob('tail-*.png'))
+        if not times or len(times) != len(files):
             raise ConversionError('decode_failed', '无法核查视频最后一帧。')
-        if not sampled or tail_times[-1] > sampled[-1][0]:
-            sampled.append((tail_times[-1], tail_files[-1]))
+        for file in files[:-1]:
+            file.unlink(missing_ok=True)
+        if times[-1] > last_timestamp + 1e-6:
+            yield times[-1], files[-1]
+        else:
+            files[-1].unlink(missing_ok=True)
     except (subprocess.SubprocessError, OSError):
         raise ConversionError('decode_failed', '视频末尾解码失败，无法确认结尾。') from None
-    return sampled
 
 
 def white_region(image):
