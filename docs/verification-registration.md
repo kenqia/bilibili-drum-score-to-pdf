@@ -19,6 +19,7 @@
 - 二次 H.264 编码，第二代 `libx264 -crf 26`，同时对照 ghost note 新增反例。
 - 0.35 像素线性插值的光标抗锯齿，同时对照 grace note 符头与短符杆反例。
 - 12 像素位置变化必须等待，不能借用后续互补光标证明同一位置。
+- `ABC → BCD → CDA` 的相邻窗口包含 0.2% 观察缩放，必须保留五行和后续重复 A，两个接续各保存两条比较变换与前后真实证据。
 
 正例要求成功、三行、实际清晰证据和 PDF；差异及位置反例要求 `waiting`、`complete=false`，不得交付完整 PDF。固定不透明遮挡、移动遮挡后内容改变、清晰 A / 隐藏 A-prime / 清晰 A，以及真正重复段落继续由原回归检查。
 
@@ -29,6 +30,6 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
 ```
 
-新配准用例及完整回归结果在合并最新集成后补记。此前单跑的 6 项光标回归全部通过。
+合并当前最新集成 `80d701a` 后，10 项新配准 CLI 验收全部通过，用时 71.129 秒。此前单跑的 6 项光标回归全部通过。完整回归结果待最终补记。
 
 支持范围仅是上述合成观察误差。1 像素边界差异不能可靠区分极细的真实记号与编码误差，尚无真实高清整曲与打印验收，不据此关闭 #7 或父规格 #1。原始源视频和真实像素保留，便于继续核查。

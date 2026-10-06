@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 import test_conversion as base_tests
-from test_ordered_conversion import sequence_video
+from test_ordered_conversion import sequence_video, window
 from test_cursor_quality import cursor_window
 
 
@@ -99,3 +99,18 @@ class ObservationRegistrationTests(unittest.TestCase):
             self.assertEqual(result['status'], 'waiting', result)
             self.assertFalse(result['complete'])
             self.assertFalse((base / 'result/score.pdf').exists())
+
+    def test_registered_neighbor_overlap_keeps_repeat_and_transform_evidence(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            source = sequence_video([window('ABC'), observed(window('BCD'), 'subpixel'),
+                                     observed(window('CDA'), 'subpixel')], base)
+            _, result = self.run_cli(source, base / 'result')
+            self.assertEqual(result['status'], 'success', result)
+            self.assertEqual(len(result['rows']), 5)
+            self.assertEqual(len(result['seams']), 2)
+            for seam in result['seams']:
+                self.assertEqual(seam['overlap_rows'], 2)
+                self.assertEqual(len(seam['registrations']), 2)
+                for endpoint in ['before', 'after']:
+                    self.assertTrue((base / 'result' / seam[endpoint]['image']).exists())
