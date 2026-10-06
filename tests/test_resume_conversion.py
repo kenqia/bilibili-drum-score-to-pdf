@@ -165,6 +165,51 @@ class ResumeTests(unittest.TestCase):
             self.assertEqual(failed['error']['code'], 'invalid_progress')
             self.assertEqual(before, (output / 'manifest.json').read_bytes())
 
+    def test_cursor_acceptance_replaces_obscured_row_with_positioned_gap(self):
+        from test_cursor_quality import cursor_window
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            source = sequence_video([cursor_window(211), cursor_window(211)], base)
+            output = base / 'result'
+            _, waiting = self.invoke(source, '--output', output)
+            self.assertEqual(waiting['issues'][0]['kind'], 'cursor_occlusion')
+            answers = base / 'answers.json'
+            answers.write_text(json.dumps({waiting['issues'][0]['id']: {'action': 'accept_missing'}}))
+            _, result = self.invoke('--resume', output, '--answers', answers)
+            self.assertEqual(result['status'], 'success', result)
+            self.assertFalse(result['complete'])
+            gap = result['gaps'][0]
+            self.assertEqual(gap['position'], 0)
+            self.assertTrue(gap['replace_row'])
+            self.assertLess((gap['page'], -gap['pdf_bbox'][3]), (result['rows'][1]['page'], -result['rows'][1]['pdf_bbox'][3]))
+            self.assertNotIn('pdf_bbox', result['rows'][0])
+            text = subprocess.run(['pdftotext', str(output / 'score.pdf'), '-'], capture_output=True, text=True, check=True).stdout
+            self.assertIn('MISSING CONTENT', text)
+            _, again = self.invoke('--resume', output)
+            self.assertEqual(again['confirmation_count'], 1)
+
+    def test_cursor_supplement_replaces_only_obscured_row_and_keeps_provenance(self):
+        from test_cursor_quality import cursor_window
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            source = sequence_video([cursor_window(211), cursor_window(211)], base)
+            output = base / 'result'
+            _, waiting = self.invoke(source, '--output', output)
+            supplied = base / 'visible-row.png'
+            cursor_window().crop((70, 145, 1211, 365)).save(supplied)
+            answers = base / 'answers.json'
+            answers.write_text(json.dumps({waiting['issues'][0]['id']: {'action': 'supplement', 'image': str(supplied)}}))
+            _, result = self.invoke('--resume', output, '--answers', answers)
+            self.assertEqual(result['status'], 'success', result)
+            self.assertTrue(result['complete'])
+            self.assertEqual(len(result['rows']), 3)
+            self.assertTrue(result['rows'][0]['supplement']['user_provided'])
+            self.assertEqual(result['quality']['unrecovered_rows'], [])
+            self.assertTrue((output / result['rows'][0]['original_image']).exists())
+            hashes = [row['content_sha256'] for row in result['rows']]
+            _, again = self.invoke('--resume', output, '--answers', answers)
+            self.assertEqual(hashes, [row['content_sha256'] for row in again['rows']])
+
 
 if __name__ == '__main__':
     unittest.main()

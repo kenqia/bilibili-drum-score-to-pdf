@@ -194,15 +194,15 @@ def restore_rows(source, output, metadata, decisions=None):
                         choice = uncertain(error_kind, '相邻谱面窗口没有唯一可确认的有序重叠，需核对是否缺行或重复段落。', item, len(delivered), previous['evidence'], current, overlaps)
                         forced_count = choice.get('overlap', 0)
                     count = overlaps[0] if forced_count is None else forced_count
-                    current_indices = previous['indices'][-count:] if count else []
-                    for position, row in zip(current_indices, current[:count]):
-                        track(row, position)
                     shifts = [a['staff_top'] - b['staff_top'] for a, b in zip(prior[-count:], current[:count])] if count else []
                     anchor = previous['anchor_rows']
                     accumulated = [a['staff_top'] - b['staff_top'] for a, b in zip(anchor[-count:], current[:count])] if count else []
                     if forced_count is None and (min(shifts) < -min(row['staff_spacing'] for row in current) or min(accumulated) < min(row['staff_spacing'] for row in current) * 2):
                         choice = uncertain('ambiguous_motion', '行内容有重叠，但没有足够的向上推进位置证据，需核对顺序。', item, len(delivered), previous['evidence'], current, [count])
                         count = choice.get('overlap', 0)
+                    current_indices = previous['indices'][-count:] if count else []
+                    for position, row in zip(current_indices, current[:count]):
+                        track(row, position)
                     if count == len(current):
                         # Rows leaving the top edge add no new content. Keep the
                         # earlier anchor to prove cumulative motion at the next join.

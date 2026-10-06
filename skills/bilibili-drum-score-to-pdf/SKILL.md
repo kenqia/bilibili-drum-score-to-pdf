@@ -65,6 +65,6 @@ uv run /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py --resume 
 
 答案文件按编号映射为对象，`action` 必须是提供的选择。用户确认相邻窗口直接衔接时用 `confirm_join`；明确再次演奏同段用 `confirm_repeat`；明确是停留画面用 `confirm_hold`；确认重叠行数用 `confirm_overlap` 并提供 `overlap`。只有当前疑点提供对应选择时才使用它们。
 
-用户提供可观察的完整单行谱面图片时用 `supplement` 和本地 `image` 路径。补图须有完整五线、符杆边缘和足够源像素，不能由文字猜补音符。补图无效时继续等待。用户明确接受无法恢复的内容时用 `accept_missing`，PDF 在对应位置显示 MISSING CONTENT，末尾附限制说明，manifest 的 `complete` 为 false。
+用户提供可观察的完整单行谱面图片时用 `supplement` 和本地 `image` 路径。补图须有完整五线、符杆边缘和足够源像素，不能由文字猜补音符。补图像素不足、裁剪不完整或仍被光标遮挡时继续等待。原始补图及只转灰度的打印图都保留。用户明确接受无法恢复的内容时用 `accept_missing`，PDF 在对应位置显示 MISSING CONTENT，末尾附限制说明，manifest 的 `complete` 为 false。
 
 恢复前校验原视频指纹和证据。收到有效回答后重放原视频到末尾或下一个疑点，不能直接把此前保存的前缀排成完整 PDF。此前答案、来源和旧证据保留。对同一个答案重复恢复不会插入重复谱行。新转换只接受空结果目录，已有目录使用 `--resume`。

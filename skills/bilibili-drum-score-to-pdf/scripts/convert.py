@@ -21,6 +21,8 @@ def main():
     parser.add_argument('--answers', help='Local JSON file mapping issue IDs to explicit choices')
     args = parser.parse_args()
     if args.resume:
+        if args.input or args.output:
+            parser.error('--resume uses its existing task directory; do not supply input or --output')
         try:
             result = resume(args.resume, args.answers)
         except ResumeError as error:
