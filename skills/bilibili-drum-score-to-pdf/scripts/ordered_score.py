@@ -96,6 +96,8 @@ def restore_rows(source, output, metadata, decisions=None):
 
     def uncertain(kind, question, item, position, reference=None, candidates=None, overlap_counts=None):
         issue = {'id': f'{kind}-{position:04d}' if kind == 'cursor_occlusion' else f'{kind}-{position:04d}-{int(round(item["timestamp"] * 1000)):08d}', 'kind': kind, 'question': question, 'timestamp': item['timestamp'], 'image': item['image'], 'position': position, 'status': 'unresolved', 'choices': ['supplement', 'accept_missing']}
+        if kind in {'ambiguous_overlap', 'ambiguous_motion', 'ambiguous_repeat'}:
+            issue['choices'].remove('supplement')
         if kind == 'no_overlap':
             issue['choices'].append('confirm_join')
         if kind == 'ambiguous_repeat':

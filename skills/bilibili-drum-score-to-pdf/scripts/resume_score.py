@@ -58,6 +58,8 @@ def load(output):
     from drum_score import probe_video, ConversionError
     output = Path(output)
     try:
+        if (output / 'state.json').is_symlink() or (output / 'manifest.json').is_symlink():
+            raise ValueError
         state = json.loads((output / 'state.json').read_text())
         manifest = json.loads((output / 'manifest.json').read_text())
         if not isinstance(state, dict) or not isinstance(manifest, dict) or not isinstance(state.get('artifacts'), dict) or not isinstance(state.get('decisions'), dict):
