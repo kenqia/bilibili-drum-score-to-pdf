@@ -1,5 +1,8 @@
 """Verify readable pixels delivered by the conversion CLI, without private hooks."""
 from pathlib import Path
+import json
+import subprocess
+import sys
 import tempfile
 import unittest
 import numpy as np
@@ -48,6 +51,11 @@ class CursorQualityTests(unittest.TestCase):
             self.assertLess(int(blue_pixels[409 - by, 900 - bx]), 150, 'native blue rest line must print as ink')
             self.assertGreater(np.count_nonzero(blue_pixels[386 - by:407 - by, 870 - bx:890 - bx] < 150), 20, 'native blue rest number 3 must survive')
             self.assertGreaterEqual(len(row['observations']), 3)
+            recovery = row['cursor_recoveries'][0]
+            self.assertGreaterEqual(recovery['after']['timestamp'], 4)
+            self.assertGreaterEqual(len(recovery['evidence']), 2)
+            for observation in recovery['evidence'] + [recovery['after']]:
+                self.assertTrue((base / 'result' / observation['image']).exists())
             self.assertEqual(result['quality']['unrecovered_rows'], [])
 
     def test_persistent_cursor_returns_stable_evidence_and_never_claims_complete(self):
@@ -64,6 +72,46 @@ class CursorQualityTests(unittest.TestCase):
             self.assertTrue((base / 'result' / issue['image']).exists())
             self.assertEqual(result['quality']['unrecovered_rows'], ['row-0001'])
             self.assertFalse((base / 'result/score.pdf').exists())
+
+    def test_cursor_mask_cannot_prove_changed_notation_is_the_same_row(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            blocked = cursor_window(685)
+            changed = cursor_window()
+            ImageDraw.Draw(changed).ellipse((700, 236, 704, 240), fill="black")
+            source = sequence_video([blocked, changed], base)
+            run, result = self.run_cli(source, base / "result")
+            self.assertEqual(run.returncode, 2)
+            self.assertEqual(result["status"], "waiting", result)
+            self.assertFalse(result["complete"])
+            self.assertTrue(result["issues"])
+            self.assertEqual(result["quality"]["unrecovered_rows"], ["row-0001"])
+            self.assertFalse((base / "result/score.pdf").exists())
+
+    def test_hidden_changed_notation_between_identical_clean_frames_remains_unproven(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            hidden = cursor_window()
+            draw = ImageDraw.Draw(hidden)
+            draw.ellipse((700, 236, 704, 240), fill='black')
+            draw.rectangle((685, 182, 717, 312), fill=(120, 215, 255))
+            source = sequence_video([cursor_window(), hidden, cursor_window()], base)
+            _, result = self.run_cli(source, base / 'result')
+            self.assertEqual(result['status'], 'waiting', result)
+            self.assertFalse(result['complete'])
+            issue = result['issues'][0]
+            self.assertEqual(issue['kind'], 'cursor_occlusion')
+            self.assertGreaterEqual(issue['timestamp'], 2)
+            self.assertTrue((base / 'result' / issue['image']).exists())
+            self.assertGreaterEqual(issue['reference']['timestamp'], 4)
+            self.assertTrue((base / 'result' / issue['reference']['image']).exists())
+            self.assertFalse((base / 'result/score.pdf').exists())
+            resumed = subprocess.run([sys.executable, str(base_tests.CLI), '--resume', str(base / 'result')], capture_output=True, text=True)
+            self.assertEqual(resumed.returncode, 2, resumed.stderr)
+            replay = json.loads(resumed.stdout)
+            self.assertEqual(replay['status'], 'waiting')
+            self.assertEqual(replay['issues'][0]['id'], issue['id'])
+            self.assertFalse(replay['complete'])
 
     def test_faint_sample_contrast_cursor_is_not_treated_as_clear_source(self):
         with tempfile.TemporaryDirectory() as scratch:
