@@ -43,7 +43,21 @@ def sample_video(source, directory, interval=0.5):
     files = sorted(directory.glob('frame-*.png'))
     if len(timestamps) != len(files):
         raise ConversionError('decode_failed', '无法建立解码画面与视频时间的对应记录。')
-    return list(zip(timestamps, files))
+    sampled = list(zip(timestamps, files))
+    # The duration need not coincide with a frame PTS. Decode the last second
+    # separately so low frame rates and variable frame rates retain the real end.
+    seek_start = max(0, duration - 1)
+    try:
+        tail = subprocess.run(['ffmpeg', '-v', 'info', '-nostdin', '-ss', str(seek_start), '-i', str(source), '-vf', f'setpts=PTS+{seek_start}/TB,showinfo', '-vsync', '0', '-start_number', '0', str(directory / 'tail-%06d.png')], capture_output=True, check=True, timeout=60)
+        tail_times = [float(value) for value in re.findall(r'\bpts_time:([0-9.eE+-]+)', tail.stderr.decode('utf-8', errors='replace'))]
+        tail_files = sorted(directory.glob('tail-*.png'))
+        if not tail_times or len(tail_times) != len(tail_files):
+            raise ConversionError('decode_failed', '无法核查视频最后一帧。')
+        if not sampled or tail_times[-1] > sampled[-1][0]:
+            sampled.append((tail_times[-1], tail_files[-1]))
+    except (subprocess.SubprocessError, OSError):
+        raise ConversionError('decode_failed', '视频末尾解码失败，无法确认结尾。') from None
+    return sampled
 
 
 def white_region(image):
@@ -60,7 +74,7 @@ def white_region(image):
     return [x, y, x + width, y + height]
 
 
-def staff_groups(crop):
+def staff_lines(crop):
     gray = np.asarray(crop.convert('L'))
     ink = (gray < 150).astype(np.uint8)
     horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, max(25, crop.width // 4)), np.uint8))
@@ -72,6 +86,11 @@ def staff_groups(crop):
         else:
             lines[-1].append(int(y))
     centers = [float(np.mean(line)) for line in lines]
+    return centers
+
+
+def staff_groups(crop):
+    centers = staff_lines(crop)
     groups, index = [], 0
     while index + 4 < len(centers):
         candidate = centers[index:index + 5]
@@ -103,82 +122,43 @@ def blank_cut(ink, low, high):
     return (start + end) // 2
 
 
-def analyze_frame(image):
+def analyze_frame(image, allow_partial=False):
     bbox = white_region(image)
     crop = image.crop(bbox)
     if crop.width < 700:
         raise ConversionError('low_resolution', '源谱面像素不足，放大不能恢复音符细节。请提供更清晰的本地视频。')
-    groups = staff_groups(crop)
-    if not groups:
+    all_groups = staff_groups(crop)
+    if not all_groups:
         raise ConversionError('incomplete_rows', '没有找到完整的五线谱行。请补充能显示整行的视频。')
-    if min(group['spacing'] for group in groups) < 6:
-        raise ConversionError('low_resolution', '源谱面像素或五线间距不足，放大不能恢复音符细节。请提供更清晰的本地视频。')
+    if min(group['spacing'] for group in all_groups) < 6:
+        raise ConversionError('low_resolution', '源五线间距不足，放大不能恢复音符细节。请提供更清晰的本地视频。')
+    groups = [group for group in all_groups if group['top'] >= group['spacing'] * 3 and crop.height - group['bottom'] >= group['spacing'] * 5]
+    if not groups:
+        raise ConversionError('incomplete_rows', '谱行靠近画面边缘，无法确认符杆及标记完整。')
+    lines = staff_lines(crop)
+    partial_top = any(line < groups[0]['top'] - 1 for line in lines)
+    partial_bottom = any(line > groups[-1]['bottom'] + 1 for line in lines)
+    if not allow_partial and (partial_top or partial_bottom):
+        raise ConversionError('incomplete_rows', '画面边缘包含未恢复的残行。')
     ink = np.asarray(crop.convert('L')) < 180
-    cuts = [blank_cut(ink, 0, groups[0]['top'] - groups[0]['spacing'] * 3)]
-    for left, right in zip(groups, groups[1:]):
-        cuts.append(blank_cut(ink, left['bottom'] + left['spacing'] * 2, right['top'] - right['spacing'] * 3))
-    # Keep all lower annotations. No fixed crop at the fifth staff line.
-    occupied = np.where(ink.sum(axis=1) > 0)[0]
-    last = min(crop.height, int(occupied[-1]) + 12)
-    cuts.append(last)
-    for group, top, bottom in zip(groups, cuts, cuts[1:]):
-        if group['top'] - top < group['spacing'] * 2 or bottom - group['bottom'] < group['spacing'] * 2:
-            raise ConversionError('incomplete_rows', '谱行靠近画面边缘，无法确认符杆及标记完整。请补充包含整行的视频。')
+    bounds = []
+    for group in groups:
+        above = [line for line in lines if line < group['top'] - 1]
+        below = [line for line in lines if line > group['bottom'] + 1]
+        top = blank_cut(ink, max(above) + group['spacing'] * 2 if above else 0, group['top'] - group['spacing'] * 3)
+        if below:
+            bottom = blank_cut(ink, group['bottom'] + group['spacing'] * 2, min(below) - group['spacing'] * 3)
+        else:
+            occupied = np.where(ink.sum(axis=1) > 0)[0]
+            bottom = min(crop.height, int(occupied[-1]) + 12)
+        bounds.append([top, bottom])
     gray = np.asarray(crop.convert('L'))
-    sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
-    return {'bbox': bbox, 'groups': groups, 'cuts': cuts, 'sharpness': sharpness}
+    return {'bbox': bbox, 'groups': groups, 'row_bounds': bounds, 'cuts': [bounds[0][0]] + [bound[1] for bound in bounds], 'partial_top': partial_top, 'partial_bottom': partial_bottom, 'sharpness': float(cv2.Laplacian(gray, cv2.CV_64F).var())}
 
 
-def extract_fixed_rows(source, output, metadata):
-    output = Path(output)
-    candidates, failures = [], []
-    first_region = None
-    with tempfile.TemporaryDirectory(prefix='drum-score-') as scratch:
-        for timestamp, file in sample_video(source, scratch):
-            with Image.open(file) as image:
-                try:
-                    analysis = analyze_frame(image)
-                    region = image.crop(analysis['bbox']).convert('L')
-                    pixels = np.asarray(region)
-                    if first_region is None:
-                        first_region = (pixels.copy(), timestamp, image.copy())
-                    reference, first_time, first_image = first_region
-                    changed = pixels.shape != reference.shape
-                    if not changed:
-                        changed = float((np.abs(pixels.astype(float) - reference.astype(float)) > 50).mean()) > .001
-                    if changed:
-                        images = output / 'images'
-                        images.mkdir(parents=True, exist_ok=True)
-                        first_image.save(images / 'window-first.png')
-                        image.save(images / 'window-changed.png')
-                        error = ConversionError('dynamic_layout', '谱面随时间变化，当前固定谱面切片不能保证整曲覆盖。需要继续进行纵向谱行恢复。')
-                        error.issues = [{'id': 'layout-001', 'kind': 'dynamic_layout', 'question': str(error), 'timestamp': timestamp, 'image': 'images/window-changed.png', 'reference_timestamp': first_time, 'reference_image': 'images/window-first.png'}]
-                        raise error
-                    candidates.append((analysis['sharpness'], timestamp, file, analysis))
-                except ConversionError as error:
-                    if error.code == 'dynamic_layout':
-                        raise
-                    failures.append(error)
-        if not candidates:
-            if failures:
-                raise failures[0]
-            raise ConversionError('decode_failed', '视频中没有可读取的画面。')
-        _, timestamp, file, analysis = max(candidates, key=lambda item: (item[0], -item[1]))
-        with Image.open(file) as image:
-            region = image.crop(analysis['bbox']).convert('L')
-            images = output / 'images'
-            images.mkdir(parents=True, exist_ok=True)
-            cuts, bbox = analysis['cuts'], analysis['bbox']
-            header = None
-            if (np.asarray(region.crop((0, 0, region.width, cuts[0]))) < 180).any():
-                region.crop((0, 0, region.width, cuts[0])).save(images / 'header.png')
-                header = {'image': 'images/header.png', 'timestamp': timestamp, 'bbox': [bbox[0], bbox[1], bbox[2], bbox[1] + cuts[0]]}
-            rows = []
-            for index, (top, bottom) in enumerate(zip(cuts, cuts[1:]), 1):
-                name = f'images/row-{index:04d}.png'
-                region.crop((0, top, region.width, bottom)).save(output / name)
-                rows.append({'id': f'row-{index:04d}', 'image': name, 'timestamp': timestamp, 'bbox': [bbox[0], bbox[1] + top, bbox[2], bbox[1] + bottom]})
-            return header, rows
+def extract_rows(source, output, metadata):
+    from ordered_score import restore_rows
+    return restore_rows(source, output, metadata)
 
 
 def write_pdf(output, header, rows):
@@ -217,13 +197,16 @@ def convert(source, output):
         result['source'] = {'kind': 'local', 'name': source.name, **metadata}
         if metadata['width'] < 700:
             raise ConversionError('low_resolution', '源视频宽度不足，放大不能恢复音符细节。请提供更清晰的本地视频。')
-        header, rows = extract_fixed_rows(source, output, metadata)
+        header, rows, evidence = extract_rows(source, output, metadata)
+        result.update(evidence)
         pages = write_pdf(output, header, rows)
         result.update(status='success', complete=True, header=header, rows=rows, page_count=pages, pdf='score.pdf')
     except ConversionError as error:
         result['error'] = {'code': error.code, 'message': str(error)}
         if hasattr(error, 'issues'):
             result.update(status='waiting', issues=error.issues)
+        if hasattr(error, 'progress'):
+            result.update(error.progress)
     result['elapsed_seconds'] = round(time.monotonic() - start, 3)
     result['confirmation_count'] = 0
     (output / 'manifest.json').write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')

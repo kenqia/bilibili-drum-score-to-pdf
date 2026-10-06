@@ -1,10 +1,10 @@
 # B站动态鼓谱转 PDF
 
-一个计划中的 Codex skill：输入 B站动态架子鼓谱链接或本地视频，将已有谱面整理成可打印 PDF。
+一个可检查的 Codex skill 文件包：输入 B站动态架子鼓谱链接或本地视频，将已有谱面整理成可打印 PDF。
 
 ## 当前状态
 
-仓库已提供可检查的 [skill 文件包](skills/bilibili-drum-score-to-pdf/SKILL.md)。当前支持白底、多行、固定谱面的本地视频，自动裁剪完整谱行并生成 A4 纵向 PDF。PDF 保留视频中可提供的标题、速度和拍号，源视频对应记录保存在 `manifest.json`。
+仓库已提供可检查的 [skill 文件包](skills/bilibili-drum-score-to-pdf/SKILL.md)。当前支持白底、多行、固定或纵向推进谱面的本地视频，自动裁剪完整谱行并生成 A4 纵向 PDF。PDF 保留视频中可提供的标题、速度和拍号，源视频对应记录保存在 `manifest.json`。
 
 ```sh
 uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py /absolute/path/to/video.mp4 --output /absolute/path/to/result
@@ -12,7 +12,7 @@ uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py /absolute/path/to/vi
 
 命令需要 `ffmpeg`、`ffprobe`、`uv` 和 Python 3.12 或更高版本。`uv` 在独立环境运行依赖。stdout 输出结构化 JSON，stderr 输出进度；`status` 区分成功、等待确认和失败。
 
-固定谱面检查会采样完整视频及末尾。发现谱面变化时提供编号证据并返回等待状态，不将一个窗口当作整曲。纵向推进恢复、光标处理和疑点回答后继续由后续切片完成。当前不会安装 skill 或修改 Codex 配置。
+入口采样完整视频并核查真实末帧。纵向跳行和滚动只按相邻窗口的唯一有序重叠与向上位移接续；同一处停留画面只保留一次，后续再次出现的谱段仍保留。上下边缘残行不会直接进入 PDF。`seams` 保存每个接续位置的前后截图与时间，`boundaries` 保存开头和结尾。缺少唯一重叠或首尾残行未恢复时，返回编号疑点和未确认候选谱行，不声称完整。光标恢复和疑点回答后继续由后续切片完成。当前不会安装 skill 或修改 Codex 配置。
 
 ## B站链接输入
 
@@ -34,13 +34,13 @@ timeout 120s uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https:
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
 ```
 
-验收测试通过统一命令调用转换，使用独立绘制的谱面和真实编码视频，检查 A4、整行分页、标题与源视频时间、低清失败以及动态输入疑点。测试需要 Poppler 的 `pdfinfo` 与 `pdftoppm`。
+验收测试通过统一命令调用转换，使用独立绘制的谱面和真实编码视频，检查 A4、整行分页、标题与源视频时间、低清失败、邻接重叠、真正重复段落、连续滚动与首尾疑点。测试需要 Poppler 的 `pdfinfo` 与 `pdftoppm`。
 
-[需求规格](docs/spec.md)列出整曲验收标准，[领域术语](GLOSSARY.md)区分重复截图和重复段落。固定合成视频的验证不代表真实整曲已经通过。
+[需求规格](docs/spec.md)列出整曲验收标准，[领域术语](GLOSSARY.md)区分重复截图和重复段落。固定和滚动合成视频的验证不代表真实整曲已经通过。
 
 ## 第一版样本
 
-[《七里香 周杰伦 动态鼓谱》](https://www.bilibili.com/video/BV1b5411x7Ku)，时长 4 分 57 秒。已观察三张匿名采样帧，实际画面为 640×360；这不足以证明整曲完整或达到打印清晰度。
+[《七里香 周杰伦 动态鼓谱》](https://www.bilibili.com/video/BV1b5411x7Ku)，时长 4 分 57 秒。已读取完整匿名视频并观察到 29 次约一谱行的向上位移，实际画面为 640×360。该视频只用于布局研究和低清拒绝验证；没有清晰本地样本前，整曲顺序与打印质量仍未验收。
 
 第一版建议面向白底、多行、纵向推进的谱面。具体适配结果以整曲测试为准，不承诺任意视频布局。
 
