@@ -219,6 +219,11 @@ def convert(source, output, decisions=None):
             raise ConversionError('low_resolution', '源视频宽度不足，放大不能恢复音符细节。请提供更清晰的本地视频。')
         header, rows, evidence = extract_rows(source, output, metadata, decisions)
         result.update(evidence)
+        from quality_score import validate_print_quality
+        try:
+            validate_print_quality(rows)
+        except ValueError as error:
+            raise ConversionError('low_print_resolution', str(error)) from None
         pages = write_pdf(output, header, rows, result.get('gaps'))
         result.update(status='success', complete=not result.get('gaps'), header=header, rows=rows, page_count=pages, pdf='score.pdf')
     except ConversionError as error:

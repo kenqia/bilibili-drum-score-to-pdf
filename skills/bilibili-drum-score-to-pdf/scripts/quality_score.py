@@ -4,6 +4,10 @@ import cv2
 import numpy as np
 from reportlab.lib.pagesizes import A4
 
+PRINTABLE_WIDTH_INCHES = (A4[0] - 72) / 72
+MIN_PRINT_DPI = 150.0
+HIGH_QUALITY_DPI = 200.0
+
 
 def cursor_regions(image, spacing):
     pixels = np.asarray(image.convert('RGB'))
@@ -24,7 +28,9 @@ def cursor_regions(image, spacing):
 def assess(image, spacing):
     boxes, _ = cursor_regions(image, spacing)
     gray = np.asarray(image.convert('L'))
-    return {'cursor_occluded': bool(boxes), 'cursor_boxes': boxes, 'sharpness': float(cv2.Laplacian(gray, cv2.CV_64F).var()), 'native_width': image.width, 'staff_spacing': spacing, 'effective_dpi': round(image.width / ((A4[0] - 72) / 72), 1)}
+    effective_dpi = image.width / PRINTABLE_WIDTH_INCHES
+    band = 'high_quality_candidate' if effective_dpi >= HIGH_QUALITY_DPI else 'printable_candidate' if effective_dpi >= MIN_PRINT_DPI else 'low_print_resolution'
+    return {'cursor_occluded': bool(boxes), 'cursor_boxes': boxes, 'sharpness': float(cv2.Laplacian(gray, cv2.CV_64F).var()), 'native_width': image.width, 'staff_spacing': spacing, 'effective_dpi': round(effective_dpi, 1), 'print_quality': band}
 
 
 def printable(image):
@@ -34,4 +40,10 @@ def printable(image):
 
 
 def quality_report(metadata, rows):
-    return {'source_width': metadata['width'], 'source_height': metadata['height'], 'policy': 'whole_clean_observed_row_then_highest_sharpness', 'pixel_mapping': 'grayscale_without_erasing_or_drawing', 'unrecovered_rows': [row['id'] for row in rows if row.get('quality', {}).get('cursor_occluded')], 'tools': {name: importlib.metadata.version(name) for name in ['pillow', 'numpy', 'opencv-python-headless', 'reportlab']}, 'limits': ['Native pixels and staff spacing are heuristics; final print readability needs visual review.']}
+    dpis = [row.get('quality', {}).get('effective_dpi') for row in rows if row.get('quality', {}).get('effective_dpi') is not None]
+    minimum = min(dpis) if dpis else None
+    return {'source_width': metadata['width'], 'source_height': metadata['height'], 'policy': 'whole_clean_observed_row_then_highest_sharpness', 'pixel_mapping': 'grayscale_without_erasing_or_drawing', 'unrecovered_rows': [row['id'] for row in rows if row.get('quality', {}).get('cursor_occluded')], 'effective_dpi': {'minimum': minimum, 'printable_width_inches': round(PRINTABLE_WIDTH_INCHES, 3), 'minimum_required': MIN_PRINT_DPI, 'high_quality_target': HIGH_QUALITY_DPI, 'status': 'high_quality_candidate' if minimum is not None and minimum >= HIGH_QUALITY_DPI else 'printable_candidate' if minimum is not None and minimum >= MIN_PRINT_DPI else 'low_print_resolution'}, 'tools': {name: importlib.metadata.version(name) for name in ['pillow', 'numpy', 'opencv-python-headless', 'reportlab']}, 'limits': ['Native pixels and staff spacing are heuristics; final print readability needs visual review.']}
+
+def validate_print_quality(rows):
+    if any(row.get('quality', {}).get('effective_dpi', 0) < MIN_PRINT_DPI for row in rows):
+        raise ValueError(f'谱行原生像素不足以达到 {MIN_PRINT_DPI:.0f} DPI。请提供更清晰的本地视频。')
