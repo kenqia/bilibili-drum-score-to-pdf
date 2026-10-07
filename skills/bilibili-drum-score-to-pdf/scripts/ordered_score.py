@@ -6,27 +6,72 @@ import tempfile
 import cv2
 import numpy as np
 from PIL import Image, ImageFilter
-from drum_score import ConversionError, analyze_frame, sample_video
+from drum_score import ConversionError, analyze_frame, sample_video, staff_lines
 from quality_score import assess, cursor_regions, printable, quality_report
 from central_obstruction import split_white_bbox, complementary_windows
 
 
-def comparison_mask(region, group):
-    spacing = group['spacing']
-    top = int(round(group['top'] - spacing * 4))
-    bottom = int(round(group['bottom'] + spacing * 6))
+def comparison_mask(region, group, row_bounds, screen_reference=None, bbox=None):
+    # Rasterized staff-line centers vary by half a pixel during a real scroll.
+    # Use a fixed staff-relative band rather than changing its size with those
+    # variations; registration handles the remaining subpixel observation error.
+    spacing = int(round(group['spacing']))
+    top = int(round(group['top'] - spacing * 6))
+    bottom = top + spacing * 16
     comparison = Image.new('RGB', (region.width, bottom - top), 'white')
-    start, stop = max(0, top), min(region.height, bottom)
-    comparison.paste(region.crop((0, start, region.width, stop)), (0, start - top))
+    source_start, source_stop = max(0, top), min(region.height, bottom)
+    # Keep actual context for proving a changing row cut. If a lower crop
+    # contains a next-row accent before its staff enters the viewport, the
+    # translated observation must show that accent outside the corrected cut.
+    comparison.paste(region.crop((0, source_start, region.width, source_stop)), (0, source_start - top))
     pixels = np.asarray(comparison)
     # Colored notation counts as ink too; only the detected playback cursor is ignored.
-    mask = (cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY) < 180) | ((np.ptp(pixels, axis=2) > 20) & (pixels.min(axis=2) < 220))
+    gray = cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY)
+    colored = (np.ptp(pixels, axis=2) > 20) & (pixels.min(axis=2) < 220)
+    mask = (gray < 180) | colored
+    if screen_reference is not None:
+        # A translucent, screen-fixed white watermark can brighten a real stem
+        # past the absolute threshold. Its initial score-free header provides
+        # the actual backdrop at those screen coordinates. Require visible
+        # contrast against that observation, never assume obscured ink exists.
+        screen_top = bbox[1] + top
+        low, high = max(0, -screen_top), min(len(mask), screen_reference.height - screen_top)
+        if high > low:
+            baseline = np.asarray(screen_reference.crop((bbox[0], screen_top + low,
+                                                         bbox[2], screen_top + high)))
+            valid = baseline.min(axis=2) >= 190
+            # A one-pixel backdrop fringe varies with codec rasterization.
+            bright = np.where(valid, cv2.cvtColor(baseline, cv2.COLOR_RGB2GRAY), 255).astype(np.uint8)
+            backdrop = cv2.erode(bright, np.ones((3, 3), np.uint8))
+            contrast = np.zeros(gray.shape, dtype=np.int16)
+            contrast[low:high] = backdrop.astype(np.int16) - gray[low:high].astype(np.int16)
+            threshold = backdrop.astype(np.int16) - 20
+            mask[low:high] = np.where(valid, (gray[low:high] < threshold) | colored[low:high], mask[low:high])
+            # The real watermark's codec shimmer produces isolated one-pixel
+            # gray specks. Retain connected faint notation and every original
+            # dark/colored pixel; this rule only rejects tiny weak gray islands
+            # introduced by the backdrop-relative comparison, never PDF pixels.
+            # Preserve even two-pixel stems with >=35 levels of real contrast.
+            count, labels, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), 8)
+            for index in range(1, count):
+                x, y, width, height, area = stats[index]
+                if area <= 2:
+                    component = labels[y:y + height, x:x + width] == index
+                    weak = ((gray[y:y + height, x:x + width] >= 180)
+                            & (contrast[y:y + height, x:x + width] < 35)
+                            & ~colored[y:y + height, x:x + width])
+                    if weak[component].all():
+                        mask[y:y + height, x:x + width][component] = False
     _, ignored = cursor_regions(comparison, spacing)
     # Enlarged comparison margins can leave the actual score window. Such
     # pixels are unavailable evidence, not PIL's default black crop padding.
-    ignored[:start - top] = True
-    ignored[stop - top:] = True
-    return mask, ignored
+    ignored[:source_start - top] = True
+    ignored[source_stop - top:] = True
+    domain = np.zeros(mask.shape, dtype=bool)
+    low = max(source_start, row_bounds[0]) - top
+    high = min(source_stop, row_bounds[1]) - top
+    domain[low:high] = True
+    return mask & domain, ignored & domain, pixels, mask, ignored, domain
 
 
 def registered_row(left, right):
@@ -47,17 +92,34 @@ def registered_row(left, right):
                 hidden = cv2.warpAffine(right['ignored'].astype(np.float32), transform, (width, height), flags=cv2.INTER_LINEAR, borderValue=1) > 0
                 support = cv2.warpAffine(np.ones(b.shape, dtype=np.uint8), transform, (width, height), flags=cv2.INTER_NEAREST).astype(bool)
                 # Registration cannot crop away visible notation at either edge.
-                if (a & ~left['ignored'] & ~support).any():
-                    continue
                 inverse = cv2.invertAffineTransform(transform)
                 back_support = cv2.warpAffine(np.ones(a.shape, dtype=np.uint8), inverse, (b.shape[1], b.shape[0]), flags=cv2.INTER_NEAREST).astype(bool)
-                if (b & ~right['ignored'] & ~back_support).any():
+                domain = cv2.warpAffine(right['row_domain'].astype(np.uint8), transform, (width, height), flags=cv2.INTER_NEAREST).astype(bool)
+                common = left['row_domain'] & domain
+                excluded_a = a & ~left['ignored'] & ~common
+                excluded_b = shifted & ~hidden & ~common
+                if excluded_a.any() or excluded_b.any():
+                    context = cv2.warpAffine(right['context_mask'].astype(np.float32), transform, (width, height), flags=cv2.INTER_LINEAR) >= .5
+                    context_hidden = cv2.warpAffine(right['context_ignored'].astype(np.float32), transform, (width, height), flags=cv2.INTER_LINEAR, borderValue=1) > 0
+                    near_context = cv2.dilate(context.astype(np.uint8), kernel).astype(bool)
+                    near_left_context = cv2.dilate(left['context_mask'].astype(np.uint8), kernel).astype(bool)
+                    # A changing crop cannot discard notation. The other real
+                    # window must expose the excluded ink at its translated
+                    # location, outside that row's whitespace boundary.
+                    if ((excluded_a & (~near_context | context_hidden)).any()
+                            or (excluded_b & (~near_left_context | left['context_ignored'])).any()):
+                        continue
+                fitted_a, fitted_b = a & common, shifted & common
+                back_common = cv2.warpAffine(common.astype(np.uint8), inverse, (b.shape[1], b.shape[0]), flags=cv2.INTER_NEAREST).astype(bool)
+                if ((fitted_a & ~left['ignored'] & ~support).any()
+                        or (b & back_common & ~right['ignored'] & ~back_support).any()):
                     continue
                 available = ~(left['ignored'] | hidden)
-                near_b = cv2.dilate(shifted.astype(np.uint8), kernel).astype(bool)
-                distant = ((a & ~near_b) | (shifted & ~near_a)) & available
-                cost = (np.count_nonzero(distant), np.count_nonzero((a ^ shifted) & available))
-                candidates.append((cost, dx, dy, shifted, hidden, sx, sy))
+                near_fitted_a = cv2.dilate(fitted_a.astype(np.uint8), kernel).astype(bool)
+                near_b = cv2.dilate(fitted_b.astype(np.uint8), kernel).astype(bool)
+                distant = ((fitted_a & ~near_b) | (fitted_b & ~near_fitted_a)) & available
+                cost = (np.count_nonzero(distant), np.count_nonzero((fitted_a ^ fitted_b) & available))
+                candidates.append((cost, dx, dy, fitted_b, hidden, sx, sy, common, fitted_a))
     if not candidates:
         return None
     candidates.sort(key=lambda candidate: candidate[0])
@@ -67,14 +129,42 @@ def registered_row(left, right):
                                                  or not np.array_equal(candidate[4], best[4]))
            for candidate in candidates[1:]):
         return None
-    _, dx, dy, b, hidden, sx, sy = best
+    _, dx, dy, b, hidden, sx, sy, common, a = best
+    near_a = cv2.dilate(a.astype(np.uint8), kernel).astype(bool)
     available = ~(left['ignored'] | hidden)
     near_b = cv2.dilate(b.astype(np.uint8), kernel).astype(bool)
     unmatched = ((a & ~near_b) | (b & ~near_a)) & available
+    pixels = cv2.warpAffine(right['pixels'], np.float32([[sx, 0, dx], [0, sy, dy]]),
+                            (width, height), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255))
+    if unmatched.any():
+        # H.264 chroma ringing around the native blue rest bar crosses the
+        # color threshold by up to 27 levels in the real 12, 15 and 125 second observations.
+        # Only near-white blue fringes beside shared ink qualify.
+        # Black notation and colored additions with actual contrast still fail.
+        residual = np.abs(left['pixels'].astype(np.int16) - pixels.astype(np.int16)).max(axis=2)
+        shared_edge = cv2.dilate((a & b & available).astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
+        left_blue = left['pixels'][:, :, 2].astype(np.int16) - left['pixels'][:, :, 0] >= 5
+        right_blue = pixels[:, :, 2].astype(np.int16) - pixels[:, :, 0] >= 5
+        fringe = ((left['pixels'].min(axis=2) >= 200) & (pixels.min(axis=2) >= 200)
+                  & left_blue & right_blue & (residual <= 32) & shared_edge)
+        # At 183 seconds the watermark exposes one gray row-number edge
+        # at 227 instead of 230. At 199 seconds a near-white beam fringe
+        # differs by 29 levels. Require grayscale pixels beside shared ink;
+        # changed faint notes and missing stems retain larger residuals.
+        gray_fringe = ((left['pixels'].min(axis=2) >= 180) & (pixels.min(axis=2) >= 180)
+                       & (np.ptp(left['pixels'], axis=2) <= 5) & (np.ptp(pixels, axis=2) <= 5)
+                       & ((residual <= 8) | ((left['pixels'].min(axis=2) >= 200)
+                                                & (pixels.min(axis=2) >= 200) & (residual <= 32)))
+                       & shared_edge)
+        unmatched &= ~(fringe | gray_fringe)
     if np.count_nonzero((a | b) & available) <= 30 or unmatched.any():
         return None
-    return dict(right, mask=b, ignored=hidden,
+    transform = np.float32([[sx, 0, dx], [0, sy, dy]])
+    context = cv2.warpAffine(right['context_mask'].astype(np.float32), transform, (width, height), flags=cv2.INTER_LINEAR) >= .5
+    context_hidden = cv2.warpAffine(right['context_ignored'].astype(np.float32), transform, (width, height), flags=cv2.INTER_LINEAR, borderValue=1) > 0
+    return dict(right, mask=context, ignored=context_hidden, pixels=pixels,
                 registration={'scale_x': sx, 'scale_y': sy, 'dx': dx, 'dy': dy,
+                              'screen_staff_shift': float(right['staff_top'] - left['staff_top']),
                               'policy': 'unique_bounded_comparison_only'})
 
 
@@ -101,17 +191,26 @@ def save_row(candidate, output, index):
     return {'id': f'row-{index:04d}', 'image': name, 'original_image': original, 'quality': quality, 'observations': [{'timestamp': candidate['timestamp'], 'bbox': candidate['bbox'], 'cursor_occluded': quality['cursor_occluded'], 'sharpness': round(quality['sharpness'], 3)}], 'timestamp': candidate['timestamp'], 'bbox': candidate['bbox'], 'staff_top': candidate['staff_top'], 'staff_spacing': candidate['staff_spacing'], 'content_sha256': hashlib.sha256((output / name).read_bytes()).hexdigest()}
 
 
-def window_rows(image, timestamp):
+def window_rows(image, timestamp, screen_reference=None):
     if split_white_bbox(image) is not None:
         raise ConversionError('central_obstruction', '中央遮挡分割白底谱面，需要同处真实互补观察确认。')
     analysis = analyze_frame(image, allow_partial=True)
     region = image.crop(analysis['bbox']).convert('RGB')
     bbox = analysis['bbox']
     rows = []
+    lines = staff_lines(region)
+    pixels = np.asarray(region)
+    ink = ((cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY) < 180)
+           | ((np.ptp(pixels, axis=2) > 20) & (pixels.min(axis=2) < 220)))
     for group, (top, bottom) in zip(analysis['groups'], analysis['row_bounds']):
         crop = region.crop((0, top, region.width, bottom))
-        mask, ignored = comparison_mask(region, group)
-        rows.append({'mask': mask, 'ignored': ignored, 'quality': assess(crop, group['spacing']), 'image': crop, 'timestamp': timestamp, 'bbox': [bbox[0], bbox[1] + top, bbox[2], bbox[1] + bottom], 'staff_top': bbox[1] + group['top'], 'staff_spacing': group['spacing']})
+        mask, ignored, comparison_pixels, context_mask, context_ignored, row_domain = comparison_mask(region, group, (top, bottom), screen_reference, bbox)
+        quality = assess(crop, group['spacing'])
+        below = int(round(group['bottom'] + group['spacing'] * 5))
+        quality['lower_boundary_supported'] = (any(line > group['bottom'] + 1 for line in lines)
+                                               or not ink[below:].any())
+        rows.append({'mask': mask, 'ignored': ignored, 'pixels': comparison_pixels, 'context_mask': context_mask,
+                     'context_ignored': context_ignored, 'row_domain': row_domain, 'quality': quality, 'image': crop, 'timestamp': timestamp, 'bbox': [bbox[0], bbox[1] + top, bbox[2], bbox[1] + bottom], 'staff_top': bbox[1] + group['top'], 'staff_spacing': group['spacing']})
     return analysis, region, rows
 
 
@@ -165,9 +264,11 @@ def restore_rows(source, output, metadata, decisions=None):
     (output / 'evidence').mkdir(parents=True, exist_ok=True)
     delivered, seams, header = [], [], None
     previous, first, last = None, None, None
+    screen_reference, comparison_backdrop = None, None
     decisions = decisions or {}
     accepted, gaps = {}, []
     best_candidates = {}
+    first_prefix_depth = 0
     cursor_runs, cursor_unproven = {}, {}
     pending, recoveries, unreadable = [], [], []
     ignored_edges = []
@@ -177,12 +278,37 @@ def restore_rows(source, output, metadata, decisions=None):
         # Masked matching is provisional. A run needs complementary real cursor
         # positions, all visible pixels consistent, then an actual clear row.
         run = cursor_runs.get(position)
+        if run is not None and not same_cursor_position(run, row):
+            # A proved scroll ends a stationary observation run. Its already
+            # complete complementary coverage may be checked against an actual
+            # earlier clean observation at that same screen position. Never
+            # borrow visibility from the translated window to fill unknowns.
+            clean = best_candidates[position]
+            aligned = (registered_row(run, clean)
+                       if not run['ignored'].any() and position not in cursor_unproven
+                       and not clean['quality']['cursor_occluded']
+                       and same_cursor_position(run, clean) else None)
+            if aligned is not None:
+                name = f'evidence/cursor-reference-{position:04d}-{int(round(clean["timestamp"] * 1000)):08d}.png'
+                clean['image'].save(output / name)
+                clear_item = {'timestamp': clean['timestamp'], 'image': name,
+                              'registration': aligned['registration']}
+                delivered[position].setdefault('cursor_recoveries', []).append({
+                    'before': {'timestamp': run['timestamp'], 'image': run['image']},
+                    'after': clear_item, 'clear_timestamp': clean['timestamp'],
+                    'completed_timestamp': run['observations'][-1],
+                    'observations': run['observations'], 'evidence': run['evidence'],
+                    'policy': 'complementary_stationary_visible_pixels_with_prior_clean_row'})
+                del cursor_runs[position]
+                run = None
         if row['quality']['cursor_occluded']:
             if run is None:
                 name = f'evidence/cursor-{position:04d}-{int(round(row["timestamp"] * 1000)):08d}.png'
                 row['image'].save(output / name)
                 run = {'timestamp': row['timestamp'], 'image': name,
-                       'mask': row['mask'].copy(), 'ignored': row['ignored'].copy(),
+                       'mask': row['mask'].copy(), 'ignored': row['ignored'].copy(), 'pixels': row['pixels'].copy(),
+                       'context_mask': row['context_mask'].copy(),
+                       'context_ignored': row['context_ignored'].copy(), 'row_domain': row['row_domain'].copy(),
                        'bbox': row['bbox'], 'staff_top': row['staff_top'],
                        'staff_spacing': row['staff_spacing'], 'observations': [],
                        'evidence': [{'timestamp': row['timestamp'], 'image': name}]}
@@ -202,6 +328,9 @@ def restore_rows(source, output, metadata, decisions=None):
                         run['evidence'].append({'timestamp': row['timestamp'], 'image': name,
                                                 'registration': aligned['registration']})
                     run['mask'][exposed] = aligned['mask'][exposed]
+                    run['pixels'][exposed] = aligned['pixels'][exposed]
+                    run['context_mask'][exposed] = aligned['mask'][exposed]
+                    run['context_ignored'][exposed] = False
                     run['ignored'] &= aligned['ignored']
             run['observations'].append(row['timestamp'])
         elif run is not None:
@@ -223,7 +352,20 @@ def restore_rows(source, output, metadata, decisions=None):
             del cursor_runs[position]
 
     def track(row, position=None):
+        nonlocal first_prefix_depth
         if position is None:
+            if not delivered:
+                # The real title/tempo lives inside the first crop. A sharper
+                # later crop may be missing it after scrolling out of view.
+                prefix_height = max(0, int(row['staff_top'] - row['bbox'][1] - row['staff_spacing'] * 4))
+                prefix = np.asarray(row['image'].convert('RGB'))[:prefix_height]
+                if prefix.size:
+                    ink = ((cv2.cvtColor(prefix, cv2.COLOR_RGB2GRAY) < 180)
+                           | ((np.ptp(prefix, axis=2) > 20) & (prefix.min(axis=2) < 220)))
+                    occupied = np.where(ink.any(axis=1))[0]
+                    if len(occupied):
+                        first_prefix_depth = row['staff_top'] - row['bbox'][1] - int(occupied[0])
+
             position = len(delivered)
             delivered.append(save_row(row, output, position + 1))
             best_candidates[position] = row
@@ -238,8 +380,10 @@ def restore_rows(source, output, metadata, decisions=None):
         cursor_followups = record.get('cursor_followups', [])
         old = best_candidates[position]
         def rank(candidate):
-            return (not candidate['quality']['cursor_occluded'], candidate['quality']['sharpness'], -candidate['timestamp'])
-        if rank(row) > rank(old):
+            return (not candidate['quality']['cursor_occluded'], candidate['quality'].get('lower_boundary_supported', False),
+                    candidate['quality']['sharpness'], -candidate['timestamp'])
+        retains_prefix = position != 0 or row['staff_top'] - row['bbox'][1] >= first_prefix_depth - 2
+        if retains_prefix and rank(row) > rank(old):
             delivered[position] = save_row(row, output, position + 1)
             best_candidates[position] = row
         delivered[position]['observations'] = observations
@@ -300,7 +444,7 @@ def restore_rows(source, output, metadata, decisions=None):
             record['proposed_position'] = position + index
             record['confirmed'] = False
             candidate_rows.append(record)
-        error.progress = {'rows': delivered, 'header': header, 'seams': seams, 'recoveries': recoveries, 'unreadable_observations': unreadable, 'ignored_edges': ignored_edges, 'readable_followup': followup, 'boundaries': {'start': first, 'end': item}, 'candidate_rows': candidate_rows, 'continuation': {'requires_original_video': True, 'requires_replay': True, 'stop_timestamp': item['timestamp'], 'confirmed_prefix_rows': len(delivered)}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}
+        error.progress = {'rows': delivered, 'header': header, 'seams': seams, 'comparison_backdrop': comparison_backdrop, 'recoveries': recoveries, 'unreadable_observations': unreadable, 'ignored_edges': ignored_edges, 'readable_followup': followup, 'boundaries': {'start': first, 'end': item}, 'candidate_rows': candidate_rows, 'continuation': {'requires_original_video': True, 'requires_replay': True, 'stop_timestamp': item['timestamp'], 'confirmed_prefix_rows': len(delivered)}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}
         raise error
 
     with tempfile.TemporaryDirectory(prefix='drum-score-') as scratch:
@@ -319,13 +463,21 @@ def restore_rows(source, output, metadata, decisions=None):
             consumed.append(file)
             with Image.open(file) as image:
                 try:
-                    analysis, region, current = window_rows(image, timestamp)
+                    analysis, region, current = window_rows(image, timestamp, screen_reference)
                 except ConversionError as error:
                     item = evidence(image, timestamp, frame_index)
                     unreadable.append(dict(item))
                     # Keep the failure value, not its traceback and decoded pixels.
                     pending.append({'evidence': item, 'file': output / item['image'], 'error': (error.code, str(error)), 'non_score': clear_non_score_card(image)})
                     continue
+                if (screen_reference is not None and not analysis['partial_top']
+                        and current[0]['staff_top'] - current[0]['staff_spacing'] * 6 >= screen_reference.height):
+                    # Refresh while the whole comparison band is still below
+                    # this margin. Video-overlay opacity can vary over time.
+                    screen_reference = image.crop((0, 0, image.width, screen_reference.height)).convert('RGB')
+                    screen_reference.save(output / 'evidence/comparison-backdrop.png')
+                    comparison_backdrop['reference'] = {'timestamp': timestamp,
+                                                         'image': 'evidence/comparison-backdrop.png'}
                 if pending and not previous and all(entry['non_score'] for entry in pending):
                     ignored_edges.append({'edge': 'start', 'start_timestamp': pending[0]['evidence']['timestamp'], 'end_timestamp': pending[-1]['evidence']['timestamp'], 'observations': [entry['evidence'] for entry in pending], 'policy': 'uniform_or_crisp_text_card_without_staff_signal'})
                     pending.clear()
@@ -378,6 +530,11 @@ def restore_rows(source, output, metadata, decisions=None):
                 if previous is None:
                     item = evidence(image, timestamp, frame_index)
                     first = first or item
+                    reference_bottom = analysis['bbox'][1] + analysis['row_bounds'][0][0]
+                    screen_reference = image.crop((0, 0, image.width, reference_bottom)).convert('RGB')
+                    comparison_backdrop = {'reference': item, 'bbox': [0, 0, image.width, reference_bottom],
+                                           'policy': 'visible_ink_contrast_against_observed_bright_header',
+                                           'minimum_visible_contrast': 20, 'minimum_reference_channel': 190}
                     if analysis['partial_top']:
                         uncertain('start_gap', '视频开头存在上边缘残行，无法证明曲谱从完整开头开始。', item, 0, candidates=current)
                     top = analysis['row_bounds'][0][0]
@@ -466,4 +623,4 @@ def restore_rows(source, output, metadata, decisions=None):
             item = {'timestamp': item['timestamp'], 'image': item['image']}
             references = record.get('cursor_followups', [])
             uncertain('cursor_occlusion', '该谱行的光标遮挡观察没有同位置互补清晰证据，无法证明隐藏内容相同。请补充完整谱行，或明确接受此处缺失；不会擦除或猜补被挡音符。', item, position, references[-1] if references else None)
-    return header, delivered, {'seams': seams, 'recoveries': recoveries, 'unreadable_observations': unreadable, 'ignored_edges': ignored_edges, 'boundaries': {'start': first, 'end': end}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}
+    return header, delivered, {'seams': seams, 'comparison_backdrop': comparison_backdrop, 'recoveries': recoveries, 'unreadable_observations': unreadable, 'ignored_edges': ignored_edges, 'boundaries': {'start': first, 'end': end}, 'decisions': accepted, 'gaps': gaps, 'limitations': [gap['question'] for gap in gaps], 'quality': quality_report(metadata, delivered)}

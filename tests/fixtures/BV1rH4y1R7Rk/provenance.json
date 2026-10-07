@@ -1,0 +1,179 @@
+{
+  "source_url": "https://www.bilibili.com/video/BV1rH4y1R7Rk",
+  "format_id": "30080",
+  "codec": "h264",
+  "width": 1920,
+  "height": 1080,
+  "fps": "30/1",
+  "duration_seconds": 298.6,
+  "source_sha256": "80f9a8d19515cf624d7d13c27ea758e88118fddb4341fa06deaad040272877fe",
+  "extraction": "ffmpeg -v error -ss TIMESTAMP -i source-1080p.mp4 -frames:v 1 -threads 1 TIMESTAMP.png",
+  "frames": [
+    {
+      "timestamp": 0.0,
+      "file": "0.0.png",
+      "sha256": "ec241c2c2a349b2a76fdac8a598d5bba4a4590136913acfc33bccbf8bd87cd1d"
+    },
+    {
+      "timestamp": 0.5,
+      "file": "0.5.png",
+      "sha256": "eda5d7f8c1c223fa40fab88619764225c3c8d2c13250ab7a825e27d5f8957053"
+    },
+    {
+      "timestamp": 1.0,
+      "file": "1.0.png",
+      "sha256": "39d6c05f042b46d2ed99502b079e21d333bf52f00b4aae1513149938899d1a5a"
+    },
+    {
+      "timestamp": 1.5,
+      "file": "1.5.png",
+      "sha256": "8bbfe3d93988a6dbfe6deefe16db120251c953b7901e5b01781838edab73a17b"
+    },
+    {
+      "timestamp": 2.0,
+      "file": "2.0.png",
+      "sha256": "1b5f78aa8a6bef99af62cef90f156a4b01982bd1ca4301dd15eaddb6dc7fd68c"
+    },
+    {
+      "timestamp": 12.0,
+      "file": "12.0.png",
+      "sha256": "e01458e52af695e460b76063ea6d6a53fcc65e0ac50640d2782cb9e797f47e30"
+    },
+    {
+      "timestamp": 15.0,
+      "file": "15.0.png",
+      "sha256": "a0de218961d43c2abdae13cf02a91a5ae47a04d91224b88d3da678e0020c0ae7"
+    },
+    {
+      "timestamp": 15.5,
+      "file": "15.5.png",
+      "sha256": "286bd1fba8f7e89b41cb13e4eeb714b2b5fa3b9072877913009147fe44b6ac55"
+    },
+    {
+      "timestamp": 114.5,
+      "file": "114.5.png",
+      "sha256": "e60f86e43faa985a21e64f1b143ade6a0414c4a0b84cd6a2fec0ffea5ffbee95"
+    },
+    {
+      "timestamp": 120.0,
+      "file": "120.0.png",
+      "sha256": "3672bbc64a6440a5a2bc53797236ad7be09cd092b33941b34f200cd28cc0a320"
+    },
+    {
+      "timestamp": 121.0,
+      "file": "121.0.png",
+      "sha256": "ec1af09bcd53e3a680813d38e9c8608f44a78b4d6091f810fe457fa62ae8e239"
+    },
+    {
+      "timestamp": 124.0,
+      "file": "124.0.png",
+      "sha256": "0ab62e5b1c910ad5b33e49385d136df86674eefc217f1da0018558acb80ebd96"
+    },
+    {
+      "timestamp": 124.5,
+      "file": "124.5.png",
+      "sha256": "07007251e181402225790877abd4bd8c069aad8db29ae9c8633afd557f934ca0"
+    },
+    {
+      "timestamp": 125.0,
+      "file": "125.0.png",
+      "sha256": "ac90157287629ceecb322a0e8b3f1429a85e6489ec71ea6218fbdf265bc7a3d8"
+    },
+    {
+      "timestamp": 126.0,
+      "file": "126.0.png",
+      "sha256": "4e787b159441f21e392c6cf445465280fe5eb01a21adbd375f2421c704d187ee"
+    },
+    {
+      "timestamp": 127.0,
+      "file": "127.0.png",
+      "sha256": "2984def69fc132534222331d426b1821d8ede45e751db054762b4b4f78ce2d41"
+    },
+    {
+      "timestamp": 128.0,
+      "file": "128.0.png",
+      "sha256": "2567fb6ff448d80f8dd53a197679ffb59e437ea1a485d92be602e28cf8556d9c"
+    },
+    {
+      "timestamp": 130.5,
+      "file": "130.5.png",
+      "sha256": "c6e722e3709caa8c2df28d40d6e71097c972c0114ba895ab7a8464f13af73431"
+    },
+    {
+      "timestamp": 131.0,
+      "file": "131.0.png",
+      "sha256": "2ee89b1e97c099a87ee684570160a5df973624b0767e1ab273c722cfe0b97166"
+    },
+    {
+      "timestamp": 144.0,
+      "file": "144.0.png",
+      "sha256": "d91606cf177c58fba119cd3b60ce882d9876930e630ec67a54fc2de348cfbfb2"
+    },
+    {
+      "timestamp": 144.5,
+      "file": "144.5.png",
+      "sha256": "54be0c2c92246675c893a6205de719c2c094fb9c8f3047573ec7347afc1809f2"
+    },
+    {
+      "timestamp": 169.5,
+      "file": "169.5.png",
+      "sha256": "1ef76f5a89b29a60ebecf5242771bbc74237f509a3884941a7b7ae4657c84093"
+    },
+    {
+      "timestamp": 170.0,
+      "file": "170.0.png",
+      "sha256": "be58910b2a91cfeef996af5997ab7bd692469d2bdfcdf42ad70472385487c751"
+    },
+    {
+      "timestamp": 177.0,
+      "file": "177.0.png",
+      "sha256": "168eac24b142e75e8acece1ca23beeb7b1783e4c558e177d7abadeda6d5dab1f"
+    },
+    {
+      "timestamp": 177.5,
+      "file": "177.5.png",
+      "sha256": "5312c114aa27aba3dc9e6111de5f5c4e300565b4f46bd61ae15a46d06f7ae8ed"
+    },
+    {
+      "timestamp": 179.5,
+      "file": "179.5.png",
+      "sha256": "c78cd52636e38642f404b91f4e07949e220a7ce24b0ecec881a18752ef2e079b"
+    },
+    {
+      "timestamp": 180.0,
+      "file": "180.0.png",
+      "sha256": "dc4a8a6c987e15f5c29c066e7affc2152e074661b99be26fc5d9ad8c632bbba1"
+    },
+    {
+      "timestamp": 182.5,
+      "file": "182.5.png",
+      "sha256": "c79ab96951c929cd2bf25b6ecfad9cadb81233d61dc607771b4bc12800dea543"
+    },
+    {
+      "timestamp": 183.0,
+      "file": "183.0.png",
+      "sha256": "f0d2c9382582aaa85233a5bc8121c092e43bdfa25e92c11e0ea8712ae5901913"
+    },
+    {
+      "timestamp": 198.5,
+      "file": "198.5.png",
+      "sha256": "500cede33472da4272596e3f64db2bf283877c0f256e69d16d2261c292f3cb60"
+    },
+    {
+      "timestamp": 199.0,
+      "file": "199.0.png",
+      "sha256": "754a5013b799ecbf61e62d8e2662e941485dcd74bbcc534461df90b5c28412a6"
+    },
+    {
+      "timestamp": 235.5,
+      "file": "235.5.png",
+      "sha256": "869f6056c984fd6b93b0f614ba4c9d6afa36f17bc9ee32d6046ff568b5895804"
+    },
+    {
+      "timestamp": 236.0,
+      "file": "236.0.png",
+      "sha256": "fafb5e2b481c64eac2dd73bd65cfe33ad3af3fd7971885f0299df7213a31d94e"
+    }
+  ],
+  "test_sampling": "The CLI fixtures concatenate real observations losslessly at 0.5-second intervals. Original timestamps are recorded here. Full acceptance runs use the original video timeline."
+}
