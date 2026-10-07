@@ -70,6 +70,8 @@ def main():
     except InputError as error:
         origin = error.origin
         result = {'schema_version': 1, 'phase': 'acquisition', 'status': 'failed', 'complete': False, 'issues': [], 'rows': [], 'error': {'code': error.code, 'message': str(error)}}
+        if hasattr(error, 'diagnostics'):
+            result['error'].update(error.diagnostics)
         if hasattr(error, 'http_status'):
             result['error']['http_status'] = error.http_status
     output = Path(args.output)

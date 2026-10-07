@@ -85,6 +85,8 @@ def _worker(url, staging, publication, connection, parent_pid):
         connection.send({'ok': True, 'origin': {**origin, **details}})
     except InputError as error:
         result = {'ok': False, 'code': error.code, 'message': str(error), 'origin': error.origin or video_origin(url)}
+        if hasattr(error, 'diagnostics'):
+            result['diagnostics'] = error.diagnostics
         if hasattr(error, 'http_status'):
             result['http_status'] = error.http_status
         connection.send(result)
@@ -123,6 +125,8 @@ def acquire(url, output, timeout=ACQUISITION_SECONDS):
                 raise InputError('public_api_unavailable', '匿名获取进程未完成。请提供清晰的本地视频。', origin)
             if not result['ok']:
                 error = InputError(result['code'], result['message'], result.get('origin') or origin)
+                if 'diagnostics' in result:
+                    error.diagnostics = result['diagnostics']
                 if 'http_status' in result:
                     error.http_status = result['http_status']
                 raise error

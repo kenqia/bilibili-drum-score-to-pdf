@@ -29,16 +29,30 @@ class PublicHTTPSConnection(http.client.HTTPSConnection):
     def connect(self):
         origin = self._tunnel_host or self.host
         addresses = public_addresses(origin)
-        # Connect directly to the validated numeric address, never resolve it again.
-        address = addresses[0][4][0]
-        if self._tunnel_host:
-            # The environment proxy is an explicitly configured transport endpoint.
-            self.sock = self._create_connection((self.host, self.port), self.timeout, self.source_address)
-            self._tunnel_host = address
-            self._tunnel()
-        else:
-            self.sock = self._create_connection((address, self.port), self.timeout, self.source_address)
-        self.sock = self._context.wrap_socket(self.sock, server_hostname=origin)
+        # Each attempt uses an already validated numeric IP. An unavailable
+        # IPv6 route must not prevent trying a reachable public IPv4 address.
+        tunnel_host = self._tunnel_host
+        last_error = None
+        for item in addresses:
+            address = item[4][0]
+            try:
+                if tunnel_host:
+                    self.sock = self._create_connection((self.host, self.port), self.timeout, self.source_address)
+                    self._tunnel_host = address
+                    self._tunnel()
+                else:
+                    self.sock = self._create_connection((address, self.port), self.timeout, self.source_address)
+                self.sock = self._context.wrap_socket(self.sock, server_hostname=origin)
+                return
+            except OSError as error:
+                last_error = error
+                if self.sock:
+                    self.sock.close()
+                    self.sock = None
+            finally:
+                self._tunnel_host = tunnel_host
+        raise last_error
+
 
 
 class PublicHTTPSHandler(urllib.request.HTTPSHandler):
@@ -64,9 +78,22 @@ class PublicTransport:
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler(), PublicHTTPSHandler(context=ssl.create_default_context()), PublicRedirect())
         self.http_status = None
         self.failure = None
+        self.stage = 'webpage'
+        self.backend_error_type = None
 
     def open(self, url, headers=None, data=None):
-        public_addresses(public_target(url))
-        clean = {k: v for k, v in (headers or {}).items() if k.lower() not in {'cookie', 'authorization', 'proxy-authorization', 'accept-encoding'}}
-        clean['Accept-Encoding'] = 'identity'
-        return self.opener.open(urllib.request.Request(url, data=data, headers=clean), timeout=20)
+        parsed = urlsplit(url)
+        self.stage = ('media' if parsed.hostname and 'bilivideo' in parsed.hostname
+                      else 'playurl' if 'playurl' in parsed.path
+                      else 'wbi' if '/wbi/' in parsed.path or parsed.path.endswith('/nav')
+                      else 'webpage')
+        try:
+            public_addresses(public_target(url))
+            clean = {k: v for k, v in (headers or {}).items() if k.lower() not in {'cookie', 'authorization', 'proxy-authorization', 'accept-encoding'}}
+            clean['Accept-Encoding'] = 'identity'
+            return self.opener.open(urllib.request.Request(url, data=data, headers=clean), timeout=20)
+        except Exception as error:
+            self.backend_error_type = type(getattr(error, 'reason', error)).__name__
+            if isinstance(error, InputError):
+                self.failure = error
+            raise

@@ -1,6 +1,7 @@
 """Built-in yt-dlp Bilibili extractor with anonymous, bounded media acquisition."""
 import json
 import io
+import gzip
 import subprocess
 from urllib.error import HTTPError
 from public_video import InputError, MAX_BYTES, checked_media_url
@@ -8,13 +9,18 @@ from anonymous_network import PublicTransport
 
 
 class BoundedBody(io.IOBase):
-    def __init__(self, response, transport, limit=2 * 1024**2):
+    def __init__(self, response, transport, limit=2 * 1024**2, decode=True):
         self.response, self.transport, self.limit, self.total = response, transport, limit, 0
+        # Servers can return gzip despite Accept-Encoding: identity. Bound both
+        # the wire body and the decompressed body before the extractor reads it.
+        self.reader = (gzip.GzipFile(fileobj=BoundedBody(response, transport, limit, decode=False))
+                       if decode and response.headers.get('Content-Encoding', '').lower() == 'gzip'
+                       else response)
 
     def read(self, size=-1):
         size = -1 if size is None else size
         amount = self.limit + 1 - self.total
-        block = self.response.read(amount if size < 0 else min(size, amount))
+        block = self.reader.read(amount if size < 0 else min(size, amount))
         self.total += len(block)
         if self.total > self.limit:
             self.transport.failure = InputError('download_too_large', '公开响应超过大小上限。请提供清晰的本地视频。')
@@ -25,6 +31,8 @@ class BoundedBody(io.IOBase):
         return True
 
     def close(self):
+        if self.reader is not self.response:
+            self.reader.close()
         self.response.close()
         super().close()
 
@@ -41,6 +49,7 @@ def download(origin, staging):
     from yt_dlp.extractor.bilibili import BiliBiliIE
     from yt_dlp.networking import Response
     from yt_dlp.version import __version__
+    from yt_dlp.utils import std_headers
     # The Python API does not parse CLI config files. Prevent constructor plugin load.
     plugin_dirs.value = []
     all_plugins_loaded.value = True
@@ -62,7 +71,8 @@ def download(origin, staging):
     class AnonymousDL(YoutubeDL):
         def urlopen(self, request):
             url = request if isinstance(request, str) else request.url
-            headers = {} if isinstance(request, str) else dict(request.headers)
+            headers = {**std_headers, **self.params.get('http_headers', {}),
+                       **({} if isinstance(request, str) else dict(request.headers))}
             data = None if isinstance(request, str) else request.data
             try:
                 response = transport.open(url, headers, data)
@@ -79,12 +89,17 @@ def download(origin, staging):
         with AnonymousDL(options, auto_init=False) as backend:
             backend.add_info_extractor(AnonymousBiliIE())
             info = backend.extract_info(origin['url'], download=False)
-    except InputError:
+    except InputError as error:
+        error.diagnostics = {'failure_stage': transport.stage, 'backend_error_type': type(error).__name__}
         raise
-    except Exception:
+    except Exception as cause:
         if transport.failure:
+            transport.failure.diagnostics = {'failure_stage': transport.stage,
+                                             'backend_error_type': transport.backend_error_type or type(cause).__name__}
             raise transport.failure from None
         error = InputError('http_unavailable' if transport.http_status else 'public_api_unavailable', '匿名公开接口拒绝请求或视频不可用。请提供清晰的本地视频。')
+        error.diagnostics = {'failure_stage': transport.stage,
+                             'backend_error_type': transport.backend_error_type or type(cause).__name__}
         if transport.http_status:
             error.http_status = transport.http_status
         raise error from None
@@ -94,7 +109,8 @@ def download(origin, staging):
     formats = [f for f in info.get('formats', []) if f.get('vcodec') != 'none' and f.get('url') and not f.get('fragments') and f.get('protocol', 'https') in {'https', 'http'}]
     independent = [f for f in formats if f.get('acodec') == 'none']
     candidates = independent or formats
-    candidates.sort(key=lambda f: (f.get('height') or 0, f.get('width') or 0, f.get('fps') or 0, str(f.get('vcodec', '')).lower().startswith(('avc', 'h264')), f.get('tbr') or 0), reverse=True)
+    candidates.sort(key=lambda f: (f.get('height') or 0, f.get('width') or 0, str(f.get('vcodec', '')).lower().startswith(('avc', 'h264')), f.get('fps') or 0, f.get('tbr') or 0), reverse=True)
+    transport.stage = 'formats'
     if not candidates:
         raise InputError('unsupported_stream', '匿名接口未提供支持的视频轨。请提供清晰的本地视频。')
     destination = staging / 'video.mp4'
@@ -105,6 +121,7 @@ def download(origin, staging):
         addresses = [fmt['url']] + list(fmt.get('backup_urls') or [])[:2]
         for backup, address in enumerate(addresses):
             try:
+                transport.stage = 'media'
                 checked_media_url(address)
                 total = 0
                 with transport.open(address, {**info.get('http_headers', {}), **fmt.get('http_headers', {})}) as response, destination.open('wb') as target:
@@ -113,6 +130,7 @@ def download(origin, staging):
                         if total > MAX_BYTES:
                             raise InputError('download_too_large', '视频超过大小上限。请提供清晰的本地视频。')
                         target.write(block)
+                transport.stage = 'probe'
                 probe = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,codec_name,r_frame_rate', '-of', 'json', str(destination)], capture_output=True, timeout=30)
                 stream = json.loads(probe.stdout)['streams'][0]
                 if probe.returncode or not stream.get('width') or not stream.get('height'):
@@ -125,13 +143,17 @@ def download(origin, staging):
                 return {'backend': 'yt-dlp', 'backend_version': __version__, 'anonymous': True,
                         'single_file_fallback': not bool(independent), 'actual_video': stream,
                         'format_attempts': attempt, 'backup_used': bool(backup),
-                        'selected_format': {'width': fmt.get('width'), 'height': fmt.get('height'), 'fps': fmt.get('fps'), 'quality': fmt.get('quality')}}
-            except InputError:
+                        'selected_format': {'format_id': fmt.get('format_id'), 'width': fmt.get('width'), 'height': fmt.get('height'), 'fps': fmt.get('fps'), 'quality': fmt.get('quality')}}
+            except InputError as error:
+                error.diagnostics = {'failure_stage': transport.stage, 'backend_error_type': type(error).__name__}
                 raise
             except HTTPError as error:
                 last_error = InputError('http_unavailable', '媒体服务器拒绝匿名获取。请提供清晰的本地视频。')
+                last_error.diagnostics = {'failure_stage': 'media', 'backend_error_type': 'HTTPError'}
                 last_error.http_status = int(error.code)
                 error.close()
-            except (OSError, ValueError, KeyError, IndexError, subprocess.TimeoutExpired):
+            except (OSError, ValueError, KeyError, IndexError, subprocess.TimeoutExpired) as cause:
                 last_error = InputError('undecodable_video', '视频获取失败或无法解码。请提供清晰的本地视频。')
+                last_error.diagnostics = {'failure_stage': transport.stage,
+                                          'backend_error_type': transport.backend_error_type or type(cause).__name__}
     raise last_error or InputError('unsupported_stream', '没有可解码视频轨。请提供清晰的本地视频。')

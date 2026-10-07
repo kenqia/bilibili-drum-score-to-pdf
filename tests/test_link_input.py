@@ -1,4 +1,5 @@
 """Unified CLI acquisition tests at the yt-dlp and HTTP boundaries."""
+import gzip
 import contextlib
 import builtins
 import importlib
@@ -109,6 +110,8 @@ class LinkInputTests(unittest.TestCase):
             code, result, logs = self.invoke(base / 'result', video, response=lambda *a, **k: (_ for _ in ()).throw(failure))
             self.assertEqual(code, 2)
             self.assertEqual(result['error']['http_status'], 412)
+            self.assertEqual(result['error']['failure_stage'], 'media')
+            self.assertEqual(result['error']['backend_error_type'], 'HTTPError')
             failure.close()
             combined = logs + (base / 'result/manifest.json').read_text()
             if 'DO_NOT_SAVE_TEST_SENTINEL' in combined:
@@ -362,13 +365,48 @@ class LinkInputTests(unittest.TestCase):
                     def close(self): pass
                     def makefile(self, *args):
                         payload = ((b'x' * (2 * 1024**2 + 1)) if oversized else b'fixture html') if self.metadata else video.read_bytes()
-                        return io.BytesIO(b'HTTP/1.1 200 OK\r\nContent-Length: ' + str(len(payload)).encode() + b'\r\n\r\n' + payload)
+                        if self.metadata:
+                            payload = gzip.compress(payload)
+                        encoding = b'Content-Encoding: gzip\r\n' if self.metadata else b''
+                        return io.BytesIO(b'HTTP/1.1 200 OK\r\n' + encoding + b'Content-Length: ' + str(len(payload)).encode() + b'\r\n\r\n' + payload)
                 proxy_env = {key: '' for key in ('http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY')}
                 with patch.object(BiliBiliIE, '_real_extract', extractor), patch.dict('os.environ', proxy_env), patch('socket.create_connection', side_effect=lambda *a, **k: WireSocket()), patch('ssl.SSLContext.wrap_socket', lambda context, sock, **kwargs: sock):
                     code, result, logs = self.invoke(base / 'result', video, real_transport=True, actual_backend=True)
                 self.assertEqual(code, 2 if oversized else 0, result)
                 if oversized:
                     self.assertEqual(result['error']['code'], 'download_too_large')
+
+
+    def test_real_webpage_path_keeps_default_headers_and_tries_next_public_address(self):
+        # The live URL failed at TLS on the first IPv6 address; the next IPv4
+        # works only with yt-dlp's default User-Agent. Exercise the CLI adapter.
+        from yt_dlp.extractor.bilibili import BiliBiliIE
+        addresses = [(socket.AF_INET6, socket.SOCK_STREAM, 6, '', ('2606:4700:4700::1111', 443, 0, 0)),
+                     (socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            video = video_from_image(score_frame(), base)
+            payload = video.read_bytes()
+            class WireSocket:
+                def sendall(self, data):
+                    if b'User-Agent:' not in data and b'User-agent:' not in data:
+                        raise AssertionError('extractor request lost default User-Agent')
+                def close(self): pass
+                def makefile(self, *args):
+                    return io.BytesIO(b'HTTP/1.1 200 OK\r\nContent-Length: ' + str(len(payload)).encode() + b'\r\n\r\n' + payload)
+            def connect(address, *args, **kwargs):
+                if ':' in address[0]:
+                    raise OSError('unreachable IPv6')
+                return WireSocket()
+            def extractor(ie, url):
+                ie._download_webpage(url, 'fixture')
+                return {'id': 'BV1b5411x7Ku_p2', 'title': 'fixture',
+                        'formats': [{'url': MEDIA, 'vcodec': 'avc1', 'acodec': 'none'}]}
+            proxy_env = {key: '' for key in ('http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY')}
+            with patch.dict('os.environ', proxy_env), patch.object(BiliBiliIE, '_real_extract', extractor), patch('socket.create_connection', side_effect=connect), patch('ssl.SSLContext.wrap_socket', lambda context, sock, **kwargs: sock):
+                code, result, _ = self.invoke(base / 'result', video, dns=addresses, real_transport=True, actual_backend=True)
+            self.assertEqual(code, 0, result)
+            self.assertEqual(result['origin']['backend'], 'yt-dlp')
 
 if __name__ == '__main__':
     unittest.main()
