@@ -1,6 +1,20 @@
 # B站动态鼓谱转 PDF
 
-一个可检查的 Codex skill 文件包：输入 B站动态架子鼓谱链接或本地视频，将已有谱面整理成可打印 PDF。
+一个可检查的 Codex skill 文件包：输入 B站动态架子鼓谱链接或本地视频，将已有谱面整理成可打印 PDF。当前定位为“同模板真实可用 / internal beta”。
+
+## 快速开始
+
+在 Windows/WSL 的 Linux 环境中安装 Python 3.12+、uv、ffmpeg。验证测试另需 Poppler。依赖由 uv 在独立环境运行，无需登录 B站或配置 Cookie。
+
+```sh
+git clone https://github.com/kenqia/bilibili-drum-score-to-pdf.git
+cd bilibili-drum-score-to-pdf
+uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibili.com/video/BV1rH4y1R7Rk' --output /absolute/path/to/new-result
+```
+
+请使用新的空目录。查看 stdout JSON 的 `status` 和结果目录的 `manifest.json`：`success` 后核对 `complete`、`score.pdf` 及全部拼接证据；`waiting` 按编号疑点确认；`failed` 查看脱敏原因，可改用清晰本地视频。接受缺失后输出的 `complete=false` 不代表完整还原。打印前仍需逐页核对细小音符和首尾。
+
+五分钟真实样本在测试环境中约需 19 分钟，不承诺固定速度。本版适合白底、多行、纵向向上推进且类似已验收样本的布局。高 DPI 不等于清晰，长期中央遮挡尚未支持完整滚动恢复。完整边界和后续工作见 [beta 限制](docs/beta-limitations.md)。
 
 ## 当前状态
 
@@ -38,7 +52,7 @@ uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibil
 
 下载先进入结果目录之外的 staging。ffprobe 测量尺寸、编码和帧率，ffmpeg 验证首帧可解码后才发布源视频，再执行本地谱面还原。`manifest.json` 保存规范 BV 链接、分 P、后端版本、选中格式 ID 与实测参数。签名媒体地址、代理认证和后端原始异常不进入输出或记录。
 
-获取工作进程默认最多运行 30 分钟，`--acquisition-timeout 120` 可缩短总时限，覆盖 DNS、接口请求、下载、探测、目标文件复制和进程退出；连接超时 20 秒，元数据的压缩体与解压体各限 2 MiB，视频上限 2 GiB。最多尝试 3 个视频格式，每个格式最多使用 2 个官方备用地址。超时、Ctrl+C 或 SIGTERM 会停止获取进程组并清理本次 staging。Linux 上强杀 CLI 也会停止获取进程组，最终目录不会留下下载 partial；强杀可能留下结果目录之外的 staging，不会自动清理未知文件。获取时限与后续本地转换时限分开，本地 ffprobe 最多 30 秒、采样解码最多 600 秒、末帧解码最多 60 秒；谱面分析和 PDF 排版没有整体时限。媒体地址及每次重定向都检查 HTTPS、无 URL 凭据与公开目标，并在实际连接时固定已验证 IP。建连失败会顺序尝试其余已验证公开地址，IPv6 失败不阻止 IPv4。extractor 请求保留 yt-dlp 默认请求头，读取有界 gzip 响应。环境代理仍可使用。HTTP CONNECT 代理向固定目标 IP 建隧道，TLS 校验原域名。
+获取工作进程默认最多运行 30 分钟，`--acquisition-timeout 120` 可缩短总时限，覆盖 DNS、接口请求、下载、探测、目标文件复制和进程退出；连接超时 20 秒，元数据的压缩体与解压体各限 2 MiB，视频上限 2 GiB。最多枚举 3 个候选格式，每个格式最多使用 2 个官方备用地址；候选过大、不安全地址或实测分辨率与标记不符目前会提前终止，尚未保证继续下一候选，详见 beta 限制。超时、Ctrl+C 或 SIGTERM 会停止获取进程组并清理本次 staging。Linux 上强杀 CLI 也会停止获取进程组，最终目录不会留下下载 partial；强杀可能留下结果目录之外的 staging，不会自动清理未知文件。获取时限与后续本地转换时限分开，本地 ffprobe 最多 30 秒、采样解码最多 600 秒、末帧解码最多 60 秒；谱面分析和 PDF 排版没有整体时限。媒体地址及每次重定向都检查 HTTPS、无 URL 凭据与公开目标，并在实际连接时固定已验证 IP。建连失败会顺序尝试其余已验证公开地址，IPv6 失败不阻止 IPv4。extractor 请求保留 yt-dlp 默认请求头，读取有界 gzip 响应。环境代理仍可使用。HTTP CONNECT 代理向固定目标 IP 建隧道，TLS 校验原域名。
 
 访问限制、格式失败、不可解码或实测分辨率低于格式标记时返回脱敏原因和本地视频兜底。匿名接口不能保证 1080p，元数据尺寸不能代替实际尺寸。`error.failure_stage`、`error.backend_error_type` 和可用的 `http_status` 提供脱敏获取诊断，不输出原始异常或签名地址。仅获取失败时，目录只含标记 `phase=acquisition` 的失败 `manifest.json`，可用原命令在同一目录重试，也可换清晰本地视频。未知文件、已有源视频或转换结果会阻止重试，需选择空目录或对已有任务使用 `--resume`。
 
