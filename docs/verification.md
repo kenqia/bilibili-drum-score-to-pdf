@@ -114,3 +114,9 @@ pdftoppm -png -r 150 /absolute/path/to/result/score.pdf /absolute/path/to/review
 独立 DPI 测试 3 项通过，18.907 秒；集成后重新运行 3 项通过，21.758 秒，既有本地转换 6 项通过，20.768 秒。随后门槛进一步改为使用未舍入的原生宽度，DPI 3 项再次通过，24.640 秒。命令为 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_print_dpi.py -v。
 
 #10 原测试把纯色无文字片头列为等待，与附件要求有差异。补充纯色片头、完整谱面、纯色片尾的 CLI 反例，旧版本返回 unreadable_window。规则只增加 RGB 各通道全图极差不超过 2 级的均匀卡片，用以容忍编码误差；中段卡片、渐变、模糊内容、局部五线及未恢复残行仍保留疑点。全片无谱面仍不能成功。4 项边缘测试通过，70.200 秒，包含低对比度线条、纯色卡接首尾残行及中段纯色卡反例。命令为 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_edge_cards.py -v。这些合成边界验证不能替代真实整曲逐页核查或实物打印。
+
+## 2026-10-07 真实 URL 整曲验收
+
+`BV1rH4y1R7Rk` 第一 P 经统一 CLI 匿名取得 H.264 1080p 格式 `30080`，完整 298.6 秒运行两次，均为 `success`、`complete=true`。输出 12 行、2 页 A4，minimum effective DPI 264.182，人工确认与未解决问题均为 0。107 项全量测试串行通过，用时 1531.135 秒。
+
+两次谱行、顺序、9 处拼接和光标证据一致，2 页 150 DPI 渲染逐像素相同。原始裁剪、灰度打印图和 PDF 嵌入图片与真实帧对应；已查看全部页面、拼接及 7 处光标滚动证据。原视频水印保留，没有实物打印。详细时间点、失败原因、格式、耗时与边界见 [真实输入记录](verification-real-bilibili.md) 和 [本轮实现状态](implementation-status.md)。

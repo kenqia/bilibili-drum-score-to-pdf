@@ -27,9 +27,15 @@ def atomic_json(path, value):
     temporary.replace(path)
 
 
-def _image_references(value):
+def _image_references(value, seen=None):
     """Yield owners and keys of local image references in a persisted result."""
+    if seen is None:
+        seen = set()
     if isinstance(value, dict):
+        # Shared evidence owners must be rewritten only once during replay.
+        if id(value) in seen:
+            return
+        seen.add(id(value))
         for key, item in value.items():
             # Answer image paths point to user input, not persisted evidence.
             if key == 'decisions':
@@ -37,10 +43,10 @@ def _image_references(value):
             if key in {'image', 'original_image'}:
                 yield value, key
             else:
-                yield from _image_references(item)
+                yield from _image_references(item, seen)
     elif isinstance(value, list):
         for item in value:
-            yield from _image_references(item)
+            yield from _image_references(item, seen)
 
 
 def artifact_names(result):

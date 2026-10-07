@@ -198,3 +198,35 @@ class RealBilibiliTests(unittest.TestCase):
             _, result = self.run_cli(source, base / 'result')
             self.assertEqual(result['error']['code'], 'no_overlap')
             self.assertFalse(result['complete'])
+
+    def test_real_132_second_scroll_uses_prior_clean_at_same_staff_position(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            _, result = self.run_cli(self.pair(base, [0, .5, 1, 15, 124.5, 125, 126, 126.5, 127, 127.5, 128, 132, 132.5, 133]), base / 'result')
+            self.assertFalse(any(issue['kind'] == 'cursor_occlusion' and issue['position'] == 2
+                                 for issue in result['issues']), result['issues'])
+            self.assertTrue(result['rows'][2].get('cursor_recoveries'), result['issues'])
+
+    def test_real_152_scroll_carries_cursor_proof_only_with_coherent_motion(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            _, result = self.run_cli(self.pair(base, [0, 124.5, 138, 138.5, 139, 144, 144.5, 145,
+                                                     151.5, 152, 153.5]), base / 'result')
+            row = result['rows'][3]
+            self.assertFalse(row.get('cursor_content_unproven'), result['issues'])
+            self.assertGreaterEqual(len(row.get('cursor_recoveries', [])), 2, result['issues'])
+
+    def test_real_152_scroll_cannot_hide_added_ghost_note(self):
+        from PIL import ImageDraw
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            self.pair(base, [0, 124.5, 138, 138.5, 139, 144, 144.5, 145, 151.5, 152, 153.5])
+            altered = Image.open(base / '9.png').convert('RGB')
+            ImageDraw.Draw(altered).ellipse((895, 610, 899, 614), fill='black')
+            altered.save(base / '9.png')
+            source = base / 'altered.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '2', '-i', str(base / '%d.png'),
+                            '-c:v', 'ffv1', str(source)], check=True)
+            _, result = self.run_cli(source, base / 'result')
+            self.assertEqual(result['error']['code'], 'no_overlap')
+            self.assertFalse(result['complete'])

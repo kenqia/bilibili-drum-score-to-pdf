@@ -206,7 +206,7 @@ def same_cursor_position(left, right):
     # The real 124.5-second run and its prior clean reference have the same
     # staff position but a seven-pixel whitespace-cut difference. Anchor
     # physical position on the staff, not that mutable crop boundary.
-    return (abs(left['staff_top'] - right['staff_top']) < allowance
+    return (abs(left.get('screen_staff_top', left['staff_top']) - right['staff_top']) < allowance
             and abs(a[0] - b[0]) <= 3)
 
 
@@ -296,13 +296,14 @@ def restore_rows(source, output, metadata, decisions=None):
     decisions = decisions or {}
     accepted, gaps = {}, []
     best_candidates = {}
+    clean_observations = {}
     first_prefix_depth = 0
     cursor_runs, cursor_unproven = {}, {}
     pending, recoveries, unreadable = [], [], []
     ignored_edges = []
     followup = None
 
-    def cursor_observation(row, position):
+    def cursor_observation(row, position, motion=None):
         # Masked matching is provisional. A run needs complementary real cursor
         # positions, all visible pixels consistent, then an actual clear row.
         run = cursor_runs.get(position)
@@ -310,10 +311,10 @@ def restore_rows(source, output, metadata, decisions=None):
             # A proved scroll ends a stationary observation run. Its already
             # complete complementary coverage may be checked against an actual
             # earlier clean observation at that same screen position. Never
-            # borrow visibility from the translated window to fill unknowns.
-            clean = best_candidates[position]
+            # use that reference to assume unknown pixels are unchanged.
+            clean = run.get('clean_reference')
             aligned = (registered_row(run, clean)
-                       if not run['ignored'].any() and position not in cursor_unproven
+                       if clean is not None and not run['ignored'].any() and position not in cursor_unproven
                        and not clean['quality']['cursor_occluded']
                        and same_cursor_position(run, clean) else None)
             if aligned is not None:
@@ -329,6 +330,16 @@ def restore_rows(source, output, metadata, decisions=None):
                     'policy': 'complementary_stationary_visible_pixels_with_prior_clean_row'})
                 del cursor_runs[position]
                 run = None
+            if run is not None and motion is not None:
+                # The caller has proved one common upward shift with independent
+                # clean rows. Carry only comparison coordinates; unknown pixels
+                # remain unknown until a real cursor observation exposes them.
+                shift = run.get('screen_staff_top', run['staff_top']) - row['staff_top']
+                aligned = (registered_row(run, row)
+                           if abs(shift - motion['vertical_shift']) <= 2 else None)
+                if aligned is not None:
+                    run['screen_staff_top'] = row['staff_top']
+                    run.setdefault('motions', []).append(motion)
         if row['quality']['cursor_occluded']:
             if run is None:
                 name = f'evidence/cursor-{position:04d}-{int(round(row["timestamp"] * 1000)):08d}.png'
@@ -341,6 +352,9 @@ def restore_rows(source, output, metadata, decisions=None):
                        'bbox': row['bbox'], 'staff_top': row['staff_top'],
                        'staff_spacing': row['staff_spacing'], 'observations': [],
                        'evidence': [{'timestamp': row['timestamp'], 'image': name}]}
+                clean = clean_observations.get(position)
+                if clean is not None and same_cursor_position(row, clean):
+                    run['clean_reference'] = clean
                 cursor_runs[position] = run
             else:
                 aligned = registered_row(run, row) if same_cursor_position(run, row) else None
@@ -377,10 +391,14 @@ def restore_rows(source, output, metadata, decisions=None):
                 delivered[position].setdefault('cursor_recoveries', []).append({
                     'before': item, 'after': clear_item, 'clear_timestamp': row['timestamp'],
                     'observations': run['observations'], 'evidence': run['evidence'],
-                    'policy': 'complementary_same_position_visible_pixels_then_clear_row'})
+                    'motions': run.get('motions', []),
+                    'policy': ('complementary_visible_pixels_with_proved_scroll_then_actual_clean_row'
+                               if run.get('motions') else 'complementary_same_position_visible_pixels_then_clear_row')})
             del cursor_runs[position]
+        if not row['quality']['cursor_occluded']:
+            clean_observations[position] = row
 
-    def track(row, position=None):
+    def track(row, position=None, motion=None):
         nonlocal first_prefix_depth
         if position is None:
             if not delivered:
@@ -420,13 +438,32 @@ def restore_rows(source, output, metadata, decisions=None):
             delivered[position]['cursor_recoveries'] = cursor_recoveries
         if cursor_followups:
             delivered[position]['cursor_followups'] = cursor_followups
-        cursor_observation(row, position)
+        cursor_observation(row, position, motion)
         return position
 
     def evidence(image, timestamp, index):
         name = f'evidence/window-{index:04d}.png'
         image.save(output / name)
         return {'timestamp': timestamp, 'image': name}
+
+    def cursor_scroll(prior, current, indices):
+        """Prove a common scroll separately from stationary cursor matching."""
+        if len(current) < 2 or not any(position in cursor_runs for position in indices):
+            return None
+        if not any(not left['quality']['cursor_occluded'] and not right['quality']['cursor_occluded']
+                   for left, right in zip(prior, current)):
+            return None
+        shifts = [left['staff_top'] - right['staff_top'] for left, right in zip(prior, current)]
+        shift = float(np.median(shifts))
+        if shift < min(row['staff_spacing'] for row in current) * 2 or max(shifts) - min(shifts) > 2:
+            return None
+        with Image.open(previous['file']) as before_image:
+            before = evidence(before_image, previous['timestamp'], previous['frame_index'])
+        return {'before': before, 'after': evidence(image, timestamp, frame_index),
+                'vertical_shift': shift, 'matched_rows': [delivered[position]['id'] for position in indices],
+                'before_staff_tops': [row['staff_top'] for row in prior],
+                'after_staff_tops': [row['staff_top'] for row in current],
+                'policy': 'unique_ordered_overlap_with_independent_clean_rows_and_common_upward_shift'}
 
     def uncertain(kind, question, item, position, reference=None, candidates=None, overlap_counts=None):
         issue = {'id': f'{kind}-{position:04d}' if kind == 'cursor_occlusion' else f'{kind}-{position:04d}-{int(round(item["timestamp"] * 1000)):08d}', 'kind': kind, 'question': question, 'timestamp': item['timestamp'], 'image': item['image'], 'position': position, 'status': 'unresolved', 'choices': ['supplement', 'accept_missing']}
@@ -597,8 +634,9 @@ def restore_rows(source, output, metadata, decisions=None):
                             exact = False
                             forced_count = 0
                     if exact:
+                        motion = cursor_scroll(prior, current, previous['indices']) if len(overlaps) == 1 else None
                         for position, row in zip(previous['indices'], current):
-                            track(row, position)
+                            track(row, position, motion)
                         # A held frame or slow scroll whose complete row identities are unchanged.
                         previous['rows'] = current
                         previous['analysis'] = analysis
@@ -620,8 +658,10 @@ def restore_rows(source, output, metadata, decisions=None):
                         choice = uncertain('ambiguous_motion', '行内容有重叠，但没有足够的向上推进位置证据，需核对顺序。', item, len(delivered), previous['evidence'], current, [count])
                         count = choice.get('overlap', 0)
                     current_indices = previous['indices'][-count:] if count else []
+                    motion = (cursor_scroll(prior[-count:], current[:count], current_indices)
+                              if count and forced_count is None else None)
                     for position, row in zip(current_indices, current[:count]):
-                        track(row, position)
+                        track(row, position, motion)
                     if count == len(current):
                         # Rows leaving the top edge add no new content. Keep the
                         # earlier anchor to prove cumulative motion at the next join.
