@@ -203,8 +203,10 @@ def same_cursor_position(left, right):
     # Cursor recovery supports only a local held window, below half staff spacing.
     a, b = left['bbox'], right['bbox']
     allowance = min(left['staff_spacing'], right['staff_spacing']) / 2
+    # The real 124.5-second run and its prior clean reference have the same
+    # staff position but a seven-pixel whitespace-cut difference. Anchor
+    # physical position on the staff, not that mutable crop boundary.
     return (abs(left['staff_top'] - right['staff_top']) < allowance
-            and abs(a[1] - b[1]) < allowance
             and abs(a[0] - b[0]) <= 3)
 
 

@@ -84,7 +84,7 @@ class RealBilibiliTests(unittest.TestCase):
     def test_real_scroll_keeps_completed_stationary_cursor_proof(self):
         with tempfile.TemporaryDirectory() as scratch:
             base = Path(scratch)
-            _, result = self.run_cli(self.pair(base, [0, 120, 121, 124, 124.5, 125, 126, 127, 128]), base / 'result')
+            _, result = self.run_cli(self.pair(base, [0, .5, 1, 15, 114.5, 115, 120, 121, 124, 124.5, 125, 126, 127, 128]), base / 'result')
             self.assertEqual(len(result['rows']), 4, result.get('issues'))
             self.assertGreaterEqual(len(result['rows'][1].get('cursor_recoveries', [])), 2,
                                     result.get('issues'))

@@ -75,6 +75,11 @@
       "sha256": "e60f86e43faa985a21e64f1b143ade6a0414c4a0b84cd6a2fec0ffea5ffbee95"
     },
     {
+      "timestamp": 115.0,
+      "file": "115.0.png",
+      "sha256": "a7f8cb4689a0c83a4e75d027149c3ac9633d037fcfefeaa1dcd2b083691e25db"
+    },
+    {
       "timestamp": 120.0,
       "file": "120.0.png",
       "sha256": "3672bbc64a6440a5a2bc53797236ad7be09cd092b33941b34f200cd28cc0a320"
