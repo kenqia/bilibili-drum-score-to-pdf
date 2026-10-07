@@ -118,53 +118,79 @@ def registered_row(left, right):
                 near_fitted_a = cv2.dilate(fitted_a.astype(np.uint8), kernel).astype(bool)
                 near_b = cv2.dilate(fitted_b.astype(np.uint8), kernel).astype(bool)
                 distant = ((fitted_a & ~near_b) | (fitted_b & ~near_fitted_a)) & available
-                cost = (np.count_nonzero(distant), np.count_nonzero((fitted_a ^ fitted_b) & available))
+                cost = (np.count_nonzero((fitted_a ^ fitted_b) & available), np.count_nonzero(distant))
                 candidates.append((cost, dx, dy, fitted_b, hidden, sx, sy, common, fitted_a))
     if not candidates:
         return None
     candidates.sort(key=lambda candidate: candidate[0])
-    best = candidates[0]
-    # Equal fits do not establish a unique registration.
-    if any(candidate[0] == best[0] and (not np.array_equal(candidate[3], best[3])
-                                                 or not np.array_equal(candidate[4], best[4]))
-           for candidate in candidates[1:]):
+    def visible_fit(candidate):
+        _, dx, dy, b, hidden, sx, sy, common, a = candidate
+        near_a = cv2.dilate(a.astype(np.uint8), kernel).astype(bool)
+        available = ~(left['ignored'] | hidden)
+        near_b = cv2.dilate(b.astype(np.uint8), kernel).astype(bool)
+        unmatched = ((a & ~near_b) | (b & ~near_a)) & available
+        pixels = cv2.warpAffine(right['pixels'], np.float32([[sx, 0, dx], [0, sy, dy]]),
+                                (width, height), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255))
+        if unmatched.any():
+            # H.264 chroma ringing around the native blue rest bar crosses the
+            # color threshold by up to 27 levels in the real 12, 15 and 125 second observations.
+            # Only near-white blue fringes beside shared ink qualify.
+            # Black notation and colored additions with actual contrast still fail.
+            residual = np.abs(left['pixels'].astype(np.int16) - pixels.astype(np.int16)).max(axis=2)
+            shared = (a & b & available).astype(np.uint8)
+            shared_edge = cv2.dilate(shared, np.ones((5, 5), np.uint8)).astype(bool)
+            left_blue = left['pixels'][:, :, 2].astype(np.int16) - left['pixels'][:, :, 0] >= 5
+            right_blue = pixels[:, :, 2].astype(np.int16) - pixels[:, :, 0] >= 5
+            fringe = ((left['pixels'].min(axis=2) >= 200) & (pixels.min(axis=2) >= 200)
+                      & left_blue & right_blue & (residual <= 32) & shared_edge)
+            # At 183 seconds the watermark exposes one gray row-number edge
+            # at 227 instead of 230. At 199 seconds a near-white beam fringe
+            # differs by 29 levels. Require grayscale pixels beside shared ink;
+            # changed faint notes and missing stems retain larger residuals.
+            gray_fringe = ((left['pixels'].min(axis=2) >= 180) & (pixels.min(axis=2) >= 180)
+                           & (np.ptp(left['pixels'], axis=2) <= 5) & (np.ptp(pixels, axis=2) <= 5)
+                           & ((residual <= 8) | ((left['pixels'].min(axis=2) >= 200)
+                                                    & (pixels.min(axis=2) >= 200) & (residual <= 32)))
+                           & shared_edge)
+            # A multi-pixel weak addition is notation, even beside shared ink.
+            # Only the actual single-pixel watermark fringes at 183/199 seconds
+            # qualify for the wider near-white residual allowance.
+            wider_gray = gray_fringe & (residual > 8)
+            count, labels, stats, _ = cv2.connectedComponentsWithStats((unmatched & wider_gray).astype(np.uint8), 8)
+            for index in range(1, count):
+                if stats[index, cv2.CC_STAT_AREA] > 1:
+                    gray_fringe[labels == index] = False
+            unmatched &= ~(fringe | gray_fringe)
+        if np.count_nonzero((a | b) & available) <= 30 or unmatched.any():
+            return None
+        return pixels
+
+    fits = []
+    for candidate in candidates:
+        if candidate[0] != candidates[0][0]:
+            break
+        pixels = visible_fit(candidate)
+        if pixels is not None:
+            fits.append((candidate, pixels))
+    if not fits:
+        return None
+    best, pixels = fits[0]
+    # Minimize all visible mask disagreement before distant fringe pixels.
+    # At 28.5 seconds the real zero-shift fit differs at 503 pixels, whereas
+    # a false one-pixel shift differs at 17011 despite fewer distant pixels.
+    # Never search a worse fit merely to make a changed note disappear.
+    if any(not np.array_equal(candidate[3], best[3]) or not np.array_equal(candidate[4], best[4])
+           for candidate, _ in fits[1:]):
         return None
     _, dx, dy, b, hidden, sx, sy, common, a = best
-    near_a = cv2.dilate(a.astype(np.uint8), kernel).astype(bool)
-    available = ~(left['ignored'] | hidden)
-    near_b = cv2.dilate(b.astype(np.uint8), kernel).astype(bool)
-    unmatched = ((a & ~near_b) | (b & ~near_a)) & available
-    pixels = cv2.warpAffine(right['pixels'], np.float32([[sx, 0, dx], [0, sy, dy]]),
-                            (width, height), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255))
-    if unmatched.any():
-        # H.264 chroma ringing around the native blue rest bar crosses the
-        # color threshold by up to 27 levels in the real 12, 15 and 125 second observations.
-        # Only near-white blue fringes beside shared ink qualify.
-        # Black notation and colored additions with actual contrast still fail.
-        residual = np.abs(left['pixels'].astype(np.int16) - pixels.astype(np.int16)).max(axis=2)
-        shared_edge = cv2.dilate((a & b & available).astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
-        left_blue = left['pixels'][:, :, 2].astype(np.int16) - left['pixels'][:, :, 0] >= 5
-        right_blue = pixels[:, :, 2].astype(np.int16) - pixels[:, :, 0] >= 5
-        fringe = ((left['pixels'].min(axis=2) >= 200) & (pixels.min(axis=2) >= 200)
-                  & left_blue & right_blue & (residual <= 32) & shared_edge)
-        # At 183 seconds the watermark exposes one gray row-number edge
-        # at 227 instead of 230. At 199 seconds a near-white beam fringe
-        # differs by 29 levels. Require grayscale pixels beside shared ink;
-        # changed faint notes and missing stems retain larger residuals.
-        gray_fringe = ((left['pixels'].min(axis=2) >= 180) & (pixels.min(axis=2) >= 180)
-                       & (np.ptp(left['pixels'], axis=2) <= 5) & (np.ptp(pixels, axis=2) <= 5)
-                       & ((residual <= 8) | ((left['pixels'].min(axis=2) >= 200)
-                                                & (pixels.min(axis=2) >= 200) & (residual <= 32)))
-                       & shared_edge)
-        unmatched &= ~(fringe | gray_fringe)
-    if np.count_nonzero((a | b) & available) <= 30 or unmatched.any():
-        return None
     transform = np.float32([[sx, 0, dx], [0, sy, dy]])
     context = cv2.warpAffine(right['context_mask'].astype(np.float32), transform, (width, height), flags=cv2.INTER_LINEAR) >= .5
     context_hidden = cv2.warpAffine(right['context_ignored'].astype(np.float32), transform, (width, height), flags=cv2.INTER_LINEAR, borderValue=1) > 0
     return dict(right, mask=context, ignored=context_hidden, pixels=pixels,
                 registration={'scale_x': sx, 'scale_y': sy, 'dx': dx, 'dy': dy,
                               'screen_staff_shift': float(right['staff_top'] - left['staff_top']),
+                              'left_backdrop': left.get('comparison_reference'),
+                              'right_backdrop': right.get('comparison_reference'),
                               'policy': 'unique_bounded_comparison_only'})
 
 
@@ -309,6 +335,7 @@ def restore_rows(source, output, metadata, decisions=None):
                        'mask': row['mask'].copy(), 'ignored': row['ignored'].copy(), 'pixels': row['pixels'].copy(),
                        'context_mask': row['context_mask'].copy(),
                        'context_ignored': row['context_ignored'].copy(), 'row_domain': row['row_domain'].copy(),
+                       'comparison_reference': row.get('comparison_reference'),
                        'bbox': row['bbox'], 'staff_top': row['staff_top'],
                        'staff_spacing': row['staff_spacing'], 'observations': [],
                        'evidence': [{'timestamp': row['timestamp'], 'image': name}]}
@@ -470,14 +497,19 @@ def restore_rows(source, output, metadata, decisions=None):
                     # Keep the failure value, not its traceback and decoded pixels.
                     pending.append({'evidence': item, 'file': output / item['image'], 'error': (error.code, str(error)), 'non_score': clear_non_score_card(image)})
                     continue
-                if (screen_reference is not None and not analysis['partial_top']
+                for row in current:
+                    row['comparison_reference'] = (dict(comparison_backdrop['reference'])
+                                                   if comparison_backdrop is not None else None)
+                if (screen_reference is not None and screen_reference.height and not analysis['partial_top']
                         and current[0]['staff_top'] - current[0]['staff_spacing'] * 6 >= screen_reference.height):
                     # Refresh while the whole comparison band is still below
                     # this margin. Video-overlay opacity can vary over time.
                     screen_reference = image.crop((0, 0, image.width, screen_reference.height)).convert('RGB')
-                    screen_reference.save(output / 'evidence/comparison-backdrop.png')
-                    comparison_backdrop['reference'] = {'timestamp': timestamp,
-                                                         'image': 'evidence/comparison-backdrop.png'}
+                    name = f'evidence/comparison-backdrop-{frame_index:04d}.png'
+                    screen_reference.save(output / name)
+                    reference = {'timestamp': timestamp, 'image': name}
+                    comparison_backdrop['reference'] = reference
+                    comparison_backdrop['references'].append(reference)
                 if pending and not previous and all(entry['non_score'] for entry in pending):
                     ignored_edges.append({'edge': 'start', 'start_timestamp': pending[0]['evidence']['timestamp'], 'end_timestamp': pending[-1]['evidence']['timestamp'], 'observations': [entry['evidence'] for entry in pending], 'policy': 'uniform_or_crisp_text_card_without_staff_signal'})
                     pending.clear()
@@ -532,7 +564,13 @@ def restore_rows(source, output, metadata, decisions=None):
                     first = first or item
                     reference_bottom = analysis['bbox'][1] + analysis['row_bounds'][0][0]
                     screen_reference = image.crop((0, 0, image.width, reference_bottom)).convert('RGB')
-                    comparison_backdrop = {'reference': item, 'bbox': [0, 0, image.width, reference_bottom],
+                    name = item['image']
+                    if screen_reference.height:
+                        name = f'evidence/comparison-backdrop-{frame_index:04d}.png'
+                        screen_reference.save(output / name)
+                    reference = {'timestamp': timestamp, 'image': name}
+                    comparison_backdrop = {'reference': reference, 'references': [reference],
+                                           'bbox': [0, 0, image.width, reference_bottom],
                                            'policy': 'visible_ink_contrast_against_observed_bright_header',
                                            'minimum_visible_contrast': 20, 'minimum_reference_channel': 190}
                     if analysis['partial_top']:

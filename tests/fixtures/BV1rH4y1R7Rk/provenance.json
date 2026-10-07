@@ -50,6 +50,26 @@
       "sha256": "286bd1fba8f7e89b41cb13e4eeb714b2b5fa3b9072877913009147fe44b6ac55"
     },
     {
+      "timestamp": 28.0,
+      "file": "28.0.png",
+      "sha256": "2993a49774d4f277e5988cba0d258d8d74b52c40a24693426baebd1c7ba03d90"
+    },
+    {
+      "timestamp": 28.5,
+      "file": "28.5.png",
+      "sha256": "490ac31fa39ead4a9fe510a5f57dbd34ab4413d2f4130447a459a2b550a9f08c"
+    },
+    {
+      "timestamp": 40.0,
+      "file": "40.0.png",
+      "sha256": "c1a75de908493e6ad14c9a728e34ef4555528683c15e7699e539933ff092c1de"
+    },
+    {
+      "timestamp": 43.5,
+      "file": "43.5.png",
+      "sha256": "f45cde8c45f0f63e42fe7e62846ebc58fc7f28e7eb4eccb79167f4574a1001c7"
+    },
+    {
       "timestamp": 114.5,
       "file": "114.5.png",
       "sha256": "e60f86e43faa985a21e64f1b143ade6a0414c4a0b84cd6a2fec0ffea5ffbee95"

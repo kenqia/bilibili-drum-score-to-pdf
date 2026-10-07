@@ -99,6 +99,14 @@ class RealBilibiliTests(unittest.TestCase):
                                     'the selected real first row must still contain the title and tempo')
             self.assertEqual(result['seams'][-1]['overlap_rows'], 4)
             self.assertAlmostEqual(result['seams'][-1]['vertical_shift'], 129, delta=2)
+            backdrops = result['comparison_backdrop']['references']
+            self.assertGreaterEqual(len(backdrops), 2)
+            self.assertEqual(len({entry['image'] for entry in backdrops}), len(backdrops))
+            for entry in backdrops:
+                self.assertTrue((base / 'result' / entry['image']).is_file())
+            registration = result['seams'][-1]['registrations'][0]
+            self.assertIn(registration['left_backdrop'], backdrops)
+            self.assertIn(registration['right_backdrop'], backdrops)
 
     def test_real_watermark_comparison_cannot_hide_deleted_stem(self):
         from PIL import ImageDraw
@@ -166,4 +174,27 @@ class RealBilibiliTests(unittest.TestCase):
             _, result = self.run_cli(self.pair(base, [0, 144, 169.5, 177, 177.5, 180, 183, 198.5, 199, 235.5, 236]), base / 'result')
             self.assertNotEqual(result.get('error', {}).get('code'), 'no_overlap', result.get('issues'))
             self.assertEqual(len(result['rows']), 12)
+            self.assertFalse(result['complete'])
+
+    def test_real_full_hold_cursor_evidence_keeps_native_blue_rest(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            _, result = self.run_cli(self.pair(base, [0, .5, 1, 1.5, 2, 12, 15, 15.5, 28, 28.5, 40, 43.5, 114.5]), base / 'result')
+            self.assertTrue(result['rows'][0].get('cursor_recoveries'), result.get('issues'))
+            self.assertFalse(any(issue['kind'] == 'cursor_occlusion' and issue['position'] == 0
+                                 for issue in result['issues']))
+
+    def test_real_watermark_fringe_rule_cannot_hide_three_pixel_gray_stroke(self):
+        from PIL import ImageDraw
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            self.pair(base, [0, 144, 169.5, 177, 177.5, 180, 183, 198.5, 199])
+            altered = Image.open(base / '8.png').convert('RGB')
+            ImageDraw.Draw(altered).line((300, 78, 302, 78), fill=(223, 223, 223))
+            altered.save(base / '8.png')
+            source = base / 'altered.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '2', '-i', str(base / '%d.png'),
+                            '-c:v', 'ffv1', str(source)], check=True)
+            _, result = self.run_cli(source, base / 'result')
+            self.assertEqual(result['error']['code'], 'no_overlap')
             self.assertFalse(result['complete'])
