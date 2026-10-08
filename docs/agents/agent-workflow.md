@@ -95,3 +95,13 @@ observations 按帧时间、帧内从上到下排列，每条只含 id、frame_i
 coverage 只含 first_frame、last_frame、unresolved，必须引用观察包首尾且 unresolved 为空。导出审计保留首尾实际时间、全部接续及 sample_gap、已接受实例、身份依据和每行来源。缺少首尾、接续、身份或选择时返回 waiting；非法字段和未知引用返回 failed。等待疑点记录区间和两张原图，供局部复查。审计明确 `hidden_content_proven_absent=false`，检查不了未采样画面中是否短暂出现新谱。Agent 提出的锚点和对应也不是脚本独立识别五线的证明，仍需实际视觉验收。
 
 本票的 prepare 仍只有首、中、尾三张相邻上下文。对照图包含全部三帧，接续两次都引用共同中帧；尚无分批采样。#36 扩展采样和补采，#38 扩展持久化批次。中尾无重叠的真实长视频必须等待，不能用三帧宣称覆盖整曲。原图 hash 只核查来源，不作为空间身份依据。
+
+## 有序谱面段 v4，#37
+
+v4 支持 Agent 能看清前后完整边界及接续关系的顺序翻页。通用字段沿用 v2，顶层 rows、observations、transitions 改为 segments、boundaries、coverage。每段单独运行 v3 空间审计，scroll_offset 从 0 开始。不同段可复用 instance_id；Manifest 用 segment_id 与 instance_id 共同标识，不以音乐内容相似去重。
+
+segments 按出现顺序排列，每段只含 id、frames、rows、observations、transitions、extras、outside_rows_verified、evidence。frames 必须把观察包全部原帧按原顺序恰好分割一次。rows、observations、transitions 沿用 v3 字段及约束，段内可只有一帧。outside_rows_verified 是布尔值；未检查标题、速度或行外符号时必须为 false。evidence 说明可见的段首、段尾及行外区域。每段 extras 是已看清的原生 title 或 notation 区域列表，每条只含 kind、placement、region。placement 为 before_rows 或 after_rows，region 沿用 v2 原生谱行字段，含完整原生细节覆盖、清晰边界和单帧来源。没有独立区域时用空列表，并在 evidence 说明标题是否不存在或已包含在行框中。谱行附近的力度、连线等仍应保留在该行 bbox 内，不移动到页首。重复或与谱行交叠的额外区域等待复查。
+
+每对相邻段必须有一条 boundaries，字段严格限定为 from_segment、to_segment、from_frame、to_frame、change、relation、before_complete、after_complete、continuity_verified、evidence_images、unresolved、evidence。引用前段末帧及后段首帧；evidence_images 至少含这两张实际查看的原图与 comparison，原生细节同时保存在每段原裁剪记录。change 记录 page_turn、scale 或 layout_jump，relation 记录 next、skip、backward 或 uncertain。只有 page_turn、next、三个确认布尔值均为 true、unresolved 为空才能继续。边界任何谱行观察仍为 partial 则等待。evidence 必须说明可见接续依据，例如前页末小节与后页首小节的明确连续标记。页码数量完整和同内容相似都不能单独证明接续；看不清时填写 uncertain。
+
+顶层 coverage 沿用 v3 首尾与 unresolved。非法字段或引用为 failed；跳页、回跳、缩放、突变、缺帧和不明边界为 waiting，保留时间区间及前后截图。导出保存段内坐标、段间判断与 extra 的原视频 PTS、bbox、RGB 和灰度裁剪，按段序排入 A4，保存决定可直接 replay。v4 不使用旧首帧检测框决定是否存在标题。审计仍明确 hidden_content_proven_absent=false，无法证明未采样时间没有隐藏页面。

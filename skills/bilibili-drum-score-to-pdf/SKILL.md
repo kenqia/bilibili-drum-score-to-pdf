@@ -45,3 +45,5 @@ v1/v2 用于固定白底多行谱面，v3 接受有可靠视觉重叠的连续�
 Agent-first 的 prepare 也接受上述 HTTPS BV 链接与分 P。使用新的任务目录，获取后继续查看原图、提交决定和导出，操作示例见 docs/agents/agent-workflow.md。原视频随观察包保留，不能修改；导出会核对 hash。匿名获取的实际尺寸与来源保存在 observation.source.origin 和最终 manifest.source.origin。只交付脱敏诊断，不转述签名媒体地址、Cookie 或后端原始异常。目录只有 acquisition-only 失败 manifest 时，可直接重试或以本地输入替代；已有观察包时另建任务。候选格式提前中止仍由 #20 跟踪。
 
 移动长谱必须用 v3，记录每帧 instance_id、staff_y、spacing、bbox 与完整性，并以具体观察 ID 明确相邻对应。至少两条重叠行，依据来自实际呈交的原图；同内容后续段落保留新空间实例，停留复用原实例。脚本计算 global_y/scroll_offset、检查几何与覆盖；冲突不得靠高置信度放行。首中尾间没有可靠重叠、只有半行、缺少身份或漏行疑点时保留 waiting 和区间原图。三张稀疏观察不能证明未采样画面没有新谱，不能据此声称整曲完成。
+
+有序翻页可使用 `schema_version=4` 的 segments/boundaries 决策，具体字段见 `docs/agents/agent-workflow.md`。每段从零建立空间坐标，重复节奏跨页保留。实际查看换页前后原帧和原生边缘，检查末小节与下一段首小节的接续；页数和内容相似不能代替这项检查。跳页、回跳、缩放、边缘残行或关系不清时保持 waiting。明确标注标题、速度及行外符号的原生区域或它们已包含在行框中的依据，不能因为规则未找到标题就把它丢弃。
