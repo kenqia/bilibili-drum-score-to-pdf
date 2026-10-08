@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw, __version__ as pillow_version
 from video_seek import ConversionError, VideoReader, probe_video
 from score_detect import analyze_frame
 from cursor_detect import cursor_occluded, obstruction_detected
+from agent_regions import native_rows
 from manifest import save_crop
 from pdf_export import PRINTABLE_WIDTH_INCHES, write_pdf
 
@@ -95,9 +96,24 @@ def prepare(source, output):
                          width=image.width, height=image.height, requested_timestamp=requested, **record)
             observation['frames'].append(frame)
             observation['images'].append(dict(id=frame_id, path=filename, sha256=frame['sha256'], frame_id=frame_id,
-                                              kind='native', bbox=[0, 0, image.width, image.height]))
+                                              kind='native', bbox=[0, 0, image.width, image.height],
+                                              mapping=dict(coordinate_space='native_pixels', scale=[1, 1], source_offset=[0, 0])))
             images.append(image)
-            analysis = analyze_frame(image)
+            # Detectors propose navigation boxes; Agent decisions may use any valid native ROI.
+            try:
+                analysis = analyze_frame(image)
+            except ConversionError as error:
+                analysis = dict(bbox=[0, 0, image.width, image.height], row_bounds=[], groups=[],
+                                header_bbox=[0, 0, 0, 0], proposal_error=error.code)
+            for y in range(0, image.height, 280):
+                for x in range(0, image.width, 640):
+                    tile_box = [x, y, min(x + 800, image.width), min(y + 360, image.height)]
+                    tile_id = f'{frame_id}-native-{x}-{y}'
+                    tile_path = f'{tile_id}.png'
+                    image.crop(tile_box).save(output / tile_path)
+                    observation['images'].append(dict(id=tile_id, path=tile_path, sha256=digest(output / tile_path),
+                        frame_id=frame_id, kind='native_detail', bbox=tile_box,
+                        mapping=dict(coordinate_space='native_pixels', scale=[1, 1], source_offset=[x, y])))
             frame['analysis'] = analysis
             for row, bounds in enumerate(analysis['row_bounds']):
                 bbox = [analysis['bbox'][0], analysis['bbox'][1] + bounds[0], analysis['bbox'][2], analysis['bbox'][1] + bounds[1]]
@@ -105,7 +121,8 @@ def prepare(source, output):
                 detail = f'{candidate_id}.png'
                 image.crop(bbox).save(output / detail)
                 observation['images'].append(dict(id=candidate_id, path=detail, sha256=digest(output / detail),
-                                                  frame_id=frame_id, kind='detail', bbox=bbox))
+                                                  frame_id=frame_id, kind='detail', bbox=bbox,
+                                                  mapping=dict(coordinate_space='native_pixels', scale=[1, 1], source_offset=bbox[:2])))
                 group = analysis['groups'][row]
                 native = image.crop(bbox)
                 clean = not cursor_occluded(native, group['spacing']) and not obstruction_detected(native, analysis['bbox'][1] + group['top'] - bbox[1], group['spacing'])
@@ -118,15 +135,15 @@ def prepare(source, output):
             size = [round(image.width * scale), round(image.height * scale)]
             montage.paste(image.resize(size), (640 * index, 30))
             ImageDraw.Draw(montage).text((640 * index + 5, 5), f'{frame["id"]}  {frame["timestamp"]:.6f} s', fill='black')
-            panels.append(dict(frame_id=frame['id'], scale=scale, offset=[640 * index, 30], size=size))
+            panels.append(dict(frame_id=frame['id'], scale=scale, offset=[640 * index, 30], size=size,
+                               source_bbox=[0, 0, image.width, image.height],
+                               mapping=dict(coordinate_space='comparison_pixels', scale=[size[0] / image.width, size[1] / image.height], source_offset=[0, 0], view_offset=[640 * index, 30])))
         montage.save(output / 'comparison.png')
         observation['images'].append(dict(id='comparison', kind='comparison', path='comparison.png',
                                           sha256=digest(output / 'comparison.png'), panels=panels))
-        if any(f['analysis']['bbox'] != observation['frames'][0]['analysis']['bbox'] or f['analysis']['row_bounds'] != observation['frames'][0]['analysis']['row_bounds'] for f in observation['frames'][1:]):
-            raise ConversionError('review_required', '当前流程只支持固定谱面，观察到几何变化。')
         observation['intervals'] = [dict(start=a['timestamp'], end=b['timestamp']) for a, b in zip(observation['frames'], observation['frames'][1:])]
         observation['metrics'] = {**count, 'analyzed_frames': len(images), 'native_images': len(images),
-                                  'detail_images': len(observation['candidates']), 'comparison_images': 1,
+                                  'detail_images': sum(i['kind'] in ('detail', 'native_detail') for i in observation['images']), 'comparison_images': 1,
                                   'image_pixels': image_pixels(output, observation['images']),
                                   'model_elapsed': None, 'model_tokens': None}
         write_json(output / 'observation.json', observation)
@@ -158,7 +175,10 @@ def checked_task(task):
 def validate(decision, state, observation):
     fields = {'schema_version', 'task_id', 'observation_sha256', 'decision_id', 'model', 'prompt', 'presented_images',
               'visual_review', 'complete', 'evidence', 'selected_candidates', 'unresolved'}
-    if not isinstance(decision, dict) or set(decision) != fields or type(decision['schema_version']) is not int or decision['schema_version'] != VERSION:
+    version = decision.get('schema_version') if isinstance(decision, dict) else None
+    if version == 2:
+        fields = fields - {'selected_candidates'} | {'rows'}
+    if not isinstance(decision, dict) or set(decision) != fields or type(version) is not int or version not in (1, 2):
         raise ConversionError('invalid_decision', '决定字段或版本非法。')
     if decision['task_id'] != state['task_id'] or decision['observation_sha256'] != state['observation_sha256']:
         raise ConversionError('invalid_decision', '决定不属于当前观察包。')
@@ -175,6 +195,14 @@ def validate(decision, state, observation):
     presented = decision['presented_images']
     if not isinstance(presented, list) or not all(isinstance(i, str) and i in known for i in presented) or len(set(presented)) != len(presented):
         raise ConversionError('invalid_decision', '图像呈交清单非法。')
+    if version == 2:
+        if 'comparison' not in presented or any(f['id'] not in presented for f in observation['frames']):
+            raise ConversionError('missing_evidence', '必须查看相邻对照图与全部原帧。')
+        if not decision['visual_review'] or not decision['complete'] or decision['unresolved']:
+            raise ConversionError('review_required', '视觉审阅或完整性存在未决疑点。')
+        return native_rows(decision, observation, presented)
+    if any(f['analysis']['bbox'] != observation['frames'][0]['analysis']['bbox'] or f['analysis']['row_bounds'] != observation['frames'][0]['analysis']['row_bounds'] for f in observation['frames'][1:]):
+        raise ConversionError('review_required', 'v1 选择协议只支持固定检测几何，请改用原生谱行决定。')
     selected = decision['selected_candidates']
     candidates = {c['id']: c for c in observation['candidates']}
     if not isinstance(selected, list) or not selected or not all(isinstance(i, str) and i in candidates for i in selected) or len(set(selected)) != len(selected):
