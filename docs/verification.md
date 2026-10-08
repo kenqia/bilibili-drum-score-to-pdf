@@ -188,3 +188,22 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 脚本独立用 ffprobe 获取 time_base，再用 FFmpeg 按整数 PTS 重解码所选帧。它核对保存原帧、RGB 原裁剪与原帧 bbox、原始灰度像素、来源 hash、行序、A4 页数、DPI 和行间位置。pdfimages 提取 PDF 中的每个嵌入图，按页、尺寸和灰度像素核对所有谱行、标题与行外区域，包含重复出现的图块。相同页数和尺寸但嵌入像素不同的 PDF 会拒绝。
 
 两份报告和 PDF 字节必须一致。该脚本只核对保存决定的执行，`visual_content_verified_by_this_script=false`。完整性、细小记号、遮挡、跨帧对应和分页的实际可读性仍须独立看图核查；真实双份 Agent 视觉验收完成前，不切换默认流程。
+
+
+### #41 第一份真实 Agent 审阅记录
+
+2026-10-09，第一份实际审阅使用匿名取得的 BV1rH4y1R7Rk 第一 P，原生 1920×1080、298.6 秒。导出与 replay 使用提交 `513695ccecd7cf2ad8da51985f3fe818644b4c96`。独立来源与 PDF 验证脚本来自提交 `80c706c`。原视频 SHA-256 为 `80f9a8d19515cf624d7d13c27ea758e88118fddb4341fa06deaad040272877fe`。
+
+root 实际审阅原图、选行细节与两个渲染页面后记录完整 12 行、2 页 A4，最低 effective DPI 为 264.182。记录确认标题、tempo 80、拍号、装饰音、ghost 括号、附点、重音、渐强线与末尾双线未截断。保存决定的 export/replay 通过独立重解码 9 个实际 PTS、13 个 PDF 嵌入图块以及 RGB 原裁剪和灰度像素核对，PDF 字节一致。PDF SHA-256 为 `0aebe26fb4c3bc471f3e3342fb1011f4e40c96b602828e38f2fcc419b6c26aba`。这项执行核对不能替代第二份独立视觉审阅。
+
+本轮外部证据保存在 `work/agent-first/real-41/root-review/decision.json`、`verification.json`、`cost-report.json` 以及 `root-output` 和 `root-replay`。这些是执行会话中的外部文件，不在仓库中。
+
+| 已测阶段与指标 | 第一份 Agent 路径 | 旧路径同一本地输入 |
+| --- | ---: | ---: |
+| 原生完整帧分析 | 48 | 57 |
+| 导航缩略检查 | 255 | 无此阶段 |
+| 源视频解码秒数 | 16.768，prepare | 16.697 |
+| prepare 总秒数 | 89.871 | 无此阶段 |
+| 转换总秒数 | 未测完整 Agent 过程 | 52.152 |
+
+第一份记录列出实际呈交的 68 个唯一图像 ID，源图像像素合计 122,079,360。canonical comparison 实际呈交时缩放为 482×2048；源图像像素不等于模型编码后的像素。重复呈交次数、模型编码像素与实际推理耗时未知，模型 token 保留 null。生成图数不能代替实际呈交图数，prepare 与旧转换的计时边界也不同，不能据此宣称提速。第二份独立审阅与最终切换门禁另行记录。
