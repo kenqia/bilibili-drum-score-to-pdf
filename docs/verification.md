@@ -176,3 +176,15 @@ CLI 导出 6 行、两个独立标题、1 页 A4。独立 Pillow 核对八个 RG
 ### #38 恢复实验
 
 统一 CLI 的 `tests/test_agent_resume.py` 覆盖两帧累计前缀接受、退出后的 resume、相同 ID 重试、冲突与显式修订、未审尾部阻止导出、最终四个空间实例无重复及独立 PDF 字节重放。固定夹具只有协议决定，没有实际视觉能力结论。失败补采实测保留预扣请求和解码预算，旧包仍可核验，旧完整结果不能直接导出。多文件发布中断夹具通过 resume 完成 hash 核对及提交；真实 SIGTERM 分别在首张 prepare 原图、补采预扣状态及首张 export 原图出现后发出，原证据保留，重试不能覆盖。未知任务版本与历史篡改拒绝。
+
+## Agent 保存决定的独立执行核查
+
+使用现有 Poppler 的 pdfinfo 和 pdfimages，不增加生产依赖。先将同一个已接受决定 export、replay 到两个新的结果目录，再运行：
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python tests/verify_agent_acceptance.py --first /absolute/first --second /absolute/replay --report /absolute/report.json
+```
+
+脚本独立用 ffprobe 获取 time_base，再用 FFmpeg 按整数 PTS 重解码所选帧。它核对保存原帧、RGB 原裁剪与原帧 bbox、原始灰度像素、来源 hash、行序、A4 页数、DPI 和行间位置。pdfimages 提取 PDF 中的每个嵌入图，按页、尺寸和灰度像素核对所有谱行、标题与行外区域，包含重复出现的图块。相同页数和尺寸但嵌入像素不同的 PDF 会拒绝。
+
+两份报告和 PDF 字节必须一致。该脚本只核对保存决定的执行，`visual_content_verified_by_this_script=false`。完整性、细小记号、遮挡、跨帧对应和分页的实际可读性仍须独立看图核查；真实双份 Agent 视觉验收完成前，不切换默认流程。

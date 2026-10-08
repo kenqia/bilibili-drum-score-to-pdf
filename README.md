@@ -31,7 +31,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 GitHub Actions 在独立 Linux runner 中运行全部离线回归与固定 Agent 决策重放。覆盖范围、受控证据和回滚见 [离线 CI](docs/agents/offline-ci.md)。
 
-测试还需要 Poppler 的 `pdfinfo` 与 `pdftoppm`。架构、输入安全、资源限额和边界见 [architecture](docs/architecture.md)，真实 URL 双跑与逐行来源验收见 [verification](docs/verification.md)。随仓库交付的 [SKILL.md](skills/bilibili-drum-score-to-pdf/SKILL.md) 使用同一入口。
+测试还需要 Poppler 的 `pdfinfo`、`pdfimages` 与 `pdftoppm`。架构、输入安全、资源限额和边界见 [architecture](docs/architecture.md)，真实 URL 双跑与逐行来源验收见 [verification](docs/verification.md)。随仓库交付的 [SKILL.md](skills/bilibili-drum-score-to-pdf/SKILL.md) 使用同一入口。
 
 移动窗口核心三个模块合计不得超过 500 行；依赖防火墙测试防止引入已删除的恢复模块。历史方案通过 Git history 查看。
 
