@@ -2,7 +2,7 @@
 
 架构与支持范围读取 docs/architecture.md，验证入口和真实验收读取 docs/verification.md，领域术语见 GLOSSARY.md。项目文档使用 unslop 润色。
 
-正常转换只有一个 moving viewport 模型。viewport_sampler.py、viewport_tracker.py、candidate_selector.py 合计最多 500 行，测试负责依赖防火墙。谱行身份来自五线几何和空间顺序；候选只能选择单个真实完整原裁剪。任何颜色或像素规则只能影响候选可用性，不能成为身份门槛或重构像素。
+默认转换只有一个 moving viewport 模型。Agent-first opt-in 路径依规格 #32，协议见 docs/agents/agent-workflow.md。viewport_sampler.py、viewport_tracker.py、candidate_selector.py 合计最多 500 行，测试负责依赖防火墙。谱行身份来自五线几何和空间顺序；候选只能选择单个真实完整原裁剪。任何颜色或像素规则只能影响候选可用性，不能成为身份门槛或重构像素。
 
 运行仓库验证：
 

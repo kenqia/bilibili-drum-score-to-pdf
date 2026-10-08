@@ -92,11 +92,23 @@ def main():
     parser = argparse.ArgumentParser(description='Restore a local white multi-staff drum score as A4 PDF.')
     parser.add_argument('input', nargs='?', help='Local video path or HTTPS Bilibili BV video URL')
     parser.add_argument('--output', help='Output directory')
+    parser.add_argument('--operation', choices=['convert', 'prepare', 'submit', 'export', 'replay'], default='convert')
+    parser.add_argument('--task', help='Existing Agent observation task')
+    parser.add_argument('--decision', help='Agent-authored JSON decision')
     parser.add_argument('--acquisition-timeout', type=float, default=ACQUISITION_SECONDS,
                         help='Overall anonymous acquisition deadline in seconds (default: 1800)')
     args = parser.parse_args()
     if not math.isfinite(args.acquisition_timeout) or args.acquisition_timeout <= 0:
         parser.error('--acquisition-timeout must be a finite positive number')
+    if args.operation != 'convert':
+        from agent_workflow import run
+        previous = signal.signal(signal.SIGTERM, interrupt_conversion)
+        try:
+            result = run(args.operation, args.input, args.task, args.decision, args.output)
+        finally:
+            signal.signal(signal.SIGTERM, previous)
+        print(json.dumps(result, ensure_ascii=False, allow_nan=False))
+        return 0 if result['status'] == 'success' else 2
     if not args.input or not args.output:
         parser.error('conversion needs input and --output')
     target = Path(args.output)

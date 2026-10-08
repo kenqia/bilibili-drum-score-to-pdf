@@ -32,3 +32,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 测试还需要 Poppler 的 `pdfinfo` 与 `pdftoppm`。架构、输入安全、资源限额和边界见 [architecture](docs/architecture.md)，真实 URL 双跑与逐行来源验收见 [verification](docs/verification.md)。随仓库交付的 [SKILL.md](skills/bilibili-drum-score-to-pdf/SKILL.md) 使用同一入口。
 
 移动窗口核心三个模块合计不得超过 500 行；依赖防火墙测试防止引入已删除的恢复模块。历史方案通过 Git history 查看。
+
+## Agent-first 试验路径
+
+固定本地谱面可通过同一入口执行 prepare、submit、export 和 replay。Agent 阅读原图、相邻对照图及原生细节并提交结构化选择，脚本验证并从真实原帧导出。默认流程保持现有 moving viewport。操作、协议和当前限制见 [Agent workflow](docs/agents/agent-workflow.md)。

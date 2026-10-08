@@ -83,3 +83,16 @@ PDF SHA-256：`58f0707765576976aa7f1887633b8acc98ef874f65d8c0826678065d1844b0ab`
 本地复核文件位于 `work/integration-20261008/`，包含 tests.log、url-1、url-2 和 acceptance.json。该目录还保存两个关联仓库的清理前 Git bundle、分支与 worktree 清单及未提交补丁。历史工作目录保留文件，实验分支引用删除前先解除 worktree 的分支占用。
 
 Issue #24–#31 按当前简化方案取代收尾，不能把原规格中的 fallback、聊天恢复或跨模型恢复标为实现。#22 按已完成的耗时改善收尾。#12、#18、#20、#21 继续跟踪未完成工作。
+
+## Agent-first 固定谱面记录，#33
+
+统一 CLI 是已确认测试边界。2026-10-08 首次 RED 运行 Agent workflow 测试时，入口拒绝 --operation。添加最小 prepare/submit/export/replay 后，同一测试 GREEN。第二轮提交合法字段但重复 schema_version 的 JSON，原解析接受并保存，负例 RED；改为拒绝重复键后 GREEN。测试命令如下。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_agent_workflow.py -v
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
+```
+
+固定合成视频的保存决定得到 3 行、独立标题、1 页 A4；原裁剪 RGB 与源 bbox 相等，export/replay 的 PDF 字节一致。覆盖非法协议、未知引用、缺少视觉证据、漏行、未决疑点、重复键、NaN/Infinity、低清、空谱面、目录保护，以及观察包和原视频变更。新增 3 个测试，既有 54 个测试继续通过，共 57 个。
+
+这些是保存决定的离线执行验证，未证明真实 Agent 视觉识别能力。真实 B站整曲 Agent 审阅、资源比较、CI 和默认切换由后续票验收。默认转换未改采样或身份规则，本票未重复真实 URL 双跑。
