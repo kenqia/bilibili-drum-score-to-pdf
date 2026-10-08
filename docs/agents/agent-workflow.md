@@ -110,7 +110,7 @@ uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation suppleme
 
 累计预算为 8 个补采请求、32 张请求原生帧、96 张原生帧和 600 秒原生解码。sampling.json 在执行前记账，若中断或失败，仍计入请求和图像额度并保守扣除每帧最多 60 秒。成功后记录实测解码。导航解码另外限制 90 秒并记录耗时。包的 JSON 达到当前可恢复读取限额时等待，旧包不被替换。预算不足保留 waiting，不输出 PDF。sampling ledger 是 #38 恢复流程使用的持久接缝，本票没有声称多进程并发安全。
 
-metrics 分开记录当前原生 seek/解码、缩略检测数量和耗时、完整帧分析、原生图、细节图、拼图组成帧、生成图像像素与 prepare 耗时。export 的 presented_image_pixels 只累加决定声明实际阅读的图像；这份清单须与实际图像审阅记录核对。模型 token 和耗时不可见时为 null。成本不能由历史 57 次分析、少于 60 次或十倍提速等目标替代。
+metrics 分开记录当前原生 seek/解码、缩略检测数量和耗时、完整帧分析、原生图、细节图、拼图组成帧、生成图像像素与 prepare 耗时。export 的 presented_image_pixels 只累加决定声明实际阅读的图像；这份清单须与实际图像审阅记录核对。缩略检测次数是导航图输出数；导航内部 decoder reported frames、模型 token 和耗时本轮不可见，未测。模型指标保留 null。成本不能由历史 57 次分析、少于 60 次或十倍提速等目标替代。
 
 ## 有序谱面段 v4，#37
 
