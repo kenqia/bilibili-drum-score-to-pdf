@@ -1,0 +1,51 @@
+name: Offline score verification
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'integration/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: skills/bilibili-drum-score-to-pdf/scripts/requirements.txt
+      - name: Install video and PDF tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg poppler-utils fonts-dejavu-core
+      - name: Install pinned Python dependencies
+        id: dependencies
+        run: python -m pip install -r skills/bilibili-drum-score-to-pdf/scripts/requirements.txt
+      - name: Run all offline regressions
+        run: python -m unittest discover -s tests -v
+      - name: Replay saved synthetic decision and negative cases
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: python ci/verify_agent_replay.py --output work/ci-evidence
+      - name: Retain bounded synthetic evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: offline-replay-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            work/ci-evidence/summary.json
+            work/ci-evidence/fixture-score.pdf
+          retention-days: 7
+          if-no-files-found: warn
+          include-hidden-files: false
