@@ -24,6 +24,7 @@ class AgentWorkflowTests(unittest.TestCase):
             _, prepared = self.cli(video, '--operation', 'prepare', '--output', task)
             self.assertEqual(prepared['status'], 'waiting')
             observation = json.loads((task / 'observation.json').read_text())
+            self.assertFalse(observation['fixed_layout_only'])
             self.assertEqual(len(observation['frames']), 3)
             self.assertIn('pts', observation['frames'][0])
             self.assertIn('time_base', observation['frames'][0])

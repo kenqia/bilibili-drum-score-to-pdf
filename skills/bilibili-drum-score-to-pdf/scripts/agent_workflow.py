@@ -92,7 +92,7 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
     task_id = hashlib.sha256((source_hash + str(output.resolve())).encode()).hexdigest()[:24]
     observation = dict(schema_version=VERSION, task_id=task_id, source=dict(path=str(source), sha256=source_hash, **metadata),
                        frames=[], images=[], candidates=[], intervals=[], coordinate_space='native_pixels',
-                       fixed_layout_only=True)
+                       fixed_layout_only=False)
     if origin:
         observation['source']['origin'] = origin
     if timestamps is None:
