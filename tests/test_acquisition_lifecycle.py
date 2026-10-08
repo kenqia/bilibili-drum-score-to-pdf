@@ -8,7 +8,7 @@ import sys
 import tempfile
 import time
 import unittest
-from test_conversion import CLI, score_frame, video_from_image
+from score_fixtures import CLI, score_frame, video_from_image
 
 
 LAUNCHER = '''

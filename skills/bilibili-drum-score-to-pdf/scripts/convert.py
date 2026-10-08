@@ -10,8 +10,12 @@ import math
 import sys
 from pathlib import Path
 from public_video import acquire, InputError, ACQUISITION_SECONDS
-from drum_score import convert
-from resume_score import persist, resume, ResumeError
+import time
+from video_seek import VideoReader, probe_video, ConversionError
+from viewport_sampler import ViewportSampler
+from viewport_tracker import ViewportError
+from manifest import export_rows, save_crop, persist
+from pdf_export import write_pdf
 
 
 def retryable_acquisition(output):
@@ -32,31 +36,62 @@ def retryable_acquisition(output):
         return False
 
 
+def convert(source, output):
+    began = time.monotonic()
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    result = {'schema_version': 1, 'status': 'failed', 'complete': False,
+              'issues': [], 'rows': [], 'header': None}
+    metrics = {'seek_count': 0, 'analyzed_frames': 0, 'selected_keyframes': 0,
+               'candidate_observations': 0, 'decode_elapsed': 0.0,
+               'decoded_reported_frames': 0, 'peak_temp_disk': 0}
+    reader = sampler = None
+    try:
+        metadata = probe_video(source)
+        result['source'] = {'kind': 'local', 'path': str(Path(source).resolve()), **metadata}
+        if metadata['width'] < 700:
+            raise ConversionError('low_resolution', '视频分辨率不足，请提供清晰本地视频。')
+        reader = VideoReader(source, metadata, metrics)
+        sampler = ViewportSampler(reader, output, metrics)
+        tracks = sampler.run()
+        rows = export_rows(output, tracks)
+        header = sampler.header
+        header.update(save_crop(output, header['source_frame'], header['bbox'], 'header'))
+        pages = write_pdf(output, header, rows)
+        result.update(status='success', complete=True, rows=rows, header=header,
+                      page_count=pages, pdf='score.pdf', transitions=sampler.transitions)
+    except ViewportError as error:
+        timestamp, screenshot = sampler.last
+        result.update(status='waiting', issues=[{'reason': error.code, 'timestamp': timestamp, 'screenshot': screenshot}],
+                      error={'code': error.code, 'message': '缺少可靠的空间接续或干净完整观察，请提供更好的视频后运行新任务。'})
+    except ConversionError as error:
+        waiting = error.code == 'unsupported_layout'
+        result.update(status='waiting' if waiting else 'failed', error={'code': error.code, 'message': str(error)})
+        if waiting and sampler and sampler.last:
+            timestamp, screenshot = sampler.last
+            result['issues'] = [{'reason': error.code, 'timestamp': timestamp, 'screenshot': screenshot}]
+    finally:
+        if reader:
+            reader.close()
+        metrics['total_elapsed'] = time.monotonic() - began
+        result['metrics'] = metrics
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description='Restore a local white multi-staff drum score as A4 PDF.')
     parser.add_argument('input', nargs='?', help='Local video path or HTTPS Bilibili BV video URL')
     parser.add_argument('--output', help='Output directory')
-    parser.add_argument('--resume', help='Existing result directory to replay with explicit answers')
-    parser.add_argument('--answers', help='Local JSON file mapping issue IDs to explicit choices')
     parser.add_argument('--acquisition-timeout', type=float, default=ACQUISITION_SECONDS,
                         help='Overall anonymous acquisition deadline in seconds (default: 1800)')
     args = parser.parse_args()
     if not math.isfinite(args.acquisition_timeout) or args.acquisition_timeout <= 0:
         parser.error('--acquisition-timeout must be a finite positive number')
-    if args.resume:
-        if args.input or args.output:
-            parser.error('--resume uses its existing task directory; do not supply input or --output')
-        try:
-            result = resume(args.resume, args.answers)
-        except ResumeError as error:
-            result = {'status': 'failed', 'complete': False, 'error': {'code': 'invalid_progress', 'message': str(error)}}
-        print(json.dumps(result, ensure_ascii=False))
-        return 0 if result['status'] == 'success' else 2
-    if not args.input or not args.output or args.answers:
-        parser.error('fresh conversion needs input and --output; answers require --resume')
+    if not args.input or not args.output:
+        parser.error('conversion needs input and --output')
     target = Path(args.output)
     if target.is_symlink() or (target.exists() and (not target.is_dir() or any(target.iterdir())) and not retryable_acquisition(target)):
-        result = {'status': 'failed', 'complete': False, 'error': {'code': 'existing_output', 'message': '结果目录已有内容，请使用 --resume 继续，或选择新的空目录。'}}
+        result = {'status': 'failed', 'complete': False, 'error': {'code': 'existing_output', 'message': '结果目录已有内容，请选择新的空目录。'}}
         print(json.dumps(result, ensure_ascii=False))
         return 2
     print('正在检查视频并提取完整谱行。', file=sys.stderr, flush=True)
@@ -76,7 +111,7 @@ def main():
             result['error']['http_status'] = error.http_status
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
-    result = persist(result, source, output, origin=origin)
+    result = persist(result, output, origin=origin)
     print(json.dumps(result, ensure_ascii=False))
     return 0 if result['status'] == 'success' else 2
 

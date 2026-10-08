@@ -14,7 +14,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
-from test_conversion import CLI, score_frame, video_from_image
+from score_fixtures import CLI, score_frame, video_from_image
 from yt_dlp import YoutubeDL
 
 sys.path.insert(0, str(CLI.parent))
