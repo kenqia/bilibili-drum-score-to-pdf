@@ -69,3 +69,15 @@ prepare 的 native_detail 是无标注原图局部，最大 800×360 像素，�
 宽遮挡、窄光标、无干净候选或边缘不确定时等待。彩色原谱记号保持原样，不能以颜色规则自动擦除；无法判断是源谱记号还是遮挡时记录 uncertain。最终完整行始终从一个原帧裁剪，细节拼图只用于审阅，不作为打印像素。
 
 v2 目前仍是固定谱面试验。Agent 必须自行核查完整行数和顺序；单帧几何与细节覆盖检查不能证明两次采样之间没有隐藏换谱。跨帧身份、补采样和换页由后续 ticket 实施。本轮不宣称通用锐度校准或中央遮挡恢复。
+
+## 匿名 BV 输入，#40
+
+prepare 同时接受本地视频和 HTTPS BV 链接，分 P 使用单个正整数 p。
+
+```sh
+uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=1' --operation prepare --output /absolute/new-task --acquisition-timeout 1800
+```
+
+入口先检查空目录，再复用匿名获取、公开连接目标检查、每跳重定向检查、总 deadline 和实际解码。获取成功的原视频保存在任务目录，后续操作核对 source.sha256，不重新下载、不修改原视频。observation.source 和最终 manifest.source 保留实测尺寸、原视频 hash 及 origin 的 BV、分 P、匿名标记和后端诊断，不保存签名媒体地址。
+
+获取失败时，目录仅保存 phase=acquisition 的脱敏 manifest。只有该诊断时，可原目录重试 BV 或改用本地视频。存在原视频、观察图、任务记录、决策或其他文件时，prepare 拒绝覆盖，改用新的空目录。候选格式提前中止仍由 #20 跟踪；本流程复用获取能力，没有修复该问题。受控后端重放证明 BV 与同一原视频的本地流程一致，真实 B站整曲 Agent 审阅由 #41 验收。

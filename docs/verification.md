@@ -107,6 +107,19 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 源视频、观察包、图像呈交 ID、公开提示词和可见模型标识、决定与两个输出保存在仓库外共享实验目录 `work/agent-first/visual-34`，不提交生成媒体。精确模型版本不可见，记录 unknown。该试验只有一组合成成对图像，证明流程与一次实际观察，不证明真实整曲识别、通用锐度校准或中央遮挡恢复。默认 moving viewport 未切换，本轮不重复其 BV 性能验收。
 
+## Agent-first BV 入口记录，#40
+
+2026-10-08，测试边界为统一 CLI 与任务产物。第一个 tracer bullet 使用现有 yt-dlp、HTTP 和 DNS 外部边界提供合法合成视频，不替换内部工作流。RED 时 BV 链接被当成本地路径，返回 invalid_input。prepare 接入原匿名 acquire 后 GREEN；同一原视频的 BV 与本地观察包进入保存决定的 submit/export 后，三行原裁剪 hash 和 PDF 字节相同。任务目录保留获取后的原视频，来源与 SHA-256 进入观察包和最终 manifest。
+
+第二个 tracer bullet 在匿名后端拒绝时 RED，InputError 尚未转换为结果 JSON。增加 acquisition-only 脱敏诊断并复用原重试条件后 GREEN，BV 重试和本地替代都可生成观察包，已有观察和用户文件拒绝覆盖。负例继续覆盖初始 HTTPS、分 P、媒体目标、私有 DNS、重定向、不可解码视频、大小限额、总 deadline 和 publication staging 清理。沿用原获取能力，没有修复 #20。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_agent_link_input.py -v
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
+```
+
+专用四项测试通过。完整仓库 61 项测试通过，运行耗时 52.761 秒。这里是受控获取与保存决定的执行验证，没有声称真实 URL 获取或 Agent 视觉能力通过。#41 承担真实整曲审阅和默认切换。本票未改变默认谱面采样、谱行身份或原匿名下载安全门槛。
+
 ## 保存决定离线 CI，#39
 
 2026-10-08，统一 CI replay 命令的第一轮 RED 因脚本不存在而失败。实现后 GREEN，受控固定视频准备、提交、导出与重放得到 3 行、1 页 A4，源原裁剪像素与 PDF 字节一致，effective DPI 不低于 150。未知版本、越界坐标和损坏图像分别得到 invalid_decision、invalid_decision 和 source_mismatch。另用缺少 ffmpeg 的子进程验证失败证据只保存异常类型，不泄露路径或日志。全量 59 个 unittest 本地通过，新增 CI command 的 2 个测试再次通过。原裁剪由独立 ffmpeg 重解码核对，DPI 同时按原裁剪宽度与 PDF 放置宽度计算。

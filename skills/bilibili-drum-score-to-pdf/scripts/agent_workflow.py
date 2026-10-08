@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 from PIL import Image, ImageDraw, __version__ as pillow_version
 from video_seek import ConversionError, VideoReader, probe_video
+from public_video import acquire, ACQUISITION_SECONDS, InputError, retryable_acquisition
 from score_detect import analyze_frame
 from cursor_detect import cursor_occluded, obstruction_detected
 from agent_regions import native_rows
@@ -73,7 +74,7 @@ def image_pixels(output, images):
     return total
 
 
-def prepare(source, output):
+def prepare(source, output, origin=None):
     source = Path(source).resolve()
     metadata = probe_video(source)
     if metadata['width'] < 700:
@@ -83,6 +84,8 @@ def prepare(source, output):
     observation = dict(schema_version=VERSION, task_id=task_id, source=dict(path=str(source), sha256=source_hash, **metadata),
                        frames=[], images=[], candidates=[], intervals=[], coordinate_space='native_pixels',
                        fixed_layout_only=True)
+    if origin:
+        observation['source']['origin'] = origin
     count = metrics()
     reader = VideoReader(source, metadata, count)
     images = []
@@ -282,19 +285,33 @@ def export(task, output):
         reader.close()
 
 
-def run(operation, source=None, task=None, decision=None, output=None):
+def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS):
     target = Path(output) if output and operation in ('prepare', 'export', 'replay') else None
     try:
         if operation in ('prepare', 'export', 'replay'):
             if not target:
                 raise ConversionError('invalid_input', '需要新的结果目录。')
+            if operation == 'prepare' and retryable_acquisition(target):
+                (target / 'manifest.json').unlink()
             empty_output(target)
         if operation == 'prepare':
-            result = prepare(source, target)
+            origin = None
+            if source and '://' in str(source):
+                source, origin = acquire(source, target, timeout=acquisition_timeout)
+            result = prepare(source, target, origin=origin)
         elif operation == 'submit':
             result = submit(Path(task), decision)
         else:
             result = export(Path(task), target)
+    except InputError as error:
+        result = dict(schema_version=VERSION, status='failed', complete=False, phase='acquisition', rows=[], issues=[],
+                      error={'code': error.code, 'message': str(error)})
+        if error.origin:
+            result['origin'] = error.origin
+        if hasattr(error, 'diagnostics'):
+            result['error'].update(error.diagnostics)
+        if hasattr(error, 'http_status'):
+            result['error']['http_status'] = error.http_status
     except KeyboardInterrupt:
         result = dict(status='failed', complete=False, phase=operation, error={'code': 'interrupted', 'message': '任务已中断，请保留观察包并使用新的结果目录。'})
     except (ConversionError, OSError, ValueError, TypeError, KeyError) as error:
