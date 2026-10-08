@@ -131,3 +131,16 @@ class SamplingTests(unittest.TestCase):
             result=self.cli('--operation','supplement','--task',task,'--decision',path)
             self.assertEqual(result['error']['code'],'invalid_request',result)
             self.assertEqual((task/'observation.json').read_bytes(),original)
+
+    def test_modified_ledger_cannot_reset_resource_usage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);source=video_from_image(score_frame(),base);task=base/'task'
+            state=self.cli(source,'--operation','prepare','--output',task)
+            packet=json.loads((task/'observation.json').read_text());ledger=packet['sampling']
+            ledger['used']['requests']=-100
+            (task/'sampling.json').write_text(json.dumps(ledger))
+            request=dict(schema_version=1,task_id=state['task_id'],observation_sha256=state['observation_sha256'],observation_version=1,
+                         request_id='bad-ledger',issue=dict(reason='inspect gap',start=0,end=0.5),timestamps=[0.25])
+            path=base/'request.json';path.write_text(json.dumps(request))
+            result=self.cli('--operation','supplement','--task',task,'--decision',path)
+            self.assertEqual(result['error']['code'],'invalid_request',result)

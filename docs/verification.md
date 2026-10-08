@@ -169,3 +169,5 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 CLI 导出 6 行、两个独立标题、1 页 A4。独立 Pillow 核对八个 RGB 原裁剪与 source_frame+bbox 逐像素相同，灰度图与 RGB 转灰度相同；replay PDF 字节一致。实际查看 Poppler 渲染，标题、tempo 及 bar 1 到 6 顺序保留。全量 70 项测试通过，耗时 85.032 秒；最后增加 placement 检查后，两项专用测试再次通过，耗时 9.726 秒。此票没有新增依赖，没有修改默认转换。稀疏观察仍不能证明未采样时间无隐藏页，真实整曲 Agent 验收由 #41 完成，未重复旧默认 BV 双跑。
 
+
+合入 #37 有序谱面段后，全量 75 项通过，111.020 秒；新增预算校验的 RED 发现被改成负数的累计 requests 曾被接受。固定脚本 LIMITS 并校验有限非负成本、整数计数后，补采专题 6 项 fresh 通过，24.626 秒。采样观察包的 limits 不能自行放宽资源上限。git diff --check 通过。实际 PTS 空转和预算记录反例各自走过 RED/GREEN。

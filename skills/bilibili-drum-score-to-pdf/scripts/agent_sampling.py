@@ -74,6 +74,8 @@ def check_request(request, state, observation):
     if not isinstance(identifier, str) or not identifier.strip() or len(identifier) > 200 or identifier in sampling['request_ids']:
         raise ConversionError('invalid_request', '补采样请求 ID 非法或重复。')
     used, limits = sampling['used'], sampling['limits']
+    if limits != LIMITS or set(used) != set(LIMITS) or any(not number(value) or value < 0 for value in used.values()) or any(type(used[k]) is not int for k in ('requests','native_frames','requested_frames')):
+        raise ConversionError('invalid_request', '采样预算记录非法，不能放宽脚本资源上限。')
     if used['requests'] >= limits['requests'] or used['requested_frames'] + len(timestamps) > limits['requested_frames'] or used['native_frames'] + len(timestamps) > limits['native_frames'] or used['decode_seconds'] >= limits['decode_seconds']:
         raise ConversionError('sampling_budget', '累计补采样预算已耗尽，请保留疑点。')
     return timestamps
