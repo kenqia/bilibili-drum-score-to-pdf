@@ -45,7 +45,6 @@ def translation(old, new):
            or abs(r.bbox[0] - old[0].bbox[0]) > tolerance for r in new):
         raise ViewportError('unsupported_layout')
     matches = []
-    backward_count = 0
     for i in range(len(old)):
         count = min(len(old) - i, len(new))
         if count < 2:
@@ -54,15 +53,11 @@ def translation(old, new):
         shift = median(deltas)
         if max(abs(d - shift) for d in deltas) > tolerance:
             continue
-        if shift < -tolerance:
-            backward_count = max(backward_count, count)
-        else:
+        if shift >= -tolerance:
             matches.append((count, max(0, shift)))
     if not matches:
         raise ViewportError('no_overlap')
     best = max(count for count, _ in matches)
-    if backward_count > best:
-        raise ViewportError('no_overlap')
     shifts = [shift for count, shift in matches if count == best]
     if max(shifts) - min(shifts) > tolerance:
         raise ViewportError('ambiguous_scroll')

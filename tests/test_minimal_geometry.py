@@ -53,8 +53,8 @@ class GeometryTests(unittest.TestCase):
         with self.assertRaisesRegex(ViewportError, 'unsupported_layout'):
             translation(observations([300, 500, 700]), new)
 
-    def test_no_overlap_and_backward_motion_wait(self):
-        for anchors in ([310, 510, 710], [50, 170, 290]):
+    def test_no_geometric_overlap_waits(self):
+        for anchors in ([320, 530, 770], [50, 170, 290]):
             with self.subTest(anchors=anchors), self.assertRaises(ViewportError):
                 translation(observations([300, 500, 700]), observations(anchors))
 
