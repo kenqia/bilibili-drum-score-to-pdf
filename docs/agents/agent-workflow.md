@@ -1,6 +1,6 @@
 # Agent-first 原帧流程
 
-这是 opt-in 路径，默认转换仍使用 moving viewport。v1/v2 保留固定白底多行谱面试验，v3 支持有可靠重叠的连续长谱。观察包采样首帧、中点和末帧，不能证明采样之间没有短暂换谱。Agent 必须检查完整性，存在疑点时不能标记 complete。
+这是 opt-in 路径，默认转换仍使用 moving viewport。v1/v2 保留固定白底多行谱面试验，v3 支持有可靠重叠的连续长谱。观察包用变化导航提出原帧，并保留首尾；不能证明采样之间没有短暂换谱。Agent 必须检查完整性，存在疑点时不能标记 complete。
 
 ## 操作
 
@@ -94,7 +94,7 @@ observations 按帧时间、帧内从上到下排列，每条只含 id、frame_i
 
 coverage 只含 first_frame、last_frame、unresolved，必须引用观察包首尾且 unresolved 为空。导出审计保留首尾实际时间、全部接续及 sample_gap、已接受实例、身份依据和每行来源。缺少首尾、接续、身份或选择时返回 waiting；非法字段和未知引用返回 failed。等待疑点记录区间和两张原图，供局部复查。审计明确 `hidden_content_proven_absent=false`，检查不了未采样画面中是否短暂出现新谱。Agent 提出的锚点和对应也不是脚本独立识别五线的证明，仍需实际视觉验收。
 
-本票的 prepare 仍只有首、中、尾三张相邻上下文。对照图包含全部三帧，接续两次都引用共同中帧；尚无分批采样。#36 扩展采样和补采，#38 扩展持久化批次。中尾无重叠的真实长视频必须等待，不能用三帧宣称覆盖整曲。原图 hash 只核查来源，不作为空间身份依据。
+在 #35 实施时，prepare 只有首、中、尾三张相邻上下文。对照图包含全部三帧，接续两次都引用共同中帧；尚无分批采样。#36 扩展采样和补采，#38 扩展持久化批次。中尾无重叠的真实长视频必须等待，不能用三帧宣称覆盖整曲。原图 hash 只核查来源，不作为空间身份依据。
 
 ## 变化导航与补采样，#36
 
@@ -106,7 +106,7 @@ coverage 只含 first_frame、last_frame、unresolved，必须引用观察包首
 uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation supplement --task /absolute/task --decision /absolute/request.json
 ```
 
-补采样使用独立请求协议 schema_version=1，必需字段为 task_id、observation_sha256、observation_version、request_id、issue、timestamps。issue 仅含 reason、start、end。理由非空，时间为有限数，范围在视频内且不超过 30 秒；timestamps 含 1 至 8 个不同的范围内时刻。布尔值、已请求时刻、重复 ID、旧包引用均拒绝。新增图片生成观察版本，旧观察保存在 observation-vN.json，已接受决定保存在 decision-vN.json。新决定必须绑定新 hash，重新审阅全部接续和首尾，不能静默继承旧 complete。
+补采样使用独立请求协议 schema_version=1，必需字段为 task_id、observation_sha256、observation_version、request_id、issue、timestamps。issue 仅含 reason、start、end。理由非空，时间为有限数，范围在视频内且不超过 30 秒；timestamps 含 1 至 8 个不同的范围内时刻。解码出的实际 PTS 若已存在，也拒绝空转。布尔值、已请求时刻、重复 ID、旧包引用均拒绝。新增图片生成观察版本，旧观察保存在 observation-vN.json，已接受决定保存在 decision-vN.json。新决定必须绑定新 hash，重新审阅全部接续和首尾，不能静默继承旧 complete。
 
 累计预算为 8 个补采请求、32 张请求原生帧、96 张原生帧和 600 秒原生解码。sampling.json 在执行前记账，若中断或失败，仍计入请求和图像额度并保守扣除每帧最多 60 秒。成功后记录实测解码。导航解码另外限制 90 秒并记录耗时。包的 JSON 达到当前可恢复读取限额时等待，旧包不被替换。预算不足保留 waiting，不输出 PDF。sampling ledger 是 #38 恢复流程使用的持久接缝，本票没有声称多进程并发安全。
 

@@ -107,6 +107,8 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
             images = [Image.open(output / f['path']).convert('RGB') for f in observation['frames']]
         for index, requested in enumerate(timestamps):
             record, image = reader.read_record(requested)
+            if prior and any(f['pts'] == record['pts'] and f['time_base'] == record['time_base'] for f in observation['frames']):
+                raise ConversionError('invalid_request', '请求重解码了已有 PTS，不能声称新增观察。')
             frame_id = f'frame-{index:03d}' if version == 1 else f'v{version}-frame-{index:03d}'
             filename = f'{frame_id}.png'
             image.save(output / filename)

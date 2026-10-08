@@ -37,6 +37,7 @@ class SamplingTests(unittest.TestCase):
     def test_bounded_requests_reject_bad_times_and_empty_progress_without_changing_packet(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory); source = video_from_image(score_frame(), base); task = base / 'task'
+            subprocess.run(['ffmpeg','-v','error','-y','-loop','1','-i',str(base/'input.png'),'-t','2','-r','16','-pix_fmt','yuv420p',str(source)],check=True)
             state = self.cli(source, '--operation', 'prepare', '--output', task)
             original = (task / 'observation.json').read_bytes()
             request = dict(schema_version=1, task_id=state['task_id'], observation_sha256=state['observation_sha256'],
@@ -118,3 +119,15 @@ class SamplingTests(unittest.TestCase):
                     decision['observation_sha256']=request['observation_sha256'];path.write_text(json.dumps(decision))
                     result=self.cli('--operation','submit','--task',task,'--decision',path)
                     self.assertEqual(result['error']['code'],'invalid_decision',result)
+
+    def test_different_request_time_that_decodes_existing_pts_cannot_claim_new_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);source=video_from_image(score_frame(),base);task=base/'task'
+            state=self.cli(source,'--operation','prepare','--output',task)
+            original=(task/'observation.json').read_bytes()
+            request=dict(schema_version=1,task_id=state['task_id'],observation_sha256=state['observation_sha256'],observation_version=1,
+                         request_id='no-new-pts',issue=dict(reason='nearby interval',start=0.8,end=1.2),timestamps=[0.9])
+            path=base/'request.json';path.write_text(json.dumps(request))
+            result=self.cli('--operation','supplement','--task',task,'--decision',path)
+            self.assertEqual(result['error']['code'],'invalid_request',result)
+            self.assertEqual((task/'observation.json').read_bytes(),original)
