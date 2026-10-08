@@ -3,6 +3,9 @@ import hashlib
 import json
 import platform
 import math
+import time
+import copy
+from agent_sampling import plan, check_request
 from pathlib import Path
 import subprocess
 from PIL import Image, ImageDraw, __version__ as pillow_version
@@ -75,7 +78,7 @@ def image_pixels(output, images):
     return total
 
 
-def prepare(source, output, origin=None):
+def prepare(source, output, origin=None, timestamps=None, sampling=None, version=1, prior=None):
     source = Path(source).resolve()
     metadata = probe_video(source)
     if metadata['width'] < 700:
@@ -87,13 +90,23 @@ def prepare(source, output, origin=None):
                        fixed_layout_only=True)
     if origin:
         observation['source']['origin'] = origin
+    if timestamps is None:
+        timestamps, sampling = plan(source, metadata)
     count = metrics()
+    initial_decode = sampling['used']['decode_seconds']
+    count['decode_elapsed'] = initial_decode
+    began = time.monotonic()
     reader = VideoReader(source, metadata, count)
     images = []
     try:
-        for index, requested in enumerate([0, metadata['duration'] / 2, None]):
+        if prior:
+            for key in ('frames', 'images', 'candidates'):
+                observation[key] = copy.deepcopy(prior[key])
+            observation['images'] = [i for i in observation['images'] if i['kind'] != 'comparison']
+            images = [Image.open(output / f['path']).convert('RGB') for f in observation['frames']]
+        for index, requested in enumerate(timestamps):
             record, image = reader.read_record(requested)
-            frame_id = f'frame-{index:03d}'
+            frame_id = f'frame-{index:03d}' if version == 1 else f'v{version}-frame-{index:03d}'
             filename = f'{frame_id}.png'
             image.save(output / filename)
             frame = dict(id=frame_id, path=filename, sha256=digest(output / filename),
@@ -132,27 +145,42 @@ def prepare(source, output, origin=None):
                 clean = not cursor_occluded(native, group['spacing']) and not obstruction_detected(native, analysis['bbox'][1] + group['top'] - bbox[1], group['spacing'])
                 observation['candidates'].append(dict(id=candidate_id, frame_id=frame_id, index=row, bbox=bbox, clean=clean,
                                                      coordinate_space='native_pixels', complete=not (analysis['partial_top'] or analysis['partial_bottom'])))
-        montage = Image.new('RGB', (640 * len(images), 510), 'white')
+        paired = sorted(zip(observation['frames'], images), key=lambda pair: pair[0]['timestamp'])
+        observation['frames'] = [f for f, _ in paired]
+        images = [i for _, i in paired]
+        montage = Image.new('RGB', (640 * min(3, len(images)), 510 * math.ceil(len(images) / 3)), 'white')
         panels = []
         for index, (frame, image) in enumerate(zip(observation['frames'], images)):
             scale = min(640 / image.width, 480 / image.height)
             size = [round(image.width * scale), round(image.height * scale)]
-            montage.paste(image.resize(size), (640 * index, 30))
-            ImageDraw.Draw(montage).text((640 * index + 5, 5), f'{frame["id"]}  {frame["timestamp"]:.6f} s', fill='black')
-            panels.append(dict(frame_id=frame['id'], scale=scale, offset=[640 * index, 30], size=size,
+            montage.paste(image.resize(size), (640 * (index % 3), 30 + 510 * (index // 3)))
+            ImageDraw.Draw(montage).text((640 * (index % 3) + 5, 5 + 510 * (index // 3)), f'{frame["id"]}  {frame["timestamp"]:.6f} s', fill='black')
+            panels.append(dict(frame_id=frame['id'], scale=scale, offset=[640 * (index % 3), 30 + 510 * (index // 3)], size=size,
                                source_bbox=[0, 0, image.width, image.height],
-                               mapping=dict(coordinate_space='comparison_pixels', scale=[size[0] / image.width, size[1] / image.height], source_offset=[0, 0], view_offset=[640 * index, 30])))
-        montage.save(output / 'comparison.png')
-        observation['images'].append(dict(id='comparison', kind='comparison', path='comparison.png',
-                                          sha256=digest(output / 'comparison.png'), panels=panels))
+                               mapping=dict(coordinate_space='comparison_pixels', scale=[size[0] / image.width, size[1] / image.height], source_offset=[0, 0], view_offset=[640 * (index % 3), 30 + 510 * (index // 3)])))
+        comparison_path = 'comparison.png' if version == 1 else f'comparison-v{version}.png'
+        montage.save(output / comparison_path)
+        observation['images'].append(dict(id='comparison', kind='comparison', path=comparison_path,
+                                          sha256=digest(output / comparison_path), panels=panels))
         observation['intervals'] = [dict(start=a['timestamp'], end=b['timestamp']) for a, b in zip(observation['frames'], observation['frames'][1:])]
-        observation['metrics'] = {**count, 'analyzed_frames': len(images), 'native_images': len(images),
+        if not prior:
+            sampling['used']['native_frames'] += len(timestamps)
+        sampling['used']['decode_seconds'] = count['decode_elapsed']
+        count['decode_elapsed'] -= initial_decode
+        observation['sampling'] = sampling
+        observation['observation_version'] = version
+        observation['batches'] = [dict(id=f'batch-{i//2:03d}', frames=[f['id'] for f in observation['frames'][i:i+3]]) for i in range(0, max(1, len(images)-1), 2)]
+        observation['metrics'] = {**count, 'analyzed_frames': len(timestamps), 'native_images': len(images),
                                   'detail_images': sum(i['kind'] in ('detail', 'native_detail') for i in observation['images']), 'comparison_images': 1,
                                   'image_pixels': image_pixels(output, observation['images']),
-                                  'model_elapsed': None, 'model_tokens': None}
+                                  'model_elapsed': None, 'model_tokens': None, 'thumbnail_checks': sampling['thumbnail_checks'],
+                                  'thumbnail_elapsed': sampling['thumbnail_elapsed'], 'comparison_composed_frames': len(images),
+                                  'supplement_requests': sampling['used']['requests'], 'prepare_elapsed': time.monotonic()-began}
+        if len(json.dumps(observation, ensure_ascii=False, allow_nan=False).encode()) > MAX_JSON - 4096:
+            raise ConversionError('sampling_budget', '观察包达到可恢复 JSON 大小上限，请保留疑点。')
         write_json(output / 'observation.json', observation)
         result = dict(schema_version=VERSION, task_id=task_id, observation_sha256=digest(output / 'observation.json'),
-                      status='waiting', complete=False, phase='review', rows=[], issues=[],
+                      status='waiting', complete=False, phase='review', observation_version=version, rows=[], issues=[],
                       next_action='Read comparison and native detail images, then submit a visual decision.', metrics=observation['metrics'])
         write_json(output / 'task.json', result)
         return result
@@ -297,10 +325,47 @@ def export(task, output):
             result['coverage'] = continuous_rows(decision, observation, decision['presented_images'])[1]
         else:
             result['coverage'] = {'scope': 'fixed_layout_trial', 'hidden_content_proven_absent': False}
+        result['metrics']['presented_image_pixels'] = image_pixels(task, result['presented_images'])
+        result['metrics']['model_elapsed'] = None
+        result['metrics']['model_tokens'] = None
         write_json(output / 'decision.json', decision)
         return result
     finally:
         reader.close()
+
+
+
+def supplement(task, path):
+    state, observation = checked_task(task)
+    request = load_json(path)
+    timestamps = check_request(request, state, observation)
+    sampling = copy.deepcopy(observation['sampling'])
+    # Charge accepted requests before decoding, so interrupted requests cannot reset the budget.
+    ledger_path = task / 'sampling.json'
+    if ledger_path.exists():
+        ledger = load_json(ledger_path)
+        sampling['used'] = ledger['used']
+        sampling['request_ids'] = ledger['request_ids']
+        check_request(request, state, {**observation, 'sampling': sampling})
+    sampling['used']['requests'] += 1
+    sampling['used']['requested_frames'] += len(timestamps)
+    sampling['request_ids'].append(request['request_id'])
+    sampling['used']['native_frames'] += len(timestamps)
+    reserved = copy.deepcopy(sampling)
+    reserved['used']['decode_seconds'] += min(60 * len(timestamps), max(0, sampling['limits']['decode_seconds'] - sampling['used']['decode_seconds']))
+    write_json(ledger_path, reserved)
+    version = state.get('observation_version', 1)
+    archive = task / f'observation-v{version}.json'
+    if not archive.exists():
+        archive.write_bytes((task / 'observation.json').read_bytes())
+    decision = task / 'decision.json'
+    result = prepare(observation['source']['path'], task, origin=observation['source'].get('origin'),
+                     timestamps=timestamps, sampling=sampling, version=version+1, prior=observation)
+    if decision.exists():
+        decision.rename(task / f'decision-v{version}.json')
+    write_json(ledger_path, sampling)
+    write_json(task / f'request-{version+1}.json', request)
+    return result
 
 
 def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS):
@@ -317,6 +382,8 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
             if source and '://' in str(source):
                 source, origin = acquire(source, target, timeout=acquisition_timeout)
             result = prepare(source, target, origin=origin)
+        elif operation == 'supplement':
+            result = supplement(Path(task), decision)
         elif operation == 'submit':
             result = submit(Path(task), decision)
         else:
@@ -334,7 +401,7 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
         result = dict(status='failed', complete=False, phase=operation, error={'code': 'interrupted', 'message': '任务已中断，请保留观察包并使用新的结果目录。'})
     except (ConversionError, OSError, ValueError, TypeError, KeyError) as error:
         code = error.code if isinstance(error, ConversionError) else 'invalid_input'
-        result = dict(status='waiting' if code in ('unsupported_layout', 'review_required', 'missing_evidence') else 'failed',
+        result = dict(status='waiting' if code in ('unsupported_layout', 'review_required', 'missing_evidence', 'sampling_budget') else 'failed',
                       complete=False, phase=operation, rows=[], issues=[], error={'code': code, 'message': str(error) if isinstance(error, ConversionError) else '记录或输入不可用。'})
         result['issues'] = getattr(error, 'issues', [])
     if target and target.exists() and result.get('error', {}).get('code') != 'existing_output':

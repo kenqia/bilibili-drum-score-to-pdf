@@ -141,3 +141,15 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 实际审阅材料、仅实际阅读图像 ID 的决定、公开提示词及可见模型标识保存在仓库外共享 `work/agent-first/visual-35`。模型精确版本不可见，记录 unknown。独立 Pillow 核对四条 RGB 原裁剪与源 bbox 逐像素相同，灰度图与原裁剪转灰度相同，保存决定 replay 的 PDF 字节与首次导出相同。这只是短合成段的一次实际观察；三张稀疏图不能证明真实整曲覆盖，本票未重复旧默认的 BV 双跑，也未宣称未采样画面没有新内容。
 
 #35 合入当前 integration/agent-first 后无需冲突处理。全量 68 项 unittest 于本工作树通过，耗时 74.144 秒；git diff --check 通过。无新生产依赖，无远端或配置操作。
+
+## 有界自适应观察记录，#36
+
+统一 CLI 第一轮 RED 因 supplement 操作不存在而失败。加入绑定版本的局部观察请求后 GREEN。负例覆盖非有限和布尔时间、越界、重复时刻、空请求、旧版本、重复 ID、八次请求后的累计耗尽；旧观察字节保持，耗尽不生成 PDF。12 秒夹具覆盖长停留、20 像素小幅推进和短暂遮挡变化，检查真实首尾及组间共同帧。补采短暂清晰行与始终遮挡两个受控保存决定分别导出及 waiting。
+
+另一次实际看图审阅保存在仓库外 `work/agent-first/visual-36`。view_image 读四帧对照、全部四张原图及 0.25 秒的两张重叠原生细节。首、中、尾的蓝矩形遮住谱行中部；0.25 秒露出四个符头与符杆、完整五线和 ROW 1 标记。按该单帧裁剪导出一行 PDF，保存决定 replay 的 PDF 字节相同。决定只记录七个实际看过的图像 ID，模型精确版本未知。本次是合成固定一行的实际补采观察，不是整曲覆盖证明；始终遮挡由独立 CLI 保存决定反例验证。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_agent_sampling.py -v
+```
+
+四项专用测试通过；此前全量 71 项测试通过，耗时 102.998 秒。后续最终全量记录以集成结果为准。协议不要求固定 4/2 秒间隔，没有恢复撤回的补丁。
