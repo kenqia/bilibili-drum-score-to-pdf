@@ -100,7 +100,7 @@ coverage 只含 first_frame、last_frame、unresolved，必须引用观察包首
 
 长于 3 秒的视频先由 ffmpeg 生成最多 256 张 160×90 灰度导航图。相邻绝对变化均值只提议原生时刻。脚本先在 16 个时间区间各挑变化处及其前一观察，再补较强变化，最多约 48 个原生时刻，另保留真实首尾。阈值 0.08 是导航灵敏度，不是谱行身份或清晰度门槛。小于等于 3 秒沿用三帧协议夹具。长停留没有额外变化时保留首、中、尾，未采样内容仍无法证明不存在。
 
-对照图每排最多三帧，batches 每组至多三帧，相邻组重用末帧。Agent 必须实际查看决策要求的全部原帧，原生细节只列实际阅读的图像。生成图像数量或看过缩略图不能代替看清符号。observations 的 v3/v4 身份检查保持不变。
+comparison.png 保留全部原帧的导航总览。batches 每组至多三帧，相邻组重用末帧；每组的 image_id 指向包内独立 batch_comparison 图，最多 1920×510 像素，时间标签与原生映射随面板保存。实际审阅使用这些有界对照图，避免长总览缩小时丢失时间和谱行关系。补采后生成含观察版本的全新文件，旧对照图仍保留为历史证据。Agent 必须实际查看决策要求的全部原帧，原生细节只列实际阅读的图像。生成图像数量或看过缩略图不能代替看清符号。observations 的 v3/v4 身份检查保持不变。
 
 ```sh
 uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation supplement --task /absolute/task --decision /absolute/request.json

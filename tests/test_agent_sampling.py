@@ -21,6 +21,7 @@ class SamplingTests(unittest.TestCase):
             task = base / 'task'
             state = self.cli(source, '--operation', 'prepare', '--output', task)
             old = (task / 'observation.json').read_bytes()
+            old_contexts = {i['path']: (task / i['path']).read_bytes() for i in json.loads(old)['images'] if i['kind'] == 'batch_comparison'}
             request = dict(schema_version=1, task_id=state['task_id'], observation_sha256=state['observation_sha256'],
                            observation_version=1, request_id='occlusion-1', issue=dict(reason='brief clean view needs checking', start=0, end=1), timestamps=[0.25])
             path = base / 'request.json'; path.write_text(json.dumps(request))
@@ -30,6 +31,8 @@ class SamplingTests(unittest.TestCase):
             self.assertEqual((task / 'observation-v1.json').read_bytes(), old)
             packet = json.loads((task / 'observation.json').read_text())
             self.assertGreater(len(packet['frames']), 3)
+            self.assertTrue(all((task / name).read_bytes() == content for name, content in old_contexts.items()))
+            self.assertFalse(set(old_contexts) & {i['path'] for i in packet['images'] if i['kind'] == 'batch_comparison'})
             self.assertEqual(packet['sampling']['used']['requests'], 1)
             rejected = self.cli('--operation', 'supplement', '--task', task, '--decision', path)
             self.assertEqual(rejected['error']['code'], 'invalid_request')
@@ -83,6 +86,13 @@ class SamplingTests(unittest.TestCase):
             self.assertEqual(packet['frames'][0]['timestamp'],0)
             self.assertGreater(packet['frames'][-1]['timestamp'],11)
             self.assertEqual(packet['batches'][0]['frames'][-1],packet['batches'][1]['frames'][0])
+            for batch in packet['batches']:
+                picture = next(i for i in packet['images'] if i['id'] == batch['image_id'])
+                self.assertEqual([p['frame_id'] for p in picture['panels']], batch['frames'])
+                from PIL import Image
+                with Image.open(task / picture['path']) as context:
+                    self.assertLessEqual(context.height, 510)
+
 
     def test_local_supplement_can_choose_brief_clean_source_and_keeps_obscured_trial_waiting(self):
         from PIL import ImageDraw

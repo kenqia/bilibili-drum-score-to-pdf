@@ -107,7 +107,7 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
         if prior:
             for key in ('frames', 'images', 'candidates'):
                 observation[key] = copy.deepcopy(prior[key])
-            observation['images'] = [i for i in observation['images'] if i['kind'] != 'comparison']
+            observation['images'] = [i for i in observation['images'] if i['kind'] not in ('comparison', 'batch_comparison')]
             images = [Image.open(output / f['path']).convert('RGB') for f in observation['frames']]
         for index, requested in enumerate(timestamps):
             record, image = reader.read_record(requested)
@@ -185,6 +185,25 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
                                   'supplement_requests': sampling['used']['requests'], 'prepare_elapsed': time.monotonic()-began,
                                   'total_elapsed': time.monotonic()-total_began,
                                   'native_processing_elapsed': time.monotonic()-began-count['decode_elapsed']}
+        for start, batch in zip(range(0, max(1, len(images)-1), 2), observation['batches']):
+            batch_id = f'comparison-v{version}-{batch["id"]}'
+            batch_path = f'{batch_id}.png'
+            context = Image.new('RGB', (640 * len(batch['frames']), 510), 'white')
+            context_panels = []
+            for position, panel in enumerate(panels[start:start+3]):
+                context.paste(montage.crop((panel['offset'][0], panel['offset'][1]-30,
+                    panel['offset'][0]+640, panel['offset'][1]+480)), (position*640, 0))
+                adjusted = copy.deepcopy(panel)
+                adjusted['offset'] = [position*640, 30]
+                adjusted['mapping']['view_offset'] = adjusted['offset']
+                context_panels.append(adjusted)
+            context.save(output / batch_path)
+            observation['images'].append(dict(id=batch_id, kind='batch_comparison', path=batch_path,
+                sha256=digest(output / batch_path), panels=context_panels))
+            batch['image_id'] = batch_id
+        observation['metrics']['image_pixels'] = image_pixels(output, observation['images'])
+        observation['metrics']['comparison_images'] += len(observation['batches'])
+        observation['metrics']['comparison_composed_frames'] += sum(len(b['frames']) for b in observation['batches'])
         if len(json.dumps(observation, ensure_ascii=False, indent=2, allow_nan=False).encode()) > MAX_JSON - 4096:
             raise ConversionError('sampling_budget', '观察包达到可恢复 JSON 大小上限，请保留疑点。')
         previous = load_json(output / 'task.json') if (output / 'task.json').exists() else {}
@@ -370,7 +389,7 @@ def submit(task, path):
                 raise ConversionError('existing_decision', '已接受身份或裁剪改变，请显式修订并重新审计。')
     partial = copy.deepcopy(observation)
     partial['frames'] = [f for f in observation['frames'] if f['id'] in reviewed]
-    allowed = {i['id'] for i in observation['images'] if i.get('frame_id') in reviewed or i['kind'] == 'comparison'}
+    allowed = {i['id'] for i in observation['images'] if i.get('frame_id') in reviewed or i['kind'] == 'comparison' or (i['kind'] == 'batch_comparison' and all(p['frame_id'] in reviewed for p in i['panels']))}
     if not isinstance(decision, dict) or any(i not in allowed for i in decision.get('presented_images', [])):
         raise ConversionError('invalid_decision', '批次不能引用未审尾部。')
     validate(decision, state, partial)
