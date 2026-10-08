@@ -86,15 +86,20 @@ def analyze_frame(image):
     # Bright colored notation also occupies space, even above the gray threshold.
     ink = (np.asarray(crop.convert('L')) < 180) | ((np.ptp(pixels, axis=2) > 20) & (pixels.min(axis=2) < 220))
     bounds = []
+    pitch = float(np.median(np.diff([group['top'] for group in all_groups]))) if len(all_groups) > 1 else None
     for group in groups:
         above = [line for line in lines if line < group['top'] - 1]
-        below = [line for line in lines if line > group['bottom'] + 1]
+        below = [line for line in lines if line > group['bottom'] + 1
+                 and (pitch is None or line >= group['top'] + pitch - group['spacing'])]
         top = blank_cut(ink, max(above) + group['spacing'] * 2 if above else max(0, group['top'] - group['spacing'] * 9), group['top'] - group['spacing'] * 3)
         if below:
             bottom = blank_cut(ink, group['bottom'] + group['spacing'] * 2, min(below) - group['spacing'] * 3)
         else:
-            occupied = np.where(ink.sum(axis=1) > 0)[0]
-            bottom = min(crop.height, int(occupied[-1]) + 12)
+            if pitch is None:
+                raise ConversionError('unsupported_layout', '缺少相邻谱行，无法确定完整裁剪边界。')
+            bottom = blank_cut(ink, group['bottom'] + group['spacing'] * 2,
+                               min(crop.height, group['top'] + pitch - group['spacing'] * 6))
+            partial_bottom = partial_bottom or bool(ink[bottom + round(group['spacing']):].any())
         bounds.append([top, bottom])
     header_ink = np.where(ink[:bounds[0][0]].sum(axis=1) > 0)[0]
     header_top = max(0, int(header_ink[0]) - 12) if len(header_ink) else bounds[0][0]

@@ -103,6 +103,12 @@ class ConversionTests(unittest.TestCase):
             first = (base / 'score.pdf').read_bytes()
             write_pdf(base, None, rows)
             self.assertEqual(first, (base / 'score.pdf').read_bytes())
+            second = base / 'different-directory'
+            second.mkdir()
+            for row in rows:
+                (second / row['image']).write_bytes((base / row['image']).read_bytes())
+            write_pdf(second, None, rows)
+            self.assertEqual(first, (second / 'score.pdf').read_bytes())
             for row in rows:
                 self.assertGreaterEqual(row['pdf_bbox'][1], 36)
                 self.assertLessEqual(row['pdf_bbox'][3], 806)

@@ -12,6 +12,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'skills/bilibili-drum-score-to-pdf/scripts'))
 from video_seek import VideoReader, probe_video
 from cursor_detect import cursor_occluded
+from score_detect import analyze_frame
 
 
 def verify(directory):
@@ -38,6 +39,10 @@ def verify(directory):
                 np.testing.assert_array_equal(np.asarray(frame), np.asarray(saved_frame))
             assert hashlib.sha256((directory / block['original_image']).read_bytes()).hexdigest() == block['original_sha256']
             if 'index' in block:
+                geometry = analyze_frame(frame)
+                x0, y0, x1, _ = geometry['bbox']
+                valid_boxes = [[x0, y0 + top, x1, y0 + bottom] for top, bottom in geometry['row_bounds']]
+                assert block['bbox'] in valid_boxes
                 assert block['quality']['complete'] and not block['quality']['obstruction_detected']
                 assert not cursor_occluded(expected, block['staff_spacing'])
                 assert block['quality']['effective_dpi'] >= 260
@@ -77,7 +82,7 @@ def main():
     report = {'status': 'verified', 'sample': 'BV1rH4y1R7Rk', 'rows': first_rows,
               'page_sha256': first_pages, 'pdf_sha256': hashlib.sha256((args.first / 'score.pdf').read_bytes()).hexdigest(),
               'first_metrics': first['metrics'], 'second_metrics': second['metrics'],
-              'independent_source_decode': [first_check, second_check]}
+              'independent_source_decode': [first_check, second_check], 'independent_geometry_checks_per_run': 12}
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
     print(json.dumps({'status': report['status'], 'rows': len(first_rows), 'pages': len(first_pages)}, ensure_ascii=False))
 

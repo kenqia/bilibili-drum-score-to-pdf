@@ -52,3 +52,12 @@ class DetectionTests(unittest.TestCase):
         for index, (group, (top, bottom)) in enumerate(zip(result['groups'], result['row_bounds'])):
             self.assertLessEqual(top + result['bbox'][1], 220 + index * 220 - 32)
             self.assertGreaterEqual(bottom + result['bbox'][1], 220 + index * 220 + 105)
+
+    def test_next_row_beam_without_visible_staff_is_partial_and_excluded(self):
+        frame = score_frame((1280, 910))
+        ImageDraw.Draw(frame).line((200, 800, 900, 800), fill='black', width=4)
+        result = analyze_frame(frame)
+        self.assertTrue(result['partial_bottom'])
+        bottom = result['bbox'][1] + result['row_bounds'][-1][1]
+        self.assertLess(bottom, 800)
+        self.assertGreater(bottom, 765)

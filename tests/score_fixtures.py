@@ -30,5 +30,3 @@ def video_from_image(image, directory, name='input'):
     image.save(png)
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-loop', '1', '-i', str(png), '-t', '2', '-r', '4', '-pix_fmt', 'yuv420p', str(video)], check=True)
     return video
-
-

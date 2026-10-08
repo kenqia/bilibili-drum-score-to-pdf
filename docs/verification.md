@@ -1,124 +1,72 @@
-# 验证与交付记录
+# 验证记录
 
-本文件保留各实施阶段的历史记录。当前 beta 定位、issue 收尾和未验收范围以 [beta 限制](beta-limitations.md) 为准；《七里香》仍未通过高清整曲验收。
+2026-10-08，重构分支 `rewrite/minimal-moving-viewport` 从 GitHub 最新 main `0b4da0639c51bf121bfa0574e456409b643936af` 建立。正式产品只保留一个空间跟踪核心，旧恢复模块和旧像素例外测试已删除。
 
-2026-10-06。实现候选已覆盖本地转换、匿名链接兜底、纵向排序、真实清晰帧选择和明确回答后的重放。最终审查修复后，统一 CLI 的 35 项测试全部通过，实测 522.942 秒，包含五项新增内容区别、模糊恢复与保守等待验收。测试只检查用户可观察的结果，不直接测试私有算法。
-
-此前合并 #2–#6 的 30 项回归曾通过，365.974 秒；光标接受缺失与补图恢复两项专项曾通过，48.956 秒。这些是历史切片结果。最终审查专项另通过五项，144.509 秒；一次在强模糊反例出现后主动中断的完整诊断不计为通过。
-
-《七里香》没有合格高清输入，整曲顺序、全部接续位置和打印可读性尚未验收。#7 与父规格 #1 保持未完成。结构校验、合成测试和独立调用成功都不能替代这项验收。
-
-## 已核查的输出
-
-下表为各实施切片的实际输出记录。它们是不同输入、不同切片版本的实测，不是最新版本的统一性能基准。耗时不作承诺。
-
-| 输入与验证 | 谱行 / 页数 | 确认数 | 转换秒数 | 结果 |
-| --- | --- | --- | --- | --- |
-| 固定 1280×960、2 秒，标题/速度/4/4 与 15 根五线 | 3 / 1 | 0 | 3.767 | A4 渲染后可读，完整保留符头、符杆和行下标记 |
-| 固定 1280×2150、2 秒，八行分页 | 8 / 2 | 0 | 3.252 | 两页逐页查看，分页在谱行之间 |
-| ABC→BCD→CDA，1280×960、6 秒 | 5 / 1 | 0 | 6.436 | 输出 ABCDA，后来的 A 没被全局去重；全部两处接续与首尾已核查 |
-| 移动浅蓝光标后出现清晰整行，1280×960、6 秒 | 3 / 1 | 0 | 4.998 | 选实际干净画面，符头/符杆/连梁及原蓝色休止横线/数字保留 |
-| ABC→DEF→EFA，明确接受无重叠处缺失 | 7 / 2 | 1 个模拟答案 | 5.525 | C 与 D 之间标出缺失，末尾 A 与限制说明保留；complete=false |
-| 独立复制包调用，studio-exercise.mp4，1280×960、6 秒 | 5 / 1 | 0 | 6.522 | complete=true，A/B/C/D/E 与两处接续正确；仅代表本合成输入 |
-
-持续遮挡返回编号原图、时间和 `cursor_occlusion`，不自动猜补。恢复测试覆盖没有回答、未知或无效回答、完整单行补图、明确接受缺失、重复判断、原视频/状态损坏拒绝以及重复执行不插入重复谱行。有效回答后会重放到问题后面的窗口，不将保存的前缀当作整曲。
-
-同一本地排序夹具重复处理，谱行图片内容与顺序、源时间一致；不要求 PDF 文件字节一致。清晰度与有效 DPI 是启发式指标，仍需查看渲染页。实物打印及浅灰记号的纸面对比度未验收。
-
-最终审查另复现两项问题：新增小点、细符杆或蓝点会被整行 8% 差异预算吞掉；暂时模糊会在查找后续清晰帧前停止。修复后，内容匹配只容许已有墨迹边缘一像素变化，五线附近的记号也参与检查。黑点、细符杆、蓝点及五线上的小点均返回等待，不生成声称完整的 PDF。
-
-模糊恢复限定为清晰端点相隔不超过 3 秒、相同位置且同内容。对每个中间采样原图，只在分析中尝试半径 1 至 3 像素的轻度模糊，两端拟合的 RGB 通道最大绝对残差经 3×3 局部平均后必须处处不超过 8 级。强模糊可能把 3 像素的小点压到残差门槛以下，因此不拟合更大半径，即使两端相同也保持等待。打印图仍取真实清晰帧，不取拟合图。清晰→轻度模糊→同窗清晰可恢复；不同后窗、模糊期间新增小点及不清晰首尾都保持等待。`recoveries`、`unreadable_observations` 和等待时的 `readable_followup` 保存实际原图与源时间。该门槛无法证明采样间变化或低于残差门槛的变化，其他模糊形态或移动窗口可能仍需用户帮助。明确接受模糊缺口后仍重放到下一处接续疑点，最终 PDF 保留对应缺失位置与 complete=false。
-
-## 真实样本与网络结果
-
-[《七里香 周杰伦 动态鼓谱》](https://www.bilibili.com/video/BV1b5411x7Ku)公开元数据为 1920×1080、297 秒。早先匿名请求取得 quality=16 的完整视频，ffprobe 实测 640×360、296.363 秒。该本地文件经统一入口返回 `failed/low_resolution`，0.984 秒、确认数 0，没有生成整曲 PDF。完整低清视频只用于布局探索和低清拒绝验证。
-
-后来直接调用新 CLI 的在线 smoke check 用 `timeout 30s` 设外部时限，退出码 124，在获取完成前停止，没有下载结果，也没有取得本轮实际宽高。这与早先匿名下载是两次不同实验，不能合并成新 CLI 在线下载成功。链接成功集成测试用替代 urllib 公开传输响应，实际下载、解码和生成夹具 PDF；它证明集成路径，不证明外部接口持续可用。
-
-没有登录、Cookie、密钥或绕过限制的重试。媒体签名地址只在内存读取，未进入记录、日志或子进程参数。接口与停止条件见 [包内维护说明](../skills/bilibili-drum-score-to-pdf/references/anonymous-input.md)。
-
-## 独立实际调用与文件包
-
-独立代理只得到复制后的 skill 与一个原始合成视频，显式使用该 skill，没有读取项目测试或预期文件。实际运行路径为：
-
-```sh
-uv run /mnt/c/Users/26960/Documents/Codex/2026-10-06/https-github-com-kenqia-bilibili-drum/work/evidence/forward-skill/skills/bilibili-drum-score-to-pdf/scripts/convert.py /mnt/c/Users/26960/Documents/Codex/2026-10-06/https-github-com-kenqia-bilibili-drum/work/evidence/forward-input/studio-exercise.mp4 --output /mnt/c/Users/26960/Documents/Codex/2026-10-06/https-github-com-kenqia-bilibili-drum/work/evidence/forward-use/result
-```
-
-退出码 0，success、complete=true、无疑点或缺口。150 DPI 渲染后核查标题 Studio exercise、tempo 88、4/4、五线、符头、符杆、连梁及 A 至 E 标记；原蓝色横线与数字 3 转为浅灰后仍能辨认。两处接续分别在 1.5/2.0 秒和 3.5/4.0 秒，开头 0.0 秒，实际结尾 5.875 秒；另取源视频末帧对照一致。本次输入没有跨段再演奏的重复段，不能代替 ABCDA 夹具的重复保留验证，也未做实物打印。
-
-skill-creator 的 `quick_validate.py` 返回 `Skill is valid!`，检查了命名、frontmatter 和占位符。CLI `--help` 可执行；实际转换另由上述独立调用验证。匿名输入与恢复细节均在包内 references 中，单独复制 skill 仍可运行绝对脚本路径。文件包没有安装到全局技能目录，未修改 Codex 认证、配置、hooks、MCP 或全局 Python。
-
-## 工具与依赖
-
-WSL，Python 3.14.0、uv 0.9.11、ffmpeg/ffprobe 4.4.2-0ubuntu0.22.04.1、Poppler 22.02.0。脚本支持 Python 3.12 或更高版本。顶层 Python 依赖同时在 PEP 723 和 requirements.txt 固定版本，只在独立环境安装。
-
-| 依赖 | 实测固定版本 | 用途 | 安装元数据许可证字段 |
-| --- | --- | --- | --- |
-| Pillow | 12.3.0 | 裁剪、原图与灰度打印图 | MIT-CMU |
-| NumPy | 2.5.3 | 像素与谱行分析 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 |
-| opencv-python-headless | 5.0.0.93 | 五线定位、相邻行比较、真实候选质量 | Apache 2.0 |
-| ReportLab | 5.0.1 | A4 排版，整行分页与缺失标记 | BSD |
-
-许可证字段来自本次已安装 distribution metadata。交付包不包含这些依赖的二进制文件；uv 根据声明安装运行依赖。没有额外识别 API 或付费服务。
-
-## 复核命令与剩余验收
-
-在完整仓库根目录运行已有验收测试。需要 ffmpeg、ffprobe、uv、pdfinfo、pdftoppm 和 pdftotext；测试中的字体使用 WSL 已有 DejaVu Sans。
+## 新鲜验证
 
 ```sh
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
-uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py /absolute/path/to/video.mp4 --output /absolute/path/to/new-result
-uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --resume /absolute/path/to/result --answers /absolute/path/to/answers.json
-pdfinfo /absolute/path/to/result/score.pdf
-pdftoppm -png -r 150 /absolute/path/to/result/score.pdf /absolute/path/to/review/page
 ```
 
-恢复答案由 Codex 根据聊天中的明确选择写入，不要求用户写 JSON。协议见 [包内恢复说明](../skills/bilibili-drum-score-to-pdf/references/resume.md)。无回答不默许确认；已有结果目录不能作为新转换目标。状态 JSON 原子替换，但不是跨整个目录的数据库事务；异常中断导致不一致时报告未能恢复并保留文件。
+54 项测试通过。覆盖固定窗口、共同位移、连续滚动、重复内容保留、partial 转 complete、永远 partial、位移歧义、比例变化、clean/cursor 的先后观察、固定遮挡否决、独立标题、A4 整行分页、实际 PTS、原裁剪来源、跨目录 PDF 确定性以及匿名获取和中断生命周期。
 
-实施期间一次小型 Python 文档编辑脚本在 import pathlib 阶段遇到 ENOMEM，尚未执行修改。约 995 MiB 可用内存、1908/2048 MiB swap 已用。未终止用户后台进程或修改全局设置，最终完整转换回归通过。该环境事件不计为转换测试失败。
+新增回归测试检查底边只露下一行符杆、还未露五线的情况。完整谱行裁剪不包含下一行碎片，结尾仍有这类碎片则等待。
 
-下一次验收需要取得清晰的《七里香》完整视频。链接匿名获取可用且画质合格时直接使用；否则使用已说明来源的高清本地视频。通过统一入口后逐一对照全部接续、开头、结尾、重复段落和反复记号，再渲染每页检查五线、符头、符杆、连梁及分页；确有缺失时由用户明确选择。最后记录该真实输入的宽高、耗时、确认次数、页数和重复处理一致性。完成前不关闭 #7 或父规格，不把带缺口的结果写为整曲还原通过。
+三个移动窗口模块共 270 行，500 行门禁和 AST 依赖防火墙通过。生产路径 grep 未发现被删除的恢复抽象。三个匿名获取模块和 requirements.txt 与 main 完全一致，无新增依赖。
 
-## 最终文件包与链接复试
+## 真实 URL 双跑
 
-审查修复后的技能 ZIP 已解压到独立位置，通过实际 `uv run` 入口再次处理 studio-exercise.mp4。退出码 0，success、complete=true，5 行、1 页 A4 纵向，7.984 秒，确认数 0。独立代理未读取仓库测试或预期文件，查看了 150 DPI 渲染的全部谱行、两处接续、原蓝色横线与数字 3，以及实际末帧 5.875 秒。没有发现错序或裁断；实物打印仍未验证。本次对应修复后的文件包，与上文 6.522 秒的审查前实验分别记录。
+```sh
+uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibili.com/video/BV1rH4y1R7Rk' --output work/verified-url-1
+uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibili.com/video/BV1rH4y1R7Rk' --output work/verified-url-2
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python tests/verify_real_acceptance.py --first work/verified-url-1 --second work/verified-url-2 --report work/verified-acceptance.json
+```
 
-用户再次提供 BV1b5411x7Ku 后，最终入口又进行一次匿名链接尝试，使用 `timeout 120s uv run ...`。退出码 124，未收到 CLI JSON，结果目录没有下载视频或 PDF。本次没有实际宽高，不能记为画质不足或下载成功。上文 640×360 来自早先另一轮下载，不代表这次结果。没有登录、读取 Cookie 或认证，也未修改配置。
+两次均匿名取得 video-only H.264 格式 30080，实际 1920×1080、298.6 秒，返回 success、complete=true、12 行和 2 页 A4。每行 effective DPI 为 264.182。逐页检查标题、tempo 80、拍号、首尾、符杆和上下边缘，未见光标覆盖或 partial row 混入。原蓝色水平休止记号保留为灰度。
 
+| 指标 | 第一次 | 第二次 |
+|---|---:|---:|
+| seek_count | 57 | 57 |
+| 完整画面分析 | 57 | 57 |
+| selected_keyframes | 15 | 15 |
+| 候选观察 | 242 | 242 |
+| 解码秒数 | 18.235 | 15.005 |
+| 匿名获取秒数 | 7.694 | 6.181 |
+| 转换秒数 | 52.649 | 42.348 |
+| URL 到 PDF 总秒数 | 60.343 | 48.529 |
+| 解码临时盘峰值 bytes | 520564 | 520564 |
 
-## #10 无谱面边缘回归
+57 次完整画面分析相对旧约 599 次下降约 10.5 倍。candidate_observations 是谱行可用性评估数量，没有计为完整画面分析，也没有谱行像素身份比较。稳定性复核和局部采样包含在 57 次中。
 
-2026-10-06，使用独立 Python 3.14 环境及固定 requirements 运行统一 CLI 测试。标题卡、完整谱面、结束卡序列修复前返回 unreadable_window；修复后输出 3 行完整 PDF，并保存 0 秒开始的片头及实际 5.75 秒末帧结束的片尾证据。
+peak_temp_disk 是单 PNG 解码临时目录的实测峰值，不包含匿名下载 staging 和保留的交付证据。decoded_reported_frames=142 是 showinfo 报告的解码画面，含末尾流式核查；seek 前由解码器丢弃的帧未测量。total_elapsed 包含匿名获取和转换，不包含下面的独立验收过程。
 
-新增 3 个测试覆盖 9 类输入，包括中段文字卡、局部五线、末尾残行接结束卡、模糊文字卡、模糊谱面、不可分类空白及全片只有文字卡。无依据的边缘保持等待，全片无谱面不生成 PDF。此轮没有取得真实频道视频，文字卡规则的真实样本验收仍由整体验收任务完成。
+## 来源与一致性
 
-验证命令 `python -m unittest discover -s tests -p test_edge_cards.py -v`，3 项通过。既有 `test_review_regressions.py` 的 5 项回归也通过。
+验证脚本独立重解码标题及 12 条所选谱行，逐像素核对 source_frame/bbox、original_image、selected_candidate 与灰度打印图，并重新检查完整谱行边界。每轮额外 13 次来源解码和 12 次几何复核仅用于验收，不属于转换的性能指标。
 
-## 匿名 yt-dlp 获取 #13
+两次 row count、index、global_y、selected timestamp、source bbox、原裁剪 hash、PDF page/bbox、标题图和 150 DPI 渲染页面完全一致。PDF 字节也一致。
 
-2026-10-06 在项目隔离 uv 环境使用 yt-dlp 2026.08.19。统一 CLI 的 DASH-only 测试先在旧路径返回 `invalid_public_response`，确认旧路径仍要求自研单文件响应。替换后，该受控链接取得真实编码视频、输出 PDF，并记录匿名后端和 ffprobe 参数。依赖在 PEP 723 与 requirements 同时固定，没有安装全局依赖或接触真实凭据。
+PDF SHA-256：`58f0707765576976aa7f1887633b8acc98ef874f65d8c0826678065d1844b0ab`。
 
-离线获取回归覆盖多个画质、视频与音频轨筛选、单文件兜底、错误分 P、高清标记与实测低清矛盾、不可解码、412、官方备用地址、恶意初始 URL、非 HTTPS 重定向、私有 DNS、5 跳重定向上限及已有文件保护。受控 socket 在真实 urllib HTTPS handler 下验证目标连接使用公开数值 IP，TLS 保留原域名。HTTP CONNECT 代理测试验证代理遵循环境配置、隧道目标固定 IP、代理认证不进入源站请求或输出。配置、Cookie、netrc 与插件均使用独立测试哨兵，未读取真实用户数据。
+| row | global_y | actual PTS 秒 | source bbox | PDF 页 |
+|---|---:|---:|---|---:|
+| 0 | 485.0 | 0.0 | [0, 417, 1920, 582] | 1 |
+| 1 | 676.0 | 2.0 | [0, 589, 1920, 779] | 1 |
+| 2 | 867.0 | 148.0 | [0, 391, 1920, 592] | 1 |
+| 3 | 1058.0 | 168.0 | [0, 204, 1920, 395] | 1 |
+| 4 | 1249.5 | 152.0 | [0, 655, 1920, 845] | 1 |
+| 5 | 1440.75 | 158.0 | [0, 847, 1920, 1026] | 1 |
+| 6 | 1632.0 | 176.0 | [0, 650, 1920, 837] | 1 |
+| 7 | 1823.5 | 174.0 | [0, 838, 1920, 1022] | 1 |
+| 8 | 2014.25 | 194.0 | [0, 634, 1920, 836] | 1 |
+| 9 | 2205.25 | 192.0 | [0, 836, 1920, 1014] | 1 |
+| 10 | 2396.5 | 222.0 | [0, 509, 1920, 697] | 1 |
+| 11 | 2587.25 | 246.0 | [0, 699, 1920, 877] | 2 |
 
-运行命令为 `uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_link_input.py -v`。真实 B站 smoke check 和整曲验收本轮未执行；合成视频与受控后端通过不能代替现场匿名高清获取。获取目录安全重试及不可捕获强杀的发布残留仍归 #14。
+## 环境与限制
 
-## Issue 15 恢复完整性
+实测环境为 Python 3.14、uv 0.9.11、ffmpeg 4.4.2、Poppler 22.02.0。依赖沿用 main 的 Pillow 12.3.0、NumPy 2.5.3、OpenCV 5.0.0、ReportLab 5.0.1、yt-dlp 2026.08.19。
 
-2026-10-06，在独立 worktree 通过统一 CLI 做 TDD。PDF 改写及丢失最初仍返回 success；只添加 PDF hash 后，删除 artifact 清单项仍可跳过校验。补齐清单一致性校验后均返回 failed / invalid_progress。文件系统替换边界的故障注入还复现了 PDF 已替换、旧 waiting 状态仍可被认可的问题，现已拒绝该混代结果。manifest 已提交而 state 未提交的中断也拒绝恢复。
+结论只覆盖此真实样本与合成布局。完全周期几何、采样之间换谱、快速整行跳跃、任意未知遮挡以及其他真实视频仍有边界，见 architecture.md。原图选择不等于能自动发现所有遮挡，打印前仍应逐页复核。
 
-运行 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_resume_conversion.py -v，13 项通过。覆盖 PDF 篡改与丢失、缺少 PDF/证据 hash、旧 schema、绝对与越界引用、提交中断、正常 waiting、重放、补图和回答幂等。此验证没有模拟断电或文件系统持久化顺序，不能据此声称整个目录具备断电原子事务。
-
-## #11 DPI 边界与 #10 纯色边缘补验
-
-2026-10-06，在独立 worktree 用真实编码视频调用统一 CLI。基线 d70408a 的 858 像素谱行约为 118.056 DPI，错误返回 success 和完整 PDF。现有 DPI 门槛另将 1090 像素的 149.978 DPI 舍入成 150.0，错误放行。门槛与质量分类现直接由原生宽度除以 A4 可打印宽度计算，不使用报告中的舍入值。1091 像素的 150.116 DPI 属于最低可打印候选；1453 与 1454 像素分别为 199.925 与 200.063 DPI，分属最低可打印与高质量候选。原生谱行宽度保持不变，低于门槛返回 failed / low_print_resolution，不生成 PDF。
-
-独立 DPI 测试 3 项通过，18.907 秒；集成后重新运行 3 项通过，21.758 秒，既有本地转换 6 项通过，20.768 秒。随后门槛进一步改为使用未舍入的原生宽度，DPI 3 项再次通过，24.640 秒。命令为 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_print_dpi.py -v。
-
-#10 原测试把纯色无文字片头列为等待，与附件要求有差异。补充纯色片头、完整谱面、纯色片尾的 CLI 反例，旧版本返回 unreadable_window。规则只增加 RGB 各通道全图极差不超过 2 级的均匀卡片，用以容忍编码误差；中段卡片、渐变、模糊内容、局部五线及未恢复残行仍保留疑点。全片无谱面仍不能成功。4 项边缘测试通过，70.200 秒，包含低对比度线条、纯色卡接首尾残行及中段纯色卡反例。命令为 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_edge_cards.py -v。这些合成边界验证不能替代真实整曲逐页核查或实物打印。
-
-## 2026-10-07 真实 URL 整曲验收
-
-`BV1rH4y1R7Rk` 第一 P 经统一 CLI 匿名取得 H.264 1080p 格式 `30080`，完整 298.6 秒运行两次，均为 `success`、`complete=true`。输出 12 行、2 页 A4，minimum effective DPI 264.182，人工确认与未解决问题均为 0。107 项全量测试串行通过，用时 1531.135 秒。
-
-两次谱行、顺序、9 处拼接和光标证据一致，2 页 150 DPI 渲染逐像素相同。原始裁剪、灰度打印图和 PDF 嵌入图片与真实帧对应；已查看全部页面、拼接及 7 处光标滚动证据。原视频水印保留，没有实物打印。详细时间点、失败原因、格式、耗时与边界见 [真实输入记录](verification-real-bilibili.md) 和 [本轮实现状态](implementation-status.md)。
+全部提交留在本地重构分支，main 未修改。未推送、发布、修改或关闭 GitHub Issues；未改动认证、Cookie、Codex 全局配置或已安装 skill。

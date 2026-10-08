@@ -1,5 +1,6 @@
 """Bounded native frame decoding with actual source PTS."""
 import json
+import math
 from pathlib import Path
 import re
 import subprocess
@@ -22,7 +23,7 @@ def probe_video(source):
         data = json.loads(process.stdout)
         stream = data['streams'][0]
         metadata = {'width': stream['width'], 'height': stream['height'], 'duration': float(data['format']['duration'])}
-        if metadata['duration'] <= 0:
+        if not math.isfinite(metadata['duration']) or metadata['duration'] <= 0:
             raise ValueError
         return metadata
     except (subprocess.SubprocessError, ValueError, KeyError, IndexError, OSError):
@@ -41,7 +42,7 @@ class VideoReader:
         tail = timestamp is None
         start = max(0, self.metadata['duration'] - 1) if tail else timestamp
         path = Path(self.scratch.name) / 'frame.png'
-        command = ['ffmpeg', '-v', 'info', '-nostdin', '-copyts', '-ss', f'{start:.6f}',
+        command = ['ffmpeg', '-v', 'info', '-nostdin', '-copyts', '-ss', str(math.floor(start * 1_000_000) / 1_000_000),
                    '-threads', '2', '-i', str(self.source), '-vf', 'showinfo', '-an', '-vsync', '0', '-threads', '1']
         command += ['-update', '1'] if tail else ['-frames:v', '1']
         command += ['-y', str(path)]
@@ -52,7 +53,12 @@ class VideoReader:
             if budget <= 0:
                 raise ValueError
             process = subprocess.run(command, capture_output=True, check=True, timeout=budget)
-            times = [float(value) for value in re.findall(r'\bpts_time:([0-9.eE+-]+)', process.stderr.decode(errors='replace'))]
+            diagnostic = process.stderr.decode(errors='replace')
+            base = re.search(r'config in time_base:\s*(\d+)/(\d+)', diagnostic)
+            pts = [int(value) for value in re.findall(r'\bpts:\s*(-?\d+)', diagnostic)]
+            if not base or int(base[2]) == 0:
+                raise ValueError
+            times = [value * int(base[1]) / int(base[2]) for value in pts]
             if not times or not path.exists():
                 raise ValueError
             self.metrics['decoded_reported_frames'] += len(times)

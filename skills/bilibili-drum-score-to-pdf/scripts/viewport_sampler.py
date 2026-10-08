@@ -49,7 +49,8 @@ class ViewportSampler:
             crop.save(self.output / crop_name)
             rows.append(RowObservation(timestamp, bbox, y0 + group['top'], group['spacing'],
                                        cursor_occluded=cursor_occluded(crop, group['spacing']),
-                                       obstruction_detected=obstruction_detected(crop, group['top'] - bounds[0], group['spacing']),
+                                       obstruction_detected=obstruction_detected(crop, group['top'] - bounds[0], group['spacing'])
+                                       or any(bbox[0] < b[2] and bbox[2] > b[0] and bbox[1] < b[3] and bbox[3] > b[1] for b in self.overlays),
                                        sharpness=float(cv2.Laplacian(np.asarray(crop.convert('L')), cv2.CV_64F).var()),
                                        original_crop=crop_name, source_frame=name))
         self.metrics['candidate_observations'] += len(rows)
@@ -66,7 +67,11 @@ class ViewportSampler:
             self.metrics['selected_keyframes'] += 1
         if previous and shift >= median(r.staff_spacing for r in previous) * 2:
             with Image.open(self.output / previous[0].source_frame) as old, Image.open(self.output / viewport.frame) as new:
-                self.overlays.extend(stationary_overlays(old, new, median(r.staff_spacing for r in previous)))
+                spacing = median(r.staff_spacing for r in previous)
+                x0, y0, x1, y1 = viewport.detection['bbox']
+                boxes = stationary_overlays(old, new, spacing)
+                self.overlays.extend(b for b in boxes if x0 + spacing <= b[0] and b[2] <= x1 - spacing
+                                     and y0 + spacing <= b[1] and b[3] <= y1 - spacing)
         for cached in self.cache.values():
             for row in cached.rows:
                 if any(row.bbox[0] < box[2] and row.bbox[2] > box[0]
@@ -75,7 +80,15 @@ class ViewportSampler:
         return shift
 
     def run(self):
-        current = self.observe(0)
+        for requested in (0, .5, 2, 4):
+            if requested >= self.reader.metadata['duration']:
+                raise ViewportError('unsupported_layout')
+            try:
+                current = self.observe(requested)
+                break
+            except ConversionError as error:
+                if error.code != 'unsupported_layout' or requested == 4:
+                    raise
         if current.detection['partial_top']:
             raise ViewportError('start_partial')
         self.header = {'timestamp': current.timestamp, 'bbox': current.detection['header_bbox'],
@@ -118,6 +131,7 @@ class ViewportSampler:
         if tail.detection['partial_bottom']:
             raise ViewportError('end_partial')
         # Extra observations stay inside the row's observed time interval.
+        budget = 12
         for track in self.tracker.rows:
             try:
                 select(track)
@@ -126,6 +140,9 @@ class ViewportSampler:
                 pass
             begin, end = track.observations[0].timestamp, track.observations[-1].timestamp
             for fraction in (.25, .5, .75):
+                if budget <= 0:
+                    break
+                budget -= 1
                 viewport = self.observe(begin + (end - begin) * fraction)
                 neighbors = sorted(self.cache.values(), key=lambda v: v.timestamp)
                 previous = max((v for v in neighbors if v.timestamp < viewport.timestamp), key=lambda v: v.timestamp, default=None)

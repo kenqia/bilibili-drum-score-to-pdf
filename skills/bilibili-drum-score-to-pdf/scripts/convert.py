@@ -7,6 +7,7 @@
 import argparse
 import json
 import math
+import signal
 import sys
 from pathlib import Path
 from public_video import acquire, InputError, ACQUISITION_SECONDS
@@ -56,12 +57,16 @@ def convert(source, output):
         tracks = sampler.run()
         rows = export_rows(output, tracks)
         header = sampler.header
-        header.update(save_crop(output, header['source_frame'], header['bbox'], 'header'))
+        if header['bbox'][3] > header['bbox'][1]:
+            header.update(save_crop(output, header['source_frame'], header['bbox'], 'header'))
+        else:
+            header = None
         pages = write_pdf(output, header, rows)
         result.update(status='success', complete=True, rows=rows, header=header,
                       page_count=pages, pdf='score.pdf', transitions=sampler.transitions)
     except ViewportError as error:
-        timestamp, screenshot = sampler.last
+        observation = getattr(error, 'observation', None)
+        timestamp, screenshot = (observation.timestamp, observation.source_frame) if observation else sampler.last
         result.update(status='waiting', issues=[{'reason': error.code, 'timestamp': timestamp, 'screenshot': screenshot}],
                       error={'code': error.code, 'message': '缺少可靠的空间接续或干净完整观察，请提供更好的视频后运行新任务。'})
     except ConversionError as error:
@@ -73,9 +78,14 @@ def convert(source, output):
     finally:
         if reader:
             reader.close()
-        metrics['total_elapsed'] = time.monotonic() - began
+        metrics['conversion_elapsed'] = time.monotonic() - began
+        metrics['total_elapsed'] = metrics['conversion_elapsed']
         result['metrics'] = metrics
     return result
+
+
+def interrupt_conversion(signum, frame):
+    raise KeyboardInterrupt
 
 
 def main():
@@ -94,6 +104,9 @@ def main():
         result = {'status': 'failed', 'complete': False, 'error': {'code': 'existing_output', 'message': '结果目录已有内容，请选择新的空目录。'}}
         print(json.dumps(result, ensure_ascii=False))
         return 2
+    began = time.monotonic()
+    acquisition_elapsed = 0.0
+    previous_handler = signal.signal(signal.SIGTERM, interrupt_conversion)
     print('正在检查视频并提取完整谱行。', file=sys.stderr, flush=True)
     origin = None
     try:
@@ -101,6 +114,7 @@ def main():
         if '://' in source:
             print('正在通过匿名公开接口获取视频，失败时请使用本地高清视频。', file=sys.stderr, flush=True)
             source, origin = acquire(source, args.output, timeout=args.acquisition_timeout)
+            acquisition_elapsed = time.monotonic() - began
         result = convert(source, args.output)
     except InputError as error:
         origin = error.origin
@@ -109,6 +123,13 @@ def main():
             result['error'].update(error.diagnostics)
         if hasattr(error, 'http_status'):
             result['error']['http_status'] = error.http_status
+    except KeyboardInterrupt:
+        result = {'schema_version': 1, 'status': 'failed', 'complete': False, 'rows': [], 'issues': [],
+                  'error': {'code': 'decode_failed', 'message': '转换已中断，请在新的空目录重新运行。'}}
+    finally:
+        signal.signal(signal.SIGTERM, previous_handler)
+    if 'metrics' in result:
+        result['metrics'].update(total_elapsed=time.monotonic() - began, acquisition_elapsed=acquisition_elapsed)
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
     result = persist(result, output, origin=origin)
