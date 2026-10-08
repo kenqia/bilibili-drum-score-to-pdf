@@ -96,3 +96,9 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 固定合成视频的保存决定得到 3 行、独立标题、1 页 A4；原裁剪 RGB 与源 bbox 相等，export/replay 的 PDF 字节一致。覆盖非法协议、未知引用、缺少视觉证据、漏行、未决疑点、重复键、NaN/Infinity、低清、空谱面、目录保护，以及观察包和原视频变更。新增 3 个测试，既有 54 个测试继续通过，共 57 个。
 
 这些是保存决定的离线执行验证，未证明真实 Agent 视觉识别能力。真实 B站整曲 Agent 审阅、资源比较、CI 和默认切换由后续票验收。默认转换未改采样或身份规则，本票未重复真实 URL 双跑。
+
+## 保存决定离线 CI，#39
+
+2026-10-08，统一 CI replay 命令的第一轮 RED 因脚本不存在而失败。实现后 GREEN，受控固定视频准备、提交、导出与重放得到 3 行、1 页 A4，源原裁剪像素与 PDF 字节一致，effective DPI 不低于 150。未知版本、越界坐标和损坏图像分别得到 invalid_decision、invalid_decision 和 source_mismatch。另用缺少 ffmpeg 的子进程验证失败证据只保存异常类型，不泄露路径或日志。
+
+实际命令及 artifact、配置影响和回滚说明见 [离线 CI](agents/offline-ci.md)。此记录是本地验证；GitHub hosted 成功运行需发布后另行记录。本票不修改或关闭 #21，也不把固定决定重放当作 Agent 视觉能力验收。
