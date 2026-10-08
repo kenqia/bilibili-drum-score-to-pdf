@@ -153,3 +153,5 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 ```
 
 四项专用测试通过；此前全量 71 项测试通过，耗时 102.998 秒。后续最终全量记录以集成结果为准。协议不要求固定 4/2 秒间隔，没有恢复撤回的补丁。
+
+同一公开源视频的自适应 prepare 实测为 waiting，48 张原生图、255 张 160×90 导航图、770 张细节和 48 张拼图组成帧。生成像素合计 327,784,320；48 次 seek、124 个 decoder reported frames、原生解码 13.257 秒、缩略导航 10.227 秒、原生处理阶段 71.471 秒。该次 prepare_elapsed 不含导航，后续代码另外记录 total_elapsed 与 native_processing_elapsed。观察包 567,687 字节，后续读取已验证。还未做这批图的实际 Agent 整曲审阅，实际呈交像素和模型成本尚未测；不能拿这些候选数断言完整。公共包保存在仓库外 `work/agent-first/adaptive36-public`，#41 可基于此复查或从匿名 BV 入口重新准备。

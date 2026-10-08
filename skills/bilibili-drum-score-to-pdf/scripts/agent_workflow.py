@@ -79,6 +79,7 @@ def image_pixels(output, images):
 
 
 def prepare(source, output, origin=None, timestamps=None, sampling=None, version=1, prior=None):
+    total_began = time.monotonic()
     source = Path(source).resolve()
     metadata = probe_video(source)
     if metadata['width'] < 700:
@@ -175,8 +176,10 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
                                   'image_pixels': image_pixels(output, observation['images']),
                                   'model_elapsed': None, 'model_tokens': None, 'thumbnail_checks': sampling['thumbnail_checks'],
                                   'thumbnail_elapsed': sampling['thumbnail_elapsed'], 'comparison_composed_frames': len(images),
-                                  'supplement_requests': sampling['used']['requests'], 'prepare_elapsed': time.monotonic()-began}
-        if len(json.dumps(observation, ensure_ascii=False, allow_nan=False).encode()) > MAX_JSON - 4096:
+                                  'supplement_requests': sampling['used']['requests'], 'prepare_elapsed': time.monotonic()-began,
+                                  'total_elapsed': time.monotonic()-total_began,
+                                  'native_processing_elapsed': time.monotonic()-began-count['decode_elapsed']}
+        if len(json.dumps(observation, ensure_ascii=False, indent=2, allow_nan=False).encode()) > MAX_JSON - 4096:
             raise ConversionError('sampling_budget', '观察包达到可恢复 JSON 大小上限，请保留疑点。')
         write_json(output / 'observation.json', observation)
         result = dict(schema_version=VERSION, task_id=task_id, observation_sha256=digest(output / 'observation.json'),
