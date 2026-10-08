@@ -1,6 +1,6 @@
-# Agent-first 固定谱面流程
+# Agent-first 原帧流程
 
-这是 opt-in 路径，默认转换仍使用 moving viewport。首版仅支持固定本地白底多行谱面。观察包采样首帧、中点和末帧，不能证明采样之间没有短暂换谱。Agent 必须检查完整性，存在疑点时不能标记 complete。
+这是 opt-in 路径，默认转换仍使用 moving viewport。v1/v2 保留固定白底多行谱面试验，v3 支持有可靠重叠的连续长谱。观察包采样首帧、中点和末帧，不能证明采样之间没有短暂换谱。Agent 必须检查完整性，存在疑点时不能标记 complete。
 
 ## 操作
 
@@ -81,3 +81,17 @@ uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibil
 入口先检查空目录，再复用匿名获取、公开连接目标检查、每跳重定向检查、总 deadline 和实际解码。获取成功的原视频保存在任务目录，后续操作核对 source.sha256，不重新下载、不修改原视频。observation.source 和最终 manifest.source 保留实测尺寸、原视频 hash 及 origin 的 BV、分 P、匿名标记和后端诊断，不保存签名媒体地址。
 
 获取失败时，目录仅保存 phase=acquisition 的脱敏 manifest。只有该诊断时，可原目录重试 BV 或改用本地视频。存在原视频、观察图、任务记录、决策或其他文件时，prepare 拒绝覆盖，改用新的空目录。候选格式提前中止仍由 #20 跟踪；本流程复用获取能力，没有修复该问题。受控后端重放证明 BV 与同一原视频的本地流程一致，真实 B站整曲 Agent 审阅由 #41 验收。
+
+## 连续长谱决定 v3，#35
+
+移动谱面使用 v3。v1/v2 仅保留固定布局试验兼容，不能用它们的 complete 声明代替滚动接续审计。v3 沿用 v2 通用字段与原生框，增加 observations、transitions、coverage。所选 rows 另外必须含 instance_id 和 observation_id。
+
+observations 按帧时间、帧内从上到下排列，每条只含 id、frame_id、instance_id、staff_y、spacing、bbox、complete、evidence。staff_y 是原帧五线顶部的原生 y 坐标，spacing 是正数线间距；二者由 Agent 提出。id 唯一，instance_id 标识长谱中的空间实例。相同谱段在后续位置出现时使用新实例，停留或滚动后的同一行使用原实例。bbox 是该次观察的行框，部分露出可记录 complete=false。选中原裁剪必须引用同一完整观察及相同建议 bbox，再通过 v2 的边界、细节、精修与干净候选检查。
+
+每对相邻帧都有一条 transitions，只含 from_frame、to_frame、matches、evidence。matches 是观察 ID 对的有序列表，例如 `[["0-B","1-B"],["0-C","1-C"]]`。引用两张实际呈交原图，在 evidence 中描述可见小节、符号或其他对应依据。至少两条独立重叠行；只有单行重叠或完全等间距但视觉仍无法判断时等待补采。不得把几何上某个合理位移冒充已看清的对应。
+
+脚本检查引用、实例相等、行顺序、共同纵向位移、横向布局与比例。线间距和行宽允许最多 3% 差异，横向偏移最多半个线间距且至少 2 像素。纵向位移误差最多最小线间距的一半；反向推进、矛盾位移和交叉对应等待。所有共有实例都须显式匹配，置信度不能豁免检查。计算 `scroll_offset += max(0, scroll_delta)` 和 `global_y = staff_y + scroll_offset`；新行只能出现在已观察长谱末端之后。每帧锚点严格递增、行框不交叠，每个空间实例只打印一次，并按首次出现顺序完整选择。
+
+coverage 只含 first_frame、last_frame、unresolved，必须引用观察包首尾且 unresolved 为空。导出审计保留首尾实际时间、全部接续及 sample_gap、已接受实例、身份依据和每行来源。缺少首尾、接续、身份或选择时返回 waiting；非法字段和未知引用返回 failed。等待疑点记录区间和两张原图，供局部复查。审计明确 `hidden_content_proven_absent=false`，检查不了未采样画面中是否短暂出现新谱。Agent 提出的锚点和对应也不是脚本独立识别五线的证明，仍需实际视觉验收。
+
+本票的 prepare 仍只有首、中、尾三张相邻上下文。对照图包含全部三帧，接续两次都引用共同中帧；尚无分批采样。#36 扩展采样和补采，#38 扩展持久化批次。中尾无重叠的真实长视频必须等待，不能用三帧宣称覆盖整曲。原图 hash 只核查来源，不作为空间身份依据。

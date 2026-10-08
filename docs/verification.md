@@ -125,3 +125,19 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 2026-10-08，统一 CI replay 命令的第一轮 RED 因脚本不存在而失败。实现后 GREEN，受控固定视频准备、提交、导出与重放得到 3 行、1 页 A4，源原裁剪像素与 PDF 字节一致，effective DPI 不低于 150。未知版本、越界坐标和损坏图像分别得到 invalid_decision、invalid_decision 和 source_mismatch。另用缺少 ffmpeg 的子进程验证失败证据只保存异常类型，不泄露路径或日志。全量 59 个 unittest 本地通过，新增 CI command 的 2 个测试再次通过。原裁剪由独立 ffmpeg 重解码核对，DPI 同时按原裁剪宽度与 PDF 放置宽度计算。
 
 实际命令及 artifact、配置影响和回滚说明见 [离线 CI](agents/offline-ci.md)。此记录是本地验证；GitHub hosted 成功运行需发布后另行记录。本票不修改或关闭 #21，也不把固定决定重放当作 Agent 视觉能力验收。
+
+## 连续长谱视觉对应记录，#35
+
+统一 CLI 的第一轮 RED 因 schema_version=3 未实现而拒绝；增加空间观察、相邻对应与覆盖检查后 GREEN。下一轮等待反例虽然拒绝导出，但 issues 为空，RED；保存前后图像与时间区间后 GREEN。验证停留不重复、等间距行的明确视觉对应、同内容不同空间实例、半行等待后选完整原帧，以及共同位移矛盾、比例变化、单行重叠、缺少首尾、缺少共同身份、成环、交叠、漏行和重复实例反例。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_agent_continuity.py -v
+```
+
+三项 CLI 测试通过，固定保存决定得到 4 条空间行，global_y 为 220、440、660、880；export/replay 的 PDF 字节相同。既有 v1/v2 来源检查继续保留。几何测试的预期位移来自手工构造的 220 像素推进，不用脚本结果反推预期。
+
+另以 view_image 实际查看 2 秒公开合成视频的三帧对照、三张原图和 8 张原生细节。0.0 s 可见 A/B/C，1.0 s 可见 B/C/D，1.75 s 与中帧相同。B/C 的可见字母与位置支持 220 像素推进；音符形状相同，D 仍为后续空间实例。字母只是视觉测试标记，不是假冒真实曲谱识别。首帧三行及中帧 D 的五线、圆形音符、字母与两侧边界在原生细节完整可见，选择这些单帧框导出 4 行、1 页 A4。
+
+实际审阅材料、仅实际阅读图像 ID 的决定、公开提示词及可见模型标识保存在仓库外共享 `work/agent-first/visual-35`。模型精确版本不可见，记录 unknown。独立 Pillow 核对四条 RGB 原裁剪与源 bbox 逐像素相同，灰度图与原裁剪转灰度相同，保存决定 replay 的 PDF 字节与首次导出相同。这只是短合成段的一次实际观察；三张稀疏图不能证明真实整曲覆盖，本票未重复旧默认的 BV 双跑，也未宣称未采样画面没有新内容。
+
+#35 合入当前 integration/agent-first 后无需冲突处理。全量 68 项 unittest 于本工作树通过，耗时 74.144 秒；git diff --check 通过。无新生产依赖，无远端或配置操作。

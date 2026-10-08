@@ -11,6 +11,7 @@ from public_video import acquire, ACQUISITION_SECONDS, InputError, retryable_acq
 from score_detect import analyze_frame
 from cursor_detect import cursor_occluded, obstruction_detected
 from agent_regions import native_rows
+from agent_continuity import continuous_rows
 from manifest import save_crop
 from pdf_export import PRINTABLE_WIDTH_INCHES, write_pdf
 
@@ -179,9 +180,11 @@ def validate(decision, state, observation):
     fields = {'schema_version', 'task_id', 'observation_sha256', 'decision_id', 'model', 'prompt', 'presented_images',
               'visual_review', 'complete', 'evidence', 'selected_candidates', 'unresolved'}
     version = decision.get('schema_version') if isinstance(decision, dict) else None
-    if version == 2:
+    if version in (2, 3):
         fields = fields - {'selected_candidates'} | {'rows'}
-    if not isinstance(decision, dict) or set(decision) != fields or type(version) is not int or version not in (1, 2):
+    if version == 3:
+        fields |= {'observations', 'transitions', 'coverage'}
+    if not isinstance(decision, dict) or set(decision) != fields or type(version) is not int or version not in (1, 2, 3):
         raise ConversionError('invalid_decision', '决定字段或版本非法。')
     if decision['task_id'] != state['task_id'] or decision['observation_sha256'] != state['observation_sha256']:
         raise ConversionError('invalid_decision', '决定不属于当前观察包。')
@@ -198,11 +201,20 @@ def validate(decision, state, observation):
     presented = decision['presented_images']
     if not isinstance(presented, list) or not all(isinstance(i, str) and i in known for i in presented) or len(set(presented)) != len(presented):
         raise ConversionError('invalid_decision', '图像呈交清单非法。')
-    if version == 2:
+    if version in (2, 3):
         if 'comparison' not in presented or any(f['id'] not in presented for f in observation['frames']):
             raise ConversionError('missing_evidence', '必须查看相邻对照图与全部原帧。')
         if not decision['visual_review'] or not decision['complete'] or decision['unresolved']:
             raise ConversionError('review_required', '视觉审阅或完整性存在未决疑点。')
+        if version == 3:
+            try:
+                return continuous_rows(decision, observation, presented)[0]
+            except ConversionError as error:
+                error.issues = [dict(reason=error.code, start=a['timestamp'], end=b['timestamp'],
+                                     before_image=a['id'], after_image=b['id'],
+                                     before_screenshot=a['path'], after_screenshot=b['path'])
+                                for a, b in zip(observation['frames'], observation['frames'][1:])]
+                raise
         return native_rows(decision, observation, presented)
     if any(f['analysis']['bbox'] != observation['frames'][0]['analysis']['bbox'] or f['analysis']['row_bounds'] != observation['frames'][0]['analysis']['row_bounds'] for f in observation['frames'][1:]):
         raise ConversionError('review_required', 'v1 选择协议只支持固定检测几何，请改用原生谱行决定。')
@@ -261,6 +273,8 @@ def export(task, output):
             row = save_crop(output, frame['path'], c['bbox'], f'row-{c["index"]:03d}')
             row.update(id=f'row{c["index"]}', index=c['index'], timestamp=frame['timestamp'], pts=frame['pts'], time_base=frame['time_base'],
                        selected_candidate=c, quality={'effective_dpi': round(dpi, 3), 'complete': True})
+            if decision['schema_version'] == 3:
+                row.update(**{k: c[k] for k in ('instance_id', 'observation_id', 'global_y', 'scroll_offset')})
             rows.append(row)
         first = observation['frames'][0]
         bbox = first['analysis']['header_bbox']
@@ -279,6 +293,10 @@ def export(task, output):
                       skill_sha256=digest(Path(__file__).parents[1] / 'SKILL.md'),
                       presented_images=[i for i in observation['images'] if i['id'] in decision['presented_images']],
                       prompt_sha256=hashlib.sha256(decision['prompt']['text'].encode()).hexdigest(), metrics=count)
+        if decision['schema_version'] == 3:
+            result['coverage'] = continuous_rows(decision, observation, decision['presented_images'])[1]
+        else:
+            result['coverage'] = {'scope': 'fixed_layout_trial', 'hidden_content_proven_absent': False}
         write_json(output / 'decision.json', decision)
         return result
     finally:
@@ -318,6 +336,7 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
         code = error.code if isinstance(error, ConversionError) else 'invalid_input'
         result = dict(status='waiting' if code in ('unsupported_layout', 'review_required', 'missing_evidence') else 'failed',
                       complete=False, phase=operation, rows=[], issues=[], error={'code': code, 'message': str(error) if isinstance(error, ConversionError) else '记录或输入不可用。'})
+        result['issues'] = getattr(error, 'issues', [])
     if target and target.exists() and result.get('error', {}).get('code') != 'existing_output':
         write_json(target / 'manifest.json', result)
     return result

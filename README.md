@@ -37,4 +37,6 @@ GitHub Actions 在独立 Linux runner 中运行全部离线回归与固定 Agent
 
 ## Agent-first 试验路径
 
-固定谱面可通过同一入口执行 prepare、submit、export 和 replay，prepare 接受本地视频或匿名 HTTPS BV 链接及分 P。Agent 阅读原图、相邻对照图及原生细节并提交结构化选择，脚本验证并从真实原帧导出。默认流程保持现有 moving viewport。操作、协议和当前限制见 [Agent workflow](docs/agents/agent-workflow.md)。
+固定谱面与有可靠视觉重叠的连续长谱可通过同一入口执行 prepare、submit、export 和 replay，prepare 接受本地视频或匿名 HTTPS BV 链接及分 P。Agent 阅读原图、相邻对照图及原生细节并提交结构化选择，脚本验证并从真实原帧导出。默认流程保持现有 moving viewport。操作、协议和当前限制见 [Agent workflow](docs/agents/agent-workflow.md)。
+
+连续长谱使用 v3 的空间实例、相邻对应与覆盖审计。每对观察至少两条可靠重叠行；单行重叠、几何冲突、缺少首尾或未决区间会等待。当前首、中、尾三帧不适合证明整曲覆盖；后续补采样前，不得把无重叠的长视频标为完整。
