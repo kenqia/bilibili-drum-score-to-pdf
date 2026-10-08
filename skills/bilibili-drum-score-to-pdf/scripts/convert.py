@@ -74,7 +74,7 @@ def main():
     parser = argparse.ArgumentParser(description='Restore a local white multi-staff drum score as A4 PDF.')
     parser.add_argument('input', nargs='?', help='Local video path or HTTPS Bilibili BV video URL')
     parser.add_argument('--output', help='Output directory')
-    parser.add_argument('--operation', choices=['convert', 'prepare', 'submit', 'supplement', 'export', 'replay'], default='convert')
+    parser.add_argument('--operation', choices=['convert', 'prepare', 'submit', 'resume', 'supplement', 'export', 'replay'], default='convert')
     parser.add_argument('--task', help='Existing Agent observation task')
     parser.add_argument('--decision', help='Agent-authored JSON decision')
     parser.add_argument('--acquisition-timeout', type=float, default=ACQUISITION_SECONDS,

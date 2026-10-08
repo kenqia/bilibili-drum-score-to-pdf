@@ -5,7 +5,8 @@ import platform
 import math
 import time
 import copy
-from agent_sampling import plan, check_request
+import os
+from agent_sampling import plan, check_request, LIMITS
 from pathlib import Path
 import subprocess
 from PIL import Image, ImageDraw, __version__ as pillow_version
@@ -32,7 +33,9 @@ def digest(path):
 
 
 def write_json(path, value):
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n')
+    temporary = path.with_name(path.name + '.tmp')
+    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n')
+    os.replace(temporary, path)
 
 
 def finite_float(value):
@@ -184,27 +187,72 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
                                   'native_processing_elapsed': time.monotonic()-began-count['decode_elapsed']}
         if len(json.dumps(observation, ensure_ascii=False, indent=2, allow_nan=False).encode()) > MAX_JSON - 4096:
             raise ConversionError('sampling_budget', '观察包达到可恢复 JSON 大小上限，请保留疑点。')
-        write_json(output / 'observation.json', observation)
-        result = dict(schema_version=VERSION, task_id=task_id, observation_sha256=digest(output / 'observation.json'),
+        previous = load_json(output / 'task.json') if (output / 'task.json').exists() else {}
+        write_json(output / 'observation.next.json', observation)
+        result = dict(schema_version=VERSION, task_id=task_id, observation_sha256=digest(output / 'observation.next.json'),
                       status='waiting', complete=False, phase='review', observation_version=version, rows=[], issues=[],
                       next_action='Read comparison and native detail images, then submit a visual decision.', metrics=observation['metrics'])
-        write_json(output / 'task.json', result)
+        result['decision_history'] = previous.get('decision_history', [])
+        write_json(output / 'sampling.next.json', sampling)
+        result['sampling_sha256'] = digest(output / 'sampling.next.json')
+        result['sampling_usage'] = sampling['used']
+        write_json(output / 'task.next.json', result)
+        write_json(output / 'publication.json', {'observation_sha256': result['observation_sha256'], 'state_sha256': digest(output / 'task.next.json'), 'sampling_sha256': result['sampling_sha256']})
+        recover_publication(output)
         return result
     finally:
         reader.close()
 
 
+def recover_publication(task):
+    journal = task / 'publication.json'
+    if not journal.exists():
+        return
+    record = load_json(journal)
+    if set(record) != {'observation_sha256', 'state_sha256', 'sampling_sha256'}:
+        raise ConversionError('invalid_task', '观察发布记录非法。')
+    for stem, key in [('observation', 'observation_sha256'), ('sampling', 'sampling_sha256'), ('task', 'state_sha256')]:
+        pending = task / f'{stem}.next.json'
+        current = task / f'{stem}.json'
+        path = pending if pending.exists() else current
+        if digest(path) != record[key]:
+            raise ConversionError('source_mismatch', '中断发布记录已损坏。')
+        if pending.exists():
+            os.replace(pending, current)
+    journal.unlink()
+
+
 def checked_task(task):
     if task.is_symlink():
         raise ConversionError('invalid_task', '任务路径非法。')
+    recover_publication(task)
     state = load_json(task / 'task.json')
     observation = load_json(task / 'observation.json')
+    if not isinstance(state, dict) or not isinstance(observation, dict):
+        raise ConversionError('invalid_task', '任务记录非法。')
+    if type(state.get('schema_version')) is not int or state['schema_version'] != VERSION or type(observation.get('schema_version')) is not int or observation['schema_version'] != VERSION:
+        raise ConversionError('invalid_task', '任务协议版本不受支持，不迁移旧任务。')
+    history = state.get('decision_history', [])
+    if not isinstance(history, list):
+        raise ConversionError('invalid_task', '接受历史非法。')
+    for index, entry in enumerate(history):
+        if not isinstance(entry, dict) or not isinstance(entry.get('sha256'), str) or len(entry['sha256']) != 64 or any(c not in '0123456789abcdef' for c in entry['sha256']):
+            raise ConversionError('invalid_task', '接受历史引用非法。')
+        if entry.get('path') != f'accepted-{index:04d}-{entry.get("sha256")}.json' or digest(task / entry['path']) != entry['sha256']:
+            raise ConversionError('source_mismatch', '接受决定历史已损坏。')
     if digest(task / 'observation.json') != state['observation_sha256'] or observation['task_id'] != state['task_id']:
         raise ConversionError('source_mismatch', '观察包已改变。')
     for image in observation['images']:
         path = task / image['path']
         if path.parent != task or path.is_symlink() or digest(path) != image['sha256']:
             raise ConversionError('source_mismatch', '观察图像已改变。')
+    ledger_path = task / 'sampling.json'
+    if state.get('sampling_sha256') and digest(ledger_path) != state['sampling_sha256']:
+        raise ConversionError('invalid_request', '采样预算记录已改变。')
+    ledger = load_json(ledger_path) if ledger_path.exists() else observation['sampling']
+    used = ledger['used']
+    if ledger['limits'] != LIMITS or set(used) != set(LIMITS) or any(type(v) not in (int, float) or not math.isfinite(v) or v < 0 for v in used.values()) or any(type(used[k]) is not int for k in ('requests','native_frames','requested_frames')) or any(used[k] < observation['sampling']['used'][k] for k in used):
+        raise ConversionError('invalid_request', '采样预算记录非法。')
     if digest(observation['source']['path']) != observation['source']['sha256']:
         raise ConversionError('source_mismatch', '原视频已改变。')
     return state, observation
@@ -276,20 +324,82 @@ def validate(decision, state, observation):
 
 def submit(task, path):
     state, observation = checked_task(task)
-    decision = load_json(path)
-    validate(decision, state, observation)
-    record = task / 'decision.json'
-    if record.exists():
-        if load_json(record) != decision:
-            raise ConversionError('existing_decision', '已有决定，请保留原任务；修订流程尚未启用。')
-    else:
-        write_json(record, decision)
-    return {**state, 'phase': 'accepted', 'next_action': 'Export to a new empty directory.'}
+    value = load_json(path)
+    batch = isinstance(value, dict) and type(value.get('schema_version')) is int and value['schema_version'] == 5
+    decision = value.get('decision') if batch else value
+    history = state.get('decision_history', [])
+    if not isinstance(decision, dict) or decision.get('task_id') != state['task_id'] or decision.get('observation_sha256') != state['observation_sha256']:
+        raise ConversionError('invalid_decision', '决定不属于当前观察包。')
+    decision_id = value.get('decision_id') if isinstance(value, dict) else None
+    if not isinstance(decision_id, str) or not decision_id.strip() or len(decision_id) > 2000:
+        raise ConversionError('invalid_decision', '缺少决定 ID。')
+    for entry in history:
+        if entry['decision_id'] == decision_id:
+            if entry['observation_sha256'] != state['observation_sha256']:
+                raise ConversionError('invalid_decision', '旧包决定不能在新观察版本继续。')
+            if load_json(task / entry['path']) != value:
+                raise ConversionError('existing_decision', '同一决定 ID 的内容不同。')
+            return state
+    reviewed = [f['id'] for f in observation['frames']]
+    revision = None
+    if batch:
+        if set(value) != {'schema_version', 'decision_id', 'reviewed_frames', 'revision_of', 'decision'} or not isinstance(decision, dict) or type(decision.get('schema_version')) is not int or decision.get('schema_version') not in (1,2,3,4):
+            raise ConversionError('invalid_decision', '批次须封装已支持的决定协议。')
+        reviewed = value['reviewed_frames']
+        all_frames = [f['id'] for f in observation['frames']]
+        if not isinstance(reviewed, list) or not reviewed or reviewed != all_frames[:len(reviewed)]:
+            raise ConversionError('invalid_decision', '批次必须是从首帧开始的连续已审前缀。')
+        if len(reviewed) < len(all_frames) and decision['schema_version'] not in (3,4):
+            raise ConversionError('invalid_decision', '固定协议不能用于部分进度。')
+        revision = value['revision_of']
+        if revision is not None and (not history or revision != history[-1]['decision_id']):
+            raise ConversionError('existing_decision', '修订必须明确引用最新已接受决定。')
+    if history:
+        baseline = load_json(task / history[0]['path'])
+        baseline = baseline.get('decision', baseline)
+        if not isinstance(decision, dict) or decision.get('model') != baseline['model'] or decision.get('schema_version') != baseline['schema_version']:
+            raise ConversionError('invalid_decision', '不能混用模型标识或决定协议，请创建新任务。')
+    previous_frames = state.get('reviewed_frames', [])
+    if previous_frames and revision is None:
+        if reviewed[:len(previous_frames)] != previous_frames or len(reviewed) <= len(previous_frames):
+            raise ConversionError('existing_decision', '继续批次必须扩展已审前缀，修改请显式修订。')
+        previous = load_json(task / history[-1]['path'])
+        previous = previous.get('decision', previous)
+        for key in ('rows', 'observations', 'transitions', 'segments', 'boundaries'):
+            if key in previous and decision.get(key, [])[:len(previous[key])] != previous[key]:
+                raise ConversionError('existing_decision', '已接受身份或裁剪改变，请显式修订并重新审计。')
+    partial = copy.deepcopy(observation)
+    partial['frames'] = [f for f in observation['frames'] if f['id'] in reviewed]
+    allowed = {i['id'] for i in observation['images'] if i.get('frame_id') in reviewed or i['kind'] == 'comparison'}
+    if not isinstance(decision, dict) or any(i not in allowed for i in decision.get('presented_images', [])):
+        raise ConversionError('invalid_decision', '批次不能引用未审尾部。')
+    validate(decision, state, partial)
+    complete = len(reviewed) == len(observation['frames'])
+    staged = task / 'accepted.next.json'
+    write_json(staged, value)
+    record_hash = digest(staged)
+    entry = dict(path=f'accepted-{len(history):04d}-{record_hash}.json', decision_id=decision_id, observation_sha256=state['observation_sha256'],
+                 observation_version=state['observation_version'], revision_of=revision)
+    os.replace(staged, task / entry['path'])
+    entry['sha256'] = record_hash
+    state.update(decision_history=history+[entry], reviewed_frames=reviewed, phase='accepted' if complete else 'batch_accepted',
+                 complete=complete, status='waiting', issues=[] if complete else [{'reason':'unreviewed_tail','frames':[f['id'] for f in observation['frames'][len(reviewed):]]}],
+                 next_action='Export to a new empty directory.' if complete else 'Review the next overlapping batch and submit the cumulative prefix.')
+    write_json(task / 'task.json', state)
+    if complete:
+        write_json(task / 'decision.json', decision)
+    return state
 
 
 def export(task, output):
     state, observation = checked_task(task)
-    decision = load_json(task / 'decision.json')
+    if state.get('decision_history'):
+        if state.get('phase') != 'accepted' or not state.get('complete'):
+            raise ConversionError('review_required', '仍有未审尾部或观察包已更新。')
+        record = load_json(task / state['decision_history'][-1]['path'])
+        decision = record.get('decision', record)
+    else:
+        decision = load_json(task / 'decision.json')
     chosen = validate(decision, state, observation)
     count = metrics()
     reader = VideoReader(observation['source']['path'], observation['source'], count)
@@ -354,6 +464,7 @@ def export(task, output):
             result['coverage'] = continuous_rows(decision, observation, decision['presented_images'])[1]
         else:
             result['coverage'] = {'scope': 'fixed_layout_trial', 'hidden_content_proven_absent': False}
+        result['decision_history'] = state.get('decision_history', [])
         result['metrics']['presented_image_pixels'] = image_pixels(task, result['presented_images'])
         result['metrics']['model_elapsed'] = None
         result['metrics']['model_tokens'] = None
@@ -383,6 +494,9 @@ def supplement(task, path):
     reserved = copy.deepcopy(sampling)
     reserved['used']['decode_seconds'] += min(60 * len(timestamps), max(0, sampling['limits']['decode_seconds'] - sampling['used']['decode_seconds']))
     write_json(ledger_path, reserved)
+    state.update(sampling_sha256=digest(ledger_path), sampling_usage=reserved['used'], phase='supplement_pending', complete=False,
+                 issues=[request['issue']], next_action='Inspect the unresolved sampling request, then supplement or explicitly revise the decision.')
+    write_json(task / 'task.json', state)
     version = state.get('observation_version', 1)
     archive = task / f'observation-v{version}.json'
     if not archive.exists():
@@ -392,7 +506,6 @@ def supplement(task, path):
                      timestamps=timestamps, sampling=sampling, version=version+1, prior=observation)
     if decision.exists():
         decision.rename(task / f'decision-v{version}.json')
-    write_json(ledger_path, sampling)
     write_json(task / f'request-{version+1}.json', request)
     return result
 
@@ -413,6 +526,8 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
             result = prepare(source, target, origin=origin)
         elif operation == 'supplement':
             result = supplement(Path(task), decision)
+        elif operation == 'resume':
+            result, _ = checked_task(Path(task))
         elif operation == 'submit':
             result = submit(Path(task), decision)
         else:
@@ -433,6 +548,13 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
         result = dict(status='waiting' if code in ('unsupported_layout', 'review_required', 'missing_evidence', 'sampling_budget') else 'failed',
                       complete=False, phase=operation, rows=[], issues=[], error={'code': code, 'message': str(error) if isinstance(error, ConversionError) else '记录或输入不可用。'})
         result['issues'] = getattr(error, 'issues', [])
+        if operation in ('submit', 'supplement') and result['status'] == 'waiting':
+            try:
+                saved, _ = checked_task(Path(task))
+                saved.update(complete=False, phase='review', issues=result['issues'] or [result['error']], next_action='Resolve the saved review issues before export.')
+                write_json(Path(task) / 'task.json', saved)
+            except (ConversionError, OSError, ValueError, TypeError, KeyError):
+                pass
     if target and target.exists() and result.get('error', {}).get('code') != 'existing_output':
         write_json(target / 'manifest.json', result)
     return result

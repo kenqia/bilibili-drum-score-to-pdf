@@ -36,7 +36,7 @@ JSON 必须且只能包含下列字段。没有第二个模型 API，也不读�
 | selected_candidates | 按谱行顺序排列的候选 ID，每行一次 |
 | unresolved | 未决疑点列表，有疑点不导出 |
 
-submit 验证并保存 decision.json。同一决定重试幂等，不覆盖其他决定。首版不支持修订和任务恢复。export 与 replay 都重新核对视频和观察图 hash，重解码实际 PTS、尺寸与 RGB 图像，再从单帧精确裁剪。保存 RGB 原裁剪、仅灰度打印图和独立标题，拒绝低于 150 effective DPI，A4 只在行间分页。
+submit 验证并保存接受历史及当前 decision.json。同一决定重试幂等，不覆盖其他决定。批次恢复与显式修订见下文。export 与 replay 都重新核对视频和观察图 hash，重解码实际 PTS、尺寸与 RGB 图像，再从单帧精确裁剪。保存 RGB 原裁剪、仅灰度打印图和独立标题，拒绝低于 150 effective DPI，A4 只在行间分页。
 
 重放证明已保存决定的执行可复现，不能证明 Agent 的识别能力。保存 script_revision、协议版本、公开提示词 hash、模型可见标识和图像清单。模型耗时与 token 不可测时保留 null。系统提示词、认证、私密聊天和外部敏感地址不进入记录。
 
@@ -121,3 +121,26 @@ segments 按出现顺序排列，每段只含 id、frames、rows、observations�
 每对相邻段必须有一条 boundaries，字段严格限定为 from_segment、to_segment、from_frame、to_frame、change、relation、before_complete、after_complete、continuity_verified、evidence_images、unresolved、evidence。引用前段末帧及后段首帧；evidence_images 至少含这两张实际查看的原图与 comparison，原生细节同时保存在每段原裁剪记录。change 记录 page_turn、scale 或 layout_jump，relation 记录 next、skip、backward 或 uncertain。只有 page_turn、next、三个确认布尔值均为 true、unresolved 为空才能继续。边界任何谱行观察仍为 partial 则等待。evidence 必须说明可见接续依据，例如前页末小节与后页首小节的明确连续标记。页码数量完整和同内容相似都不能单独证明接续；看不清时填写 uncertain。
 
 顶层 coverage 沿用 v3 首尾与 unresolved。非法字段或引用为 failed；跳页、回跳、缩放、突变、缺帧和不明边界为 waiting，保留时间区间及前后截图。导出保存段内坐标、段间判断与 extra 的原视频 PTS、bbox、RGB 和灰度裁剪，按段序排入 A4，保存决定可直接 replay。v4 不使用旧首帧检测框决定是否存在标题。审计仍明确 hidden_content_proven_absent=false，无法证明未采样时间没有隐藏页面。
+
+
+## 批次、修订与恢复，#38
+
+`resume --task /absolute/task` 核对任务协议、视频、观察图、接受历史和采样账本，再返回已保存状态。它不调用模型。等待输入时可以退出；下次从 `reviewed_frames` 末帧继续，保留与下一组的重叠。
+
+`submit` 另接受 v5 批次封装，字段严格限定为 schema_version=5、decision_id、reviewed_frames、revision_of、decision。decision 是完整的 v3/v4 前缀决定，绑定当前完整观察包 hash，coverage.last_frame 指向当前前缀末帧。reviewed_frames 必须按观察包顺序从首帧开始；部分批次不能引用尾部原帧。每次续批提交累计前缀，rows、observations、transitions 或 segments、boundaries 保留上次接受内容，随后增加新观察。脚本重新执行前缀空间和接续审计，最终每条空间实例只导出一次。批次没有要求一次审完所有生成图像。
+
+例如首批审过 frame-000、frame-001，封装的 reviewed_frames 为这两个 ID，内部 coverage.last_frame 为 frame-001。下一批同时比较 frame-001、frame-002，并提交三帧累计决定。部分接受返回 phase=batch_accepted、complete=false，持久化未审尾部和下一步；export 此时等待。覆盖全部原帧且审计通过才返回 phase=accepted。完整 v1/v2 固定决定仍可直接提交和重放，也可以用 v5 封装进行显式修订，但不能作为部分批次。
+
+同一外层 decision_id 和相同内容重试不增加记录；相同 ID 不同内容拒绝。修订使用新 ID，并将 revision_of 设置为最新已接受外层 ID。修订可以更换裁剪或身份，脚本重新审计整个提交前缀，不继承旧 complete。任务不能混用模型标识或内部决定协议；改用模型或协议请从新空目录 prepare。精确模型版本不可见时明确记录 unknown。
+
+接受历史以受控索引和内容 hash 命名，不使用 Agent ID 作为路径。task.json 原子发布历史引用与进度；发布前中断留下的无引用文件不当成已接受决定。观察更新通过 publication.json 将观察包、预算和任务状态一起提交；resume 完成已记录且 hash 正确的发布。损坏、未知任务协议、跨任务或旧观察 hash 均拒绝。不存在任务记录的 prepare 中断保留原生图，改用新空目录重新准备，不从零散图片猜测进度。当前实现要求同一任务串行操作，不支持同时 submit/supplement。
+
+补采执行前保存保守预扣账本及待解决请求。失败和中断不会退还预算；resume 的 sampling_usage 显示消费，已接受历史仍在。成功补采生成新观察版本，旧包决定不能当作当前完整结果。新包必须重新审阅；等待疑点保存到 task.json。若旧包下补采中断而没有新增证据，使用明确修订记录复查结果，或继续有额度的补采，不直接导出旧 complete。
+
+```sh
+uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation resume --task /absolute/task
+uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation submit --task /absolute/task --decision /absolute/prefix-or-revision.json
+uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation replay --task /absolute/task --output /absolute/new-replay
+```
+
+导出中断保留已有原图与诊断，重试必须使用新的空结果目录。回滚代码时也保留任务目录和历史；旧代码不认识的新协议必须拒绝，不能自动转入 moving viewport。相同保存决定在独立目录重放核对来源、行序和 PDF 字节；再次视觉推理可产生不同合法决定。
