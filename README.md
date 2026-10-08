@@ -35,4 +35,4 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 ## Agent-first 试验路径
 
-固定本地谱面可通过同一入口执行 prepare、submit、export 和 replay。Agent 阅读原图、相邻对照图及原生细节并提交结构化选择，脚本验证并从真实原帧导出。默认流程保持现有 moving viewport。操作、协议和当前限制见 [Agent workflow](docs/agents/agent-workflow.md)。
+固定谱面可通过同一入口执行 prepare、submit、export 和 replay，prepare 接受本地视频或匿名 HTTPS BV 链接及分 P。Agent 阅读原图、相邻对照图及原生细节并提交结构化选择，脚本验证并从真实原帧导出。默认流程保持现有 moving viewport。操作、协议和当前限制见 [Agent workflow](docs/agents/agent-workflow.md)。

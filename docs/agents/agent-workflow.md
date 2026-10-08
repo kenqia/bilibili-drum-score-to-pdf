@@ -41,3 +41,15 @@ submit 验证并保存 decision.json。同一决定重试幂等，不覆盖其�
 重放证明已保存决定的执行可复现，不能证明 Agent 的识别能力。保存 script_revision、协议版本、公开提示词 hash、模型可见标识和图像清单。模型耗时与 token 不可测时保留 null。系统提示词、认证、私密聊天和外部敏感地址不进入记录。
 
 新输出目录必须为空。解码临时目录结束或中断时自动清理，任务观察和已保存决定保留。缺失或损坏记录、未知字段和版本、重复 JSON 键、NaN、错误引用均拒绝。待审阅和疑点用 waiting，非法输入用 failed。
+
+## 匿名 BV 输入，#40
+
+prepare 同时接受本地视频和 HTTPS BV 链接，分 P 使用单个正整数 p。
+
+```sh
+uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=1' --operation prepare --output /absolute/new-task --acquisition-timeout 1800
+```
+
+入口先检查空目录，再复用匿名获取、公开连接目标检查、每跳重定向检查、总 deadline 和实际解码。获取成功的原视频保存在任务目录，后续操作核对 source.sha256，不重新下载、不修改原视频。observation.source 和最终 manifest.source 保留实测尺寸、原视频 hash 及 origin 的 BV、分 P、匿名标记和后端诊断，不保存签名媒体地址。
+
+获取失败时，目录仅保存 phase=acquisition 的脱敏 manifest。只有该诊断时，可原目录重试 BV 或改用本地视频。存在原视频、观察图、任务记录、决策或其他文件时，prepare 拒绝覆盖，改用新的空目录。候选格式提前中止仍由 #20 跟踪；本流程复用获取能力，没有修复该问题。受控后端重放证明 BV 与同一原视频的本地流程一致，真实 B站整曲 Agent 审阅由 #41 验收。

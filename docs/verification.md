@@ -96,3 +96,16 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 固定合成视频的保存决定得到 3 行、独立标题、1 页 A4；原裁剪 RGB 与源 bbox 相等，export/replay 的 PDF 字节一致。覆盖非法协议、未知引用、缺少视觉证据、漏行、未决疑点、重复键、NaN/Infinity、低清、空谱面、目录保护，以及观察包和原视频变更。新增 3 个测试，既有 54 个测试继续通过，共 57 个。
 
 这些是保存决定的离线执行验证，未证明真实 Agent 视觉识别能力。真实 B站整曲 Agent 审阅、资源比较、CI 和默认切换由后续票验收。默认转换未改采样或身份规则，本票未重复真实 URL 双跑。
+
+## Agent-first BV 入口记录，#40
+
+2026-10-08，测试边界为统一 CLI 与任务产物。第一个 tracer bullet 使用现有 yt-dlp、HTTP 和 DNS 外部边界提供合法合成视频，不替换内部工作流。RED 时 BV 链接被当成本地路径，返回 invalid_input。prepare 接入原匿名 acquire 后 GREEN；同一原视频的 BV 与本地观察包进入保存决定的 submit/export 后，三行原裁剪 hash 和 PDF 字节相同。任务目录保留获取后的原视频，来源与 SHA-256 进入观察包和最终 manifest。
+
+第二个 tracer bullet 在匿名后端拒绝时 RED，InputError 尚未转换为结果 JSON。增加 acquisition-only 脱敏诊断并复用原重试条件后 GREEN，BV 重试和本地替代都可生成观察包，已有观察和用户文件拒绝覆盖。负例继续覆盖初始 HTTPS、分 P、媒体目标、私有 DNS、重定向、不可解码视频、大小限额、总 deadline 和 publication staging 清理。沿用原获取能力，没有修复 #20。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_agent_link_input.py -v
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
+```
+
+专用四项测试通过。完整仓库 61 项测试通过，运行耗时 52.761 秒。这里是受控获取与保存决定的执行验证，没有声称真实 URL 获取或 Agent 视觉能力通过。#41 承担真实整曲审阅和默认切换。本票未改变默认谱面采样、谱行身份或原匿名下载安全门槛。

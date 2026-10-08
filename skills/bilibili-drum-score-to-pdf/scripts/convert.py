@@ -10,31 +10,13 @@ import math
 import signal
 import sys
 from pathlib import Path
-from public_video import acquire, InputError, ACQUISITION_SECONDS
+from public_video import acquire, InputError, ACQUISITION_SECONDS, retryable_acquisition
 import time
 from video_seek import VideoReader, probe_video, ConversionError
 from viewport_sampler import ViewportSampler
 from viewport_tracker import ViewportError
 from manifest import export_rows, save_crop, persist
 from pdf_export import write_pdf
-
-
-def retryable_acquisition(output):
-    """Only our acquisition-only diagnosis may be replaced by a fresh task."""
-    try:
-        if output.is_symlink() or {entry.name for entry in output.iterdir()} != {'manifest.json'}:
-            return False
-        manifest = output / 'manifest.json'
-        if manifest.is_symlink() or not manifest.is_file():
-            return False
-        result = json.loads(manifest.read_text())
-        return (result.get('schema_version') == 1 and result.get('phase') == 'acquisition'
-                and result.get('status') == 'failed' and result.get('complete') is False
-                and result.get('rows') == [] and result.get('issues') == []
-                and isinstance(result.get('error'), dict) and not result.get('source')
-                and not result.get('pdf') and not result.get('state'))
-    except (OSError, ValueError, AttributeError):
-        return False
 
 
 def convert(source, output):
@@ -104,7 +86,7 @@ def main():
         from agent_workflow import run
         previous = signal.signal(signal.SIGTERM, interrupt_conversion)
         try:
-            result = run(args.operation, args.input, args.task, args.decision, args.output)
+            result = run(args.operation, args.input, args.task, args.decision, args.output, acquisition_timeout=args.acquisition_timeout)
         finally:
             signal.signal(signal.SIGTERM, previous)
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))
