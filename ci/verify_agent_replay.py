@@ -87,7 +87,10 @@ def verify(base, evidence, summary):
             with Image.open(exported / row['image']) as printable:
                 require(crop.convert('L').tobytes() == printable.tobytes(), 'print_pixels_changed')
         if 'quality' in row:
-            require(row['quality']['effective_dpi'] >= 150, 'low_dpi')
+            pixels = row['bbox'][2] - row['bbox'][0]
+            inches = (row['pdf_bbox'][2] - row['pdf_bbox'][0]) / 72
+            require(inches > 0 and pixels / inches >= 150, 'low_dpi')
+            require(abs(pixels / inches - row['quality']['effective_dpi']) < .01, 'dpi_report_mismatch')
     summary.update(row_count=3, native_crops_equal=True,
                    minimum_effective_dpi=min(r['quality']['effective_dpi'] for r in result['rows']))
     code, replay = cli('--operation', 'replay', '--task', task, '--output', replayed)
