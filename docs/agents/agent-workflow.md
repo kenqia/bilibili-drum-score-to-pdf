@@ -121,4 +121,3 @@ segments 按出现顺序排列，每段只含 id、frames、rows、observations�
 每对相邻段必须有一条 boundaries，字段严格限定为 from_segment、to_segment、from_frame、to_frame、change、relation、before_complete、after_complete、continuity_verified、evidence_images、unresolved、evidence。引用前段末帧及后段首帧；evidence_images 至少含这两张实际查看的原图与 comparison，原生细节同时保存在每段原裁剪记录。change 记录 page_turn、scale 或 layout_jump，relation 记录 next、skip、backward 或 uncertain。只有 page_turn、next、三个确认布尔值均为 true、unresolved 为空才能继续。边界任何谱行观察仍为 partial 则等待。evidence 必须说明可见接续依据，例如前页末小节与后页首小节的明确连续标记。页码数量完整和同内容相似都不能单独证明接续；看不清时填写 uncertain。
 
 顶层 coverage 沿用 v3 首尾与 unresolved。非法字段或引用为 failed；跳页、回跳、缩放、突变、缺帧和不明边界为 waiting，保留时间区间及前后截图。导出保存段内坐标、段间判断与 extra 的原视频 PTS、bbox、RGB 和灰度裁剪，按段序排入 A4，保存决定可直接 replay。v4 不使用旧首帧检测框决定是否存在标题。审计仍明确 hidden_content_proven_absent=false，无法证明未采样时间没有隐藏页面。
-
