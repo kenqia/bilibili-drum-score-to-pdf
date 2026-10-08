@@ -49,3 +49,6 @@ Agent-first 的 prepare 也接受上述 HTTPS BV 链接与分 P。使用新的�
 ### 局部补采样
 
 Agent-first 的长视频 prepare 用低分辨率变化导航生成重叠观察组。存在遮挡或接续疑点时，用 `--operation supplement --task TASK --decision REQUEST` 请求局部原帧。请求协议、版本与累计预算见 `docs/agents/agent-workflow.md`。先实际看新增原图与原生细节，再按新 observation_sha256 提交决定。预算耗尽或仍看不清时保持 waiting。不要用新增候选数量宣称整曲完整。
+
+有序翻页可使用 `schema_version=4` 的 segments/boundaries 决策，具体字段见 `docs/agents/agent-workflow.md`。每段从零建立空间坐标，重复节奏跨页保留。实际查看换页前后原帧和原生边缘，检查末小节与下一段首小节的接续；页数和内容相似不能代替这项检查。跳页、回跳、缩放、边缘残行或关系不清时保持 waiting。明确标注标题、速度及行外符号的原生区域或它们已包含在行框中的依据，不能因为规则未找到标题就把它丢弃。
+

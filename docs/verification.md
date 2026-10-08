@@ -155,3 +155,17 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 补采专题五项测试覆盖实际 PTS 空转；此前全量 71 项测试通过，耗时 102.998 秒。后续最终全量记录以集成结果为准。协议不要求固定 4/2 秒间隔，没有恢复撤回的补丁。
 
 同一公开源视频的自适应 prepare 实测为 waiting，48 张原生图、255 张 160×90 导航图、770 张细节和 48 张拼图组成帧。生成像素合计 327,784,320；48 次 seek、124 个 decoder reported frames、原生解码 13.257 秒、缩略导航 10.227 秒、原生处理阶段 71.471 秒。该次 prepare_elapsed 不含导航，后续代码另外记录 total_elapsed 与 native_processing_elapsed。观察包 567,687 字节，后续读取已验证。还未做这批图的实际 Agent 整曲审阅，实际呈交像素和模型成本尚未测；不能拿这些候选数断言完整。公共包保存在仓库外 `work/agent-first/adaptive36-public`，#41 可基于此复查或从匿名 BV 入口重新准备。
+
+## 有序谱面段记录，#37
+
+统一 CLI 的 v4 两段决定首轮 RED 因版本未支持而失败。实现分段审计后 GREEN，单帧首段与两帧停留的次段得到 6 行，段内 global_y 都是 220、440、660，scroll_offset 独立从 0 开始。跨页同名实例与同节奏均保留，两个 Agent 指定原生标题进入 PDF；保存决定重放的 PDF 字节相等。第二轮 RED 暴露重复标题及缺帧检查顺序问题，第三轮 RED 暴露行外区域 placement 与原帧上下顺序矛盾，修复后两项专用 CLI 测试通过。负例覆盖跳页、回跳、相似页面仍无法确认、缺接续证据、缩放、布局突变、换页边缘残行、缺段帧、缺边界、未检查行外符号及重复区域。waiting 保留前后截图和实际时间。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_agent_segments.py -v
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
+```
+
+另以实际 view_image 查看公开 2 秒合成视频的对照图、三张原帧及两页共 12 张原生细节。可见第一段为 bar 1、2、3，第二段为 bar 4、5、6，末帧与第二段相同；两页标题、tempo 80、五线及单音符完整。音符形状相同仍保留为两个段中的六个实例。这里的小节文字是合成测试的明确接续标记，不假冒真实曲谱识别能力。实际呈交的 16 张图 ID、公开提示词、可见模型标识、决定和产物保存在仓库外共享 `work/agent-first/visual-37`。模型精确版本不可见，记录 unknown。
+
+CLI 导出 6 行、两个独立标题、1 页 A4。独立 Pillow 核对八个 RGB 原裁剪与 source_frame+bbox 逐像素相同，灰度图与 RGB 转灰度相同；replay PDF 字节一致。实际查看 Poppler 渲染，标题、tempo 及 bar 1 到 6 顺序保留。全量 70 项测试通过，耗时 85.032 秒；最后增加 placement 检查后，两项专用测试再次通过，耗时 9.726 秒。此票没有新增依赖，没有修改默认转换。稀疏观察仍不能证明未采样时间无隐藏页，真实整曲 Agent 验收由 #41 完成，未重复旧默认 BV 双跑。
+

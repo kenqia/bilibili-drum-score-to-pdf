@@ -15,6 +15,7 @@ from score_detect import analyze_frame
 from cursor_detect import cursor_occluded, obstruction_detected
 from agent_regions import native_rows
 from agent_continuity import continuous_rows
+from agent_segments import ordered_segments
 from manifest import save_crop
 from pdf_export import PRINTABLE_WIDTH_INCHES, write_pdf
 
@@ -217,7 +218,9 @@ def validate(decision, state, observation):
         fields = fields - {'selected_candidates'} | {'rows'}
     if version == 3:
         fields |= {'observations', 'transitions', 'coverage'}
-    if not isinstance(decision, dict) or set(decision) != fields or type(version) is not int or version not in (1, 2, 3):
+    if version == 4:
+        fields = fields - {'selected_candidates'} | {'segments','boundaries','coverage'}
+    if not isinstance(decision, dict) or set(decision) != fields or type(version) is not int or version not in (1, 2, 3, 4):
         raise ConversionError('invalid_decision', '决定字段或版本非法。')
     if decision['task_id'] != state['task_id'] or decision['observation_sha256'] != state['observation_sha256']:
         raise ConversionError('invalid_decision', '决定不属于当前观察包。')
@@ -234,14 +237,14 @@ def validate(decision, state, observation):
     presented = decision['presented_images']
     if not isinstance(presented, list) or not all(isinstance(i, str) and i in known for i in presented) or len(set(presented)) != len(presented):
         raise ConversionError('invalid_decision', '图像呈交清单非法。')
-    if version in (2, 3):
+    if version in (2, 3, 4):
         if 'comparison' not in presented or any(f['id'] not in presented for f in observation['frames']):
             raise ConversionError('missing_evidence', '必须查看相邻对照图与全部原帧。')
         if not decision['visual_review'] or not decision['complete'] or decision['unresolved']:
             raise ConversionError('review_required', '视觉审阅或完整性存在未决疑点。')
-        if version == 3:
+        if version in (3, 4):
             try:
-                return continuous_rows(decision, observation, presented)[0]
+                return (ordered_segments if version == 4 else continuous_rows)(decision, observation, presented)[0]
             except ConversionError as error:
                 error.issues = [dict(reason=error.code, start=a['timestamp'], end=b['timestamp'],
                                      before_image=a['id'], after_image=b['id'],
@@ -306,15 +309,34 @@ def export(task, output):
             row = save_crop(output, frame['path'], c['bbox'], f'row-{c["index"]:03d}')
             row.update(id=f'row{c["index"]}', index=c['index'], timestamp=frame['timestamp'], pts=frame['pts'], time_base=frame['time_base'],
                        selected_candidate=c, quality={'effective_dpi': round(dpi, 3), 'complete': True})
-            if decision['schema_version'] == 3:
+            if decision['schema_version'] in (3,4):
                 row.update(**{k: c[k] for k in ('instance_id', 'observation_id', 'global_y', 'scroll_offset')})
+            if decision['schema_version'] == 4:
+                row['segment_id'] = c['segment_id']
             rows.append(row)
+        extras = []
         first = observation['frames'][0]
         bbox = first['analysis']['header_bbox']
-        if bbox[3] > bbox[1]:
+        if decision['schema_version'] != 4 and bbox[3] > bbox[1]:
             header = save_crop(output, first['path'], bbox, 'header')
             header.update(timestamp=first['timestamp'], pts=first['pts'], time_base=first['time_base'])
-        pages = write_pdf(output, header, rows)
+        if decision['schema_version'] == 4:
+            _, segment_audit, regions = ordered_segments(decision, observation, decision['presented_images'])
+            for index,c in enumerate(regions):
+                frame = next(f for f in observation['frames'] if f['id'] == c['frame_id'])
+                if (c['bbox'][2]-c['bbox'][0])/PRINTABLE_WIDTH_INCHES < 150:
+                    raise ConversionError('low_resolution', '行外区域不足 150 effective DPI。')
+                extra = save_crop(output,frame['path'],c['bbox'],f'extra-{index:03d}')
+                extra.update(segment_id=c['segment_id'],kind=c['kind'],placement=c['placement'],timestamp=frame['timestamp'],pts=frame['pts'],time_base=frame['time_base'],selected_region=c)
+                extras.append(extra)
+            blocks=[]
+            for segment in decision['segments']:
+                blocks.extend(e for e in extras if e['segment_id']==segment['id'] and e['placement']=='before_rows')
+                blocks.extend(r for r in rows if r['segment_id']==segment['id'])
+                blocks.extend(e for e in extras if e['segment_id']==segment['id'] and e['placement']=='after_rows')
+            pages=write_pdf(output,None,blocks)
+        else:
+            pages = write_pdf(output, header, rows)
         try:
             revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=Path(__file__).parent, capture_output=True, text=True, check=True).stdout.strip()
         except (OSError, subprocess.SubprocessError):
@@ -326,7 +348,9 @@ def export(task, output):
                       skill_sha256=digest(Path(__file__).parents[1] / 'SKILL.md'),
                       presented_images=[i for i in observation['images'] if i['id'] in decision['presented_images']],
                       prompt_sha256=hashlib.sha256(decision['prompt']['text'].encode()).hexdigest(), metrics=count)
-        if decision['schema_version'] == 3:
+        if decision['schema_version'] == 4:
+            result.update(coverage=segment_audit,extras=extras)
+        elif decision['schema_version'] == 3:
             result['coverage'] = continuous_rows(decision, observation, decision['presented_images'])[1]
         else:
             result['coverage'] = {'scope': 'fixed_layout_trial', 'hidden_content_proven_absent': False}
