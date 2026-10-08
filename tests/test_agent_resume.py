@@ -19,7 +19,10 @@ class ResumeTests(test_agent_continuity.ContinuityTests):
             prefix['transitions']=prefix['transitions'][:1]
             prefix['coverage']['last_frame']='frame-001'
             packet=json.loads((task/'observation.json').read_text())
-            prefix['presented_images']=[i['id'] for i in packet['images'] if i.get('frame_id')!='frame-002']
+            prefix['presented_images']=[i['id'] for i in packet['images']
+                if i.get('frame_id')!='frame-002'
+                and not any(p['frame_id']=='frame-002' for p in i.get('panels', []))
+                or i['kind']=='comparison']
             batch=dict(schema_version=5,decision_id='batch-one',reviewed_frames=['frame-000','frame-001'],revision_of=None,decision=prefix)
             path=base/'batch.json';path.write_text(json.dumps(batch))
             result=self.cli('--operation','submit','--task',task,'--decision',path)
