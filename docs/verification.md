@@ -106,3 +106,9 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 选择中帧三个完整整行，实际 PTS 均为 16384，time_base 为 1/16384，原裁剪宽 1120 像素。CLI 导出 1 页 A4。独立 Pillow 核对三条 RGB 原裁剪与 source_frame+bbox 逐像素一致，打印图与原裁剪 convert('L') 一致。实际查看第一条 RGB、灰度及 Poppler 渲染 PDF，`(x)`、弧线、`pp` 和原红色记号的灰度保留。保存决定重新 replay 的 PDF 字节一致。
 
 源视频、观察包、图像呈交 ID、公开提示词和可见模型标识、决定与两个输出保存在仓库外共享实验目录 `work/agent-first/visual-34`，不提交生成媒体。精确模型版本不可见，记录 unknown。该试验只有一组合成成对图像，证明流程与一次实际观察，不证明真实整曲识别、通用锐度校准或中央遮挡恢复。默认 moving viewport 未切换，本轮不重复其 BV 性能验收。
+
+## 保存决定离线 CI，#39
+
+2026-10-08，统一 CI replay 命令的第一轮 RED 因脚本不存在而失败。实现后 GREEN，受控固定视频准备、提交、导出与重放得到 3 行、1 页 A4，源原裁剪像素与 PDF 字节一致，effective DPI 不低于 150。未知版本、越界坐标和损坏图像分别得到 invalid_decision、invalid_decision 和 source_mismatch。另用缺少 ffmpeg 的子进程验证失败证据只保存异常类型，不泄露路径或日志。全量 59 个 unittest 本地通过，新增 CI command 的 2 个测试再次通过。原裁剪由独立 ffmpeg 重解码核对，DPI 同时按原裁剪宽度与 PDF 放置宽度计算。
+
+实际命令及 artifact、配置影响和回滚说明见 [离线 CI](agents/offline-ci.md)。此记录是本地验证；GitHub hosted 成功运行需发布后另行记录。本票不修改或关闭 #21，也不把固定决定重放当作 Agent 视觉能力验收。
