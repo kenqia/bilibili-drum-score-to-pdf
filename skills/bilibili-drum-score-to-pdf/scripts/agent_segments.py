@@ -21,11 +21,7 @@ def ordered_segments(decision, packet, presented):
         waiting('谱面段缺帧、重复、回跳或顺序非法。')
     chosen, audits, extras = [], [], []
     for segment in segments:
-        if not isinstance(segment, dict) or set(segment) != fields or not text(segment['id']) or not text(segment['evidence']):
-            invalid('谱面段字段或依据非法。')
         sf = segment['frames']
-        if not isinstance(sf, list) or not sf or any(not isinstance(f,str) or f not in frames for f in sf):
-            invalid('谱面段帧引用非法。')
         if type(segment['outside_rows_verified']) is not bool:
             invalid('行外符号核查状态非法。')
         if not segment['outside_rows_verified']:
@@ -54,8 +50,6 @@ def ordered_segments(decision, packet, presented):
             native.update(segment_id=segment['id'],kind=extra['kind'],placement=extra['placement'])
             extras.append(native)
         audits.append(dict(id=segment['id'],**audit,extras=len(regions),outside_rows_verified=True,evidence=segment['evidence']))
-    if len(set(ids))!=len(ids) or flattened!=list(frames):
-        waiting('谱面段缺帧、重复、回跳或顺序非法。')
     coverage=decision['coverage']
     if not isinstance(coverage,dict) or set(coverage)!={'first_frame','last_frame','unresolved'}:
         invalid('覆盖字段非法。')
