@@ -89,3 +89,5 @@ Agent-first 入口用 `agent_performance.py` 保存独立性能账本。它不�
 `agent_evidence.py` 在已验证原帧上物化整数 ROI，不重解码、不缩放，也不改打印像素。新增证据沿原 publication 事务更新 observation hash/version，保留归档、已审前缀与接受历史。决定重绑通过现有显式修订，旧包决定拒绝。实际生成和失败生成另列计量，已发布图像总数不冒充实际呈交。
 
 `agent_proposals.py` 只用五线与空间顺序提出结构建议。`agent_decision_builder.py` 将绑定当前观察的建议、结构修正和调用方明确的视觉确认构造为现有 v2 至 v5 决定，输出差异、来源与未决事项。构建不接受决定，也不提前结束交付计时。没有确认或原生证据时保留 waiting。具体协议见 [惰性证据](agents/lazy-evidence.md) 与 [决定构建](agents/decision-building.md)。
+
+`agent_review.py` 提供分类疑点及绑定的 ROI/补采请求，显式历史复用仅沿用来源与结构未改的实际判断。`agent_audit.py` 为 lazy 要求 v4 原生图块及逐项覆盖审计，在 submit/export/replay 统一核验决定文件、任务与来源绑定。接受历史保存审计副本与 hash，证据更新后重新绑定。首尾、相邻 gap、空间实例和段边界都保留，未采样隐藏内容仍未知。操作与有限导航恢复见 [疑点审阅](agents/review-plan.md) 和 [覆盖审计](agents/coverage-audit.md)。

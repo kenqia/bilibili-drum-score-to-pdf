@@ -4,6 +4,8 @@
 
 显式实验的 `lazy/materialize` 读取 [惰性证据](lazy-evidence.md)，构建决定读取 [决定构建](decision-building.md)，按疑点规划或沿用未改的实际判断读取 [疑点审阅](review-plan.md)。lazy 接续的内容门禁与恢复限制读取 [内容检查](content-checks.md)。这些入口仍要求实际原帧和原生细节审阅，自动接受尚未启用。
 
+lazy 提交另要求 v4 图块和当前决定文件旁的 `audit.json`，标题、速度、拍号、行外区域及覆盖逐项核查见 [覆盖审计](coverage-audit.md)。本文件下述旧协议说明仍适用于 full；lazy 直接提交 v1/v2/v3 会等待，构建器可把连续 v3 proposal 包装为单段 v4。
+
 ## 操作
 
 所有操作调用同一 `convert.py`，使用仓库已有 uv 环境。
