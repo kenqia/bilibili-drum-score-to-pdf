@@ -266,3 +266,18 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 宿主补采回归保存旧 batch_comparison 的呈交事件，更新观察包后仍核验归档图像并累计成本，resume/report 和再次导入保持可用。新事件可绑定归档观察 hash，错包绑定不修改原宿主账本。另用四帧到五帧的同尺寸不同内容 comparison 验证，legacy 事件首次导入持久化观察 hash，后续补采和旧包重导入保留原绑定。这些测试验证软件契约，不证明真实模型视觉理解或真实性能下降。
 
 唯一图像计量补充反例覆盖同 comparison ID、不同观察绑定、相同尺寸但不同 PNG hash 的两个拼图，分别统计两张唯一图。无损合成视频另外验证同源图跨观察版本只算一张、不同实际 PTS 的源图 ID 即使 PNG hash 相同仍是两张，以及 delivery/diagnostic 同名图按来源区分。实际呈交次数和像素成本仍逐事件累计。
+
+
+### #44/#45 最终集成与恢复核对
+
+最终软件快照为 `d09fa9dc55d0ce5d836492116498b9a8ed991a14`。此前在该快照运行本页统一 unittest 入口，108 项测试、217.664 秒全部通过。日志保存在 `work/issue-43-context/final-tests.log`，SHA-256 为 `7732cefe17c35bebaec1d7b1b3a2a0c7449ab448cc25e5a08aaa428d10ca54b5`。同目录 `review-spec-final.md` 与 `review-standards-final.md` 对 `3c460ec..d09fa9d` 的已实施范围均无剩余 finding。早期 94 项回归及待修复记录是中间状态，最终状态以此处证据为准。
+
+2026-10-09 本次恢复仅核对既有证据，未重新运行完整回归、下载视频、实际视觉审阅或重解码原帧。现存两份独立标准样本审阅位于 `work/performance-43-20261009/standard-review-1/` 与 `standard-review-2/`。各自 `checked-source-audit.json` 记录 12 行、2 页、13 个 PDF 嵌入图块及 6 个独立重解码 PTS，最低 effective DPI 分别为 264.182 和 250.423。来源脚本没有作视觉判断，实际判断和逐页审核证据保存在原交付回执。
+
+本次逐份核对 `checked-export/score.pdf` 与 `checked-replay/score.pdf` 字节一致，导出 PDF 和 manifest 的 hash 与 `delivery-review.json` 相符。两份 PDF SHA-256 分别为 `f8c9754273fe90af9d6691d532d479413676284f6075ab3e286ab16e31500723` 和 `20bf4bf6fdb07d3d463095491fc1b9dcab2bf8fc0528255eea6cdcadf1712d5c`。两个独立决定之间不要求 PDF 字节一致。 源文件完整性核对另见 `work/issue-43-resume-20261009/source-integrity.json`，两份 MP4 hash 与观察包记录一致，已保存的 48 帧实际 PTS 列表相同，没有新增解码。
+
+公开只读 `report` 的新鲜 smoke 两次均退出 0，全部任务 JSON hash 不变，当前交付确认有效。摘要为 `work/issue-43-resume-20261009/report-smoke-summary.json`，核对索引为同目录 `resume-evidence.json`。这验证现存任务的只读报告能力，不属于新一轮视觉或性能验收。
+
+宿主模式仍为 `review_only`，实际观察 Token 分别为 5,036,868 和 5,399,475，完整 `model_tokens` 均为 null。四项覆盖 `lifecycle_complete`、`model_calls_complete`、`tools_complete`、`images_complete` 均为 false。两份旧任务的 `wall_clock_valid=false`、`wall_elapsed_seconds=null`；prepare 墙钟与单调时钟分别为 58.896795 / 56.974424 秒、58.158619 / 56.198641 秒，已有账本记录 `wall_clock_discontinuity`。原因未知，账本未修改，这些任务不能进入耗时或完整成本基线。
+
+#44 本地验证完成，#45 软件完成但三类真实视频完整基线未验收，#46 至 #52 未启动，#43 未完成。GitHub 只读核对 #44 至 #52 均为 open，#46/#47 仍原生依赖 #45，没有关闭或修改工单。后续顺序提案见 [性能实施状态](agents/performance-implementation-status.md)，调整阻塞顺序仍待用户明确确认。
