@@ -81,9 +81,18 @@ class SegmentTests(unittest.TestCase):
                     self.assertFalse((task/'decision.json').exists())
 
     def test_cumulative_batches_allow_page_append_and_last_segment_extension(self):
-        for prefix_length in (1, 2):
-            with self.subTest(prefix_length=prefix_length), tempfile.TemporaryDirectory() as directory:
-                base = Path(directory); task, full = self.decision(base)
+        for layout, prefix_length in (('pages', 1), ('pages', 2), ('continuous', 1)):
+            with self.subTest(layout=layout, prefix_length=prefix_length), tempfile.TemporaryDirectory() as directory:
+                base = Path(directory)
+                if layout == 'continuous':
+                    # This long-score segment adds D as well as a new frame and relation.
+                    task, continuous = self.prepare(base)
+                    full = {k:v for k,v in continuous.items() if k not in ('rows','observations','transitions')}
+                    full.update(schema_version=4, segments=[dict(id='long-score', frames=['frame-000','frame-001','frame-002'],
+                        rows=continuous['rows'], observations=continuous['observations'], transitions=continuous['transitions'],
+                        extras=[], outside_rows_verified=True, evidence='Native continuous score.')], boundaries=[])
+                else:
+                    task, full = self.decision(base)
                 prefix = copy.deepcopy(full)
                 frames = [f'frame-{i:03d}' for i in range(prefix_length)]
                 prefix['coverage']['last_frame'] = frames[-1]
@@ -91,6 +100,7 @@ class SegmentTests(unittest.TestCase):
                 prefix['boundaries'] = prefix['boundaries'][:len(prefix['segments'])-1]
                 for segment in prefix['segments']:
                     segment['frames'] = [f for f in segment['frames'] if f in frames]
+                    segment['rows'] = [r for r in segment['rows'] if r['frame_id'] in frames]
                     segment['observations'] = [o for o in segment['observations'] if o['frame_id'] in frames]
                     segment['transitions'] = [t for t in segment['transitions'] if t['to_frame'] in frames]
                 packet = json.loads((task / 'observation.json').read_text())
@@ -109,7 +119,10 @@ class SegmentTests(unittest.TestCase):
                         bad = copy.deepcopy(final)
                         segment = bad['decision']['segments'][len(prefix['segments'])-1]
                         if isinstance(segment[field], list):
-                            segment[field][0] = 'changed'
+                            if segment[field]:
+                                segment[field][0] = 'changed'
+                            else:
+                                segment[field].append('changed')
                         else:
                             segment[field] = 'changed'
                         path.write_text(json.dumps(bad))
@@ -121,4 +134,14 @@ class SegmentTests(unittest.TestCase):
                 self.assertEqual(result['phase'], 'accepted', result)
                 result = self.cli('--operation', 'export', '--task', task, '--output', base / 'out')
                 self.assertEqual(result['status'], 'success', result)
-                self.assertEqual([r['segment_id'] for r in result['rows']], ['page-0']*3 + ['page-1']*3)
+                expected = ['long-score']*4 if full['segments'][0]['id'] == 'long-score' else ['page-0']*3 + ['page-1']*3
+                self.assertEqual([r['segment_id'] for r in result['rows']], expected)
+                revision = copy.deepcopy(final)
+                revision.update(decision_id='revision', revision_of='full')
+                revision['decision']['segments'][-1]['rows'][0]['evidence'] = 'Explicitly revised public review.'
+                path.write_text(json.dumps(revision))
+                revised = self.cli('--operation', 'submit', '--task', task, '--decision', path)
+                self.assertEqual(revised['phase'], 'accepted', revised)
+                self.assertEqual(len(revised['decision_history']), 3, revised)
+                for entry, accepted in zip(revised['decision_history'], (batch, final, revision)):
+                    self.assertEqual(json.loads((task / entry['path']).read_text()), accepted)

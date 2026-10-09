@@ -150,6 +150,8 @@ class ContinuityValidationTests(unittest.TestCase):
                     path.write_text(json.dumps(bad))
                     process = subprocess.run([sys.executable, str(CLI), '--operation', 'submit', '--task', str(task), '--decision', str(path)], capture_output=True, text=True)
                     self.assertTrue(process.stdout, 'CLI must return a failure JSON')
+                    self.assertNotEqual(process.returncode, 0)
+                    self.assertNotIn('Traceback', process.stderr)
                     result = json.loads(process.stdout)
                     self.assertEqual(result['status'], 'failed', result)
                     self.assertEqual(result['error']['code'], 'invalid_decision', result)

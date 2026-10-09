@@ -83,7 +83,12 @@ class SamplingTests(unittest.TestCase):
                     else:
                         bad['issue'][field] = 10**1000
                     path.write_text(json.dumps(bad))
-                    result = self.cli('--operation', 'supplement', '--task', task, '--decision', path)
+                    process = subprocess.run([sys.executable, str(CLI), '--operation', 'supplement', '--task', str(task), '--decision', str(path)], capture_output=True, text=True)
+                    self.assertTrue(process.stdout, 'CLI must return a failure JSON')
+                    self.assertNotEqual(process.returncode, 0)
+                    self.assertNotIn('Traceback', process.stderr)
+                    self.assertNotIn(str(10**1000), process.stdout + process.stderr)
+                    result = json.loads(process.stdout)
                     self.assertEqual(result['status'], 'failed', result)
                     self.assertEqual(result['error']['code'], 'invalid_request', result)
                     self.assertNotIn(str(10**1000), json.dumps(result))
