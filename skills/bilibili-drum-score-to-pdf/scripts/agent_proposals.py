@@ -47,7 +47,9 @@ def suggest(packet):
             structure['transitions'].append(dict(from_frame=previous[0]['frame_id'], to_frame=frame['id'],
                 matches=[[a['id'],b['id']] for a,b in pairs], evidence='Script ordered common-displacement suggestion; Agent must confirm identity.'))
             audits.append(dict(from_frame=previous[0]['frame_id'], to_frame=frame['id'],
-                               status='suggested' if pairs else 'uncertain', matches=[[a['id'],b['id']] for a,b in pairs]))
+                               status='suggested' if pairs else 'uncertain', matches=[[a['id'],b['id']] for a,b in pairs],
+                               plausible_translations=[dict(scroll_delta=sum(a['staff_y']-b['staff_y'] for a,b in option)/len(option),
+                                   matches=[[a['id'],b['id']] for a,b in option]) for option in possibilities.values()]))
         for a,b in pairs:
             b['instance_id'] = a['instance_id']
         for sighting in current:
