@@ -78,9 +78,11 @@ ROI、bbox、所选 observation 和 evidence_images 都仍受现有提交校验�
 
 ## 保存进度与来源
 
-存在接受历史时，可以省略 `proposal`，以最新接受结构为基础。必须提供 `revision_of`，明确引用最新已接受的外层决定 ID，并使用新 `decision_id`。构建器重新校验，不修改历史。当前实现会清空基础决定的视觉判断，要求本次显式确认；局部沿用已审前缀尚未实现，不能据此宣称已降低复审成本。
+存在接受历史时，可以省略 `proposal`，以最新接受结构为基础。必须提供 `revision_of`，明确引用最新已接受的外层决定 ID，并使用新 `decision_id`。构建器重新校验，不修改历史。默认清空基础决定的视觉判断，要求本次显式确认。纯证据物化后需要沿用未改的实际判断时，显式设置 `reuse_accepted_review=true`；来源核验与清空条件见 [疑点审阅](review-plan.md)。
 
 可选 `reviewed_frames` 是从首帧开始的连续前缀。前缀或修订输出现有 v5 封装，内部仍为 v2、v3 或 v4。部分进度只允许 v3、v4。旧任务不自动迁移，物化或补采后的修订必须绑定新观察 hash，并明确声明本次实际查看的图像。
+
+lazy 任务另需填写 `review.score_audit`，契约见 [覆盖审计](coverage-audit.md)。原 v3 proposal 在确认后包装为单段 v4；独立标题与行外区域通过 v4 extras 指定。构建输出增加绑定决定文件的 `audit.json`，提交时与决定放在同一目录。缺少审计或直接提交旧版 lazy 决定会等待；full 的既有协议行为保留。
 
 目录保留 `decision.json`、`diff.json`、`sources.json`、`unresolved.json`。差异逐项列出结构与判断的前后值；来源记录当前观察绑定、建议来源、接受历史 hash、五线建议、实际 PTS、源帧 hash 和调用方确认。未知模型版本使用 `unknown`，没有可信模型成本时仍为 null。
 
