@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from agent_regions import box, contains, covered, invalid
+from agent_regions import box, contains, covered, invalid, native_rows
 from video_seek import ConversionError
 
 CHECKS = ('title', 'tempo', 'time_signature', 'outside_rows')
@@ -100,7 +100,15 @@ def inspect(decision, packet, review):
                 chosen = collection[target['index']]
                 if name == 'title' and check['status'] == 'checked':
                     require(target['kind'] == 'extra' and chosen['kind'] == 'title', '已核查标题必须来自实际打印的 title extra。')
-                selected.append(chosen if target['kind'] == 'row' else chosen['region'])
+                raw = chosen if target['kind'] == 'row' else chosen['region']
+                candidate = ({k:v for k,v in raw.items() if k not in ('instance_id','observation_id')}
+                             if target['kind'] == 'row' else raw)
+                try:
+                    selected.extend(native_rows({'rows':[candidate]}, packet, presented))
+                except ConversionError as error:
+                    if error.code not in ('review_required','missing_evidence'):
+                        raise
+                    pending(error.code, segment_id=segment['id'], field=name, message=str(error))
             if check['status'] == 'pending':
                 pending('score_region_pending', segment_id=segment['id'], field=name)
             elif check['status'] == 'absent':
