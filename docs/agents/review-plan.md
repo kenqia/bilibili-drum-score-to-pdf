@@ -63,7 +63,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 lazy 计划额外输出 `score-audit-template.json`，使用 #50 的输入格式，不建立另一套审计协议。单段 ID 为 `score-000`，title、tempo、time_signature、outside_rows 各项都是 pending，首尾完整性为 false，相邻区间都是 pending。此文件不证明任何项不存在。
 
-支持 #50 的构建器后，Agent 实际核查原生区域、打印选择和覆盖，再将该模板填入 `review.score_audit`。只有 `outside_rows_verified=true` 或一句文字依据仍不足以代替逐项审计。这个模板本身不提交、不放行，也不能证明未采样区间不存在隐藏换谱。
+构建器现已支持 [整曲与行外区域审计](coverage-audit.md)。Agent 实际核查原生区域、打印选择和覆盖，再将该模板填入 `review.score_audit`。有标题或独立记谱区域时，须在 v4 proposal 的 extras 指定实际打印的单帧原生裁剪；标题不能继续从检测器框隐式导出。首尾与每个相邻区间的审计也需要对应原帧的完整原生证据。只有 `outside_rows_verified=true` 或一句文字依据仍不足以代替逐项审计。这个模板本身不提交、不放行，也不能证明未采样区间不存在隐藏换谱。
 
 ## 本地验证
 
@@ -76,6 +76,11 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 2026-10-10，首次 RED 运行因 CLI 未识别 `review-plan` 失败；补上入口和疑点规划后通过。显式历史复用先因不受支持返回 failed，增加归档核验后通过。跨进程复用的四个 JSON 文件比较发现已接受结构的 set 遍历会改变键顺序，改用排序遍历后逐字节一致。
 
-最终本票 7 项专项通过，26.487 秒。干净 lazy 片段完成 ROI、构建、提交、导出和 PDF 字节重放；混合光标片段用于疑点分类与 waiting，不作为污染对应已经恢复的证明。旧 full 的显式复用单独核对修订历史、导出重放、新 ROI 未被自动呈交，以及新补采帧拒绝沿用旧接续。#47 的既有 9 项回归通过，35.005 秒。编译检查和 `git diff --check` 通过。
+#50 集成前，本票 7 项专项通过，26.487 秒。干净 lazy 片段完成 ROI、构建、提交、导出和 PDF 字节重放；混合光标片段用于疑点分类与 waiting，不作为污染对应已经恢复的证明。旧 full 的显式复用单独核对修订历史、导出重放、新 ROI 未被自动呈交，以及新补采帧拒绝沿用旧接续。#47 的既有 9 项回归通过，35.005 秒。编译检查和 `git diff --check` 通过。
 
-必需身份对应仍被光标污染时，当前内容门禁可能无法靠单张补采解除。该情形继续等待，没有协议改动或口头 override。#50 集成后的 lazy 正例仍需通过其逐项审计；本节不是完整真实视频验收记录。
+必需身份对应仍被光标污染时，当前内容门禁可能无法靠单张补采解除。该情形继续等待，没有协议改动或口头 override。lazy 正例必须通过绑定当前决定的逐项审计；本节不是完整真实视频验收记录。
+
+
+2026-10-10，合入 #49/#50 门禁后，旧 lazy 正例缺少逐项审计，专项 RED 保持 waiting。测试改为通过公开 ROI 操作取得首尾和 gap 的完整原生证据，再提供显式 v4 title extra 与有效 `review.score_audit`，没有改动生产门禁。适配后 7 项专项通过，25.872 秒。干净 lazy 的三个打印行选择末帧真实裁剪，标题使用首帧显式区域，接受历史保存审计 hash；export/replay 的 PDF 字节一致，`hidden_content_proven_absent=false` 保留。删除审计后不能提交，混合光标片段即使声称全部确认仍 waiting，导出没有成功 PDF。full 历史复用单独保留其兼容范围。
+
+同一门禁快照的 #47 既有 9 项兼容回归通过，25.074 秒。`git diff --check` 通过。本次适配只修改测试和本页文档，没有执行完整仓库回归、下载真实视频或调用真实模型。
