@@ -46,8 +46,9 @@ class Performance:
         value = load(path) if path.exists() else None
         self.data = value.get('performance_ledger') if embedded and value else value
         now = time.time()
+        preexisting = value is not None or (directory / 'task.json').exists()
         if self.data is None:
-            self.data = dict(schema_version=1, lifecycle_id=uuid.uuid4().hex if not (directory / 'task.json').exists() else None, submitted_at=now if not (directory / 'task.json').exists() else None,
+            self.data = dict(schema_version=1, lifecycle_id=uuid.uuid4().hex if not preexisting else None, submitted_at=now if not preexisting else None,
                              last_observed_at=now, first_deliverable_at=None, task_status='waiting',
                              operations=[], stages=[], clock_anomalies=[], source=None, metrics={},
                              environment=dict(python=platform.python_version(), pillow=pillow_version),
@@ -55,10 +56,16 @@ class Performance:
                              requirements_sha256=hashlib.sha256(Path(__file__).with_name('requirements.txt').read_bytes()).hexdigest(),
                              model=dict(id='unknown', version='unknown'), script_revision='unknown',
                              tool_versions=None, entry='prepare', cache_status='unknown')
-        if not isinstance(self.data, dict) or self.data.get('schema_version') != 1 or not all(isinstance(self.data.get(k), list) for k in ('operations','stages','clock_anomalies')):
+        fields = {'schema_version','lifecycle_id','submitted_at','last_observed_at','first_deliverable_at','task_status',
+                  'operations','stages','clock_anomalies','source','metrics','environment','script_sha256','requirements_sha256',
+                  'model','script_revision','tool_versions','entry','cache_status','state_revision','task_id','sampling_usage'}
+        if not isinstance(self.data, dict) or set(self.data)-fields or type(self.data.get('schema_version')) is not int or self.data.get('schema_version') != 1 or self.data.get('task_status') not in ('waiting','failed','success') or not all(isinstance(self.data.get(k), list) for k in ('operations','stages','clock_anomalies')):
             raise ValueError('invalid performance ledger')
         def number(value):
-            return type(value) in (int,float) and math.isfinite(value)
+            try:
+                return type(value) in (int,float) and math.isfinite(value)
+            except OverflowError:
+                return False
         if not number(self.data.get('last_observed_at')) or (self.data.get('submitted_at') is not None and not number(self.data['submitted_at'])) or (self.data.get('first_deliverable_at') is not None and not number(self.data['first_deliverable_at'])) or not isinstance(self.data.get('metrics'), dict):
             raise ValueError('invalid performance ledger')
         for event in self.data['operations'] + self.data['stages']:
@@ -141,7 +148,7 @@ class Performance:
                     existing[event['event_id']] = imported
             self.data['stages'].extend(additions)
             self.save()
-        except (ConversionError, OSError, ValueError, TypeError, KeyError):
+        except (ConversionError, OSError, ValueError, TypeError, KeyError, OverflowError):
             raise ConversionError('invalid_performance', '性能事件字段、绑定或已有事件内容非法。') from None
 
     def metadata(self, observation, state):
@@ -166,7 +173,7 @@ class Performance:
             wall_clock_valid=not anomaly, observed_at=now,
             model_tokens=None, model_elapsed_seconds=None, host_tool_calls=None,
             actual_presented_images=None, active_elapsed_seconds=None, model_queue_seconds=None,
-            user_pause_seconds=None, missing_measurements=['host/model usage and presentation events unavailable',
+            user_pause_seconds=None, missing_measurements=(['lifecycle submission time unavailable for pre-existing task'] if self.data['submitted_at'] is None else []) + ['host/model usage and presentation events unavailable',
                 'unobserved waiting cannot be split into review, queue or user pause'],
             script_operation_count=len(self.data['operations']),
             native_seek_attempts=sum(e['name'] == 'native_decode' for e in self.data['stages']),

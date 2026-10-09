@@ -159,7 +159,7 @@ Agent-first 的每次 CLI 操作返回 `performance`。任务目录的 `performa
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation report --task /absolute/task
 ```
 
-`report` 核对既有任务后重建报告，不增加操作事件，也不写任务。旧任务没有提交时间时返回 null，不推测历史耗时。墙钟回拨保留异常记录，总历时返回 null。进程中断留下的 running 事件，在下次操作时改记 interrupted；该进程没有保存的单调耗时仍为 null。
+`report` 核对既有任务后重建报告，不增加操作事件，也不写任务。prepare 在观察包发布前失败时，它仍可读取已保存的失败性能账本；匿名获取失败也可从嵌入 manifest 的账本重建。观察发布中断时须先 resume，report 不替任务完成发布。旧任务没有提交时间时返回 null，不推测历史耗时。墙钟回拨保留异常记录，总历时返回 null。进程中断留下的 running 事件，在下次操作时改记 interrupted；该进程没有保存的单调耗时仍为 null。
 
 匿名获取失败只保存 `manifest.json`，性能账本嵌入其中。原目录重试成功后迁入 `performance.json`，保留失败成本和最早提交时间。存在视频或观察证据的中断任务沿用原恢复约定，不能靠性能账本恢复未发布的观察包。已有结果目录的拒绝不修改原账本。
 

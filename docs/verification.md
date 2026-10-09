@@ -248,6 +248,6 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 ### #44 生命周期计量
 
-新增 `tests/test_agent_performance.py`，从统一 CLI 检查 prepare、resume、report、submit、export 与 replay。用合成视频核对等待计入跨进程历时、重复决定保留单次接受历史、真实 CLI 重试留下不同事件、首次交付后恢复不改写交付时间，以及固定决定 PDF 重放一致。受控计时文件验证阶段重叠、相同事件去重和冲突拒绝。SIGKILL 用例在导出原生 seek 开始后中断进程，再用 resume 核对未结束事件和未知单调耗时。匿名获取夹具检查失败时仅保存 manifest，并在本地重试后保留最初提交和失败事件。墙钟回拨用受控 CLI 时钟验证，旧任务报告不编造提交时间。
+新增 `tests/test_agent_performance.py`，从统一 CLI 检查 prepare、resume、report、submit、export 与 replay。用合成视频核对等待计入跨进程历时、重复决定保留单次接受历史、真实 CLI 重试留下不同事件、首次交付后恢复不改写交付时间，以及固定决定 PDF 重放一致。受控计时文件验证阶段重叠、相同事件去重和冲突拒绝。SIGKILL 用例在导出原生 seek 开始后中断进程，再用 resume 核对未结束事件和未知单调耗时。匿名获取夹具检查失败时仅保存 manifest，并在本地重试后保留最初提交和失败事件。墙钟回拨和操作内向前跳跃用受控 CLI 时钟验证，旧任务报告不编造提交时间。失败 prepare 在观察发布前也可重建报告；非法版本、未知字段、错误状态及超大数值账本均拒绝且不修改原记录。
 
 这些检查没有调用真实模型或访问真实 B站视频。计量字段与生命周期通过合成和受控输入验证，真实端到端基线与 Token 改善仍须另外验收。

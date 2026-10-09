@@ -200,3 +200,30 @@ class PerformanceTests(unittest.TestCase):
             rejected = self.cli('--operation','report','--task',task)
             self.assertEqual(rejected['error']['code'], 'invalid_task')
             self.assertEqual(pending.read_text(), journal)
+
+    def test_report_rebuilds_failed_prepare_before_observation_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task = base / 'task'
+            failed = self.cli(base / 'missing.mp4', '--output', task)
+            self.assertEqual(failed['status'], 'failed')
+            self.assertGreater(failed['performance']['operations'][0]['elapsed_seconds'], 0)
+            original = (task / 'performance.json').read_bytes()
+            rebuilt = self.cli('--operation', 'report', '--task', task)
+            self.assertEqual(rebuilt['status'], 'failed')
+            self.assertEqual(rebuilt['performance']['operations'], failed['performance']['operations'])
+            self.assertEqual((task / 'performance.json').read_bytes(), original)
+
+    def test_malformed_ledger_is_rejected_without_mutating_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task = base / 'task'
+            self.cli(video_from_image(score_frame(), base), '--output', task)
+            path = task / 'performance.json'
+            original = json.loads(path.read_text())
+            for mutation in ({'schema_version': True}, {'submitted_at': 10**1000}, {'task_status': 'invented'}, {'unrecognized': 'controlled-fixture'}):
+                path.write_text(json.dumps(original | mutation))
+                before = path.read_bytes()
+                rejected = self.cli('--operation', 'report', '--task', task)
+                self.assertEqual(rejected['status'], 'failed')
+                self.assertEqual(path.read_bytes(), before)

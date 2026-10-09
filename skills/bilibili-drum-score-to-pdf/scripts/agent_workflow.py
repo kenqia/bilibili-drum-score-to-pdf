@@ -570,10 +570,18 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
         if operation == 'report' and performance_events:
             raise ConversionError('invalid_performance', '报告重建不接收新性能事件。')
         if operation == 'report':
-            state, observation = checked_task(Path(task), recover=False)
-            recorder = Performance(Path(task), load_json, write_json)
-            recorder.metadata(observation, state)
-            return dict(status='success' if recorder.data['task_status'] == 'success' else 'waiting', complete=recorder.data['task_status'] == 'success', phase='report', performance=recorder.report())
+            directory = Path(task)
+            if directory.is_symlink():
+                raise ConversionError('invalid_task', '任务路径非法。')
+            embedded = retryable_acquisition(directory)
+            if not (directory / 'task.json').exists() and ((directory / 'performance.json').exists() or embedded):
+                recorder = Performance(directory, load_json, write_json, embedded=embedded)
+            else:
+                state, observation = checked_task(directory, recover=False)
+                recorder = Performance(directory, load_json, write_json)
+                recorder.metadata(observation, state)
+            status = recorder.data['task_status']
+            return dict(status=status, complete=status == 'success', phase='report', performance=recorder.report())
         if operation in ('prepare', 'export', 'replay'):
             if not target:
                 raise ConversionError('invalid_input', '需要新的结果目录。')
