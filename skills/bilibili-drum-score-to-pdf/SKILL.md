@@ -83,4 +83,6 @@ Agent-first 的长视频 prepare 用低分辨率变化导航生成重叠观察�
 
 需要从几何建议和必要修正构建决定时，读 `docs/agents/decision-building.md` 后调用 `build-decision`。脚本建议保持未确认，Agent 根据实际原图、细节和相邻接续填写确认；waiting 草稿先解除疑点，成功草稿再走原有 submit/export/replay。补采与物化改变观察 hash 时按新绑定显式修订，保留历史。
 
+需要定位疑点、生成 ROI/补采请求或显式沿用未改的历史判断时，读 `docs/agents/review-plan.md` 后调用 `review-plan` 或构建器的历史复用入口。lazy 接续出现 content conflict/uncertain 时，读 `docs/agents/content-checks.md`，仅在全部必需对应具备可靠证据后继续；污染原帧不能仅凭新增干净帧放行。
+
 这些能力尚未完成真实视频性能放行，不能自动接受普通行或声称已降低总 Token。保留全部原生视觉门禁、真实成本未知字段和实际逐页交付确认。回退到冻结提交 `d09fa9d` 时使用新目录，保留实验任务证据。

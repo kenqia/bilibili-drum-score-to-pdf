@@ -2,6 +2,8 @@
 
 默认操作为 prepare，返回 waiting 并保存观察包，Agent 完成审阅、submit 和 export 后才生成 PDF。显式 --operation convert 保留 moving viewport 路径。v1/v2 保留固定白底多行谱面试验，v3 支持有可靠重叠的连续长谱，v4 支持可确认接续的顺序换页。观察包的 `fixed_layout_only=false` 表示可提交这些协议，并不放宽各协议的支持范围。v1/v2 仍限固定谱面。观察包用变化导航提出原帧，并保留首尾；不能证明采样之间没有短暂换谱。Agent 必须检查完整性，存在疑点时不能标记 complete。
 
+显式实验的 `lazy/materialize` 读取 [惰性证据](lazy-evidence.md)，构建决定读取 [决定构建](decision-building.md)，按疑点规划或沿用未改的实际判断读取 [疑点审阅](review-plan.md)。lazy 接续的内容门禁与恢复限制读取 [内容检查](content-checks.md)。这些入口仍要求实际原帧和原生细节审阅，自动接受尚未启用。
+
 ## 操作
 
 所有操作调用同一 `convert.py`，使用仓库已有 uv 环境。
