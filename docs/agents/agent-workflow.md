@@ -1,16 +1,16 @@
 # Agent-first 原帧流程
 
-这是 opt-in 路径，默认转换仍使用 moving viewport。v1/v2 保留固定白底多行谱面试验，v3 支持有可靠重叠的连续长谱，v4 支持可确认接续的顺序换页。观察包的 `fixed_layout_only=false` 表示可提交这些协议，并不放宽各协议的支持范围。v1/v2 仍限固定谱面。观察包用变化导航提出原帧，并保留首尾；不能证明采样之间没有短暂换谱。Agent 必须检查完整性，存在疑点时不能标记 complete。
+默认操作为 prepare，返回 waiting 并保存观察包，Agent 完成审阅、submit 和 export 后才生成 PDF。显式 --operation convert 保留 moving viewport 路径。v1/v2 保留固定白底多行谱面试验，v3 支持有可靠重叠的连续长谱，v4 支持可确认接续的顺序换页。观察包的 `fixed_layout_only=false` 表示可提交这些协议，并不放宽各协议的支持范围。v1/v2 仍限固定谱面。观察包用变化导航提出原帧，并保留首尾；不能证明采样之间没有短暂换谱。Agent 必须检查完整性，存在疑点时不能标记 complete。
 
 ## 操作
 
 所有操作调用同一 `convert.py`，使用仓库已有 uv 环境。
 
 ```sh
-uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py /absolute/video.mp4 --operation prepare --output /absolute/new-task
-uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation submit --task /absolute/new-task --decision /absolute/agent-decision.json
-uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation export --task /absolute/new-task --output /absolute/new-result
-uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation replay --task /absolute/new-task --output /absolute/new-replay
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py /absolute/video.mp4 --operation prepare --output /absolute/new-task
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation submit --task /absolute/new-task --decision /absolute/agent-decision.json
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation export --task /absolute/new-task --output /absolute/new-result
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation replay --task /absolute/new-task --output /absolute/new-replay
 ```
 
 prepare 返回 waiting，生成 observation.json、task.json、原生 RGB 帧、原生候选局部图和 comparison.png。原帧记录实际整数 PTS、time_base、时间、尺寸和 SHA-256。对照图记录缩放与面板偏移，标注在谱面之外。坐标为原帧 native_pixels、左闭右开的整数 bbox。
@@ -68,14 +68,14 @@ prepare 的 native_detail 是无标注原图局部，最大 800×360 像素，�
 
 宽遮挡、窄光标、无干净候选或边缘不确定时等待。彩色原谱记号保持原样，不能以颜色规则自动擦除；无法判断是源谱记号还是遮挡时记录 uncertain。最终完整行始终从一个原帧裁剪，细节拼图只用于审阅，不作为打印像素。
 
-v2 目前仍是固定谱面试验。Agent 必须自行核查完整行数和顺序；单帧几何与细节覆盖检查不能证明两次采样之间没有隐藏换谱。跨帧身份、补采样和换页由后续 ticket 实施。本轮不宣称通用锐度校准或中央遮挡恢复。
+v2 目前仍是固定谱面试验。Agent 必须自行核查完整行数和顺序；单帧几何与细节覆盖检查不能证明两次采样之间没有隐藏换谱。连续长谱使用下文 v3，变化导航与 supplement 获取补充证据，有序换页使用 v4。本轮不宣称通用锐度校准或中央遮挡恢复。
 
 ## 匿名 BV 输入，#40
 
 prepare 同时接受本地视频和 HTTPS BV 链接，分 P 使用单个正整数 p。
 
 ```sh
-uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=1' --operation prepare --output /absolute/new-task --acquisition-timeout 1800
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=1' --operation prepare --output /absolute/new-task --acquisition-timeout 1800
 ```
 
 入口先检查空目录，再复用匿名获取、公开连接目标检查、每跳重定向检查、总 deadline 和实际解码。获取成功的原视频保存在任务目录，后续操作核对 source.sha256，不重新下载、不修改原视频。observation.source 和最终 manifest.source 保留实测尺寸、原视频 hash 及 origin 的 BV、分 P、匿名标记和后端诊断，不保存签名媒体地址。
@@ -103,7 +103,7 @@ coverage 只含 first_frame、last_frame、unresolved，必须引用观察包首
 comparison.png 保留全部原帧的导航总览。batches 每组至多三帧，相邻组重用末帧；每组的 image_id 指向包内独立 batch_comparison 图，最多 1920×510 像素，时间标签与原生映射随面板保存。实际审阅使用这些有界对照图，避免长总览缩小时丢失时间和谱行关系。补采后生成含观察版本的全新文件，旧对照图仍保留为历史证据。Agent 必须实际查看决策要求的全部原帧，原生细节只列实际阅读的图像。生成图像数量或看过缩略图不能代替看清符号。observations 的 v3/v4 身份检查保持不变。
 
 ```sh
-uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation supplement --task /absolute/task --decision /absolute/request.json
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation supplement --task /absolute/task --decision /absolute/request.json
 ```
 
 补采样使用独立请求协议 schema_version=1，必需字段为 task_id、observation_sha256、observation_version、request_id、issue、timestamps。issue 仅含 reason、start、end。理由非空，时间为有限数，范围在视频内且不超过 30 秒；timestamps 含 1 至 8 个不同的范围内时刻。解码出的实际 PTS 若已存在，也拒绝空转。布尔值、已请求时刻、重复 ID、旧包引用均拒绝。新增图片生成观察版本，旧观察保存在 observation-vN.json，已接受决定保存在 decision-vN.json。新决定必须绑定新 hash，重新审阅全部接续和首尾，不能静默继承旧 complete。
@@ -138,9 +138,15 @@ segments 按出现顺序排列，每段只含 id、frames、rows、observations�
 补采执行前保存保守预扣账本及待解决请求。失败和中断不会退还预算；resume 的 sampling_usage 显示消费，已接受历史仍在。成功补采生成新观察版本，旧包决定不能当作当前完整结果。新包必须重新审阅；等待疑点保存到 task.json。若旧包下补采中断而没有新增证据，使用明确修订记录复查结果，或继续有额度的补采，不直接导出旧 complete。
 
 ```sh
-uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation resume --task /absolute/task
-uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation submit --task /absolute/task --decision /absolute/prefix-or-revision.json
-uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation replay --task /absolute/task --output /absolute/new-replay
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation resume --task /absolute/task
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation submit --task /absolute/task --decision /absolute/prefix-or-revision.json
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation replay --task /absolute/task --output /absolute/new-replay
 ```
 
 导出中断保留已有原图与诊断，重试必须使用新的空结果目录。回滚代码时也保留任务目录和历史；旧代码不认识的新协议必须拒绝，不能自动转入 moving viewport。相同保存决定在独立目录重放核对来源、行序和 PDF 字节；再次视觉推理可产生不同合法决定。
+
+## 默认入口与产品回滚，#41
+
+本地视频和 BV 链接省略 --operation 时等同 prepare。任务目录存放观察、决定与历史；export/replay 使用另一个新空结果目录。没有图像访问能力或还有未决区间时保留 waiting，不能自动转为旧转换。真实双份独立视觉审阅与来源验证已完成，记录见 ../verification.md 的 #41 实验。
+
+恢复任务使用 resume；修改观察用 supplement 后重新审阅，修改接受决定用显式修订。完整产品回滚在独立 checkout 使用旧稳定提交 23ec65459807bed7a51f3fa0f1e9c08b51cc63dc，写到新的结果目录。旧任务与历史保留，不自动迁移。当前版本的旧转换入口可显式调用 --operation convert。

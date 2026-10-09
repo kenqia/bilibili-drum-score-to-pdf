@@ -17,7 +17,7 @@ from manifest import save_crop
 
 class ConversionTests(unittest.TestCase):
     def run_cli(self, video, output):
-        process = subprocess.run([sys.executable, str(CLI), str(video), '--output', str(output)],
+        process = subprocess.run([sys.executable, str(CLI), str(video), '--operation', 'convert', '--output', str(output)],
                                  capture_output=True, text=True, check=False)
         return process.returncode, json.loads(process.stdout)
 

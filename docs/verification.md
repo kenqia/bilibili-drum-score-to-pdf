@@ -187,8 +187,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 脚本独立用 ffprobe 获取 time_base，再用 FFmpeg 按整数 PTS 重解码所选帧。它核对保存原帧、RGB 原裁剪与原帧 bbox、原始灰度像素、来源 hash、行序、A4 页数、DPI 和行间位置。pdfimages 提取 PDF 中的每个嵌入图，按页、尺寸和灰度像素核对所有谱行、标题与行外区域，包含重复出现的图块。相同页数和尺寸但嵌入像素不同的 PDF 会拒绝。
 
-两份报告和 PDF 字节必须一致。该脚本只核对保存决定的执行，`visual_content_verified_by_this_script=false`。完整性、细小记号、遮挡、跨帧对应和分页的实际可读性仍须独立看图核查；真实双份 Agent 视觉验收完成前，不切换默认流程。
-
+两份报告和 PDF 字节必须一致。该脚本只核对保存决定的执行，`visual_content_verified_by_this_script=false`。完整性、细小记号、遮挡、跨帧对应和分页的实际可读性仍须独立看图核查；默认流程的切换须另有真实双份 Agent 视觉验收，本轮记录见下文。
 
 ### #41 第一份真实 Agent 审阅记录
 
@@ -206,4 +205,19 @@ root 实际审阅原图、选行细节与两个渲染页面后记录完整 12 �
 | prepare 总秒数 | 89.871 | 无此阶段 |
 | 转换总秒数 | 未测完整 Agent 过程 | 52.152 |
 
-第一份记录列出实际呈交的 68 个唯一图像 ID，源图像像素合计 122,079,360。canonical comparison 实际呈交时缩放为 482×2048；源图像像素不等于模型编码后的像素。重复呈交次数、模型编码像素与实际推理耗时未知，模型 token 保留 null。生成图数不能代替实际呈交图数，prepare 与旧转换的计时边界也不同，不能据此宣称提速。第二份独立审阅与最终切换门禁另行记录。
+第一份记录列出实际呈交的 68 个唯一图像 ID，源图像像素合计 122,079,360。canonical comparison 实际呈交时缩放为 482×2048；源图像像素不等于模型编码后的像素。重复呈交次数、模型编码像素与实际推理耗时未知，模型 token 保留 null。生成图数不能代替实际呈交图数，prepare 与旧转换的计时边界也不同，不能据此宣称提速。第二份独立审阅与默认切换记录如下。
+
+### #41 第二份独立审阅与默认切换
+
+第二份 export/replay 同样使用提交 513695ccecd7cf2ad8da51985f3fe818644b4c96，独立验证脚本来自 80c706c。盲审使用第一份决定产生前保留的同源观察包，独立阅读原图、细节与两个 PDF 渲染页。两份判断均确认 12 条完整空间谱行、2 页 A4、最低 264.182 effective DPI，未决列表均为空。第二份 export/replay 独立核对 10 个实际 PTS 和 13 个 PDF 嵌入图块，执行来源与 PDF 字节一致。第二份 PDF SHA-256 为 `9107f33e04f1286b74035428ba0664d272ecfc3756c5d4a595145c7006dfb1f3`。
+
+独立决定在第 4、7 条打印行选用了不同的合法原帧和边界，对应原谱标记 47、60。root 实际比较这些裁剪，确认保留相同完整音乐内容；其余选帧框一致。两次独立判断之间不要求 PDF 字节一致，逐份保存决定的 replay 则要求一致。源视频开头静态蓝色 8/休止记号持续存在，不能断言它来自作者配色或应用选择，原样保留后仅转灰度，不声称已还原。
+
+第二份实际呈交 94 个唯一图像 ID，源像素合计 145,382,400；模型编码像素未知。可见模型标识为 GPT-6，精确版本 unknown，token 与推理耗时 null。两份审阅使用同一 prepare 观察包，不能把它计为两次独立获取或 prepare；导出阶段仍有来源重解码。第二份外部证据为 `blind-review-current/review.md`、`verification.json`、`cost.json`、`blind-output-current` 和 `blind-replay-current`。差异记录为 `real-41/independent-review-comparison.json`。
+
+盲审最初的裸 uv 入口返回 invalid_input，使用仓库 requirements.txt 的 --with-requirements 入口后 prepare 之外的提交、导出和重放通过，命令记录在 `blind-review-current/commands.txt`。当前使用说明统一采用该已验证环境，不新增生产依赖。
+
+双份实际视觉审阅、逐份保存决定的来源与 PDF 重放核对通过后，#41 将默认 CLI 和 Skill 切为 prepare。无图像能力、视觉疑点、几何冲突、换页缺口、预算耗尽、损坏记录与中断恢复仍由离线负例覆盖。实际内容结论仅覆盖本真实样本，未采样区间仍不能证明没有隐藏换谱。完整产品回滚到旧稳定提交 23ec65459807bed7a51f3fa0f1e9c08b51cc63dc，使用新结果目录并保留旧任务，不自动迁移。
+
+
+默认切换后的本地完整回归为 84 项，133.370 秒通过。统一入口的默认 prepare 先记录 success 与 waiting 不符的 RED，再验证 waiting/review、resume 证据不变且无 PDF 的 GREEN。旧转换测试显式传 --operation convert 保留原断言。CI 的合成固定决定重放脚本也通过，范围仍为 fixed_decision_replay_only；这些本地结果不替代最终集成提交的 hosted CI。

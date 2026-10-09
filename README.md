@@ -1,42 +1,42 @@
 # B站动态鼓谱转 PDF
 
-输入 B站 BV 链接或本地视频，将视频中已有的白底多行鼓谱整理成 A4 纵向 PDF。程序把视频当作一张长谱的移动窗口，用五线几何跟踪谱行，再从多个时刻选择完整、无遮挡的真实原图。
+输入 B站 BV 链接或本地视频，由 Agent 查看视频中已有的白底多行鼓谱，确定谱行身份、完整性和干净来源。脚本核对几何、实际 PTS 与单帧裁剪，再生成 A4 纵向 PDF。
 
 ## 运行
 
 需要 Python 3.12+、uv、ffmpeg 和 ffprobe。uv 使用独立环境运行仓库已声明的依赖，无需登录 B站或配置 Cookie。
 
 ```sh
-uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibili.com/video/BV1rH4y1R7Rk' --output /absolute/path/to/new-result
-uv run skills/bilibili-drum-score-to-pdf/scripts/convert.py /absolute/path/to/video.mp4 --output /absolute/path/to/new-result
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibili.com/video/BV1rH4y1R7Rk' --output /absolute/new-task
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py /absolute/video.mp4 --output /absolute/new-task
 ```
 
-使用新的空目录，检查 stdout JSON 和 `manifest.json`。`success` 表示所有空间谱行都选到了完整干净原图，PDF 在行间分页。`waiting` 给出时间、截图和简单原因，请提供更好的视频后运行新任务。`failed` 给出脱敏诊断。匿名获取失败且目录仅含失败 manifest 时，可用原命令重试。
+默认操作是 prepare，返回 `waiting` 并保存观察包，不直接生成 PDF。Agent 实际阅读原帧、相邻对照图和所选原生细节，记录身份、完整性、遮挡与首尾；必要时补采样。Agent 写决定并提交，用户无需填写 JSON。字段和补采、分批审阅、恢复操作见 [Agent workflow](docs/agents/agent-workflow.md)。
 
-结果目录包含 `score.pdf`、独立标题图、逐行 RGB 原裁剪与灰度打印图、原视频帧和来源记录。每行可按 timestamp、bbox 和 original_image 核对。打印前逐页检查符头、符杆、细小记号与首尾。
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation submit --task /absolute/new-task --decision /absolute/agent-decision.json
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation export --task /absolute/new-task --output /absolute/new-result
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation replay --task /absolute/new-task --output /absolute/new-replay
+```
+
+任务与结果使用不同的新空目录。检查 stdout JSON 和 manifest.json。只有 `success`、`complete=true` 且没有未决区间时才交付完整曲谱。`waiting` 保留证据与疑点，可 resume 或按协议补采；`failed` 给出脱敏诊断。匿名获取失败且目录仅含失败 manifest 时，可用原命令重试。
+
+结果包含 score.pdf、显式标题或行外区域、逐行 RGB 原裁剪与灰度打印图、原视频帧和来源记录。每行可按 timestamp、bbox 与 original_image 核对。打印前逐页检查标题、速度、拍号、细小记号与首尾。
 
 ## 支持范围
 
-支持固定比例、白底、多行、固定窗口或单向向上推进的长谱，相邻窗口需有至少两条完整五线重叠。标题与速度从首张稳定谱面独立保留。重复段落按空间位置保留；半行等到完整出现才收录。
+固定谱面可用 v1/v2，固定比例、白底、多行、单向向上推进的连续长谱使用 v3 或 v4 的段内协议，相邻窗口至少两条完整谱行可靠重叠。有序翻页用 v4，须从实际原图确认末小节与下一页首小节接续，空间段分别编号。重复段落按原谱空间位置保留；半行等到完整出现才收录。
 
-光标与固定屏幕遮挡只影响候选选择。程序不擦除光标，不拼接像素、不补绘、不识别重排音符。原谱彩色记号只转灰度。没有干净完整观察时返回等待。
+每条打印谱行来自一张真实完整原帧，只转灰度。Agent 判断光标、复杂遮挡、细小符号与边界；脚本验证坐标、来源和几何，不重画、修补或拼接音符。没有可确认的干净完整观察时等待。源视频中的彩色静态记号原样保留，不能据颜色断言其作者或应用来源。
 
-低于 150 effective DPI 的谱行拒绝打印。高 DPI 仍需人工核对清晰度。任意遮挡、比例变化、倒退、无重叠的大跳跃以及快速推进造成的几何歧义不保证支持。稀疏采样无法证明两次观察之间没有换谱。
+低于 150 effective DPI 的谱行拒绝打印。高 DPI 仍需实际核对清晰度。比例变化、倒退、无重叠的大跳跃、未知遮挡与无法确认的翻页关系可能等待。稀疏采样不能证明未采样时间没有换谱，重放也不能证明模型识别正确。
 
-## 验证与维护
+## 验证与回滚
 
 ```sh
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
 ```
 
-GitHub Actions 在独立 Linux runner 中运行全部离线回归与固定 Agent 决策重放。覆盖范围、受控证据和回滚见 [离线 CI](docs/agents/offline-ci.md)。
+测试还需要 Poppler 的 pdfinfo、pdfimages 与 pdftoppm。GitHub Actions 运行全部离线回归与固定 Agent 决策重放。受控证据见 [离线 CI](docs/agents/offline-ci.md)，双份真实视觉审阅、独立来源核对与成本边界见 [verification](docs/verification.md)。架构、资源限额与安全边界见 [architecture](docs/architecture.md)。随仓库交付的 [SKILL.md](skills/bilibili-drum-score-to-pdf/SKILL.md) 使用同一默认流程。
 
-测试还需要 Poppler 的 `pdfinfo`、`pdfimages` 与 `pdftoppm`。架构、输入安全、资源限额和边界见 [architecture](docs/architecture.md)，真实 URL 双跑与逐行来源验收见 [verification](docs/verification.md)。随仓库交付的 [SKILL.md](skills/bilibili-drum-score-to-pdf/SKILL.md) 使用同一入口。
-
-移动窗口核心三个模块合计不得超过 500 行；依赖防火墙测试防止引入已删除的恢复模块。历史方案通过 Git history 查看。
-
-## Agent-first 试验路径
-
-固定谱面与有可靠视觉重叠的连续长谱可通过同一入口执行 prepare、submit、export 和 replay，prepare 接受本地视频或匿名 HTTPS BV 链接及分 P。Agent 阅读原图、相邻对照图及原生细节并提交结构化选择，脚本验证并从真实原帧导出。默认流程保持现有 moving viewport。操作、协议和当前限制见 [Agent workflow](docs/agents/agent-workflow.md)。
-
-连续长谱使用 v3 的空间实例、相邻对应与覆盖审计。每对观察至少两条可靠重叠行；单行重叠、几何冲突、缺少首尾或未决区间会等待。当前首、中、尾三帧不适合证明整曲覆盖；后续补采样前，不得把无重叠的长视频标为完整。
+保留的 moving viewport 路径用 `--operation convert` 显式运行。三个核心模块合计不得超过 500 行，依赖防火墙继续约束它。需要回滚完整产品时，在独立 checkout 使用旧稳定提交 `23ec65459807bed7a51f3fa0f1e9c08b51cc63dc` 和新的结果目录；保留已有 Agent 任务，不迁移或覆盖其记录。

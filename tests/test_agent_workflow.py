@@ -16,6 +16,21 @@ class AgentWorkflowTests(unittest.TestCase):
         self.assertTrue(p.stdout, p.stderr)
         return p.returncode, json.loads(p.stdout)
 
+    def test_default_prepares_for_agent_and_resume_preserves_unreviewed_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            video = video_from_image(score_frame(), base)
+            task = base / 'task'
+            _, prepared = self.cli(video, '--output', task)
+            self.assertEqual(prepared['status'], 'waiting')
+            self.assertEqual(prepared['phase'], 'review')
+            packet = (task / 'observation.json').read_bytes()
+            self.assertFalse(json.loads(packet).get('fixed_layout_only', False))
+            _, resumed = self.cli('--operation', 'resume', '--task', task)
+            self.assertEqual(resumed['status'], 'waiting')
+            self.assertEqual(packet, (task / 'observation.json').read_bytes())
+            self.assertFalse((task / 'score.pdf').exists())
+
     def test_fixed_local_score_decision_exports_and_replays_native_pixels(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)

@@ -1,4 +1,6 @@
-# Moving viewport 架构与实施规格
+# Agent-first 与 moving viewport 架构
+
+默认入口、真实视觉验收与回滚见下文 Agent-first 节。前面的 moving viewport 几何、搜索及旧成本门禁描述显式 --operation convert 路径。
 
 Row identity is spatial, not pixel-content identity.
 
@@ -10,7 +12,7 @@ Partial rows are ignored until they become complete.
 
 No pixel reconstruction in the normal product.
 
-## 决策
+## 保留的 moving viewport 决策
 
 将视频视为一张现成长谱的移动窗口。五线锚点、共同纵向位移与出现顺序建立谱行位置。每条打印谱行来自一个真实视频帧的完整无遮挡裁剪，只转灰度。标题与速度从首张稳定谱面独立保存。
 
@@ -54,12 +56,17 @@ HTTPS、公开 IP、每跳重定向和实际连接均检查，连接固定已验
 
 不新增生产依赖。完全周期性的几何在快速整行跳跃或倒退时可能与停留画面混淆，算法不能从空间锚点证明两次采样间的隐藏轨迹；这些输入超出支持范围。回滚使用 Git 中的旧提交及新的结果目录，不能将旧任务状态当作新任务继续运行。远端提交、PR、合并及 Issues 修改需要单独明确确认。
 
-## Agent-first opt-in 路径
+## 默认 Agent-first 路径
 
-规格 #32 授权新增固定本地谱面的观察、Agent 决策与确定性执行路径。它复用统一入口与原帧/PDF 能力，模型只提供选择和公开可观察依据，不嵌入 API。协议见 [Agent workflow](agents/agent-workflow.md)。现有 moving viewport 核心与几何身份规则继续约束默认转换；新的视觉决策记录独立于旧空间跟踪。单帧原像素、输入安全、来源核对和不重画约束两条路径都保留。
+规格 #32 规定观察、Agent 决策与确定性执行路径。它复用统一入口与原帧/PDF 能力，模型只提供选择和公开可观察依据，不嵌入 API。协议见 [Agent workflow](agents/agent-workflow.md)。默认入口为 prepare，Agent 实际审阅后 submit/export；显式 --operation convert 保留 moving viewport 核心与原几何身份规则。新的视觉决策记录独立于旧空间跟踪。单帧原像素、输入安全、来源核对和不重画约束两条路径都保留。
 
 Agent 原生谱行协议 v2 允许模型提出 ROI 与边界，检测器只生成建议。脚本检查整数矩形、原生细节完整覆盖、单帧来源、显式有界精修和 DPI；光标、复杂遮挡及细小符号由 Agent 对原生图作判断。重放检查无法替代视觉验收。v1 的规则候选选择保留用于兼容。
 
 连续长谱 v3 将视觉对应与几何验证分开。Agent 提交每帧空间实例、五线锚点、完整性和相邻对应，脚本在 agent_continuity.py 检查共同位移与顺序，计算原有 global_y/scroll_offset，随后复用原生候选和 PDF 导出。视觉依据可消除等间距的对应歧义，但不放宽几何冲突、比例变化、单行重叠或来源检查。审计范围是实际观察到的连续长谱，不证明未采样时间没有换谱。协议和限制见 Agent workflow 的 v3 节。旧三个移动窗口模块与 500 行防火墙不变。
 
 有序谱面 v4 将可确认接续的翻页分为独立空间段，复用 v3 段内几何，每段重置滚动位移。边界必须有相邻前后原图和完整边缘，Agent 明确记录接续、跳页、回跳、缩放及布局突变。只有顺序 page_turn 能导出；音乐内容相似不合并跨段实例。独立标题与行外区域由 Agent 指定原生来源，复用裁剪和 A4 写入能力。协议及未采样区间限制见 Agent workflow 的 v4 节。
+
+
+#41 在双份独立真实视觉审阅、保存决定重放和 PDF 来源验证通过后，将 CLI 与 Skill 默认入口切为 prepare。模型识别与几何执行各自保留审计，脚本不嵌入模型 API。标题和行外区域由 Agent 显式指出；每个打印图块来自单个真实 PTS 原帧，只转灰度。静态源视频颜色保留，无法证明其作者或应用来源。
+
+完整产品回滚使用独立 checkout 的旧稳定提交 23ec65459807bed7a51f3fa0f1e9c08b51cc63dc 与新结果目录，保留 Agent 任务和历史，不自动迁移。新路径的真实来源、双视觉差异和未测成本见 verification.md。
