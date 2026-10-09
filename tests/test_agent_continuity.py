@@ -110,3 +110,29 @@ class ContinuityTests(unittest.TestCase):
             result=self.cli('--operation','export','--task',task,'--output',base/'out')
             self.assertEqual(result['status'],'success',result)
             self.assertEqual(result['rows'][1]['source_frame'],'frame-001.png')
+
+
+class ContinuityValidationTests(unittest.TestCase):
+    cli = ContinuityTests.cli
+    prepare = ContinuityTests.prepare
+
+    def test_unknown_or_non_string_observation_references_fail_but_conflicts_wait(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory); task, decision = self.prepare(base)
+            path = base / 'decision.json'
+            for reference in ('unknown-observation', 7, [], {}):
+                with self.subTest(reference=reference):
+                    bad = copy.deepcopy(decision)
+                    bad['rows'][0]['observation_id'] = reference
+                    path.write_text(json.dumps(bad))
+                    result = self.cli('--operation', 'submit', '--task', task, '--decision', path)
+                    self.assertEqual(result['status'], 'failed', result)
+                    self.assertEqual(result['error']['code'], 'invalid_decision', result)
+                    self.assertFalse((task / 'decision.json').exists())
+            for change in (dict(observation_id='0-B'), dict(frame_id='frame-001'), dict(bbox=[70,180,1210,321])):
+                with self.subTest(change=change):
+                    bad = copy.deepcopy(decision); bad['rows'][0].update(change)
+                    path.write_text(json.dumps(bad))
+                    result = self.cli('--operation', 'submit', '--task', task, '--decision', path)
+                    self.assertEqual(result['status'], 'waiting', result)
+                    self.assertEqual(result['error']['code'], 'review_required', result)

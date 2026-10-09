@@ -103,8 +103,10 @@ def continuous_rows(decision, packet, presented):
         waiting('空间实例漏行、重复或打印顺序非法。')
     native=[]
     for r in rows:
-        s=by_id.get(r['observation_id'])
-        if not s or s['instance_id']!=r['instance_id'] or s['frame_id']!=r.get('frame_id') or s['bbox']!=r.get('bbox'):
+        if not isinstance(r['observation_id'], str) or r['observation_id'] not in by_id:
+            invalid('所选谱行观察引用非法。')
+        s=by_id[r['observation_id']]
+        if s['instance_id']!=r['instance_id'] or s['frame_id']!=r.get('frame_id') or s['bbox']!=r.get('bbox'):
             waiting('所选原裁剪与身份观察不一致。')
         if not s['complete']:
             waiting('半行必须等到完整出现才能打印。')
