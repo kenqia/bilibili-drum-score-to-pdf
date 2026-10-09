@@ -27,14 +27,20 @@ def main():
     collector.add_argument('--cwd', default=os.getcwd())
     collector.add_argument('--mode', choices=['review','review_only','replay'], default='review')
     collector.add_argument('--output', type=Path, required=True)
+    aggregation = commands.add_parser('aggregate')
+    aggregation.add_argument('--runs', type=Path, required=True)
     args = parser.parse_args()
     try:
-        if args.task.is_symlink():
-            raise ValueError
-        checked_task(args.task, recover=False)
+        if args.operation == 'aggregate':
+            from benchmark_aggregate import aggregate
+            result = aggregate(load_json(args.runs))
+        else:
+            if args.task.is_symlink():
+                raise ValueError
+            checked_task(args.task, recover=False)
         if args.operation == 'import':
             result = dict(status='success', usage=import_packet(args.task, load_json(args.events), load_json, write_json))
-        else:
+        elif args.operation == 'collect':
             from codex_usage_source import collect
             packet = collect(args.task, args.root_thread, args.root_turn, args.invocation, args.start, args.end, args.codex_home, load_json, args.cwd, args.mode, args.thread_id)
             if args.output.exists() or args.output.is_symlink():

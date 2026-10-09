@@ -188,3 +188,5 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 `source.kind` 为 host 或 controlled_fixture。后者用于离线测试，不能当作真实模型计量。`elapsed_seconds` 是调用方提供的单调耗时，时间戳使用 Unix 秒。事件名限 agent_review、model_queue、user_pause、decision_building；状态限 complete、failed、waiting。阶段允许重叠，相同 ID 与内容重复导入不记第二次成本，同 ID 内容变化会拒绝整批。独立调用须使用不同 ID。宿主事件不能填写脚本计数、宣告交付或覆盖脚本事件，`report` 不接收新事件。
 
 模型 Token、模型耗时、宿主工具调用数和实际图像呈交数没有可信来源时保留 null。决定声明的 presented_images 和生成图像数量仍保留原口径，不能替代实际呈交事件。审阅、排队、用户暂停与主动执行总耗时无法完整拆分时也为 null。这里的脚本计时不证明模型看清了谱面，也不证明总 Token 已降低。显式 `--operation convert` 继续使用旧报告口径。
+
+宿主实际 Token、工具和图像呈交使用独立 [计量适配器](host-usage.md)。`host_usage.py collect` 只读明确 invocation 的授权会话元数据，`import` 验证任务绑定并保存幂等账本，`aggregate` 按入口、真实审阅与重放分组。统一 report 的 `host_usage` 区分已观察实际量、完整实际量和缺失来源；Desktop partial 采集不能冒充完整视频基线。

@@ -147,7 +147,7 @@ def collect(directory, root, root_turn, invocation, start, end, home, load, cwd,
     packet = dict(schema_version=1, lifecycle_id=ledger['lifecycle_id'], task_id=ledger['task_id'],
                   source=dict(kind='codex_desktop_jsonl', id='desktop-' + root),
                   scope=dict(invocation_id=invocation, root_thread_id=root, root_turn_id=root_turn, started_at=start, ended_at=end, mode=mode, thread_ids=sorted(set(threads))),
-                  coverage=dict(model_calls_complete=False, tools_complete=False, images_complete=False,
+                  coverage=dict(lifecycle_complete=False, model_calls_complete=False, tools_complete=False, images_complete=False,
                                 expected_response_ids=[], missing_reasons=['Desktop source lacks response-start and failed-call coverage',
                                 'Nested tool calls and actual image presentations are not fully observable']), events=events)
     return validate(packet, ledger, image_catalog(directory, load))

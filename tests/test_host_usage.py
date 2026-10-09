@@ -27,7 +27,7 @@ class HostUsageTests(unittest.TestCase):
                     source=dict(kind='controlled_fixture', id='fixture'),
                     scope=dict(invocation_id='run-1', root_thread_id='root', root_turn_id='turn',
                                started_at=report['submitted_at'], ended_at=time.time(), mode='review', thread_ids=['root']),
-                    coverage=dict(model_calls_complete=True, tools_complete=True, images_complete=False,
+                    coverage=dict(lifecycle_complete=report['task_status'] != 'waiting', model_calls_complete=True, tools_complete=True, images_complete=False,
                                   expected_response_ids=['response-1', 'response-retry'], missing_reasons=['images not instrumented']),
                     events=[dict(kind='model_call', event_id='usage-1', thread_id='root', response_id='response-1',
                                  timestamp=report['submitted_at'], status='complete', usage=dict(input_tokens=100, output_tokens=10, total_tokens=110,
@@ -110,6 +110,14 @@ class HostUsageTests(unittest.TestCase):
             self.assertNotIn('PRIVATE_', output.read_text())
             self.assertNotIn('999999', output.read_text())
             self.assertFalse((task / 'host-usage.json').exists())  # collect is read-only for task
+            child_output = base / 'child-only.json'
+            code, result = self.run_cli(HOST, 'collect', '--task', task, '--invocation', 'child-only',
+                '--thread-id', 'child', '--start', start, '--end', end, '--output', child_output, env=env)
+            self.assertEqual(code, 0, result)
+            child_packet = json.loads(child_output.read_text())
+            self.assertEqual(child_packet['scope']['root_turn_id'], 'turn')
+            self.assertEqual(len(child_packet['events']), 1)
+            self.assertEqual(child_packet['events'][0]['thread_id'], 'child')
 
     def test_images_missing_usage_and_unknown_fields_preserve_cost_completeness(self):
         from test_agent_performance import PerformanceTests
@@ -165,3 +173,57 @@ class HostUsageTests(unittest.TestCase):
                 code,value=self.run_cli(HOST,'import','--task',task,'--events',path)
                 self.assertEqual(code,2,mutate)
                 self.assertEqual((task/'host-usage.json').read_bytes(),original)
+
+    def test_aggregate_keeps_status_denominator_and_replay_separate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory)
+            runs=[]
+            for index, seconds in enumerate((10,20,30,40,50)):
+                runs.append(dict(run_id=f'run-{index}',sample_id='standard',code_version='baseline',entry='url',mode='review',
+                    input_sha256='a'*64,environment_id='frozen-env',model_id='fixture-model',model_version='unknown',
+                    measurement_source='controlled_fixture',timeout_seconds=1200,
+                    performance=dict(lifecycle_id=f'life-{index}',task_status='success',wall_elapsed_seconds=seconds,
+                        first_deliverable_at=seconds,wall_clock_valid=True,model_tokens=dict(input_tokens=90,output_tokens=10,total_tokens=100))))
+            for status in ('waiting','failed','cancelled','timeout'):
+                runs.append(dict(runs[0],run_id=status,performance=dict(lifecycle_id=status,task_status=status,
+                    wall_elapsed_seconds=8,first_deliverable_at=None,wall_clock_valid=True,model_tokens=None)))
+            runs.append(dict(runs[0],run_id='replay',mode='replay',performance=dict(runs[0]['performance'],lifecycle_id='replay',wall_elapsed_seconds=1)))
+            runs.append(runs[0])  # duplicated report import is idempotent
+            path=base/'runs.json';path.write_text(json.dumps(dict(schema_version=1,runs=runs)))
+            code,result=self.run_cli(HOST,'aggregate','--runs',path)
+            self.assertEqual(code,0,result)
+            group=next(g for g in result['groups'] if g['mode']=='review')
+            self.assertEqual(group['submitted_count'],9)
+            self.assertEqual(group['delivery_seconds'],dict(sample_count=5,p50=30,p90=50,algorithm='nearest-rank'))
+            self.assertAlmostEqual(group['status_rates']['success'],5/9)
+            self.assertAlmostEqual(group['status_rates']['cancelled'],1/9)
+            self.assertIsNone(group['actual_total_tokens'])
+            self.assertEqual(group['complete_token_run_count'],5)
+            self.assertEqual(group['known_observed_total_tokens'],500)
+            self.assertEqual(next(g for g in result['groups'] if g['mode']=='replay')['delivery_seconds']['sample_count'],1)
+            self.assertTrue(group['small_sample_limit'])
+            self.assertFalse(group['real_baseline_eligible'])
+            runs[-1]=dict(runs[0],input_sha256='b'*64)
+            path.write_text(json.dumps(dict(schema_version=1,runs=runs)))
+            self.assertEqual(self.run_cli(HOST,'aggregate','--runs',path)[0],2)
+
+    def test_only_explicit_complete_caller_scope_can_report_zero_model_tokens(self):
+        from test_agent_performance import PerformanceTests
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory)
+            task,_=self.prepare(base)
+            self.run_cli(CLI,'--operation','submit','--task',task,'--decision',PerformanceTests().decision(task,base))
+            _,exported=self.run_cli(CLI,'--operation','export','--task',task,'--output',base/'output')
+            packet=self.packet(exported['performance'])
+            packet['events']=[]
+            packet['coverage']['expected_response_ids']=[]
+            path=base/'usage.json';path.write_text(json.dumps(packet))
+            code,result=self.run_cli(HOST,'import','--task',task,'--events',path)
+            self.assertEqual(code,0,result)
+            self.assertEqual(result['usage']['model_tokens']['total_tokens'],0)
+            self.assertTrue(result['usage']['token_complete'])
+            packet['coverage']['model_calls_complete']=False
+            packet['scope']['ended_at']=time.time()
+            path.write_text(json.dumps(packet))
+            _,partial=self.run_cli(HOST,'import','--task',task,'--events',path)
+            self.assertIsNone(partial['usage']['model_tokens'])

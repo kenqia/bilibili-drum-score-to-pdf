@@ -251,3 +251,9 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 新增 `tests/test_agent_performance.py`，从统一 CLI 检查 prepare、resume、report、submit、export 与 replay。用合成视频核对等待计入跨进程历时、重复决定保留单次接受历史、真实 CLI 重试留下不同事件、首次交付后恢复不改写交付时间，以及固定决定 PDF 重放一致。受控计时文件验证阶段重叠、相同事件去重和冲突拒绝。SIGKILL 用例在导出原生 seek 开始后中断进程，再用 resume 核对未结束事件和未知单调耗时。匿名获取夹具检查失败时仅保存 manifest，并在本地重试后保留最初提交和失败事件。墙钟回拨和操作内向前跳跃用受控 CLI 时钟验证，旧任务报告不编造提交时间。失败 prepare 在观察发布前也可重建报告；非法版本、未知字段、错误状态及超大数值账本均拒绝且不修改原记录。
 
 这些检查没有调用真实模型或访问真实 B站视频。计量字段与生命周期通过合成和受控输入验证，真实端到端基线与 Token 改善仍须另外验收。
+
+### #45 受控宿主计量
+
+`tests/test_host_usage.py` 从公开 host CLI 和统一任务 report 验证逐响应计量、失败重试、相同事件幂等导入、冲突拒绝、缺失 usage、未知字段、线程绑定、真实呈交尺寸与源像素区分、额外 PDF 图像、已认证零调用和 nearest-rank 汇总。受控 Desktop 文件含正文与工具参数哨兵，采集输出不出现这些内容；同 inode 的 sessions/archived_sessions 不重复计量，其他 turn、窗口外开发调用与无关线程排除。模型累计镜像不参加逐响应总量。source、entry、环境、模型版本和 review/replay 分组保留，controlled_fixture 不具有真实基线资格。
+
+这些都是合成视频和受控计量输入，不证明真实模型视觉质量或真实端到端提速。授权只读勘察已经找到本次 Desktop 的 `token_usage_record.usage`；失败模型调用完整账本与图像实际呈交覆盖仍未知，采集器始终输出 partial coverage。三类真实视频的完整新鲜基线与实际总 Token 降低尚未通过，不能据此开启性能快路径。

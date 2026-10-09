@@ -40,3 +40,5 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 测试还需要 Poppler 的 pdfinfo、pdfimages 与 pdftoppm。GitHub Actions 运行全部离线回归与固定 Agent 决策重放。受控证据见 [离线 CI](docs/agents/offline-ci.md)，双份真实视觉审阅、独立来源核对与成本边界见 [verification](docs/verification.md)。架构、资源限额与安全边界见 [architecture](docs/architecture.md)。随仓库交付的 [SKILL.md](skills/bilibili-drum-score-to-pdf/SKILL.md) 使用同一默认流程。
 
 保留的 moving viewport 路径用 `--operation convert` 显式运行。三个核心模块合计不得超过 500 行，依赖防火墙继续约束它。需要回滚完整产品时，在独立 checkout 使用旧稳定提交 `23ec65459807bed7a51f3fa0f1e9c08b51cc63dc` 和新的结果目录；保留已有 Agent 任务，不迁移或覆盖其记录。
+
+授权宿主的真实 Token、工具与图像呈交可用 [计量适配器](docs/agents/host-usage.md) 采集和导入，汇总按真实审阅、重放与入口分别统计。缺失模型调用或呈交覆盖时保留 null，不将开发会话成本当作视频基线。

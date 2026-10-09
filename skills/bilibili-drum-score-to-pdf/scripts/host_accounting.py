@@ -52,8 +52,8 @@ def validate(packet, ledger, known_images):
         number(scope[name])
     require(scope['started_at'] <= scope['ended_at'])
     coverage = packet['coverage']
-    require(isinstance(coverage, dict) and set(coverage) == {'model_calls_complete', 'tools_complete', 'images_complete', 'expected_response_ids', 'missing_reasons'})
-    for name in ('model_calls_complete', 'tools_complete', 'images_complete'):
+    require(isinstance(coverage, dict) and set(coverage) == {'lifecycle_complete', 'model_calls_complete', 'tools_complete', 'images_complete', 'expected_response_ids', 'missing_reasons'})
+    for name in ('lifecycle_complete', 'model_calls_complete', 'tools_complete', 'images_complete'):
         require(type(coverage[name]) is bool)
     require(isinstance(coverage['expected_response_ids'], list) and len(coverage['expected_response_ids']) <= 100000)
     for value in coverage['expected_response_ids']:
@@ -166,8 +166,15 @@ def summarize(packet, ledger, directory, load):
     missing = sorted(set(packet['coverage']['expected_response_ids']) - ids)
     missing_usage = [e['response_id'] for e in models if e['usage'] is None]
     end = ledger.get('first_deliverable_at')
-    scope_closed = (end is not None and packet['scope']['started_at'] <= ledger['submitted_at'] and packet['scope']['ended_at'] >= end)
+    terminal = end if ledger.get('task_status') == 'success' else ledger.get('last_observed_at')
+    if terminal is not None and ledger.get('task_status') == 'success':
+        terminal = max([terminal] + [e['ended_at'] for e in ledger.get('operations', [])
+            if e.get('operation') in ('export', 'replay') and e.get('status') == 'success' and e.get('ended_at') is not None])
+    scope_closed = (packet['coverage']['lifecycle_complete'] and terminal is not None and packet['scope']['started_at'] <= ledger['submitted_at'] and packet['scope']['ended_at'] >= terminal)
     complete = packet['scope']['mode'] != 'review_only' and packet['coverage']['model_calls_complete'] and not missing and not missing_usage and scope_closed
+    if complete and not models:
+        for key in ('input_tokens', 'output_tokens', 'total_tokens'):
+            actual[key] = observed[key] = 0
     reasons = list(packet['coverage']['missing_reasons'])
     if not packet['coverage']['model_calls_complete']:
         reasons.append('model call coverage unavailable')

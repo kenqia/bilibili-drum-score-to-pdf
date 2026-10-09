@@ -175,8 +175,8 @@ class Performance:
             wall_clock_valid=not anomaly, observed_at=now,
             host_usage=host, model_tokens=host['model_tokens'] if host else None, model_elapsed_seconds=None, host_tool_calls=host['host_tool_calls'] if host else None,
             actual_presented_images=host['actual_presented_images'] if host else None, active_elapsed_seconds=None, model_queue_seconds=None,
-            user_pause_seconds=None, missing_measurements=(['lifecycle submission time unavailable for pre-existing task'] if self.data['submitted_at'] is None else []) + ['host/model usage and presentation events unavailable',
-                'unobserved waiting cannot be split into review, queue or user pause'],
+            user_pause_seconds=None, missing_measurements=(['lifecycle submission time unavailable for pre-existing task'] if self.data['submitted_at'] is None else []) + ((host['missing_measurements'] if host else ['host/model usage and presentation events unavailable']) + [
+                'unobserved waiting cannot be split into review, queue or user pause']),
             script_operation_count=len(self.data['operations']),
             native_seek_attempts=sum(e['name'] == 'native_decode' for e in self.data['stages']),
             source_redecode_attempts=sum(e['name'] == 'source_redecode' for e in self.data['stages']),
