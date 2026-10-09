@@ -15,12 +15,32 @@ class PerformanceTests(unittest.TestCase):
         self.assertTrue(process.stdout, process.stderr)
         return json.loads(process.stdout)
 
+    def controlled_cli(self, *args, clock=None):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from test_link_input import cli
+        if not hasattr(self, 'clock_anchor'):
+            self.clock_anchor = time.time(), time.monotonic()
+        stable = clock is None
+        if stable:
+            clock = lambda: self.clock_anchor[0] + (time.monotonic() - self.clock_anchor[1])
+        capture = io.StringIO()
+        with patch.object(sys, 'argv', [str(CLI), *map(str,args)]), contextlib.redirect_stdout(capture), patch('agent_performance.time.time', side_effect=clock):
+            cli.main()
+        result = json.loads(capture.getvalue())
+        if stable:
+            self.assertTrue(result['performance']['wall_clock_valid'],result)
+            self.assertIsNotNone(result['performance']['wall_elapsed_seconds'],result)
+            self.assertEqual(result['performance']['clock_anomalies'],[])
+        return result
+
     def test_prepare_resume_and_report_include_wait_without_recounting(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             video = video_from_image(score_frame(), base)
             task = base / 'task'
-            prepared = self.cli(video, '--output', task)
+            prepared = self.controlled_cli(video, '--output', task)
             report = prepared['performance']
             self.assertEqual(report['task_status'], 'waiting')
             self.assertIsNone(report['first_deliverable_at'])
@@ -28,12 +48,12 @@ class PerformanceTests(unittest.TestCase):
             self.assertEqual(report['operations'][0]['operation'], 'prepare')
             self.assertGreater(report['operations'][0]['elapsed_seconds'], 0)
             time.sleep(0.05)
-            resumed = self.cli('--operation', 'resume', '--task', task)['performance']
+            resumed = self.controlled_cli('--operation', 'resume', '--task', task)['performance']
             self.assertEqual(report['submitted_at'], resumed['submitted_at'])
             self.assertGreater(resumed['wall_elapsed_seconds'], report['wall_elapsed_seconds'] + 0.05)
             self.assertEqual(len(resumed['operations']), 2)
-            rebuilt = self.cli('--operation', 'report', '--task', task)['performance']
-            again = self.cli('--operation', 'report', '--task', task)['performance']
+            rebuilt = self.controlled_cli('--operation', 'report', '--task', task)['performance']
+            again = self.controlled_cli('--operation', 'report', '--task', task)['performance']
             self.assertEqual(rebuilt['operations'], again['operations'])
             self.assertEqual(rebuilt['stages'], again['stages'])
             self.assertEqual(rebuilt['source']['sha256'], json.loads((task / 'observation.json').read_text())['source']['sha256'])
@@ -44,7 +64,7 @@ class PerformanceTests(unittest.TestCase):
             base = Path(directory)
             task = base / 'task'
             video = video_from_image(score_frame(), base)
-            report = self.cli(video, '--output', task)['performance']
+            report = self.controlled_cli(video, '--output', task)['performance']
             operation = report['operations'][0]
             event = dict(event_id='host-review-1', name='agent_review', started_at=operation['started_at'],
                          ended_at=operation['ended_at'], elapsed_seconds=operation['elapsed_seconds'], status='complete')
@@ -52,8 +72,8 @@ class PerformanceTests(unittest.TestCase):
                           events=[event, dict(event, event_id='host-review-2')])
             path = base / 'events.json'
             path.write_text(json.dumps(packet))
-            first = self.cli('--operation', 'resume', '--task', task, '--performance-events', path)['performance']
-            second = self.cli('--operation', 'resume', '--task', task, '--performance-events', path)['performance']
+            first = self.controlled_cli('--operation', 'resume', '--task', task, '--performance-events', path)['performance']
+            second = self.controlled_cli('--operation', 'resume', '--task', task, '--performance-events', path)['performance']
             external = [e for e in second['stages'] if e['source'] == 'controlled_fixture']
             self.assertEqual(len(external), 2)
             self.assertEqual(first['stages'], second['stages'])
@@ -62,10 +82,41 @@ class PerformanceTests(unittest.TestCase):
             self.assertGreater(sum(e['elapsed_seconds'] for e in second['stages']), second['wall_elapsed_seconds'])
             packet['events'][0]['elapsed_seconds'] += 1
             path.write_text(json.dumps(packet))
-            failed = self.cli('--operation', 'resume', '--task', task, '--performance-events', path)
+            failed = self.controlled_cli('--operation', 'resume', '--task', task, '--performance-events', path)
             self.assertEqual(failed['error']['code'], 'invalid_performance')
-            rebuilt = self.cli('--operation', 'report', '--task', task)['performance']
+            rebuilt = self.controlled_cli('--operation', 'report', '--task', task)['performance']
             self.assertEqual(first['stages'], rebuilt['stages'])
+
+    def test_forward_clock_jump_nulls_wall_elapsed_and_survives_resume_and_report(self):
+        import itertools
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task = base/'task'
+            video = video_from_image(score_frame(),base)
+            now = time.time()
+            ticks = itertools.chain([now,now],itertools.repeat(now+3600))
+            clock = lambda: next(ticks)
+            prepared = self.controlled_cli(video,'--output',task,clock=clock)['performance']
+            self.assertFalse(prepared['wall_clock_valid'])
+            self.assertIsNone(prepared['wall_elapsed_seconds'])
+            self.assertEqual(len(prepared['clock_anomalies']),1)
+            anomaly = prepared['clock_anomalies'][0]
+            self.assertEqual(anomaly['kind'],'wall_clock_discontinuity')
+            self.assertEqual(anomaly['operation_id'],prepared['operations'][0]['event_id'])
+            self.assertEqual(anomaly['wall_seconds'],3600)
+            self.assertGreater(anomaly['monotonic_seconds'],0)
+            self.assertGreater(anomaly['wall_seconds']-anomaly['monotonic_seconds'],1)
+            resumed = self.controlled_cli('--operation','resume','--task',task,clock=clock)['performance']
+            self.assertEqual(len(resumed['operations']),2)
+            ledger = (task/'performance.json').read_bytes()
+            rebuilt = self.controlled_cli('--operation','report','--task',task,clock=clock)['performance']
+            for report in (resumed,rebuilt):
+                self.assertFalse(report['wall_clock_valid'])
+                self.assertIsNone(report['wall_elapsed_seconds'])
+                self.assertEqual(report['clock_anomalies'],prepared['clock_anomalies'])
+                self.assertEqual(report['operations'][0],prepared['operations'][0])
+            self.assertEqual(rebuilt['operations'],resumed['operations'])
+            self.assertEqual((task/'performance.json').read_bytes(),ledger)
 
     def decision(self, task, base):
         state = json.loads((task / 'task.json').read_text())
@@ -84,32 +135,32 @@ class PerformanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             task = base / 'task'
-            self.cli(video_from_image(score_frame(), base), '--output', task)
-            first = self.cli('--operation', 'export', '--task', task, '--output', base / 'missing')
+            self.controlled_cli(video_from_image(score_frame(), base), '--output', task)
+            first = self.controlled_cli('--operation', 'export', '--task', task, '--output', base / 'missing')
             self.assertEqual(first['performance']['operations'][-1]['status'], 'failed')
             decision = self.decision(task, base)
-            self.cli('--operation', 'submit', '--task', task, '--decision', decision)
-            second = self.cli('--operation', 'submit', '--task', task, '--decision', decision)
+            self.controlled_cli('--operation', 'submit', '--task', task, '--decision', decision)
+            second = self.controlled_cli('--operation', 'submit', '--task', task, '--decision', decision)
             self.assertEqual(len(json.loads((task / 'task.json').read_text())['decision_history']), 1)
             self.assertEqual(second['performance']['script_operation_count'], 4)
             self.assertIsNone(second['performance']['first_deliverable_at'])
             output = base / 'out'
-            result = self.cli('--operation', 'export', '--task', task, '--output', output)
+            result = self.controlled_cli('--operation', 'export', '--task', task, '--output', output)
             self.assertEqual(result['performance']['task_status'], 'waiting')
-            confirmation = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', output,
+            confirmation = self.controlled_cli('--operation', 'confirm-delivery', '--task', task, '--output', output,
                                     '--decision', self.delivery_review(task, output, base))
             result['performance'] = confirmation['performance']
             self.assertTrue((output / 'manifest.json').is_file())
             self.assertTrue((output / 'score.pdf').is_file())
             end = result['performance']['first_deliverable_at']
             self.assertEqual(result['performance']['metrics']['analyzed_frames'], 3)
-            resumed = self.cli('--operation', 'resume', '--task', task)
+            resumed = self.controlled_cli('--operation', 'resume', '--task', task)
             self.assertEqual(resumed['performance']['task_status'], 'success')
             self.assertEqual(resumed['performance']['first_deliverable_at'], end)
             self.assertEqual(resumed['performance']['wall_elapsed_seconds'], result['performance']['wall_elapsed_seconds'])
-            duplicate = self.cli('--operation', 'submit', '--task', task, '--decision', decision)['performance']
+            duplicate = self.controlled_cli('--operation', 'submit', '--task', task, '--decision', decision)['performance']
             self.assertEqual(duplicate['task_status'], 'success')
-            replayed = self.cli('--operation', 'replay', '--task', task, '--output', base / 'replay')
+            replayed = self.controlled_cli('--operation', 'replay', '--task', task, '--output', base / 'replay')
             self.assertEqual(replayed['performance']['first_deliverable_at'], end)
             self.assertEqual((output / 'score.pdf').read_bytes(), (base / 'replay/score.pdf').read_bytes())
 
@@ -274,25 +325,25 @@ class PerformanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             task = base / 'task'
-            self.cli(video_from_image(score_frame(), base), '--output', task)
+            self.controlled_cli(video_from_image(score_frame(), base), '--output', task)
             decision = self.decision(task, base)
-            self.cli('--operation', 'submit', '--task', task, '--decision', decision)
+            self.controlled_cli('--operation', 'submit', '--task', task, '--decision', decision)
             output = base / 'output'
-            exported = self.cli('--operation', 'export', '--task', task, '--output', output)['performance']
+            exported = self.controlled_cli('--operation', 'export', '--task', task, '--output', output)['performance']
             self.assertEqual(exported['task_status'], 'waiting')
             self.assertIsNone(exported['first_deliverable_at'])
             self.assertIsNone(exported['delivered_at'])
             self.assertIsNotNone(exported['exported_at'])
             time.sleep(0.05)
-            waiting = self.cli('--operation', 'report', '--task', task)['performance']
+            waiting = self.controlled_cli('--operation', 'report', '--task', task)['performance']
             self.assertGreater(waiting['wall_elapsed_seconds'], exported['wall_elapsed_seconds']+0.05)
             receipt = self.delivery_review(task, output, base)
-            confirmed = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', output, '--decision', receipt)
+            confirmed = self.controlled_cli('--operation', 'confirm-delivery', '--task', task, '--output', output, '--decision', receipt)
             self.assertEqual(confirmed['status'], 'success')
             delivered = confirmed['performance']
             self.assertTrue(delivered['delivery_confirmed'])
             self.assertGreater(delivered['delivered_at'], exported['exported_at'])
-            again = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', output, '--decision', receipt)['performance']
+            again = self.controlled_cli('--operation', 'confirm-delivery', '--task', task, '--output', output, '--decision', receipt)['performance']
             self.assertEqual(again['delivered_at'], delivered['delivered_at'])
             self.assertEqual(len(again['delivery_history']), 1)
             value = json.loads(decision.read_text())
@@ -300,24 +351,24 @@ class PerformanceTests(unittest.TestCase):
             revision = dict(schema_version=5, decision_id='revision-1', reviewed_frames=[f['id'] for f in json.loads((task/'observation.json').read_text())['frames']],
                             revision_of='test-review', decision=value)
             decision.write_text(json.dumps(revision))
-            revised = self.cli('--operation', 'submit', '--task', task, '--decision', decision)['performance']
+            revised = self.controlled_cli('--operation', 'submit', '--task', task, '--decision', decision)['performance']
             self.assertEqual(revised['task_status'], 'waiting')
             self.assertIsNone(revised['delivered_at'])
             self.assertEqual(revised['first_deliverable_at'], delivered['first_deliverable_at'])
             self.assertGreater(revised['wall_elapsed_seconds'], delivered['wall_elapsed_seconds'])
             self.assertEqual(len(revised['delivery_history']), 1)
-            stale = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', output, '--decision', receipt)
+            stale = self.controlled_cli('--operation', 'confirm-delivery', '--task', task, '--output', output, '--decision', receipt)
             self.assertEqual(stale['error']['code'], 'invalid_delivery')
             replay = base / 'replay'
-            replayed = self.cli('--operation', 'replay', '--task', task, '--output', replay)['performance']
+            replayed = self.controlled_cli('--operation', 'replay', '--task', task, '--output', replay)['performance']
             self.assertFalse(replayed['delivery_confirmed'])
             receipt = self.delivery_review(task, replay, base, 'replay-review')
-            rejected = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', replay, '--decision', receipt)
+            rejected = self.controlled_cli('--operation', 'confirm-delivery', '--task', task, '--output', replay, '--decision', receipt)
             self.assertEqual(rejected['error']['code'], 'invalid_delivery')
             output2 = base / 'output2'
-            self.cli('--operation', 'export', '--task', task, '--output', output2)
+            self.controlled_cli('--operation', 'export', '--task', task, '--output', output2)
             review2 = self.delivery_review(task, output2, base, 'delivery-2')
-            final = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', output2, '--decision', review2)['performance']
+            final = self.controlled_cli('--operation', 'confirm-delivery', '--task', task, '--output', output2, '--decision', review2)['performance']
             self.assertTrue(final['delivery_confirmed'])
             self.assertEqual(len(final['delivery_history']), 2)
             self.assertGreater(final['delivered_at'], delivered['delivered_at'])
