@@ -102,3 +102,27 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 先并行实现 #46 惰性证据与 #47 决定构建；两项软件验证通过后再按原依赖实现 #48 疑点审阅、#49 内容冲突否决和 #50 覆盖审计。使用已确认的统一 CLI 与受控计量边界进行合成验证，保存红绿记录、完整回归与两轴审阅。原有全量路径继续可用，实验能力显式调用；不启用自动接受，不伪造实际视觉确认或真实模型成本。
 
 #45 的完整真实基线及后续 #51、#52 门禁保持。GitHub 依赖、工单状态与远端分支不修改。实验阶段的合成验证和局部运行不能宣称真实视频质量验收完成或总耗时、Token 降低。旧任务不自动迁移，回退使用冻结提交与新结果目录，原决定和证据保持可追溯。
+
+## 2026-10-10 隔离软件结果
+
+#46 至 #50 的软件实现与合成验证已合入 `codex/issue-43-software-experiment`。最终代码和测试快照为 `6f344f0ddace1659788bd64f6a4d48161bf0112e`，工作目录为 `/home/kenqia/my_folder/issue-43-software-experiment`。默认仍为 full/prepare，没有自动接受；真实质量和性能放行尚未完成。
+
+| 工单 | 本地实现 | 操作契约 |
+| --- | --- | --- |
+| #46 | 按需原生 ROI、缓存及可追溯观察更新，失败生成成本保留 | [惰性证据](lazy-evidence.md) |
+| #47 | 当前包绑定、结构修正、确认、差异、来源和未决草稿，沿用现有决定协议 | [决定构建](decision-building.md) |
+| #48 | 分类疑点、实际 PTS 上下文、ROI/有界补采请求；显式沿用未改的实际判断 | [疑点审阅](review-plan.md) |
+| #49 | 对几何已提出的局部对应检查内容，冲突或不可靠证据等待 | [内容检查](content-checks.md) |
+| #50 | v4 原生图块、逐项标题与行外审计、首尾/gap/段边界及精确决定文件绑定 | [覆盖审计](coverage-audit.md) |
+
+最终仓库入口运行 150 项测试，403.639 秒，全部通过。日志为 `/home/kenqia/issue-43-resume-notes/final-verification-20261010/unittest-final.log`，SHA-256 为 `67b06176404710e41c72eb37b91a409a3217376f45b12a0f582679cdb62e5bba`。这是回归运行时间，不是视频端到端耗时。
+
+离线 `ci/verify_agent_replay.py` 在生产快照 `2f9e231` 通过，后续至 `6f344f0` 仅修改性能测试，生产源码完全相同。固定决定输出 3 行、1 页，原生裁剪相等、重放 PDF 字节一致，最低 effective DPI 为 156.996，来源篡改、越界和未知版本均被拒绝。报告为 `/home/kenqia/issue-43-resume-notes/final-replay-reviewed-20261010/summary.json`，PDF SHA-256 为 `532b7cb98af23c0cc0b9fa10c0a04e459daf3686a2f9bc96de1c54a24f4b8f10`。重放不是独立视觉验收。
+
+两轴审阅固定范围为 `39ce3ab...6f344f0`。初审各发现同一 P1，覆盖审计忽略实际 refinement 裁剪框。现已复用原生裁剪验证器返回的执行 bbox，row 和 extra 缩掉核查区域会等待，合法精修仍能导出与重放。最终 Standards、Spec 均无剩余 finding，报告保存在上述实验记录目录的 `review-standards-phase2-final.md` 与 `review-spec-phase2-final.md`。
+
+中间 `2f9e231` 全套有一次 149 项运行中的计量测试错误，旧断言对允许为 null 的墙钟字段做加法。三次自然复测没有重现具体宿主异常，受控前跳则复现同一 TypeError。修复仅改变测试时间边界，正常时钟继续严格验证增长，新增前跳负例验证 null、具体异常、恢复保留及 report 不改账本。生产时钟门禁保持，原失败日志和诊断保存于 `final-verification-20261010/unittest-reviewed.log` 与 `review-fixes-clock/`。
+
+污染必需对应的光标或遮挡仍不能仅靠补一张干净帧解除；所有必需对应必须具备可靠内容证据。导航限额只能按当前全部 gap 核查和真实新增 PTS 的有限入口解除，历史风险记录保留，`hidden_content_proven_absent=false`。这些支持限制没有被改成成功输出。
+
+原工作区仍为 `39ce3ab`，原有未跟踪资产保留。七个已合入且干净的实现工作树已正常清理，分支和仓库外实验记录保留。没有新增生产依赖，三个 moving viewport 核心未改，防火墙通过。没有 push、PR、远端合并或工单修改；#45 的完整真实基线、各票真实验收及 #51/#52 仍待完成，#43 未完成。

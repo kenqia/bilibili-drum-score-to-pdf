@@ -1,5 +1,21 @@
 # 验证记录
 
+## 2026-10-10 隔离性能软件验证
+
+`codex/issue-43-software-experiment` 的 `6f344f0` 使用下列仓库入口完成新鲜回归，150 项全部通过，403.639 秒。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
+```
+
+覆盖按需原生证据、决定构建、疑点规划、历史判断复用、局部内容否决、精确绑定的覆盖审计、补采与修订、实际精修打印框、正常及异常时钟。旧 full 流程、来源核验、重复空间实例、DPI、分页与三个核心的依赖防火墙保持。
+
+`ci/verify_agent_replay.py --output NEW_EMPTY_OUTPUT` 在相同生产源码的 `2f9e231` 通过。固定决定输出 3 行、1 页，原生 RGB 裁剪一致，灰度 PDF 的 export/replay 字节相等。Standards、Spec 最终复核均无剩余 finding。详细快照、日志 hash、初审修复及一次时钟测试失败的诊断见 [实施状态](agents/performance-implementation-status.md#2026-10-10-隔离软件结果)。
+
+本轮没有重复真实 URL 下载或独立视觉审阅，不代表 #45 完整基线和 #51/#52 放行。模型与墙钟完整成本的原有缺口保留，不能从离线回归时间或固定决定重放声称端到端耗时、Token 降低。下文按日期保留历史验证记录。
+
+## 2026-10-08 重构基点
+
 2026-10-08，重构分支 `rewrite/minimal-moving-viewport` 从 GitHub 最新 main `0b4da0639c51bf121bfa0574e456409b643936af` 建立。正式产品只保留一个空间跟踪核心，旧恢复模块和旧像素例外测试已删除。
 
 ## 新鲜验证
