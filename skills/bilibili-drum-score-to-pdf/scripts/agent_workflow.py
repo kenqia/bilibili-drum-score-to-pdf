@@ -7,6 +7,7 @@ import time
 import copy
 import os
 from agent_sampling import plan, check_request, LIMITS
+from agent_performance import ACTIVE, Performance, stage
 from pathlib import Path
 import subprocess
 from PIL import Image, ImageDraw, __version__ as pillow_version
@@ -85,7 +86,8 @@ def image_pixels(output, images):
 def prepare(source, output, origin=None, timestamps=None, sampling=None, version=1, prior=None):
     total_began = time.monotonic()
     source = Path(source).resolve()
-    metadata = probe_video(source)
+    with stage('source_verification'):
+        metadata = probe_video(source)
     if metadata['width'] < 700:
         raise ConversionError('low_resolution', '原视频分辨率不足。')
     source_hash = digest(source)
@@ -96,7 +98,8 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
     if origin:
         observation['source']['origin'] = origin
     if timestamps is None:
-        timestamps, sampling = plan(source, metadata)
+        with stage('navigation'):
+            timestamps, sampling = plan(source, metadata)
     count = metrics()
     initial_decode = sampling['used']['decode_seconds']
     count['decode_elapsed'] = initial_decode
@@ -110,7 +113,8 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
             observation['images'] = [i for i in observation['images'] if i['kind'] not in ('comparison', 'batch_comparison')]
             images = [Image.open(output / f['path']).convert('RGB') for f in observation['frames']]
         for index, requested in enumerate(timestamps):
-            record, image = reader.read_record(requested)
+            with stage('native_decode'):
+                record, image = reader.read_record(requested)
             if prior and any(f['pts'] == record['pts'] and f['time_base'] == record['time_base'] for f in observation['frames']):
                 raise ConversionError('invalid_request', '请求重解码了已有 PTS，不能声称新增观察。')
             frame_id = f'frame-{index:03d}' if version == 1 else f'v{version}-frame-{index:03d}'
@@ -125,85 +129,88 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
             images.append(image)
             # Detectors propose navigation boxes; Agent decisions may use any valid native ROI.
             try:
-                analysis = analyze_frame(image)
+                with stage('native_analysis'):
+                    analysis = analyze_frame(image)
             except ConversionError as error:
                 analysis = dict(bbox=[0, 0, image.width, image.height], row_bounds=[], groups=[],
                                 header_bbox=[0, 0, 0, 0], proposal_error=error.code)
-            for y in range(0, image.height, 280):
-                for x in range(0, image.width, 640):
-                    tile_box = [x, y, min(x + 800, image.width), min(y + 360, image.height)]
-                    tile_id = f'{frame_id}-native-{x}-{y}'
-                    tile_path = f'{tile_id}.png'
-                    image.crop(tile_box).save(output / tile_path)
-                    observation['images'].append(dict(id=tile_id, path=tile_path, sha256=digest(output / tile_path),
-                        frame_id=frame_id, kind='native_detail', bbox=tile_box,
-                        mapping=dict(coordinate_space='native_pixels', scale=[1, 1], source_offset=[x, y])))
-            frame['analysis'] = analysis
-            for row, bounds in enumerate(analysis['row_bounds']):
-                bbox = [analysis['bbox'][0], analysis['bbox'][1] + bounds[0], analysis['bbox'][2], analysis['bbox'][1] + bounds[1]]
-                candidate_id = f'{frame_id}-row-{row:03d}'
-                detail = f'{candidate_id}.png'
-                image.crop(bbox).save(output / detail)
-                observation['images'].append(dict(id=candidate_id, path=detail, sha256=digest(output / detail),
-                                                  frame_id=frame_id, kind='detail', bbox=bbox,
-                                                  mapping=dict(coordinate_space='native_pixels', scale=[1, 1], source_offset=bbox[:2])))
-                group = analysis['groups'][row]
-                native = image.crop(bbox)
-                clean = not cursor_occluded(native, group['spacing']) and not obstruction_detected(native, analysis['bbox'][1] + group['top'] - bbox[1], group['spacing'])
-                observation['candidates'].append(dict(id=candidate_id, frame_id=frame_id, index=row, bbox=bbox, clean=clean,
-                                                     coordinate_space='native_pixels', complete=not (analysis['partial_top'] or analysis['partial_bottom'])))
+            with stage('image_generation'):
+                for y in range(0, image.height, 280):
+                    for x in range(0, image.width, 640):
+                        tile_box = [x, y, min(x + 800, image.width), min(y + 360, image.height)]
+                        tile_id = f'{frame_id}-native-{x}-{y}'
+                        tile_path = f'{tile_id}.png'
+                        image.crop(tile_box).save(output / tile_path)
+                        observation['images'].append(dict(id=tile_id, path=tile_path, sha256=digest(output / tile_path),
+                            frame_id=frame_id, kind='native_detail', bbox=tile_box,
+                            mapping=dict(coordinate_space='native_pixels', scale=[1, 1], source_offset=[x, y])))
+                frame['analysis'] = analysis
+                for row, bounds in enumerate(analysis['row_bounds']):
+                    bbox = [analysis['bbox'][0], analysis['bbox'][1] + bounds[0], analysis['bbox'][2], analysis['bbox'][1] + bounds[1]]
+                    candidate_id = f'{frame_id}-row-{row:03d}'
+                    detail = f'{candidate_id}.png'
+                    image.crop(bbox).save(output / detail)
+                    observation['images'].append(dict(id=candidate_id, path=detail, sha256=digest(output / detail),
+                                                      frame_id=frame_id, kind='detail', bbox=bbox,
+                                                      mapping=dict(coordinate_space='native_pixels', scale=[1, 1], source_offset=bbox[:2])))
+                    group = analysis['groups'][row]
+                    native = image.crop(bbox)
+                    clean = not cursor_occluded(native, group['spacing']) and not obstruction_detected(native, analysis['bbox'][1] + group['top'] - bbox[1], group['spacing'])
+                    observation['candidates'].append(dict(id=candidate_id, frame_id=frame_id, index=row, bbox=bbox, clean=clean,
+                                                         coordinate_space='native_pixels', complete=not (analysis['partial_top'] or analysis['partial_bottom'])))
         paired = sorted(zip(observation['frames'], images), key=lambda pair: pair[0]['timestamp'])
         observation['frames'] = [f for f, _ in paired]
         images = [i for _, i in paired]
-        montage = Image.new('RGB', (640 * min(3, len(images)), 510 * math.ceil(len(images) / 3)), 'white')
-        panels = []
-        for index, (frame, image) in enumerate(zip(observation['frames'], images)):
-            scale = min(640 / image.width, 480 / image.height)
-            size = [round(image.width * scale), round(image.height * scale)]
-            montage.paste(image.resize(size), (640 * (index % 3), 30 + 510 * (index // 3)))
-            ImageDraw.Draw(montage).text((640 * (index % 3) + 5, 5 + 510 * (index // 3)), f'{frame["id"]}  {frame["timestamp"]:.6f} s', fill='black')
-            panels.append(dict(frame_id=frame['id'], scale=scale, offset=[640 * (index % 3), 30 + 510 * (index // 3)], size=size,
-                               source_bbox=[0, 0, image.width, image.height],
-                               mapping=dict(coordinate_space='comparison_pixels', scale=[size[0] / image.width, size[1] / image.height], source_offset=[0, 0], view_offset=[640 * (index % 3), 30 + 510 * (index // 3)])))
-        comparison_path = 'comparison.png' if version == 1 else f'comparison-v{version}.png'
-        montage.save(output / comparison_path)
-        observation['images'].append(dict(id='comparison', kind='comparison', path=comparison_path,
-                                          sha256=digest(output / comparison_path), panels=panels))
-        observation['intervals'] = [dict(start=a['timestamp'], end=b['timestamp']) for a, b in zip(observation['frames'], observation['frames'][1:])]
-        if not prior:
-            sampling['used']['native_frames'] += len(timestamps)
-        sampling['used']['decode_seconds'] = count['decode_elapsed']
-        count['decode_elapsed'] -= initial_decode
-        observation['sampling'] = sampling
-        observation['observation_version'] = version
-        observation['batches'] = [dict(id=f'batch-{i//2:03d}', frames=[f['id'] for f in observation['frames'][i:i+3]]) for i in range(0, max(1, len(images)-1), 2)]
-        observation['metrics'] = {**count, 'analyzed_frames': len(timestamps), 'native_images': len(images),
-                                  'detail_images': sum(i['kind'] in ('detail', 'native_detail') for i in observation['images']), 'comparison_images': 1,
-                                  'image_pixels': image_pixels(output, observation['images']),
-                                  'model_elapsed': None, 'model_tokens': None, 'thumbnail_checks': sampling['thumbnail_checks'],
-                                  'thumbnail_elapsed': sampling['thumbnail_elapsed'], 'comparison_composed_frames': len(images),
-                                  'supplement_requests': sampling['used']['requests'], 'prepare_elapsed': time.monotonic()-began,
-                                  'total_elapsed': time.monotonic()-total_began,
-                                  'native_processing_elapsed': time.monotonic()-began-count['decode_elapsed']}
-        for start, batch in zip(range(0, max(1, len(images)-1), 2), observation['batches']):
-            batch_id = f'comparison-v{version}-{batch["id"]}'
-            batch_path = f'{batch_id}.png'
-            context = Image.new('RGB', (640 * len(batch['frames']), 510), 'white')
-            context_panels = []
-            for position, panel in enumerate(panels[start:start+3]):
-                context.paste(montage.crop((panel['offset'][0], panel['offset'][1]-30,
-                    panel['offset'][0]+640, panel['offset'][1]+480)), (position*640, 0))
-                adjusted = copy.deepcopy(panel)
-                adjusted['offset'] = [position*640, 30]
-                adjusted['mapping']['view_offset'] = adjusted['offset']
-                context_panels.append(adjusted)
-            context.save(output / batch_path)
-            observation['images'].append(dict(id=batch_id, kind='batch_comparison', path=batch_path,
-                sha256=digest(output / batch_path), panels=context_panels))
-            batch['image_id'] = batch_id
-        observation['metrics']['image_pixels'] = image_pixels(output, observation['images'])
-        observation['metrics']['comparison_images'] += len(observation['batches'])
-        observation['metrics']['comparison_composed_frames'] += sum(len(b['frames']) for b in observation['batches'])
+        with stage('image_generation'):
+            montage = Image.new('RGB', (640 * min(3, len(images)), 510 * math.ceil(len(images) / 3)), 'white')
+            panels = []
+            for index, (frame, image) in enumerate(zip(observation['frames'], images)):
+                scale = min(640 / image.width, 480 / image.height)
+                size = [round(image.width * scale), round(image.height * scale)]
+                montage.paste(image.resize(size), (640 * (index % 3), 30 + 510 * (index // 3)))
+                ImageDraw.Draw(montage).text((640 * (index % 3) + 5, 5 + 510 * (index // 3)), f'{frame["id"]}  {frame["timestamp"]:.6f} s', fill='black')
+                panels.append(dict(frame_id=frame['id'], scale=scale, offset=[640 * (index % 3), 30 + 510 * (index // 3)], size=size,
+                                   source_bbox=[0, 0, image.width, image.height],
+                                   mapping=dict(coordinate_space='comparison_pixels', scale=[size[0] / image.width, size[1] / image.height], source_offset=[0, 0], view_offset=[640 * (index % 3), 30 + 510 * (index // 3)])))
+            comparison_path = 'comparison.png' if version == 1 else f'comparison-v{version}.png'
+            montage.save(output / comparison_path)
+            observation['images'].append(dict(id='comparison', kind='comparison', path=comparison_path,
+                                              sha256=digest(output / comparison_path), panels=panels))
+            observation['intervals'] = [dict(start=a['timestamp'], end=b['timestamp']) for a, b in zip(observation['frames'], observation['frames'][1:])]
+            if not prior:
+                sampling['used']['native_frames'] += len(timestamps)
+            sampling['used']['decode_seconds'] = count['decode_elapsed']
+            count['decode_elapsed'] -= initial_decode
+            observation['sampling'] = sampling
+            observation['observation_version'] = version
+            observation['batches'] = [dict(id=f'batch-{i//2:03d}', frames=[f['id'] for f in observation['frames'][i:i+3]]) for i in range(0, max(1, len(images)-1), 2)]
+            observation['metrics'] = {**count, 'analyzed_frames': len(timestamps), 'native_images': len(images),
+                                      'detail_images': sum(i['kind'] in ('detail', 'native_detail') for i in observation['images']), 'comparison_images': 1,
+                                      'image_pixels': image_pixels(output, observation['images']),
+                                      'model_elapsed': None, 'model_tokens': None, 'thumbnail_checks': sampling['thumbnail_checks'],
+                                      'thumbnail_elapsed': sampling['thumbnail_elapsed'], 'comparison_composed_frames': len(images),
+                                      'supplement_requests': sampling['used']['requests'], 'prepare_elapsed': time.monotonic()-began,
+                                      'total_elapsed': time.monotonic()-total_began,
+                                      'native_processing_elapsed': time.monotonic()-began-count['decode_elapsed']}
+            for start, batch in zip(range(0, max(1, len(images)-1), 2), observation['batches']):
+                batch_id = f'comparison-v{version}-{batch["id"]}'
+                batch_path = f'{batch_id}.png'
+                context = Image.new('RGB', (640 * len(batch['frames']), 510), 'white')
+                context_panels = []
+                for position, panel in enumerate(panels[start:start+3]):
+                    context.paste(montage.crop((panel['offset'][0], panel['offset'][1]-30,
+                        panel['offset'][0]+640, panel['offset'][1]+480)), (position*640, 0))
+                    adjusted = copy.deepcopy(panel)
+                    adjusted['offset'] = [position*640, 30]
+                    adjusted['mapping']['view_offset'] = adjusted['offset']
+                    context_panels.append(adjusted)
+                context.save(output / batch_path)
+                observation['images'].append(dict(id=batch_id, kind='batch_comparison', path=batch_path,
+                    sha256=digest(output / batch_path), panels=context_panels))
+                batch['image_id'] = batch_id
+            observation['metrics']['image_pixels'] = image_pixels(output, observation['images'])
+            observation['metrics']['comparison_images'] += len(observation['batches'])
+            observation['metrics']['comparison_composed_frames'] += sum(len(b['frames']) for b in observation['batches'])
         if len(json.dumps(observation, ensure_ascii=False, indent=2, allow_nan=False).encode()) > MAX_JSON - 4096:
             raise ConversionError('sampling_budget', '观察包达到可恢复 JSON 大小上限，请保留疑点。')
         previous = load_json(output / 'task.json') if (output / 'task.json').exists() else {}
@@ -342,7 +349,8 @@ def validate(decision, state, observation):
 
 
 def submit(task, path):
-    state, observation = checked_task(task)
+    with stage('source_verification'):
+        state, observation = checked_task(task)
     value = load_json(path)
     batch = isinstance(value, dict) and type(value.get('schema_version')) is int and value['schema_version'] == 5
     decision = value.get('decision') if batch else value
@@ -407,7 +415,8 @@ def submit(task, path):
     allowed = {i['id'] for i in observation['images'] if i.get('frame_id') in reviewed or i['kind'] == 'comparison' or (i['kind'] == 'batch_comparison' and all(p['frame_id'] in reviewed for p in i['panels']))}
     if not isinstance(decision, dict) or any(i not in allowed for i in decision.get('presented_images', [])):
         raise ConversionError('invalid_decision', '批次不能引用未审尾部。')
-    validate(decision, state, partial)
+    with stage('decision_validation'):
+        validate(decision, state, partial)
     complete = len(reviewed) == len(observation['frames'])
     staged = task / 'accepted.next.json'
     write_json(staged, value)
@@ -426,7 +435,8 @@ def submit(task, path):
 
 
 def export(task, output):
-    state, observation = checked_task(task)
+    with stage('source_verification'):
+        state, observation = checked_task(task)
     if state.get('decision_history'):
         if state.get('phase') != 'accepted' or not state.get('complete'):
             raise ConversionError('review_required', '仍有未审尾部或观察包已更新。')
@@ -434,13 +444,15 @@ def export(task, output):
         decision = record.get('decision', record)
     else:
         decision = load_json(task / 'decision.json')
-    chosen = validate(decision, state, observation)
+    with stage('decision_validation'):
+        chosen = validate(decision, state, observation)
     count = metrics()
     reader = VideoReader(observation['source']['path'], observation['source'], count)
     rows, header = [], None
     try:
         for frame in observation['frames']:
-            actual, image = reader.read_record(frame['requested_timestamp'])
+            with stage('source_redecode'):
+                actual, image = reader.read_record(frame['requested_timestamp'])
             path = output / frame['path']
             image.save(path)
             if actual != {k: frame[k] for k in ('timestamp', 'pts', 'time_base')} or image.size != (frame['width'], frame['height']) or digest(path) != frame['sha256']:
@@ -478,9 +490,11 @@ def export(task, output):
                 blocks.extend(e for e in extras if e['segment_id']==segment['id'] and e['placement']=='before_rows')
                 blocks.extend(r for r in rows if r['segment_id']==segment['id'])
                 blocks.extend(e for e in extras if e['segment_id']==segment['id'] and e['placement']=='after_rows')
-            pages=write_pdf(output,None,blocks)
+            with stage('pdf_export'):
+                pages=write_pdf(output,None,blocks)
         else:
-            pages = write_pdf(output, header, rows)
+            with stage('pdf_export'):
+                pages = write_pdf(output, header, rows)
         try:
             revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=Path(__file__).parent, capture_output=True, text=True, check=True).stdout.strip()
         except (OSError, subprocess.SubprocessError):
@@ -510,7 +524,8 @@ def export(task, output):
 
 
 def supplement(task, path):
-    state, observation = checked_task(task)
+    with stage('source_verification'):
+        state, observation = checked_task(task)
     request = load_json(path)
     timestamps = check_request(request, state, observation)
     sampling = copy.deepcopy(observation['sampling'])
@@ -546,17 +561,36 @@ def supplement(task, path):
 
 def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS):
     target = Path(output) if output and operation in ('prepare', 'export', 'replay') else None
+    performance = None
+    token = None
     try:
+        if operation == 'report':
+            state, observation = checked_task(Path(task))
+            recorder = Performance(Path(task), load_json, write_json)
+            recorder.metadata(observation, state)
+            return dict(status='success' if recorder.data['task_status'] == 'success' else 'waiting', complete=recorder.data['task_status'] == 'success', phase='report', performance=recorder.report())
         if operation in ('prepare', 'export', 'replay'):
             if not target:
                 raise ConversionError('invalid_input', '需要新的结果目录。')
-            if operation == 'prepare' and retryable_acquisition(target):
+            retry = operation == 'prepare' and retryable_acquisition(target)
+            if retry:
+                performance = Performance(target, load_json, write_json, embedded=True)
                 (target / 'manifest.json').unlink()
             empty_output(target)
+            if operation == 'prepare':
+                performance = performance or Performance(target, load_json, write_json, embedded=bool(source and '://' in str(source)))
+        if operation != 'prepare' and task and Path(task).is_dir() and not Path(task).is_symlink():
+            performance = Performance(Path(task), load_json, write_json)
+        if performance:
+            performance.start(operation)
+            token = ACTIVE.set(performance)
         if operation == 'prepare':
             origin = None
             if source and '://' in str(source):
-                source, origin = acquire(source, target, timeout=acquisition_timeout)
+                with stage('anonymous_acquisition'):
+                    source, origin = acquire(source, target, timeout=acquisition_timeout)
+            performance.embedded = False
+            performance.save()
             result = prepare(source, target, origin=origin)
         elif operation == 'supplement':
             result = supplement(Path(task), decision)
@@ -577,7 +611,7 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
             result['error']['http_status'] = error.http_status
     except KeyboardInterrupt:
         result = dict(status='failed', complete=False, phase=operation, error={'code': 'interrupted', 'message': '任务已中断，请保留观察包并使用新的结果目录。'})
-    except (ConversionError, OSError, ValueError, TypeError, KeyError) as error:
+    except (ConversionError, OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError) as error:
         code = error.code if isinstance(error, ConversionError) else 'invalid_input'
         result = dict(status='waiting' if code in ('unsupported_layout', 'review_required', 'missing_evidence', 'sampling_budget') else 'failed',
                       complete=False, phase=operation, rows=[], issues=[], error={'code': code, 'message': str(error) if isinstance(error, ConversionError) else '记录或输入不可用。'})
@@ -589,6 +623,21 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
                 write_json(Path(task) / 'task.json', saved)
             except (ConversionError, OSError, ValueError, TypeError, KeyError):
                 pass
+    if performance:
+        if (performance.directory / 'observation.json').exists() and (performance.directory / 'task.json').exists():
+            try:
+                performance.metadata(load_json(performance.directory / 'observation.json'), load_json(performance.directory / 'task.json'))
+            except (ConversionError, OSError, ValueError, TypeError, KeyError):
+                pass
+        if target and result.get('status') == 'success' and operation in ('export','replay'):
+            with stage('delivery_publication'):
+                write_json(target / 'manifest.json', result)
+        performance.finish(result)
+        result['performance'] = performance.report()
+        if performance.embedded:
+            result['performance_ledger'] = performance.data
+        if token is not None:
+            ACTIVE.reset(token)
     if target and target.exists() and result.get('error', {}).get('code') != 'existing_output':
         write_json(target / 'manifest.json', result)
     return result
