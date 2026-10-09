@@ -231,7 +231,7 @@ def build(task, request_path, output):
             from agent_review import reuse_accepted_review
             reused=reuse_accepted_review(task,state,packet,reviewed,baseline,structure,JUDGMENTS)
         review=request.get('review',{})
-        fields={'identity_verified','coverage_verified','outside_rows_verified','presented_images','visual_review','complete','evidence','unresolved','confirmations','rows','observations','transitions'}
+        fields={'identity_verified','coverage_verified','outside_rows_verified','presented_images','visual_review','complete','evidence','unresolved','confirmations','rows','observations','transitions','score_audit'}
         require(isinstance(review,dict) and set(review)<=fields)
         for key in ('identity_verified','coverage_verified','outside_rows_verified','visual_review','complete'):
             require(key not in review or type(review[key]) is bool)
@@ -245,6 +245,11 @@ def build(task, request_path, output):
                         record.update(copy.deepcopy(review[key]))
         patch(structure,review.get('confirmations',[]),review=True)
         check_structure(structure,partial)
+        if packet.get('evidence_mode') == 'lazy':
+            from agent_audit import wrap_continuous
+            structure = wrap_continuous(structure, partial['frames'], review)
+            check_structure(structure,partial)
+
         prior=reused['defaults'] if reused else {}
         presented=review.get('presented_images',[])
         require(isinstance(presented,list) and all(isinstance(i,str) and i in allowed for i in presented) and len(set(presented))==len(presented))
@@ -265,7 +270,7 @@ def build(task, request_path, output):
         require(isinstance(decision['presented_images'],list) and all(isinstance(i,str) and i in allowed for i in decision['presented_images'])
                 and len(set(decision['presented_images']))==len(decision['presented_images']))
         require(isinstance(decision['unresolved'],list))
-        no_geometry=origin=='script_geometry' and not structure['observations']
+        no_geometry=origin=='script_geometry' and not any(p['observations'] for p in records(structure))
         if no_geometry:
             issues.extend(geometry['issues'])
         # Validation probes use only local copies to catch malformed fields even while waiting.
@@ -288,6 +293,12 @@ def build(task, request_path, output):
                 if error.code not in ('review_required','missing_evidence'):
                     raise
                 issues.append(dict(reason=error.code,message=str(error)))
+        score_audit = None
+        if packet.get('evidence_mode') == 'lazy':
+            from agent_audit import inspect
+            with stage('coverage_audit'):
+                score_audit, audit_issues = inspect(decision,partial,review.get('score_audit'))
+                issues.extend(audit_issues)
         if issues:
             decision['complete']=False
         value=decision
@@ -305,6 +316,9 @@ def build(task, request_path, output):
                      selected_frames=[dict(id=f['id'],sha256=f['sha256'],pts=f['pts'],time_base=f['time_base']) for f in partial['frames']])
         for name,data in [('decision.json',value),('diff.json',diff),('sources.json',sources),('unresolved.json',issues)]:
             write_json(output/name,data)
+        if score_audit is not None:
+            from agent_audit import bind
+            write_json(output/'audit.json',bind(value,state,score_audit))
     return dict(status='waiting' if issues else 'success',complete=False,phase='decision_built',
                 ready_to_submit=not issues,decision=str((output/'decision.json').resolve()),
                 diff=diff,sources=sources,unresolved=issues,

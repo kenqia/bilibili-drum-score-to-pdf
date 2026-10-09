@@ -276,6 +276,9 @@ def checked_task(task, recover=True):
             raise ConversionError('invalid_task', '接受历史引用非法。')
         if entry.get('path') != f'accepted-{index:04d}-{entry.get("sha256")}.json' or digest(task / entry['path']) != entry['sha256']:
             raise ConversionError('source_mismatch', '接受决定历史已损坏。')
+        if 'audit_path' in entry or 'audit_sha256' in entry:
+            if entry.get('audit_path') != entry['path'].replace('.json','.audit.json') or (task / entry['audit_path']).is_symlink() or digest(task / entry['audit_path']) != entry.get('audit_sha256'):
+                raise ConversionError('source_mismatch', '接受决定的审计历史已损坏。')
     if digest(task / 'observation.json') != state['observation_sha256'] or observation['task_id'] != state['task_id']:
         raise ConversionError('source_mismatch', '观察包已改变。')
     for image in observation['images']:
@@ -306,6 +309,8 @@ def validate(decision, state, observation, task=None, content_checks=None):
         fields = fields - {'selected_candidates'} | {'segments','boundaries','coverage'}
     if not isinstance(decision, dict) or set(decision) != fields or type(version) is not int or version not in (1, 2, 3, 4):
         raise ConversionError('invalid_decision', '决定字段或版本非法。')
+    if observation.get('evidence_mode') == 'lazy' and version != 4:
+        raise ConversionError('review_required', '实验 lazy 需要 v4 显式标题、行外区域与覆盖审计，请通过 build-decision 升级。')
     if decision['task_id'] != state['task_id'] or decision['observation_sha256'] != state['observation_sha256']:
         raise ConversionError('invalid_decision', '决定不属于当前观察包。')
     if any(not isinstance(decision[k], str) or not decision[k].strip() or len(decision[k]) > 2000 for k in ('decision_id', 'evidence')):
@@ -434,6 +439,11 @@ def submit(task, path):
         validate(decision, state, partial, task, content_checks)
     if content_checks:
         state['content_checks'] = content_checks
+    audit = None
+    if observation.get('evidence_mode') == 'lazy':
+        from agent_audit import load_for_submit
+        with stage('coverage_audit'):
+            audit = load_for_submit(path,value,state,partial,load_json)
     complete = len(reviewed) == len(observation['frames'])
     staged = task / 'accepted.next.json'
     write_json(staged, value)
@@ -442,6 +452,12 @@ def submit(task, path):
                  observation_version=state['observation_version'], revision_of=revision)
     os.replace(staged, task / entry['path'])
     entry['sha256'] = record_hash
+    if audit is not None:
+        entry['audit_path'] = entry['path'].replace('.json','.audit.json')
+        if (task / entry['audit_path']).is_symlink() or (task / (entry['audit_path']+'.tmp')).is_symlink():
+            raise ConversionError('source_mismatch', '接受审计路径非法。')
+        write_json(task / entry['audit_path'],audit)
+        entry['audit_sha256'] = digest(task / entry['audit_path'])
     state.update(decision_history=history+[entry], reviewed_frames=reviewed, phase='accepted' if complete else 'batch_accepted',
                  complete=complete, status='waiting', issues=[] if complete else [{'reason':'unreviewed_tail','frames':[f['id'] for f in observation['frames'][len(reviewed):]]}],
                  next_action='Export to a new empty directory.' if complete else 'Review the next overlapping batch and submit the cumulative prefix.')
@@ -464,6 +480,14 @@ def export(task, output):
     with stage('decision_validation'):
         content_checks = []
         chosen = validate(decision, state, observation, task, content_checks)
+    audit = None
+    if observation.get('evidence_mode') == 'lazy':
+        from agent_audit import check
+        latest = state.get('decision_history',[])[-1] if state.get('decision_history') else {}
+        if 'audit_path' not in latest:
+            raise ConversionError('review_required', '实验 lazy 缺少已接受的整曲审计记录。')
+        with stage('coverage_audit'):
+            audit = check(load_json(task/latest['audit_path']),record,state,observation)
     count = metrics()
     reader = VideoReader(observation['source']['path'], observation['source'], count)
     rows, header = [], None
@@ -533,6 +557,8 @@ def export(task, output):
         if content_checks:
             result['content_checks'] = content_checks
         result['decision_history'] = state.get('decision_history', [])
+        if audit is not None:
+            result['score_audit'] = audit
         result['metrics']['presented_image_pixels'] = image_pixels(task, result['presented_images'])
         result['metrics']['model_elapsed'] = None
         result['metrics']['model_tokens'] = None
