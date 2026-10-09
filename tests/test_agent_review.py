@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from PIL import ImageDraw
 from score_fixtures import CLI, score_frame
+import test_agent_audit
 
 
 class ReviewTests(unittest.TestCase):
@@ -58,6 +59,17 @@ class ReviewTests(unittest.TestCase):
             self.assertEqual(template['observation_sha256'],hashlib.sha256(before).hexdigest())
             self.assertFalse(template['review']['visual_review'])
             self.assertEqual(template['review']['presented_images'],[])
+            state=self.cli('--operation','resume','--task',task)
+            packet=json.loads((task/'observation.json').read_text())
+            state,packet=test_agent_audit.AuditTests.native_sources(self,base,task,state,packet)
+            unsafe=test_agent_audit.AuditTests.reviewed_request(self,state,packet)
+            path=base/'unsafe-review.json';path.write_text(json.dumps(unsafe))
+            blocked=self.cli('--operation','build-decision','--task',task,'--decision',path,'--output',base/'unsafe')
+            self.assertEqual(blocked['status'],'waiting',blocked)
+            self.assertFalse(blocked.get('ready_to_submit',False))
+            exported=self.cli('--operation','export','--task',task,'--output',base/'unsafe-out')
+            self.assertNotEqual(exported['status'],'success',exported)
+            self.assertFalse((base/'unsafe-out/score.pdf').exists())
 
     def test_clean_roi_review_rebinds_template_and_enters_build_submit_export_replay(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -70,35 +82,49 @@ class ReviewTests(unittest.TestCase):
             old=base/'plan/build-template.json'
             stale=self.cli('--operation','build-decision','--task',task,'--decision',old,'--output',base/'stale')
             self.assertEqual(stale['status'],'failed',stale)
+            packet=json.loads((task/'observation.json').read_text())
+            # The audit needs native evidence for complete edges and both ends of every gap.
+            expanded,packet=test_agent_audit.AuditTests.native_sources(self,base,task,expanded,packet)
             current=self.plan(base,task,'current')
             self.assertEqual(current['observation_sha256'],expanded['observation_sha256'])
             template=json.loads((base/'current/build-template.json').read_text())
-            packet=json.loads((task/'observation.json').read_text())
+            reviewed=test_agent_audit.AuditTests.reviewed_request(self,expanded,packet)
+            template.update(proposal=reviewed['proposal'],model=reviewed['model'],review=reviewed['review'])
             last=packet['frames'][-1]['id']
+            segment=template['proposal']['segments'][0]
             corrections=[]
-            for index,row in enumerate(template['proposal']['rows']):
-                selected=next(s for s in template['proposal']['observations'] if s['instance_id']==row['instance_id'] and s['frame_id']==last)
+            for index,row in enumerate(segment['rows']):
+                selected=next(s for s in segment['observations'] if s['instance_id']==row['instance_id'] and s['frame_id']==last)
                 for key,value in [('observation_id',selected['id']),('frame_id',last),('bbox',selected['bbox']),
                                   ('evidence_images',[i['id'] for i in packet['images'] if i.get('frame_id')==last and i['kind']=='native_detail'])]:
-                    corrections.append(dict(path=['rows',index,key],value=value))
+                    corrections.append(dict(path=['segments',0,'rows',index,key],value=value))
             template['corrections']=corrections
-            template['model']=dict(id='controlled-fixture',version='unknown')
-            template['review']=dict(identity_verified=True,coverage_verified=True,outside_rows_verified=True,
-                presented_images=[i['id'] for i in packet['images']],visual_review=True,complete=True,
-                evidence='Controlled fixture verifies stable five-line identities and clean later crops.',unresolved=[],
-                rows=dict(complete=True,cursor='clear',occlusion='clear',boundary_verified=True,evidence='Controlled native source confirmation.'),
-                observations=dict(complete=True,evidence='Controlled five-line correspondence confirmation.'),
-                transitions=dict(evidence='Controlled stationary correspondence, unchanged source geometry.'))
+            outside=template['review']['score_audit']['segments'][0]['checks']['outside_rows']
+            outside['regions']=[dict(frame_id=last,bbox=segment['rows'][0]['bbox'],
+                evidence_images=[i['id'] for i in packet['images'] if i.get('frame_id')==last and i['kind']=='native_detail'])]
             path=base/'confirmed.json';path.write_text(json.dumps(template))
             built=self.cli('--operation','build-decision','--task',task,'--decision',path,'--output',base/'built')
             self.assertTrue(built.get('ready_to_submit'),built)
+            decision=json.loads((base/'built/decision.json').read_text())
+            self.assertEqual(decision['schema_version'],4)
+            saved_audit=json.loads((base/'built/audit.json').read_text())
+            self.assertEqual(saved_audit['decision_sha256'],hashlib.sha256((base/'built/decision.json').read_bytes()).hexdigest())
+            missing=copy.deepcopy(template);missing['review'].pop('score_audit')
+            path.write_text(json.dumps(missing))
+            rejected=self.cli('--operation','build-decision','--task',task,'--decision',path,'--output',base/'missing-audit')
+            self.assertEqual(rejected['status'],'waiting',rejected)
+            self.assertFalse(rejected['ready_to_submit'])
+            self.assertFalse((task/'decision.json').exists())
             accepted=self.cli('--operation','submit','--task',task,'--decision',base/'built/decision.json')
             self.assertEqual(accepted['phase'],'accepted',accepted)
+            self.assertIn('audit_sha256',accepted['decision_history'][-1])
             exported=self.cli('--operation','export','--task',task,'--output',base/'out')
             replay=self.cli('--operation','replay','--task',task,'--output',base/'replay')
             self.assertEqual(exported['status'],'success',exported)
             self.assertEqual(replay['status'],'success',replay)
             self.assertTrue(all(r['selected_candidate']['frame_id']==last for r in exported['rows']))
+            self.assertEqual(exported['extras'][0]['selected_region']['bbox'],[80,50,1200,155])
+            self.assertFalse(exported['score_audit']['coverage']['hidden_content_proven_absent'])
             self.assertEqual((base/'out/score.pdf').read_bytes(),(base/'replay/score.pdf').read_bytes())
 
     def test_no_image_access_keeps_waiting_and_counts_only_actual_plan_operations(self):
