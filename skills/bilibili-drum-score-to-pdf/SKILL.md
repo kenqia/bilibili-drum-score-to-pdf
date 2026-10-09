@@ -28,7 +28,7 @@ uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/
 
 任务与导出结果使用不同目录。只在决定接受且无未决区间后 export。检查 stdout JSON 的 status 和结果目录的 manifest.json。
 
-- `success`：检查 complete 为 true，逐页查看 score.pdf，交付 PDF 和 manifest。核对标题、速度、拍号、细小记号与首尾。每条 row 的 original_image 必须与 source_frame 的 bbox 精确一致；image 仅转灰度。timestamp 是实际源 PTS，global_y 与 index 给出空间顺序。
+- `success`：检查 complete 为 true，逐页查看 score.pdf，完成下文实际交付确认后交付 PDF 和 manifest。核对标题、速度、拍号、细小记号与首尾。每条 row 的 original_image 必须与 source_frame 的 bbox 精确一致；image 仅转灰度。timestamp 是实际源 PTS，global_y 与 index 给出空间顺序。
 - `waiting`：展示 issues 的 reason、timestamp 与 screenshot。没有完整干净观察或可靠空间接续时不得称为完整。可用 resume 查看已保存进度，再补采或按协议修订；证据不足时说明所需更好的视频。
 - `failed`：说明 error.code 和 error.message。不得输出后端原始异常、签名媒体地址或认证信息。
 
@@ -39,6 +39,18 @@ uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/
 谱行需达到 150 effective DPI；高 DPI 仍需逐页核对。任意遮挡、比例变化、倒退、快速滚动或缺乏重叠可能返回等待。用 supplement 获取有界局部原帧，用 resume 恢复任务；导出或代码回滚始终用新结果目录。
 
 获取默认限时 1800 秒，可用 `--acquisition-timeout` 缩短；原生解码累计最多 600 秒，导航解码另限 90 秒，单次最多 60 秒。可捕获中断清理解码临时文件，已有证据保留。完整仓库的 docs/architecture.md 记录架构和安全边界，docs/verification.md 记录本轮真实验收。
+
+## 实际交付与计量结束
+
+export 的 success 表示脚本完成输出。性能状态仍为 waiting，总墙钟时间继续包含逐页 PDF 审核、修订和补采。实际查看每一页并完成上文来源、整曲和符号检查后，由 Agent 写独立审核回执，用户无需填写 JSON。
+
+```sh
+uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/requirements.txt /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py --operation confirm-delivery --task /absolute/path/to/new-task --output /absolute/path/to/new-result --decision /absolute/path/to/delivery-review.json
+```
+
+回执格式见 docs/agents/agent-workflow.md 的实际交付确认节。绑定当前 task、lifecycle、观察包、最新接受记录、PDF 与 manifest 的 SHA256；每一页记录实际审核的正面 evidence，并在实际检查通过后填写 source_manifest_verified=true 和 complete_score_verified=true。reviewer.kind=agent，id 使用实际审阅线程 ID。不能把生成或重放 PDF 当作已实际审阅，也不能填入虚构依据。
+
+确认通过后，performance.delivery_confirmed=true，delivered_at 是当前版本端到端终点。首次确认历史和当前确认分开保存；修订或补采会撤销当前确认，需要对新导出重新实际审核。相同回执重复确认幂等，重放不会自动关闭计时。回执是实际审核调用方的声明，脚本核对来源绑定，不证明模型已经理解整页。
 
 ## 原帧审阅要求
 

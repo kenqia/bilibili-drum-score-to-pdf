@@ -95,7 +95,10 @@ class PerformanceTests(unittest.TestCase):
             self.assertIsNone(second['performance']['first_deliverable_at'])
             output = base / 'out'
             result = self.cli('--operation', 'export', '--task', task, '--output', output)
-            self.assertEqual(result['performance']['task_status'], 'success')
+            self.assertEqual(result['performance']['task_status'], 'waiting')
+            confirmation = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', output,
+                                    '--decision', self.delivery_review(task, output, base))
+            result['performance'] = confirmation['performance']
             self.assertTrue((output / 'manifest.json').is_file())
             self.assertTrue((output / 'score.pdf').is_file())
             end = result['performance']['first_deliverable_at']
@@ -145,7 +148,9 @@ class PerformanceTests(unittest.TestCase):
             self.assertEqual(len(interrupted), 1)
             self.assertIsNone(interrupted[0]['elapsed_seconds'])
             self.assertIsNone(resumed['first_deliverable_at'])
-            delivered = self.cli('--operation','export','--task',task,'--output',base/'retry')['performance']
+            self.cli('--operation','export','--task',task,'--output',base/'retry')
+            delivered = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', base/'retry',
+                                 '--decision', self.delivery_review(task, base/'retry', base))['performance']
             self.assertEqual(delivered['task_status'], 'success')
 
     def test_acquisition_failure_retry_preserves_submission_and_failed_cost(self):
@@ -247,3 +252,101 @@ class PerformanceTests(unittest.TestCase):
                         rejected = self.cli('--operation', operation, '--task', task)
                         self.assertEqual(rejected['status'], 'failed')
                         self.assertEqual(path.read_bytes(), before)
+
+    def delivery_review(self, task, output, base, review_id='delivery-1'):
+        import hashlib
+        state = json.loads((task / 'task.json').read_text())
+        ledger = json.loads((task / 'performance.json').read_text())
+        manifest = json.loads((output / 'manifest.json').read_text())
+        receipt = dict(schema_version=1, review_id=review_id, task_id=state['task_id'], lifecycle_id=ledger['lifecycle_id'],
+                       observation_sha256=state['observation_sha256'], decision_sha256=state['decision_history'][-1]['sha256'],
+                       pdf_sha256=hashlib.sha256((output / 'score.pdf').read_bytes()).hexdigest(),
+                       manifest_sha256=hashlib.sha256((output / 'manifest.json').read_bytes()).hexdigest(),
+                       reviewer=dict(kind='controlled_fixture', id='fixture'),
+                       source_manifest_verified=True, complete_score_verified=True,
+                       pages=[dict(page=index, evidence='Viewed the rendered fixture page; all full rows and margins visible.')
+                              for index in range(1, manifest['page_count']+1)])
+        path = base / f'{review_id}.json'
+        path.write_text(json.dumps(receipt))
+        return path
+
+    def test_export_requires_actual_delivery_review_and_revision_keeps_timer_running(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task = base / 'task'
+            self.cli(video_from_image(score_frame(), base), '--output', task)
+            decision = self.decision(task, base)
+            self.cli('--operation', 'submit', '--task', task, '--decision', decision)
+            output = base / 'output'
+            exported = self.cli('--operation', 'export', '--task', task, '--output', output)['performance']
+            self.assertEqual(exported['task_status'], 'waiting')
+            self.assertIsNone(exported['first_deliverable_at'])
+            self.assertIsNone(exported['delivered_at'])
+            self.assertIsNotNone(exported['exported_at'])
+            time.sleep(0.05)
+            waiting = self.cli('--operation', 'report', '--task', task)['performance']
+            self.assertGreater(waiting['wall_elapsed_seconds'], exported['wall_elapsed_seconds']+0.05)
+            receipt = self.delivery_review(task, output, base)
+            confirmed = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', output, '--decision', receipt)
+            self.assertEqual(confirmed['status'], 'success')
+            delivered = confirmed['performance']
+            self.assertTrue(delivered['delivery_confirmed'])
+            self.assertGreater(delivered['delivered_at'], exported['exported_at'])
+            again = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', output, '--decision', receipt)['performance']
+            self.assertEqual(again['delivered_at'], delivered['delivered_at'])
+            self.assertEqual(len(again['delivery_history']), 1)
+            value = json.loads(decision.read_text())
+            value.update(decision_id='revised', evidence='Rechecked full score and retained the same complete rows.')
+            revision = dict(schema_version=5, decision_id='revision-1', reviewed_frames=[f['id'] for f in json.loads((task/'observation.json').read_text())['frames']],
+                            revision_of='test-review', decision=value)
+            decision.write_text(json.dumps(revision))
+            revised = self.cli('--operation', 'submit', '--task', task, '--decision', decision)['performance']
+            self.assertEqual(revised['task_status'], 'waiting')
+            self.assertIsNone(revised['delivered_at'])
+            self.assertEqual(revised['first_deliverable_at'], delivered['first_deliverable_at'])
+            self.assertGreater(revised['wall_elapsed_seconds'], delivered['wall_elapsed_seconds'])
+            self.assertEqual(len(revised['delivery_history']), 1)
+            stale = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', output, '--decision', receipt)
+            self.assertEqual(stale['error']['code'], 'invalid_delivery')
+            replay = base / 'replay'
+            replayed = self.cli('--operation', 'replay', '--task', task, '--output', replay)['performance']
+            self.assertFalse(replayed['delivery_confirmed'])
+            receipt = self.delivery_review(task, replay, base, 'replay-review')
+            rejected = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', replay, '--decision', receipt)
+            self.assertEqual(rejected['error']['code'], 'invalid_delivery')
+            output2 = base / 'output2'
+            self.cli('--operation', 'export', '--task', task, '--output', output2)
+            review2 = self.delivery_review(task, output2, base, 'delivery-2')
+            final = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', output2, '--decision', review2)['performance']
+            self.assertTrue(final['delivery_confirmed'])
+            self.assertEqual(len(final['delivery_history']), 2)
+            self.assertGreater(final['delivered_at'], delivered['delivered_at'])
+
+    def test_delivery_review_rejects_missing_checks_stale_hashes_and_tampered_exports(self):
+        import copy
+        import hashlib
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task = base / 'task'
+            self.cli(video_from_image(score_frame(), base), '--output', task)
+            self.cli('--operation', 'submit', '--task', task, '--decision', self.decision(task, base))
+            output = base / 'output'
+            self.cli('--operation', 'export', '--task', task, '--output', output)
+            path = self.delivery_review(task, output, base)
+            original = json.loads(path.read_text())
+            for change in ({'source_manifest_verified': False}, {'complete_score_verified': False}, {'pages': []},
+                           {'pages': [dict(page=1, evidence='')]}, {'pdf_sha256': '0'*64}, {'manifest_sha256': '0'*64},
+                           {'observation_sha256': '0'*64}, {'decision_sha256': '0'*64}, {'lifecycle_id': 'other'}, {'unexpected': True}):
+                path.write_text(json.dumps(original | change))
+                rejected = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', output, '--decision', path)
+                self.assertEqual(rejected['error']['code'], 'invalid_delivery')
+                self.assertFalse(rejected['performance']['delivery_confirmed'])
+                self.assertEqual(rejected['performance']['delivery_history'], [])
+            with (output/'score.pdf').open('ab') as stream:
+                stream.write(b'controlled-tamper')
+            changed = copy.deepcopy(original)
+            changed['pdf_sha256'] = hashlib.sha256((output/'score.pdf').read_bytes()).hexdigest()
+            path.write_text(json.dumps(changed))
+            rejected = self.cli('--operation', 'confirm-delivery', '--task', task, '--output', output, '--decision', path)
+            self.assertEqual(rejected['error']['code'], 'invalid_delivery')
+            self.assertFalse(rejected['performance']['delivery_confirmed'])

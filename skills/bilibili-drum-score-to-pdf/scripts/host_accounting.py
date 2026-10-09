@@ -1,5 +1,6 @@
 """Strict, credential-free caller accounting, separate from observation identity."""
 import math
+import hashlib
 from pathlib import Path
 import re
 from video_seek import ConversionError
@@ -70,7 +71,9 @@ def validate(packet, ledger, known_images):
         fields = {'model_call': {'response_id', 'status', 'usage'},
                   'host_tool_call': {'call_id', 'tool_name', 'status'},
                   'image_presented': {'call_id', 'image_id', 'width', 'height', 'panel_count', 'source_pixels', 'image_source'}}
-        require(kind in fields and set(event) == common | fields[kind])
+        expected = common | fields.get(kind, set())
+        optional = {'observation_sha256'} if kind == 'image_presented' and event.get('image_source') == 'observation' else set()
+        require(kind in fields and expected <= set(event) <= expected | optional)
         for name in ('event_id', 'thread_id'):
             identifier(event[name])
         require(event['thread_id'] in scope['thread_ids'])
@@ -104,8 +107,21 @@ def validate(packet, ledger, known_images):
                 count(event[name])
                 require(event[name] > 0)
             if event['image_source'] == 'observation':
+                count(event['source_pixels'])
+                require(event['source_pixels'] > 0)
                 require(event['image_id'] in known_images)
-                require(event['source_pixels'] == known_images[event['image_id']])
+                records = known_images[event['image_id']]
+                matches = [r for r in records if r['source_pixels'] == event['source_pixels']]
+                if 'observation_sha256' in event:
+                    require(isinstance(event['observation_sha256'], str) and bool(re.fullmatch(r'[a-f0-9]{64}', event['observation_sha256'])))
+                    matches = [r for r in matches if r['observation_sha256'] == event['observation_sha256']]
+                else:
+                    current = [r for r in matches if r['current']]
+                    matches = current or matches
+                require(bool(matches) and len({r['image_sha256'] for r in matches}) == 1)
+                if 'observation_sha256' not in event:
+                    require(len({r['observation_sha256'] for r in matches}) == 1)
+                    event = event | dict(observation_sha256=matches[0]['observation_sha256'])
             else:
                 require(event['image_id'] not in known_images)
                 if event['source_pixels'] is not None:
@@ -120,14 +136,20 @@ def validate(packet, ledger, known_images):
 
 
 def image_catalog(directory, load):
-    observation = load(directory / 'observation.json')
-    # Native source dimensions remain distinct from actual presented dimensions.
+    current = load(directory / 'observation.json')
     catalog = {}
-    for image in observation['images']:
-        path = directory / image['path']
-        require(not path.is_symlink() and path.resolve().is_relative_to(directory.resolve()))
-        with Image.open(path) as raster:
-            catalog[image['id']] = raster.width * raster.height
+    paths = list(sorted(directory.glob('observation-v[0-9]*.json'))) + [directory / 'observation.json']
+    for packet_path in paths:
+        observation = load(packet_path)
+        require(observation['task_id'] == current['task_id'] and observation['source'] == current['source'])
+        observation_hash = hashlib.sha256(packet_path.read_bytes()).hexdigest()
+        for image in observation['images']:
+            path = directory / image['path']
+            require(not path.is_symlink() and path.resolve().is_relative_to(directory.resolve()))
+            require(hashlib.sha256(path.read_bytes()).hexdigest() == image['sha256'])
+            with Image.open(path) as raster:
+                record = dict(observation_sha256=observation_hash, image_sha256=image['sha256'], source_pixels=raster.width*raster.height, current=packet_path.name == 'observation.json')
+            catalog.setdefault(image['id'], []).append(record)
     return catalog
 
 
@@ -135,10 +157,15 @@ def import_packet(directory, packet, load, write):
     try:
         ledger = task_context(directory, load)
         known = image_catalog(directory, load)
-        packet = validate(packet, ledger, known)
         path = directory / 'host-usage.json'
-        if path.exists():
-            previous = validate(load(path), ledger, known)
+        previous = validate(load(path), ledger, known) if path.exists() else None
+        if previous and isinstance(packet, dict) and isinstance(packet.get('events'), list):
+            bindings = {e['event_id']: e.get('observation_sha256') for e in previous['events']}
+            packet = packet | dict(events=[e | dict(observation_sha256=bindings[e['event_id']])
+                if isinstance(e, dict) and e.get('kind') == 'image_presented' and e.get('image_source') == 'observation'
+                and 'observation_sha256' not in e and bindings.get(e.get('event_id')) else e for e in packet['events']])
+        packet = validate(packet, ledger, known)
+        if previous:
             require(previous['source'] == packet['source'])
             fixed = set(packet['scope']) - {'ended_at'}
             require(all(previous['scope'][k] == packet['scope'][k] for k in fixed))
@@ -149,12 +176,12 @@ def import_packet(directory, packet, load, write):
                 merged = packet | {'events': previous['events'] + packet['events']}
             packet = validate(merged, ledger, known)
         write(path, packet)
-        return summarize(packet, ledger, directory, load)
+        return summarize(packet, ledger, directory, load, known)
     except (ConversionError, OSError, ValueError, TypeError, KeyError, OverflowError):
         raise ConversionError('invalid_host_usage', '宿主计量字段、任务绑定或已有事件内容非法。') from None
 
 
-def summarize(packet, ledger, directory, load):
+def summarize(packet, ledger, directory, load, catalog):
     models = [e for e in packet['events'] if e['kind'] == 'model_call']
     tools = [e for e in packet['events'] if e['kind'] == 'host_tool_call']
     images = [e for e in packet['events'] if e['kind'] == 'image_presented']
@@ -165,12 +192,12 @@ def summarize(packet, ledger, directory, load):
     ids = {e['response_id'] for e in models}
     missing = sorted(set(packet['coverage']['expected_response_ids']) - ids)
     missing_usage = [e['response_id'] for e in models if e['usage'] is None]
-    end = ledger.get('first_deliverable_at')
-    terminal = end if ledger.get('task_status') == 'success' else ledger.get('last_observed_at')
-    if terminal is not None and ledger.get('task_status') == 'success':
-        terminal = max([terminal] + [e['ended_at'] for e in ledger.get('operations', [])
-            if e.get('operation') in ('export', 'replay') and e.get('status') == 'success' and e.get('ended_at') is not None])
-    scope_closed = (packet['coverage']['lifecycle_complete'] and terminal is not None and packet['scope']['started_at'] <= ledger['submitted_at'] and packet['scope']['ended_at'] >= terminal)
+    from agent_delivery import current_delivery
+    confirmed = current_delivery(ledger)
+    terminal = confirmed['confirmed_at'] if ledger.get('task_status') == 'success' and confirmed else (
+        ledger.get('last_observed_at') if ledger.get('task_status') in ('failed','cancelled','timeout') else None)
+    scope_closed = (packet['coverage']['lifecycle_complete'] and terminal is not None and ledger.get('submitted_at') is not None
+                    and packet['scope']['started_at'] <= ledger['submitted_at'] and packet['scope']['ended_at'] >= terminal)
     complete = packet['scope']['mode'] != 'review_only' and packet['coverage']['model_calls_complete'] and not missing and not missing_usage and scope_closed
     if complete and not models:
         for key in ('input_tokens', 'output_tokens', 'total_tokens'):
@@ -188,7 +215,12 @@ def summarize(packet, ledger, directory, load):
         value = load(decision)
         declared = value.get('decision', value).get('presented_images')
     presented = {e['image_id'] for e in images}
-    evidence = {e['image_id'] for e in images if e['image_source'] == 'observation'}
+    current = load(directory / 'observation.json')
+    current_images = {i['id']: i for i in current['images']}
+    observation_hash = hashlib.sha256((directory / 'observation.json').read_bytes()).hexdigest()
+    evidence = {e['image_id'] for e in images if e['image_source'] == 'observation' and e['image_id'] in current_images
+                and (e.get('observation_sha256') == observation_hash or 'observation_sha256' not in e and
+                     e['source_pixels'] == next(r['source_pixels'] for r in catalog[e['image_id']] if r['observation_sha256'] == observation_hash))}
     return dict(source=packet['source'], scope=packet['scope'], coverage=packet['coverage'],
                 observed_actual_tokens=observed, model_tokens=actual if complete else None, token_complete=complete,
                 model_call_count=len(models), failed_model_calls=sum(e['status'] == 'failed' for e in models),
@@ -210,7 +242,8 @@ def task_summary(directory, ledger, load):
     if not path.exists():
         return None
     try:
-        packet = validate(load(path), ledger, image_catalog(directory, load))
-        return summarize(packet, ledger, Path(directory), load)
+        catalog = image_catalog(directory, load)
+        packet = validate(load(path), ledger, catalog)
+        return summarize(packet, ledger, Path(directory), load, catalog)
     except (ConversionError, OSError, ValueError, TypeError, KeyError, OverflowError):
         raise ConversionError('invalid_host_usage', '已保存的宿主计量非法。') from None

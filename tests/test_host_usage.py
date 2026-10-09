@@ -127,7 +127,9 @@ class HostUsageTests(unittest.TestCase):
             decision = PerformanceTests().decision(task, base)
             self.run_cli(CLI, '--operation', 'submit', '--task', task, '--decision', decision)
             _, exported = self.run_cli(CLI, '--operation', 'export', '--task', task, '--output', base/'output')
-            report = exported['performance']
+            _, delivered = self.run_cli(CLI, '--operation', 'confirm-delivery', '--task', task, '--output', base/'output',
+                                      '--decision', PerformanceTests().delivery_review(task, base/'output', base))
+            report = delivered['performance']
             packet = self.packet(report)
             image = json.loads((task/'observation.json').read_text())['images'][0]
             packet['coverage']['images_complete'] = True
@@ -183,11 +185,11 @@ class HostUsageTests(unittest.TestCase):
                     input_sha256='a'*64,environment_id='frozen-env',model_id='fixture-model',model_version='unknown',
                     measurement_source='controlled_fixture',timeout_seconds=1200,
                     performance=dict(lifecycle_id=f'life-{index}',task_status='success',wall_elapsed_seconds=seconds,
-                        first_deliverable_at=seconds,wall_clock_valid=True,model_tokens=dict(input_tokens=90,output_tokens=10,total_tokens=100))))
+                        first_deliverable_at=seconds,delivered_at=seconds,delivery_confirmed=True,wall_clock_valid=True,model_tokens=dict(input_tokens=90,output_tokens=10,total_tokens=100))))
             for status in ('waiting','failed','cancelled','timeout'):
                 runs.append(dict(runs[0],run_id=status,performance=dict(lifecycle_id=status,task_status=status,
                     wall_elapsed_seconds=8,first_deliverable_at=None,wall_clock_valid=True,model_tokens=None)))
-            runs.append(dict(runs[0],run_id='replay',mode='replay',performance=dict(runs[0]['performance'],lifecycle_id='replay',wall_elapsed_seconds=1)))
+            runs.append(dict(runs[0],run_id='replay',mode='replay',performance=dict(runs[0]['performance'],lifecycle_id='replay',task_status='waiting',delivered_at=None,delivery_confirmed=False,wall_elapsed_seconds=1)))
             runs.append(runs[0])  # duplicated report import is idempotent
             path=base/'runs.json';path.write_text(json.dumps(dict(schema_version=1,runs=runs)))
             code,result=self.run_cli(HOST,'aggregate','--runs',path)
@@ -200,7 +202,7 @@ class HostUsageTests(unittest.TestCase):
             self.assertIsNone(group['actual_total_tokens'])
             self.assertEqual(group['complete_token_run_count'],5)
             self.assertEqual(group['known_observed_total_tokens'],500)
-            self.assertEqual(next(g for g in result['groups'] if g['mode']=='replay')['delivery_seconds']['sample_count'],1)
+            self.assertEqual(next(g for g in result['groups'] if g['mode']=='replay')['delivery_seconds']['sample_count'],0)
             self.assertTrue(group['small_sample_limit'])
             self.assertFalse(group['real_baseline_eligible'])
             runs[-1]=dict(runs[0],input_sha256='b'*64)
@@ -214,7 +216,9 @@ class HostUsageTests(unittest.TestCase):
             task,_=self.prepare(base)
             self.run_cli(CLI,'--operation','submit','--task',task,'--decision',PerformanceTests().decision(task,base))
             _,exported=self.run_cli(CLI,'--operation','export','--task',task,'--output',base/'output')
-            packet=self.packet(exported['performance'])
+            _, delivered = self.run_cli(CLI, '--operation', 'confirm-delivery', '--task', task, '--output', base/'output',
+                                      '--decision', PerformanceTests().delivery_review(task, base/'output', base))
+            packet=self.packet(delivered['performance'])
             packet['events']=[]
             packet['coverage']['expected_response_ids']=[]
             path=base/'usage.json';path.write_text(json.dumps(packet))
@@ -227,3 +231,167 @@ class HostUsageTests(unittest.TestCase):
             path.write_text(json.dumps(packet))
             _,partial=self.run_cli(HOST,'import','--task',task,'--events',path)
             self.assertIsNone(partial['usage']['model_tokens'])
+
+    def test_complete_usage_waits_for_current_delivery_confirmation(self):
+        from test_agent_performance import PerformanceTests
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task, _ = self.prepare(base)
+            helper = PerformanceTests()
+            decision = helper.decision(task, base)
+            self.run_cli(CLI, '--operation', 'submit', '--task', task, '--decision', decision)
+            output = base / 'output'
+            _, exported = self.run_cli(CLI, '--operation', 'export', '--task', task, '--output', output)
+            packet = self.packet(exported['performance'])
+            packet['coverage']['lifecycle_complete'] = True
+            path = base / 'usage.json'
+            path.write_text(json.dumps(packet))
+            _, waiting = self.run_cli(HOST, 'import', '--task', task, '--events', path)
+            self.assertIsNone(waiting['usage']['model_tokens'])
+            receipt = helper.delivery_review(task, output, base)
+            _, confirmed = self.run_cli(CLI, '--operation', 'confirm-delivery', '--task', task, '--output', output, '--decision', receipt)
+            self.assertTrue(confirmed['performance']['delivery_confirmed'])
+            _, old_window = self.run_cli(CLI, '--operation', 'report', '--task', task)
+            self.assertIsNone(old_window['performance']['model_tokens'])
+            packet['scope']['ended_at'] = time.time()
+            path.write_text(json.dumps(packet))
+            _, complete = self.run_cli(HOST, 'import', '--task', task, '--events', path)
+            self.assertEqual(complete['usage']['model_tokens']['total_tokens'], 213)
+            value = json.loads(decision.read_text())
+            value.update(decision_id='revised', evidence='Actual recheck requires a new delivery review.')
+            revision = dict(schema_version=5, decision_id='revision-1', reviewed_frames=[f['id'] for f in json.loads((task/'observation.json').read_text())['frames']],
+                            revision_of='test-review', decision=value)
+            decision.write_text(json.dumps(revision))
+            _, revised = self.run_cli(CLI, '--operation', 'submit', '--task', task, '--decision', decision)
+            self.assertIsNone(revised['performance']['model_tokens'])
+            self.assertFalse(revised['performance']['delivery_confirmed'])
+
+    def test_supplement_preserves_presentations_from_archived_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task, report = self.prepare(base)
+            state = json.loads((task/'task.json').read_text())
+            observation = json.loads((task/'observation.json').read_text())
+            batch = next(i for i in observation['images'] if i['kind'] == 'batch_comparison')
+            packet = self.packet(report)
+            packet['events'].append(dict(kind='image_presented', event_id='batch-view-1', thread_id='root', call_id='batch-view',
+                timestamp=report['submitted_at'], image_id=batch['id'], image_source='observation', width=640, height=170,
+                panel_count=3, source_pixels=1920*510))
+            packet_path = base/'usage.json'
+            packet_path.write_text(json.dumps(packet))
+            code, imported = self.run_cli(HOST, 'import', '--task', task, '--events', packet_path)
+            self.assertEqual(code, 0, imported)
+            request = dict(schema_version=1, task_id=state['task_id'], observation_sha256=state['observation_sha256'],
+                observation_version=1, request_id='review-gap', issue=dict(reason='Inspect a missing native interval.', start=0, end=1), timestamps=[0.25])
+            path = base/'request.json'
+            path.write_text(json.dumps(request))
+            _, supplemented = self.run_cli(CLI, '--operation', 'supplement', '--task', task, '--decision', path)
+            self.assertEqual(supplemented['phase'], 'review')
+            self.assertEqual(supplemented['observation_version'], 2)
+            self.assertEqual(supplemented['performance']['host_usage']['observed_image_presentations'], 1)
+            _, rebuilt = self.run_cli(CLI, '--operation', 'report', '--task', task)
+            self.assertEqual(rebuilt['performance']['host_usage']['verified_observation_source_pixels'], 1920*510)
+            code, again = self.run_cli(HOST, 'import', '--task', task, '--events', packet_path)
+            self.assertEqual(code, 0, again)
+            self.assertEqual(again['usage']['observed_image_presentations'], 1)
+            packet['scope']['ended_at'] = time.time()
+            packet['events'][-1]['observation_sha256'] = state['observation_sha256']
+            packet_path.write_text(json.dumps(packet))
+            code, bound = self.run_cli(HOST, 'import', '--task', task, '--events', packet_path)
+            # The same normalized archived binding remains idempotent.
+            self.assertEqual(code, 0, bound)
+            packet['events'][-1].update(event_id='batch-view-2', call_id='batch-view-again')
+            packet_path.write_text(json.dumps(packet))
+            code, bound = self.run_cli(HOST, 'import', '--task', task, '--events', packet_path)
+            self.assertEqual(code, 0, bound)
+            self.assertEqual(bound['usage']['observed_image_presentations'], 2)
+            original = (task/'host-usage.json').read_bytes()
+            packet['events'][-1]['observation_sha256'] = '0'*64
+            packet['scope']['ended_at'] = time.time()
+            packet_path.write_text(json.dumps(packet))
+            self.assertEqual(self.run_cli(HOST, 'import', '--task', task, '--events', packet_path)[0], 2)
+            self.assertEqual((task/'host-usage.json').read_bytes(), original)
+
+    def test_real_baseline_gate_preserves_explicit_fixture_delivery_provenance(self):
+        from test_agent_performance import PerformanceTests
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task, _ = self.prepare(base)
+            helper = PerformanceTests()
+            self.run_cli(CLI, '--operation', 'submit', '--task', task, '--decision', helper.decision(task, base))
+            output = base/'output'
+            self.run_cli(CLI, '--operation', 'export', '--task', task, '--output', output)
+            _, delivered = self.run_cli(CLI, '--operation', 'confirm-delivery', '--task', task, '--output', output,
+                                        '--decision', helper.delivery_review(task, output, base))
+            packet = self.packet(delivered['performance'])
+            packet['source']['kind'] = 'host'
+            packet['coverage'].update(lifecycle_complete=True, images_complete=True, missing_reasons=[])
+            for index, image in enumerate(json.loads((task/'observation.json').read_text())['images']):
+                with Image.open(task/image['path']) as raster:
+                    width, height = raster.size
+                packet['events'].append(dict(kind='image_presented', event_id=f'image-{index}', call_id=f'image-{index}',
+                    thread_id='root', timestamp=packet['scope']['started_at'], image_id=image['id'], image_source='observation',
+                    width=width, height=height, panel_count=1, source_pixels=width*height))
+            path = base/'usage.json'
+            path.write_text(json.dumps(packet))
+            self.assertEqual(self.run_cli(HOST, 'import', '--task', task, '--events', path)[0], 0)
+            _, value = self.run_cli(CLI, '--operation', 'report', '--task', task)
+            report = value['performance']
+            self.assertTrue(report['host_usage']['declared_presented_images_match'])
+            run = dict(run_id='fixture-delivery',sample_id='fixture',code_version='candidate',entry='local',mode='review',
+                       input_sha256=report['source']['sha256'],environment_id='fixture-env',model_id='test',model_version='unknown',
+                       measurement_source='host',timeout_seconds=1200,performance=report)
+            aggregate = base/'runs.json'
+            aggregate.write_text(json.dumps(dict(schema_version=1,runs=[run])))
+            _, result = self.run_cli(HOST, 'aggregate', '--runs', aggregate)
+            self.assertFalse(result['groups'][0]['real_baseline_eligible'])
+            # An otherwise identical caller-supplied real-review provenance clears this specific gate.
+            report['delivery_history'][-1]['review']['reviewer']['kind'] = 'agent'
+            report['delivery_reviewer']['kind'] = 'agent'
+            aggregate.write_text(json.dumps(dict(schema_version=1,runs=[run])))
+            _, result = self.run_cli(HOST, 'aggregate', '--runs', aggregate)
+            self.assertTrue(result['groups'][0]['real_baseline_eligible'])
+            report['delivery_confirmed'] = False
+            aggregate.write_text(json.dumps(dict(schema_version=1,runs=[run])))
+            self.assertEqual(self.run_cli(HOST, 'aggregate', '--runs', aggregate)[0], 2)
+
+    def test_legacy_comparison_binding_survives_equal_size_new_montage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task, report = self.prepare(base)
+            def supplement(timestamp, request_id):
+                state = json.loads((task/'task.json').read_text())
+                request = dict(schema_version=1, task_id=state['task_id'], observation_sha256=state['observation_sha256'],
+                    observation_version=state['observation_version'], request_id=request_id,
+                    issue=dict(reason='Inspect another native interval.', start=0, end=1), timestamps=[timestamp])
+                path = base/f'{request_id}.json'
+                path.write_text(json.dumps(request))
+                return self.run_cli(CLI, '--operation', 'supplement', '--task', task, '--decision', path)[1]
+            report = supplement(0.25, 'first-gap')['performance']
+            observation = json.loads((task/'observation.json').read_text())
+            montage = next(i for i in observation['images'] if i['id'] == 'comparison')
+            from PIL import Image
+            with Image.open(task/montage['path']) as raster:
+                width, height = raster.size
+            packet = self.packet(report)
+            packet['events'].append(dict(kind='image_presented', event_id='montage-view', thread_id='root', call_id='montage-call',
+                timestamp=time.time(), image_id='comparison', image_source='observation', width=width, height=height,
+                panel_count=4, source_pixels=width*height))
+            packet['scope']['ended_at'] = time.time()
+            path = base/'usage.json'
+            path.write_text(json.dumps(packet))
+            self.assertEqual(self.run_cli(HOST, 'import', '--task', task, '--events', path)[0], 0)
+            supplemented = supplement(0.5, 'second-gap')
+            self.assertEqual(supplemented['phase'], 'review')
+            self.assertEqual(supplemented['performance']['host_usage']['observed_image_presentations'], 1)
+            current = json.loads((task/'observation.json').read_text())
+            new = next(i for i in current['images'] if i['id'] == 'comparison')
+            with Image.open(task/new['path']) as raster:
+                self.assertEqual(raster.size, (width,height))
+            self.assertNotEqual(new['sha256'], montage['sha256'])
+            code, again = self.run_cli(HOST, 'import', '--task', task, '--events', path)
+            self.assertEqual(code, 0, again)
+            self.assertEqual(again['usage']['observed_image_presentations'], 1)
+            stored = json.loads((task/'host-usage.json').read_text())
+            self.assertEqual(stored['events'][-1]['observation_sha256'], report['state_revision']['observation_sha256'])

@@ -257,3 +257,10 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 `tests/test_host_usage.py` 从公开 host CLI 和统一任务 report 验证逐响应计量、失败重试、相同事件幂等导入、冲突拒绝、缺失 usage、未知字段、线程绑定、真实呈交尺寸与源像素区分、额外 PDF 图像、已认证零调用和 nearest-rank 汇总。受控 Desktop 文件含正文与工具参数哨兵，采集输出不出现这些内容；同 inode 的 sessions/archived_sessions 不重复计量，其他 turn、窗口外开发调用与无关线程排除。模型累计镜像不参加逐响应总量。source、entry、环境、模型版本和 review/replay 分组保留，controlled_fixture 不具有真实基线资格。
 
 这些都是合成视频和受控计量输入，不证明真实模型视觉质量或真实端到端提速。授权只读勘察已经找到本次 Desktop 的 `token_usage_record.usage`；失败模型调用完整账本与图像实际呈交覆盖仍未知，采集器始终输出 partial coverage。三类真实视频的完整新鲜基线与实际总 Token 降低尚未通过，不能据此开启性能快路径。
+
+
+### #43 审阅修复
+
+新增统一 CLI 负例，删除内部阶段或操作必需字段后，resume 与 report 在写入前拒绝并保留原账本字节。交付确认用合成 PDF 验证脚本导出后继续计时、实际逐页回执关闭当前范围、重复确认幂等、修订恢复计时并保留历史、旧回执与重放产物拒绝，以及缺失审核、错误 hash、空页依据和修改过的产物无法宣告完成。宿主完整成本范围必须覆盖当前确认，旧窗口与等待状态不提供完整总量。汇总成功样本要求当前交付确认，明确 fixture 审核不能作为真实基线。
+
+宿主补采回归保存旧 batch_comparison 的呈交事件，更新观察包后仍核验归档图像并累计成本，resume/report 和再次导入保持可用。新事件可绑定归档观察 hash，错包绑定不修改原宿主账本。另用四帧到五帧的同尺寸不同内容 comparison 验证，legacy 事件首次导入持久化观察 hash，后续补采和旧包重导入保留原绑定。这些测试验证软件契约，不证明真实模型视觉理解或真实性能下降。

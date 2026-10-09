@@ -2,6 +2,7 @@
 import math
 import re
 from host_accounting import identifier, number, require
+from agent_delivery import current_delivery
 
 
 def aggregate(packet):
@@ -32,7 +33,8 @@ def aggregate(packet):
         elapsed=performance.get('wall_elapsed_seconds')
         if elapsed is not None:number(elapsed)
         if performance['task_status']=='success':
-            require(performance.get('first_deliverable_at') is not None)
+            require(performance.get('delivery_confirmed') is True and performance.get('delivered_at') is not None)
+            number(performance['delivered_at'])
         tokens=performance.get('model_tokens')
         if tokens is not None:
             require(isinstance(tokens,dict) and type(tokens.get('total_tokens')) is int and tokens['total_tokens']>=0)
@@ -62,6 +64,7 @@ def aggregate(packet):
             observed_token_run_count=len(observed),known_observed_total_tokens=sum(observed) if observed else None,
             small_sample_limit=len(successful)<10,
             real_baseline_eligible=group['measurement_source'] in ('host','codex_desktop_jsonl') and group['mode']=='review' and len(complete)==n and all(
+                current_delivery(r) is not None and current_delivery(r)['review']['reviewer']['kind'] in ('agent','human') and
                 isinstance(r.get('host_usage'),dict) and r['host_usage'].get('token_complete') is True and r['host_usage'].get('declared_presented_images_match') is not False and
                 r['host_usage'].get('source',{}).get('kind')==group['measurement_source'] and
                 all(r['host_usage'].get('coverage',{}).get(k) is True for k in ('lifecycle_complete','model_calls_complete','tools_complete','images_complete'))

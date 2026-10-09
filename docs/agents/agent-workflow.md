@@ -153,7 +153,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 ## 任务性能报告，#44
 
-Agent-first 的每次 CLI 操作返回 `performance`。任务目录的 `performance.json` 保存提交时间、操作开始与结束，以及单调时钟测得的阶段耗时。`prepare` 的起点在匿名获取之前；`export` 或 `replay` 完成 PDF、来源检查和首次 manifest 发布后，记录首次可交付时间。跨进程墙钟历时包含操作间的等待，不等于阶段耗时之和。接受决定仍是 waiting，直到实际导出成功。
+Agent-first 的每次 CLI 操作返回 `performance`。任务目录的 `performance.json` 保存提交时间、操作开始与结束，以及单调时钟测得的阶段耗时。`prepare` 的起点在匿名获取之前；`export` 记录脚本导出时刻 `exported_at`。完成实际逐页 PDF 审核和来源、整曲检查后，`confirm-delivery` 才记录当前版本的 `delivered_at`。跨进程墙钟历时包含操作间的等待，不等于阶段耗时之和。接受决定、导出和重放的性能状态都保持 waiting，直到当前版本交付审核确认。原 export 返回的 success/complete 仍表示脚本执行成功，不代表实际交付审核已经完成。
 
 ```sh
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation report --task /absolute/task
@@ -190,3 +190,18 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 模型 Token、模型耗时、宿主工具调用数和实际图像呈交数没有可信来源时保留 null。决定声明的 presented_images 和生成图像数量仍保留原口径，不能替代实际呈交事件。审阅、排队、用户暂停与主动执行总耗时无法完整拆分时也为 null。这里的脚本计时不证明模型看清了谱面，也不证明总 Token 已降低。显式 `--operation convert` 继续使用旧报告口径。
 
 宿主实际 Token、工具和图像呈交使用独立 [计量适配器](host-usage.md)。`host_usage.py collect` 只读明确 invocation 的授权会话元数据，`import` 验证任务绑定并保存幂等账本，`aggregate` 按入口、真实审阅与重放分组。统一 report 的 `host_usage` 区分已观察实际量、完整实际量和缺失来源；Desktop partial 采集不能冒充完整视频基线。
+
+
+## 实际交付确认
+
+先按技能要求实际逐页查看 PDF，核对整曲完整性、行序、边界、标题和源图裁剪。完成后提交独立审核回执，原决定协议不变。回执是审核调用方的正面声明；脚本核对绑定和导出证据，不证明模型理解了每个图像区域，也不能防止调用方故意提交虚假声明。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation confirm-delivery --task /absolute/task --output /absolute/export --decision /absolute/delivery-review.json
+```
+
+回执字段严格限定为 schema_version=1、review_id、task_id、lifecycle_id、observation_sha256、decision_sha256、pdf_sha256、manifest_sha256、reviewer、source_manifest_verified、complete_score_verified、pages。task 与 lifecycle 来自当前任务和性能账本；observation_sha256 必须为当前观察包，decision_sha256 必须为最新接受历史记录的 sha256。PDF 和 manifest 使用导出目录实际文件的 SHA256。reviewer 仅含 kind 和 id，kind 为 agent、human 或 controlled_fixture；Agent 使用实际审阅线程 ID，未知模型精确版本仍为 unknown。
+
+两个 verified 字段只有实际检查通过后才能为 true。pages 必须按 1 至 page_count 顺序覆盖全部页，每项仅含 page 和非空 evidence，具体说明实际看到的完整谱行、边界和分页。空页审核、缺失正面检查、旧决定、旧观察包、修改后的 PDF/manifest、同 review_id 不同内容及单独重放产物均拒绝。回执必须绑定同一任务记录中的真实 export 产物。
+
+同回执重复确认不增加审核历史，也不重设确认时刻；实际 CLI 操作成本仍单列。修订或补采改变任务版本时撤销当前确认，`delivered_at` 变为 null，总墙钟时间继续从最早提交计算，直到修订版本重新导出并实际审核确认。`first_deliverable_at` 保留首次审核确认的历史时刻，不能作为当前版本终点。delivery_history 保存各次实际审核回执、产物目录和确认时刻。replay 记录执行成本，不自动补写确认。旧计量记录中的脚本成功不能替代实际审核回执。

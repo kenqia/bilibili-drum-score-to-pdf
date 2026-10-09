@@ -580,8 +580,9 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
                 state, observation = checked_task(directory, recover=False)
                 recorder = Performance(directory, load_json, write_json)
                 recorder.metadata(observation, state)
-            status = recorder.data['task_status']
-            return dict(status=status, complete=status == 'success', phase='report', performance=recorder.report())
+            report = recorder.report()
+            status = report['task_status']
+            return dict(status=status, complete=status == 'success', phase='report', performance=report)
         if operation in ('prepare', 'export', 'replay'):
             if not target:
                 raise ConversionError('invalid_input', '需要新的结果目录。')
@@ -613,6 +614,10 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
             result, _ = checked_task(Path(task))
         elif operation == 'submit':
             result = submit(Path(task), decision)
+        elif operation == 'confirm-delivery':
+            from agent_delivery import confirm
+            state, observation = checked_task(Path(task))
+            result = confirm(output, decision, performance, state, observation, load_json, digest)
         else:
             result = export(Path(task), target)
     except InputError as error:
@@ -645,6 +650,9 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
             except (ConversionError, OSError, ValueError, TypeError, KeyError):
                 pass
         if target and result.get('status') == 'success' and operation in ('export','replay'):
+            state = load_json(performance.directory / 'task.json')
+            performance.operation['artifact'] = dict(directory=str(target.resolve()), pdf_sha256=digest(target / 'score.pdf'),
+                    observation_sha256=result['observation_sha256'], decision_sha256=state['decision_history'][-1]['sha256'] if state.get('decision_history') else digest(performance.directory / 'decision.json'))
             with stage('delivery_publication'):
                 write_json(target / 'manifest.json', result)
         performance.finish(result)
@@ -655,4 +663,7 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
             ACTIVE.reset(token)
     if target and target.exists() and result.get('error', {}).get('code') != 'existing_output':
         write_json(target / 'manifest.json', result)
+        if performance and performance.operation.get('artifact') and result['status'] == 'success':
+            performance.operation['artifact']['manifest_sha256'] = digest(target / 'manifest.json')
+            performance.save()
     return result

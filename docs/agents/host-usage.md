@@ -56,7 +56,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 source.kind 只允许 `host`、`codex_desktop_jsonl`、`controlled_fixture`。mode 为 `review`、`review_only` 或 `replay`。模型与工具 status 为 `complete`、`failed`、`cancelled` 或 `unknown`。未知字段拒绝，不会暗中加入总量。
 
-Token 总量等于 input + output。可选字段为 cached_input、cache_write_input、reasoning_output、text_input 和 image_input 的 `_tokens` 字段，它们是总量的拆分。缓存拆分不得超过 input，推理不得超过 output。只有全部响应提供同一个拆分时，完整总计才有该字段的值；部分来源提供时另列已观察拆分，完整值为 null。总实际 Token 要求生命周期范围关闭、覆盖提交到终止或首次交付、调用方确认全部模型调用且预期响应均有 usage。`review_only` 始终不能宣称完整生命周期。受控调用方明确证实完整范围内没有模型调用时，input/output/total 可为零；不可观测来源始终为 null。
+Token 总量等于 input + output。可选字段为 cached_input、cache_write_input、reasoning_output、text_input 和 image_input 的 `_tokens` 字段，它们是总量的拆分。缓存拆分不得超过 input，推理不得超过 output。只有全部响应提供同一个拆分时，完整总计才有该字段的值；部分来源提供时另列已观察拆分，完整值为 null。总实际 Token 要求生命周期范围关闭、覆盖提交到终止或当前版本实际交付确认、调用方确认全部模型调用且预期响应均有 usage。仅 export success 或历史 first_deliverable_at 不能关闭当前范围；确认后必须扩展 invocation 结束时间到当前 delivered_at。修订或补采撤销当前确认，完整成本字段恢复为 null，已观察成本仍累计。`review_only` 始终不能宣称完整生命周期。受控调用方明确证实完整范围内没有模型调用时，input/output/total 可为零；不可观测来源始终为 null。
 
 工具事件采用以下字段，外层模型调用与内部 seek、解码、shell 执行分别统计，不能混加。
 
@@ -67,17 +67,17 @@ Token 总量等于 input + output。可选字段为 cached_input、cache_write_i
 实际图像呈交事件必须在图像送入模型时记录，每次呈交有独立 event ID。生成 PNG 或运行 view_image 成功不能替代呈交事件。
 
 ```json
-{"kind":"image_presented","event_id":"delivery-1","thread_id":"root","timestamp":1791537100,"call_id":"call-1","image_id":"frame-000","image_source":"observation","width":640,"height":360,"panel_count":1,"source_pixels":2073600}
+{"kind":"image_presented","event_id":"delivery-1","thread_id":"root","timestamp":1791537100,"call_id":"call-1","image_id":"frame-000","image_source":"observation","width":640,"height":360,"panel_count":1,"source_pixels":2073600,"observation_sha256":"SHA256_OF_REVIEWED_OBSERVATION"}
 ```
 
-observation 图像 ID 必须属于当前观察包，source_pixels 与保存图像的实际尺寸相符。delivery、diagnostic 用于 PDF 页或额外诊断图；它们不满足观察证据要求，未知源像素为 null，已提供源像素也只属调用方声明。决策 presented_images 仅和 observation 呈交 ID 集合核对，额外交付图不造成错误匹配。报告同时列呈交次数、唯一图像、重复次数、实际呈交像素、面板数和经核对的观察源像素。实际呈交尺寸不等于模型内部编码尺寸，也不证明模型理解每个面板。
+observation 图像 ID 必须属于当前观察包或任务保留的 observation-vN 归档，source_pixels 与对应保存图像实际尺寸相符，图像内容 hash 也要匹配。新事件可携带 observation_sha256，显式绑定被查看的观察版本；错包 hash 拒绝。旧事件首次导入没有该字段时，默认绑定当前包中 source_pixels 匹配的图；当前包没有该 ID 时，仅接受唯一可定位的归档。导入会把 observation_sha256 规范化保存，之后同 legacy 事件重复导入继承已保存绑定再比对。这样 generic comparison ID 即使在补采后复用、尺寸相同而图像 hash 不同，也不会改写旧呈交来源或阻塞恢复。补采后的当前包不再包含旧 batch_comparison 时，已呈交的旧图成本仍累计，不能让合法旧事件阻塞补采或报告。当前决定的呈交核对只使用属于当前包的证据，旧包特有图像不充当新包证据。delivery、diagnostic 用于 PDF 页或额外诊断图；它们不满足观察证据要求，未知源像素为 null，已提供源像素也只属调用方声明。决策 presented_images 仅和 observation 呈交 ID 集合核对，额外交付图不造成错误匹配。报告同时列呈交次数、唯一图像、重复次数、实际呈交像素、面板数和经核对的观察源像素。实际呈交尺寸不等于模型内部编码尺寸，也不证明模型理解每个面板。
 
 ## 多次运行汇总
 
 `aggregate --runs /absolute/runs.json` 输出分组 P50/P90、状态率和完整性。输入为 `{"schema_version":1,"runs":[...]}`，每项提供 `run_id`、`sample_id`、`code_version`、`entry`、`mode`、`input_sha256`、`environment_id`、`model_id`、`model_version`、`measurement_source`、`timeout_seconds` 和统一 report 的 `performance`。entry 为 local/url；同样本 hash 必须一致，重复 run ID 内容一致时只统计一次，冲突或复用 lifecycle ID 拒绝。
 
-报告按上述运行条件分组。成功且墙钟有效的可交付任务计算 nearest-rank，P50/P90 的秩为 ceil(q × N)。等待、失败、取消、超时均保留已发生时间，所有状态率使用全部提交任务作分母。成功交付样本小于十次时标记小样本局限，P90 可能就是最大值。完整实际 Token 只在分组全部任务有完整值时累计，未知不作为零；观察到的实际量另报。
+报告按上述运行条件分组。成功、具有当前版本交付确认且墙钟有效的任务计算 nearest-rank，P50/P90 的秩为 ceil(q × N)。等待、失败、取消、超时均保留已发生时间，所有状态率使用全部提交任务作分母。成功交付样本小于十次时标记小样本局限，P90 可能就是最大值。完整实际 Token 只在分组全部任务有完整值时累计，未知不作为零；观察到的实际量另报。
 
-固定决定重放、review_only 和 controlled_fixture 单列，不能作为真实 Agent 性能放行依据。`real_baseline_eligible` 只检查真实来源、完整模型/工具/图像覆盖及完整 review 范围，不检查曲谱质量、样本数量或配对降幅。真实基线仍须冻结至少三类视频、入口、hash、时限、环境与重复次数，完成标准 URL 双跑及各自独立视觉、来源与 PDF 验收。
+固定决定重放、review_only 和 controlled_fixture 单列，不能作为真实 Agent 性能放行依据。`real_baseline_eligible` 检查真实来源、完整模型/工具/图像覆盖、完整 review 范围及当前审核回执。明确 controlled_fixture 的交付审核不能进入真实基线，即使 measurement_source 声称 host。该标记不检查曲谱质量、样本数量或配对降幅。真实基线仍须冻结至少三类视频、入口、hash、时限、环境与重复次数，完成标准 URL 双跑及各自独立视觉、来源与 PDF 验收。
 
 #45 软件边界可通过合成 CLI 与受控事件验证。当前 Desktop 来源无法证明全部失败调用和图像呈交覆盖；新鲜多视频完整基线及实际总 Token 降低仍未验收。开发会话成本、历史 prepare 时间和固定决定重放不能填补这些缺口。

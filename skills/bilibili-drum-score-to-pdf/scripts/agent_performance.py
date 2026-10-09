@@ -46,16 +46,23 @@ def validate_events(data, number):
     ids = set()
     for event in data['operations']:
         required = {'event_id','operation','started_at','elapsed_seconds','ended_at','status'}
-        optional = {'phase','error_code','metrics','state_changed'}
+        optional = {'phase','error_code','metrics','state_changed','artifact'}
         require(isinstance(event, dict) and required <= set(event) <= required | optional)
         require(event['operation'] in ('prepare','resume','submit','supplement','export','replay','confirm-delivery'))
         require(event['status'] in ('running','interrupted','waiting','failed','success'))
         require(number(event['started_at']) and (event['ended_at'] is None or number(event['ended_at'])))
         require(event['elapsed_seconds'] is None or number(event['elapsed_seconds']) and event['elapsed_seconds'] >= 0)
+        require(event['status'] in ('running','interrupted') or event['ended_at'] is not None and event['elapsed_seconds'] is not None)
         require(isinstance(event['event_id'], str) and bool(re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', event['event_id'])) and event['event_id'] not in ids)
         require('metrics' not in event or event['metrics'] is None or isinstance(event['metrics'], dict))
         require('state_changed' not in event or type(event['state_changed']) is bool)
         require(all(event.get(k) is None or isinstance(event[k], str) for k in ('phase','error_code')))
+        if 'artifact' in event:
+            artifact = event['artifact']
+            required_artifact = {'directory','pdf_sha256','observation_sha256','decision_sha256'}
+            require(isinstance(artifact, dict) and required_artifact <= set(artifact) <= required_artifact | {'manifest_sha256'})
+            require(isinstance(artifact['directory'], str) and Path(artifact['directory']).is_absolute())
+            require(all(isinstance(v, str) and bool(re.fullmatch(r'[a-f0-9]{64}', v)) for k,v in artifact.items() if k != 'directory'))
         operations.add(event['event_id'])
         ids.add(event['event_id'])
     for event in data['stages']:
@@ -91,7 +98,7 @@ class Performance:
         preexisting = value is not None or (directory / 'task.json').exists()
         if self.data is None:
             self.data = dict(schema_version=1, lifecycle_id=uuid.uuid4().hex if not preexisting else None, submitted_at=now if not preexisting else None,
-                             last_observed_at=now, first_deliverable_at=None, task_status='waiting',
+                             last_observed_at=now, first_deliverable_at=None, delivered_at=None, exported_at=None, delivery_history=[], delivery_review_id=None, task_status='waiting',
                              operations=[], stages=[], clock_anomalies=[], source=None, metrics={},
                              environment=dict(python=platform.python_version(), pillow=pillow_version),
                              script_sha256=hashlib.sha256(b''.join(p.name.encode()+b'\0'+p.read_bytes() for p in sorted(Path(__file__).parent.glob('*.py')))).hexdigest(),
@@ -100,7 +107,8 @@ class Performance:
                              tool_versions=None, entry='prepare', cache_status='unknown')
         fields = {'schema_version','lifecycle_id','submitted_at','last_observed_at','first_deliverable_at','task_status',
                   'operations','stages','clock_anomalies','source','metrics','environment','script_sha256','requirements_sha256',
-                  'model','script_revision','tool_versions','entry','cache_status','state_revision','task_id','sampling_usage'}
+                  'model','script_revision','tool_versions','entry','cache_status','state_revision','task_id','sampling_usage',
+                  'delivered_at','exported_at','delivery_history','delivery_review_id'}
         if not isinstance(self.data, dict) or set(self.data)-fields or type(self.data.get('schema_version')) is not int or self.data.get('schema_version') != 1 or self.data.get('task_status') not in ('waiting','failed','success') or not all(isinstance(self.data.get(k), list) for k in ('operations','stages','clock_anomalies')):
             raise ValueError('invalid performance ledger')
         def number(value):
@@ -111,7 +119,21 @@ class Performance:
         if not number(self.data.get('last_observed_at')) or (self.data.get('submitted_at') is not None and not number(self.data['submitted_at'])) or (self.data.get('first_deliverable_at') is not None and not number(self.data['first_deliverable_at'])) or not isinstance(self.data.get('metrics'), dict):
             raise ValueError('invalid performance ledger')
         validate_events(self.data, number)
+        from agent_delivery import review_shape
+        if not isinstance(self.data.get('delivery_history', []), list):
+            raise ValueError('invalid delivery history')
+        review_ids = set()
+        for record in self.data.get('delivery_history', []):
+            if not isinstance(record, dict) or set(record) != {'review','directory','confirmed_at','operation_id'} or not number(record['confirmed_at']) or not isinstance(record['directory'], str) or not Path(record['directory']).is_absolute() or record['operation_id'] not in {e['event_id'] for e in self.data['operations']}:
+                raise ValueError('invalid delivery history')
+            review_shape(record['review'])
+            if record['review']['review_id'] in review_ids:
+                raise ValueError('duplicate delivery review')
+            review_ids.add(record['review']['review_id'])
+        if self.data.get('delivered_at') is not None and (not number(self.data['delivered_at']) or self.data.get('delivery_review_id') not in review_ids):
+            raise ValueError('invalid current delivery')
         self.operation = None
+        self.confirmation = None
         self.began = None
         self.observe(now)
 
@@ -147,15 +169,22 @@ class Performance:
                                                    wall_seconds=now-self.operation['started_at'], monotonic_seconds=elapsed))
         self.operation.update(ended_at=now, elapsed_seconds=elapsed, status=result['status'],
                               phase=result.get('phase'), error_code=result.get('error', {}).get('code'))
-        delivered = self.operation['operation'] in ('export','replay') and result['status'] == 'success' and result.get('complete')
-        if delivered and self.data['first_deliverable_at'] is None:
-            self.data['first_deliverable_at'] = now
-        if self.data['first_deliverable_at'] is None:
-            self.data['task_status'] = result['status']
-        elif self.operation['operation'] in ('supplement','submit') and self.operation.get('state_changed'):
-            self.data['task_status'] = 'waiting'
-        elif delivered:
+        if self.operation['operation'] in ('supplement','submit') and self.operation.get('state_changed'):
+            self.data.update(delivered_at=None, delivery_review_id=None)
+        if self.operation['operation'] == 'export' and result['status'] == 'success':
+            self.data['exported_at'] = now
+        if self.confirmation and self.operation['operation'] == 'confirm-delivery' and result['status'] == 'success':
+            history = self.data.setdefault('delivery_history', [])
+            existing = next((r for r in history if r['review']['review_id'] == self.confirmation['review']['review_id']), None)
+            if existing is None:
+                existing = self.confirmation | dict(confirmed_at=now, operation_id=self.operation['event_id'])
+                history.append(existing)
+            self.data.update(delivered_at=existing['confirmed_at'], delivery_review_id=existing['review']['review_id'],
+                             first_deliverable_at=history[0]['confirmed_at'])
+        if self.delivery_confirmed():
             self.data['task_status'] = 'success'
+        else:
+            self.data['task_status'] = 'waiting' if result['status'] == 'success' else result['status']
         if self.operation['operation'] in ('prepare','supplement','export','replay'):
             self.operation['metrics'] = result.get('metrics')
         if result.get('script_revision'):
@@ -203,14 +232,24 @@ class Performance:
             self.data['model'] = value.get('decision', value)['model']
         self.data['sampling_usage'] = state.get('sampling_usage', observation['sampling']['used'])
 
+    def delivery_confirmed(self):
+        from agent_delivery import current_delivery
+        return current_delivery(self.data) is not None
+
     def report(self):
         now = time.time()
-        end = self.data['first_deliverable_at'] or now
+        from agent_delivery import current_delivery
+        delivery = current_delivery(self.data)
+        confirmed = delivery is not None
+        end = self.data.get('delivered_at') if confirmed else now
         elapsed = None if self.data['submitted_at'] is None else end-self.data['submitted_at']
         anomaly = now < self.data['last_observed_at'] or bool(self.data['clock_anomalies']) or (elapsed is not None and elapsed < 0)
         from host_accounting import task_summary
-        host = task_summary(self.directory, self.data, self.load)
+        effective = self.data | dict(delivery_confirmed=confirmed, task_status=self.data['task_status'] if self.data['task_status'] != 'success' or confirmed else 'waiting')
+        host = task_summary(self.directory, effective, self.load)
         return {k: v for k,v in self.data.items() if k != 'last_observed_at'} | dict(
+            task_status=effective['task_status'], delivery_confirmed=confirmed, delivery_reviewer=delivery['review']['reviewer'] if delivery else None, delivered_at=self.data.get('delivered_at') if confirmed else None,
+            first_deliverable_at=self.data.get('delivery_history', [{}])[0].get('confirmed_at') if self.data.get('delivery_history') else None,
             wall_elapsed_seconds=None if anomaly else elapsed,
             wall_clock_valid=not anomaly, observed_at=now,
             host_usage=host, model_tokens=host['model_tokens'] if host else None, model_elapsed_seconds=None, host_tool_calls=host['host_tool_calls'] if host else None,
