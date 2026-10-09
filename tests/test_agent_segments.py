@@ -79,3 +79,46 @@ class SegmentTests(unittest.TestCase):
                     self.assertEqual(result['status'],'waiting',result)
                     self.assertTrue(result['issues'])
                     self.assertFalse((task/'decision.json').exists())
+
+    def test_cumulative_batches_allow_page_append_and_last_segment_extension(self):
+        for prefix_length in (1, 2):
+            with self.subTest(prefix_length=prefix_length), tempfile.TemporaryDirectory() as directory:
+                base = Path(directory); task, full = self.decision(base)
+                prefix = copy.deepcopy(full)
+                frames = [f'frame-{i:03d}' for i in range(prefix_length)]
+                prefix['coverage']['last_frame'] = frames[-1]
+                prefix['segments'] = [s for s in prefix['segments'] if s['frames'][0] in frames]
+                prefix['boundaries'] = prefix['boundaries'][:len(prefix['segments'])-1]
+                for segment in prefix['segments']:
+                    segment['frames'] = [f for f in segment['frames'] if f in frames]
+                    segment['observations'] = [o for o in segment['observations'] if o['frame_id'] in frames]
+                    segment['transitions'] = [t for t in segment['transitions'] if t['to_frame'] in frames]
+                packet = json.loads((task / 'observation.json').read_text())
+                prefix['presented_images'] = [i['id'] for i in packet['images'] if i.get('frame_id') in frames or i['kind'] == 'comparison']
+                batch = dict(schema_version=5, decision_id='prefix', reviewed_frames=frames, revision_of=None, decision=prefix)
+                path = base / 'batch.json'; path.write_text(json.dumps(batch))
+                result = self.cli('--operation', 'submit', '--task', task, '--decision', path)
+                self.assertEqual(result['phase'], 'batch_accepted', result)
+                original = (task / 'task.json').read_bytes()
+                final = dict(schema_version=5, decision_id='full', reviewed_frames=['frame-000','frame-001','frame-002'], revision_of=None, decision=full)
+                # Every accepted segment field remains protected, including the segment being extended.
+                for field in ('id', 'evidence', 'outside_rows_verified', 'extras', 'frames', 'rows', 'observations', 'transitions'):
+                    if field == 'transitions' and not prefix['segments'][-1][field]:
+                        continue
+                    with self.subTest(field=field):
+                        bad = copy.deepcopy(final)
+                        segment = bad['decision']['segments'][len(prefix['segments'])-1]
+                        if isinstance(segment[field], list):
+                            segment[field][0] = 'changed'
+                        else:
+                            segment[field] = 'changed'
+                        path.write_text(json.dumps(bad))
+                        result = self.cli('--operation', 'submit', '--task', task, '--decision', path)
+                        self.assertEqual(result['error']['code'], 'existing_decision', result)
+                        self.assertEqual((task / 'task.json').read_bytes(), original)
+                path.write_text(json.dumps(final))
+                result = self.cli('--operation', 'submit', '--task', task, '--decision', path)
+                self.assertEqual(result['phase'], 'accepted', result)
+                result = self.cli('--operation', 'export', '--task', task, '--output', base / 'out')
+                self.assertEqual(result['status'], 'success', result)
+                self.assertEqual([r['segment_id'] for r in result['rows']], ['page-0']*3 + ['page-1']*3)

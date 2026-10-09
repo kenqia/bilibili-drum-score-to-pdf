@@ -384,9 +384,24 @@ def submit(task, path):
             raise ConversionError('existing_decision', '继续批次必须扩展已审前缀，修改请显式修订。')
         previous = load_json(task / history[-1]['path'])
         previous = previous.get('decision', previous)
-        for key in ('rows', 'observations', 'transitions', 'segments', 'boundaries'):
+        for key in ('rows', 'observations', 'transitions', 'boundaries'):
             if key in previous and decision.get(key, [])[:len(previous[key])] != previous[key]:
                 raise ConversionError('existing_decision', '已接受身份或裁剪改变，请显式修订并重新审计。')
+        if 'segments' in previous:
+            old_segments, new_segments = previous['segments'], decision.get('segments')
+            if not isinstance(new_segments, list) or len(new_segments) < len(old_segments) or new_segments[:len(old_segments)-1] != old_segments[:-1]:
+                raise ConversionError('existing_decision', '已接受谱面段改变，请显式修订并重新审计。')
+            old_last, new_last = old_segments[-1], new_segments[len(old_segments)-1]
+            if not isinstance(new_last, dict) or set(new_last) != set(old_last):
+                raise ConversionError('existing_decision', '已接受谱面段字段改变，请显式修订并重新审计。')
+            for key, accepted in old_last.items():
+                proposed = new_last[key]
+                if key in ('frames', 'rows', 'observations', 'transitions'):
+                    unchanged = isinstance(proposed, list) and proposed[:len(accepted)] == accepted
+                else:
+                    unchanged = proposed == accepted
+                if not unchanged:
+                    raise ConversionError('existing_decision', '已接受身份或裁剪改变，请显式修订并重新审计。')
     partial = copy.deepcopy(observation)
     partial['frames'] = [f for f in observation['frames'] if f['id'] in reviewed]
     allowed = {i['id'] for i in observation['images'] if i.get('frame_id') in reviewed or i['kind'] == 'comparison' or (i['kind'] == 'batch_comparison' and all(p['frame_id'] in reviewed for p in i['panels']))}
