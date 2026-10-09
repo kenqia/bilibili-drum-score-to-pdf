@@ -75,7 +75,7 @@ def validate_events(data, number):
             require(required <= set(event) <= required | {'ended_at'})
             require(event['operation_id'] in operations and number(event['offset_seconds']) and event['offset_seconds'] >= 0)
             require(event['name'] in ('source_verification','navigation','anonymous_acquisition','native_decode','native_analysis',
-                                    'image_generation','decision_building','decision_validation','source_redecode','pdf_export','delivery_publication'))
+                                    'image_generation','decision_building','decision_validation','source_redecode','pdf_export','delivery_publication','coverage_audit'))
             require(event['status'] in ('running','interrupted','complete','failed'))
         else:
             require(set(event) == common | {'ended_at','source_id','measurement'})

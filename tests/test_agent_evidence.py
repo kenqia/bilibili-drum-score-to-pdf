@@ -83,7 +83,19 @@ class LazyEvidenceTests(unittest.TestCase):
                             presented_images=[i['id'] for i in current['images']], visual_review=True,
                             complete=True, evidence='Three complete fixed rows.', rows=rows, unresolved=[])
             path.write_text(json.dumps(decision))
-            accepted = self.cli('--operation', 'submit', '--task', task, '--decision', path)
+            legacy = self.cli('--operation', 'submit', '--task', task, '--decision', path)
+            self.assertEqual(legacy['status'], 'waiting', legacy)
+            from test_agent_audit import AuditTests
+            audited_state, audited_packet = AuditTests.native_sources(self, base, task, materialized, current)
+            request = AuditTests.reviewed_request(self, audited_state, audited_packet)
+            segment = request['proposal']['segments'][0]
+            for row, detail in zip(segment['rows'], details):
+                row['bbox'] = detail['bbox']
+            for index, sighting in enumerate(segment['observations']):
+                sighting['bbox'] = details[index % 3]['bbox']
+            built = AuditTests.build(self, base, task, request, 'audited-build')
+            self.assertTrue(built.get('ready_to_submit'), built)
+            accepted = self.cli('--operation', 'submit', '--task', task, '--decision', base / 'audited-build/decision.json')
             self.assertEqual(accepted['phase'], 'accepted', accepted)
             exported = self.cli('--operation', 'export', '--task', task, '--output', base / 'out')
             self.assertEqual(exported['status'], 'success', exported)
@@ -127,7 +139,14 @@ class LazyEvidenceTests(unittest.TestCase):
                                        cursor='clear', occlusion='clear', boundary_verified=True, evidence='Full staff.')])
             path.write_text(json.dumps(decision))
             rejected = self.cli('--operation', 'submit', '--task', task, '--decision', path)
-            self.assertEqual(rejected['error']['code'], 'missing_evidence', rejected)
+            self.assertEqual(rejected['error']['code'], 'review_required', rejected)
+            from test_agent_audit import AuditTests
+            audit_state, audit_packet = AuditTests.native_sources(self, base, task, updated, current)
+            audit_request = AuditTests.reviewed_request(self, audit_state, audit_packet)
+            audit_request['proposal']['segments'][0]['rows'][0]['evidence_images'] = [detail['id']]
+            insufficient = AuditTests.build(self, base, task, audit_request, 'insufficient-native')
+            self.assertFalse(insufficient['ready_to_submit'], insufficient)
+            self.assertIn('missing_evidence', [i['reason'] for i in insufficient['unresolved']])
             decision['observation_sha256'] = state['observation_sha256']
             path.write_text(json.dumps(decision))
             rejected = self.cli('--operation', 'submit', '--task', task, '--decision', path)

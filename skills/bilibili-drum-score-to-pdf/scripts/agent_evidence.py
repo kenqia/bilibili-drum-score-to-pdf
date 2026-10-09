@@ -81,7 +81,7 @@ def materialize(task, path):
                 costs['cache_hits'] += 1
                 save_cost()
                 continue
-            key = hashlib.sha256(json.dumps([observation['source']['sha256'], frame['sha256'], frame['pts'], frame['time_base'], bbox]).encode()).hexdigest()
+            key = hashlib.sha256(json.dumps([observation['source']['sha256'], frame['id'], frame['sha256'], frame['pts'], frame['time_base'], bbox]).encode()).hexdigest()
             image_id = f'roi-{key}'
             filename = f'{image_id}.png'
             with Image.open(task / frame['path']) as original:
