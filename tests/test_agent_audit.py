@@ -140,6 +140,90 @@ class AuditTests(unittest.TestCase):
             self.assertNotEqual(exported['status'], 'success', exported)
             self.assertFalse((base / 'out/score.pdf').exists())
 
+    def test_refinement_cannot_remove_audited_row_or_extra_pixels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task,state,packet = self.prepare(base)
+            state,packet = self.native_sources(base,task,state,packet)
+            for kind in ('row','extra'):
+                with self.subTest(kind=kind):
+                    request = self.reviewed_request(state,packet)
+                    segment = request['proposal']['segments'][0]
+                    if kind == 'row':
+                        target = segment['rows'][0]
+                        refined = [80,188,1200,350]
+                        path = ['segments',0,'rows',0,'refinement','boundary_verified']
+                    else:
+                        target = segment['extras'][0]['region']
+                        target['bbox'] = [80,50,1200,120]
+                        refined = [80,50,1200,112]
+                        path = ['segments',0,'extras',0,'region','refinement','boundary_verified']
+                    target['refinement'] = dict(bbox=refined,reason='Eight-pixel inward boundary correction.',boundary_verified=True)
+                    request['review']['confirmations'].append(dict(path=path,value=True))
+                    built = self.build(base,task,request,kind)
+                    self.assertFalse(built.get('ready_to_submit'),built)
+                    self.assertIn('score_region_not_printed',[i['reason'] for i in built['unresolved']])
+                    rejected = self.cli('--operation','submit','--task',task,'--decision',base/kind/'decision.json')
+                    self.assertEqual(rejected['status'],'waiting',rejected)
+                    self.assertNotEqual(rejected.get('phase'),'accepted',rejected)
+                    for operation in ('export','replay'):
+                        output = base/f'{kind}-{operation}'
+                        result = self.cli('--operation',operation,'--task',task,'--output',output)
+                        self.assertNotEqual(result['status'],'success',result)
+                        self.assertFalse((output/'score.pdf').exists())
+
+    def test_refined_rows_and_extras_containing_audit_regions_export_and_replay(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task,state,packet = self.prepare(base)
+            state,packet = self.native_sources(base,task,state,packet)
+            request = self.reviewed_request(state,packet)
+            segment = request['proposal']['segments'][0]
+            segment['rows'][0]['refinement'] = dict(bbox=[80,188,1200,350],reason='Remove blank upper margin.',boundary_verified=True)
+            segment['extras'][0]['region']['refinement'] = dict(bbox=[80,50,1200,147],reason='Remove blank lower margin.',boundary_verified=True)
+            request['review']['score_audit']['segments'][0]['checks']['outside_rows']['regions'][0]['bbox'] = [100,190,1180,340]
+            for path in (['segments',0,'rows',0,'refinement','boundary_verified'],
+                         ['segments',0,'extras',0,'region','refinement','boundary_verified']):
+                request['review']['confirmations'].append(dict(path=path,value=True))
+            built = self.build(base,task,request)
+            self.assertTrue(built['ready_to_submit'],built)
+            accepted = self.cli('--operation','submit','--task',task,'--decision',base/'built/decision.json')
+            self.assertEqual(accepted['phase'],'accepted',accepted)
+            for operation in ('export','replay'):
+                result = self.cli('--operation',operation,'--task',task,'--output',base/operation)
+                self.assertEqual(result['status'],'success',result)
+                self.assertEqual(result['rows'][0]['bbox'],[80,188,1200,350])
+                self.assertEqual(result['extras'][0]['selected_region']['bbox'],[80,50,1200,147])
+                self.assertEqual(result['score_audit']['source_regions'][3]['bbox'],[100,190,1180,340])
+            self.assertEqual((base/'export/score.pdf').read_bytes(),(base/'replay/score.pdf').read_bytes())
+
+    def test_unverified_refinement_keeps_waiting_audit_draft(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task,state,packet = self.prepare(base)
+            state,packet = self.native_sources(base,task,state,packet)
+            for kind in ('row','extra'):
+                with self.subTest(kind=kind):
+                    request = self.reviewed_request(state,packet)
+                    segment = request['proposal']['segments'][0]
+                    if kind == 'row':
+                        target = segment['rows'][0]
+                        path = ['segments',0,'rows',0,'refinement','boundary_verified']
+                    else:
+                        target = segment['extras'][0]['region']
+                        path = ['segments',0,'extras',0,'region','refinement','boundary_verified']
+                    target['refinement'] = dict(bbox=target['bbox'][:],reason='Boundary needs native review.',boundary_verified=False)
+                    request['review']['confirmations'].append(dict(path=path,value=False))
+                    built = self.build(base,task,request,kind)
+                    self.assertEqual(built['status'],'waiting',built)
+                    self.assertFalse(built['ready_to_submit'])
+                    self.assertIn('review_required',[i['reason'] for i in built['unresolved']])
+                    for name in ('decision.json','diff.json','sources.json','unresolved.json','audit.json'):
+                        self.assertTrue((base/kind/name).exists(),name)
+                    rejected = self.cli('--operation','submit','--task',task,'--decision',base/kind/'decision.json')
+                    self.assertEqual(rejected['status'],'waiting',rejected)
+                    self.assertNotEqual(rejected.get('phase'),'accepted',rejected)
+
     def test_pending_missing_cropped_and_stale_audits_cannot_publish_success(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)

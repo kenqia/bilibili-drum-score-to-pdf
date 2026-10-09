@@ -15,7 +15,7 @@
 | `print_regions` | `[{"kind":"row或extra","index":0}]`，索引属于当前段 |
 | `evidence` | 简短公开依据，不能用一个 true 替代 |
 
-每份 region 只含 `frame_id`、整数原生 `bbox`、`evidence_images`。细节图必须来自同一帧、实际呈交、映射比例为 1，并完整覆盖核查 bbox。checked 项须由指定的打印 row/extra 完整包含核查区域，来源帧必须相同；checked title 必须打印为 `kind=title` 的 extra。absent 也须有实际原生核查依据，`print_regions=[]`，空 extras 本身不表示不存在。pending 保持 waiting。
+每份 region 只含 `frame_id`、整数原生 `bbox`、`evidence_images`。细节图必须来自同一帧、实际呈交、映射比例为 1，并完整覆盖核查 bbox。checked 项须由指定的打印 row/extra 完整包含核查区域，来源帧必须相同。包含检查使用 `agent_regions` 校验后的实际执行 bbox；指定 refinement 时使用其最终 bbox，不能用精修前的建议框代替。精修缩掉已核查区域时保持 waiting，未核查的精修也不能成为打印依据。checked title 必须打印为 `kind=title` 的 extra。absent 也须有实际原生核查依据，`print_regions=[]`，空 extras 本身不表示不存在。pending 保持 waiting。
 
 边缘核查包含 `complete`、`regions`、`evidence`，来源分别为当前段首帧和末帧，缺少完整边缘不能完成。intervals 严格覆盖当前已审前缀的全部相邻帧，每项含 `from_frame`、`to_frame`、`status`、`regions`、`evidence`；status 为 checked 或 pending，checked 必须有两端原生证据。已有五线几何、至少两个有序对应、完整干净原行、单帧来源和 DPI 门禁继续执行。换页仍由 v4 boundaries 检查，跳页、回跳、比例变化及缺少完整边界不能导出。
 
