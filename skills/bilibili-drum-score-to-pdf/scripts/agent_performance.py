@@ -168,11 +168,13 @@ class Performance:
         end = self.data['first_deliverable_at'] or now
         elapsed = None if self.data['submitted_at'] is None else end-self.data['submitted_at']
         anomaly = now < self.data['last_observed_at'] or bool(self.data['clock_anomalies']) or (elapsed is not None and elapsed < 0)
+        from host_accounting import task_summary
+        host = task_summary(self.directory, self.data, self.load)
         return {k: v for k,v in self.data.items() if k != 'last_observed_at'} | dict(
             wall_elapsed_seconds=None if anomaly else elapsed,
             wall_clock_valid=not anomaly, observed_at=now,
-            model_tokens=None, model_elapsed_seconds=None, host_tool_calls=None,
-            actual_presented_images=None, active_elapsed_seconds=None, model_queue_seconds=None,
+            host_usage=host, model_tokens=host['model_tokens'] if host else None, model_elapsed_seconds=None, host_tool_calls=host['host_tool_calls'] if host else None,
+            actual_presented_images=host['actual_presented_images'] if host else None, active_elapsed_seconds=None, model_queue_seconds=None,
             user_pause_seconds=None, missing_measurements=(['lifecycle submission time unavailable for pre-existing task'] if self.data['submitted_at'] is None else []) + ['host/model usage and presentation events unavailable',
                 'unobserved waiting cannot be split into review, queue or user pause'],
             script_operation_count=len(self.data['operations']),
