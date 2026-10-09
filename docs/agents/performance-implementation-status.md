@@ -70,7 +70,6 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 该范围含独立审阅与收尾，排除 prepare、获取和 root 开发。完整模型调用及失败覆盖、内部工具和图像计量仍不可证实，完整 model_tokens 保留 null。第一份 117 次实际图像呈交保存在独立记录，过去未采集的 timestamp/call_id 保留 null，不伪造为完整宿主事件。证据见忽略目录 `work/performance-43-20261009/standard-review-1/`，不得把这些 partial 数据当成 #45 完整基线。
 
-
 ## 最终证据与本次恢复核对
 
 2026-10-09，本次恢复只核对项目 `work/` 中已保存的产物和报告，并运行公开只读 `report` smoke。没有重新下载视频、进行视觉审阅、重解码原帧或重复完整回归。此前临时目录丢失的记录仍不作为证据；下列证据来自其后保留在项目中的实验。
@@ -88,7 +87,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 | export PDF 与各自 replay 字节相等 | 是 | 是 |
 | export PDF、manifest 与交付回执 hash 相符 | 是 | 是 |
 
-第一份 PDF SHA-256 为 `f8c9754273fe90af9d6691d532d479413676284f6075ab3e286ab16e31500723`，第二份为 `20bf4bf6fdb07d3d463095491fc1b9dcab2bf8fc0528255eea6cdcadf1712d5c`。两份独立判断的选帧与边界可不同，各自保存决定的重放必须字节一致。来源脚本明确不验证视觉内容；原有实际视觉判断和逐页交付回执另行保留。 本次源完整性核对另保存在 `work/issue-43-resume-20261009/source-integrity.json`，两份 MP4 hash 与观察包记录一致，已保存的 48 帧实际 PTS 列表相同，没有新增解码。
+第一份 PDF SHA-256 为 `f8c9754273fe90af9d6691d532d479413676284f6075ab3e286ab16e31500723`，第二份为 `20bf4bf6fdb07d3d463095491fc1b9dcab2bf8fc0528255eea6cdcadf1712d5c`。两份独立判断的选帧与边界可不同，各自保存决定的重放必须字节一致。来源脚本明确不验证视觉内容；原有实际视觉判断和逐页交付回执另行保留。本次源完整性核对另保存在 `work/issue-43-resume-20261009/source-integrity.json`，两份 MP4 hash 与观察包记录一致，已保存的 48 帧实际 PTS 列表相同，没有新增解码。
 
 新鲜公开 `report` smoke 两次均退出 0，所有任务 JSON 的 SHA-256 保持不变，当前交付确认有效。摘要保存在 `work/issue-43-resume-20261009/report-smoke-summary.json`，证据索引为同目录 `resume-evidence.json`。两份宿主成本均为 `review_only`，实际观察 Token 分别为 5,036,868 和 5,399,475。`model_tokens=null`；`lifecycle_complete`、`model_calls_complete`、`tools_complete`、`images_complete` 均为 false。这些数据不能补成完整端到端成本。
 
