@@ -13,13 +13,41 @@ import test_decision_builder
 
 class ContentChecksTests(unittest.TestCase):
     request = test_decision_builder.DecisionBuilderTests.request
-    reviewed_request = test_decision_builder.DecisionBuilderTests.reviewed_request
     build = test_decision_builder.DecisionBuilderTests.build
 
     def cli(self, *args):
         result = subprocess.run([sys.executable, str(CLI), *map(str, args)], capture_output=True, text=True)
         self.assertTrue(result.stdout, result.stderr)
         return json.loads(result.stdout)
+
+    def reviewed_request(self, task, decision):
+        request,packet=test_decision_builder.DecisionBuilderTests.reviewed_request(self,task,decision)
+        if packet.get('evidence_mode')!='lazy':
+            return request,packet
+        segment=decision['segments'][0]
+        frames=packet['frames']
+        details={f['id']:next(i['id'] for i in packet['images'] if i['kind']=='native_detail'
+                 and i.get('frame_id')==f['id'] and i['bbox']==[0,0,f['width'],f['height']]) for f in frames}
+        def region(fid,bbox):
+            return dict(frame_id=fid,bbox=copy.deepcopy(bbox),evidence_images=[details[fid]])
+        title=segment['extras'][0]['region']
+        checks={kind:dict(status='checked',regions=[region(title['frame_id'],title['bbox'])],
+                    print_regions=[dict(kind='extra',index=0)],evidence='Drawn native fixture title, tempo 96 and 4/4 are inside the title extra.')
+                for kind in ('title','tempo','time_signature')}
+        row=segment['rows'][0]
+        checks['outside_rows']=dict(status='checked',regions=[region(row['frame_id'],row['bbox'])],
+                    print_regions=[dict(kind='row',index=0)],evidence='Drawn native stems and beams lie inside the complete printed row.')
+        first,last=frames[0],frames[-1]
+        request['review']['score_audit']=dict(segments=[dict(id=segment['id'],checks=checks,
+            first_edge=dict(complete=True,regions=[region(first['id'],[0,0,first['width'],first['height']])],
+                            evidence='Opening title and complete first native staff are visible.'),
+            last_edge=dict(complete=True,regions=[region(last['id'],[0,0,last['width'],last['height']])],
+                           evidence='Final native D staff and blank ending margin are visible.'))],
+            intervals=[dict(from_frame=a['id'],to_frame=b['id'],status='checked',
+                            regions=[region(f['id'],[0,0,f['width'],f['height']]) for f in (a,b)],
+                            evidence='Controlled true translation and pause endpoints reviewed; no claim about hidden unsampled content.')
+                       for a,b in zip(frames,frames[1:])],unresolved=[])
+        return request,packet
 
     def prepare_score(self, base, wrong=False, mode='lazy', variant='notes'):
         # A genuinely translated long score. D repeats A's music at a new position.
