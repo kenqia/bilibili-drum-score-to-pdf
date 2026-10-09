@@ -214,7 +214,14 @@ def summarize(packet, ledger, directory, load, catalog):
     if decision.exists():
         value = load(decision)
         declared = value.get('decision', value).get('presented_images')
-    presented = {e['image_id'] for e in images}
+    presented = set()
+    for event in images:
+        if event['image_source'] == 'observation':
+            image_hash = next(r['image_sha256'] for r in catalog[event['image_id']]
+                              if r['observation_sha256'] == event['observation_sha256'])
+            presented.add(('observation', event['image_id'], image_hash))
+        else:
+            presented.add((event['image_source'], event['image_id']))
     current = load(directory / 'observation.json')
     current_images = {i['id']: i for i in current['images']}
     observation_hash = hashlib.sha256((directory / 'observation.json').read_bytes()).hexdigest()

@@ -359,7 +359,14 @@ class HostUsageTests(unittest.TestCase):
     def test_legacy_comparison_binding_survives_equal_size_new_montage(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
-            task, report = self.prepare(base)
+            # Lossless fixture retains equal PNG bytes at distinct real source PTS.
+            score_frame().save(base/'source.png')
+            video = base/'source.mp4'
+            subprocess.run(['ffmpeg','-v','error','-y','-loop','1','-i',str(base/'source.png'),
+                            '-t','2','-r','4','-c:v','libx264','-crf','0','-pix_fmt','yuv420p',str(video)], check=True)
+            task = base/'task'
+            _, prepared = self.run_cli(CLI, video, '--output', task)
+            report = prepared['performance']
             def supplement(timestamp, request_id):
                 state = json.loads((task/'task.json').read_text())
                 request = dict(schema_version=1, task_id=state['task_id'], observation_sha256=state['observation_sha256'],
@@ -395,3 +402,42 @@ class HostUsageTests(unittest.TestCase):
             self.assertEqual(again['usage']['observed_image_presentations'], 1)
             stored = json.loads((task/'host-usage.json').read_text())
             self.assertEqual(stored['events'][-1]['observation_sha256'], report['state_revision']['observation_sha256'])
+
+            current_hash = json.loads((task/'task.json').read_text())['observation_sha256']
+            packet['events'].append(dict(kind='image_presented', event_id='new-montage-view', thread_id='root', call_id='new-montage-call',
+                timestamp=time.time(), image_id='comparison', image_source='observation', width=width, height=height,
+                panel_count=5, source_pixels=width*height, observation_sha256=current_hash))
+            packet['scope']['ended_at'] = time.time()
+            path.write_text(json.dumps(packet))
+            _, distinct = self.run_cli(HOST, 'import', '--task', task, '--events', path)
+            self.assertEqual(distinct['usage']['observed_image_presentations'], 2)
+            self.assertEqual(distinct['usage']['unique_presented_images'], 2)
+            self.assertEqual(distinct['usage']['repeated_presentations'], 0)
+            # The same source PNG in two observation versions is a repeated presentation.
+            for index, binding in enumerate((report['state_revision']['observation_sha256'], current_hash)):
+                packet['events'].append(dict(kind='image_presented', event_id=f'native-repeat-{index}', call_id=f'native-call-{index}',
+                    thread_id='root', timestamp=time.time(), image_id='frame-000', image_source='observation',
+                    width=1280, height=960, panel_count=1, source_pixels=1280*960, observation_sha256=binding))
+            # Caller-owned external IDs are scoped by their source, not by their string alone.
+            for index, source in enumerate(('delivery','diagnostic','delivery')):
+                packet['events'].append(dict(kind='image_presented', event_id=f'external-{index}', call_id=f'external-call-{index}',
+                    thread_id='root', timestamp=time.time(), image_id='external-page', image_source=source,
+                    width=640, height=480, panel_count=1, source_pixels=None))
+            packet['scope']['ended_at'] = time.time()
+            path.write_text(json.dumps(packet))
+            _, totals = self.run_cli(HOST, 'import', '--task', task, '--events', path)
+            self.assertEqual(totals['usage']['observed_image_presentations'], 7)
+            self.assertEqual(totals['usage']['unique_presented_images'], 5)
+            self.assertEqual(totals['usage']['repeated_presentations'], 2)
+
+            native = {i['id']: i for i in current['images'] if i['kind'] == 'native'}
+            self.assertEqual(native['frame-000']['sha256'], native['frame-001']['sha256'])
+            packet['events'].append(dict(kind='image_presented', event_id='different-source', call_id='different-source-call',
+                thread_id='root', timestamp=time.time(), image_id='frame-001', image_source='observation',
+                width=1280, height=960, panel_count=1, source_pixels=1280*960, observation_sha256=current_hash))
+            packet['scope']['ended_at'] = time.time()
+            path.write_text(json.dumps(packet))
+            _, sources = self.run_cli(HOST, 'import', '--task', task, '--events', path)
+            self.assertEqual(sources['usage']['observed_image_presentations'], 8)
+            self.assertEqual(sources['usage']['unique_presented_images'], 6)
+            self.assertEqual(sources['usage']['repeated_presentations'], 2)
