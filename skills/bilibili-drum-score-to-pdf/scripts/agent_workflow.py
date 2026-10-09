@@ -570,7 +570,7 @@ def supplement(task, path):
 
 
 def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None, evidence_mode='full'):
-    target = Path(output) if output and operation in ('prepare', 'export', 'replay', 'build-decision') else None
+    target = Path(output) if output and operation in ('prepare', 'export', 'replay', 'build-decision', 'review-plan') else None
     performance = None
     token = None
     try:
@@ -590,7 +590,7 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
             report = recorder.report()
             status = report['task_status']
             return dict(status=status, complete=status == 'success', phase='report', performance=report)
-        if operation in ('prepare', 'export', 'replay', 'build-decision'):
+        if operation in ('prepare', 'export', 'replay', 'build-decision', 'review-plan'):
             if not target:
                 raise ConversionError('invalid_input', '需要新的结果目录。')
             retry = operation == 'prepare' and retryable_acquisition(target)
@@ -618,6 +618,9 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
         elif operation == 'materialize':
             from agent_evidence import materialize
             result = materialize(Path(task), decision)
+        elif operation == 'review-plan':
+            from agent_review import review_plan
+            result = review_plan(Path(task), target, decision)
         elif operation == 'build-decision':
             from agent_decision_builder import build
             result = build(Path(task), decision, target)
