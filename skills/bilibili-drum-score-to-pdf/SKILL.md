@@ -75,3 +75,12 @@ Agent-first 的长视频 prepare 用低分辨率变化导航生成重叠观察�
 ## 回滚
 
 当前 moving viewport 路径可显式使用 --operation convert。完整回滚在独立 checkout 使用旧稳定提交 23ec65459807bed7a51f3fa0f1e9c08b51cc63dc 和新的结果目录。已有 Agent 任务及历史保留，不自动迁移或交给旧代码继续运行。源视频中的静态蓝色记号仅保留并转灰度，不能断言它来自作者配色或应用选择，更不能宣称已还原。
+
+
+## 显式实验模式
+
+只有用户要求实验路径时使用 `prepare --evidence-mode lazy`。先读仓库 `docs/agents/lazy-evidence.md`，按当前任务、观察 hash、实际 PTS 和原帧来源请求 `materialize`，取得真实原生细节。默认 full/prepare 保留。
+
+需要从几何建议和必要修正构建决定时，读 `docs/agents/decision-building.md` 后调用 `build-decision`。脚本建议保持未确认，Agent 根据实际原图、细节和相邻接续填写确认；waiting 草稿先解除疑点，成功草稿再走原有 submit/export/replay。补采与物化改变观察 hash 时按新绑定显式修订，保留历史。
+
+这些能力尚未完成真实视频性能放行，不能自动接受普通行或声称已降低总 Token。保留全部原生视觉门禁、真实成本未知字段和实际逐页交付确认。回退到冻结提交 `d09fa9d` 时使用新目录，保留实验任务证据。
