@@ -59,7 +59,11 @@ def check_request(request, state, observation):
     if not isinstance(issue, dict) or set(issue) != {'reason', 'start', 'end'} or not isinstance(issue['reason'], str) or not issue['reason'].strip() or len(issue['reason']) > 2000:
         raise ConversionError('invalid_request', '需要明确的疑点与局部时间范围。')
     def number(value):
-        return type(value) in (int, float) and math.isfinite(value)
+        # Reject integers outside finite float conversion before geometry/time arithmetic.
+        try:
+            return type(value) in (int, float) and math.isfinite(value)
+        except OverflowError:
+            return False
     start, end = issue['start'], issue['end']
     if not number(start) or not number(end) or not 0 <= start < end <= observation['source']['duration'] or end-start > 30:
         raise ConversionError('invalid_request', '补采样范围非法或超过 30 秒。')

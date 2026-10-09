@@ -13,7 +13,11 @@ def text(value):
 
 
 def number(value):
-    return type(value) in (int, float) and math.isfinite(value)
+    # Reject integers outside finite float conversion before geometry/time arithmetic.
+    try:
+        return type(value) in (int, float) and math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def continuous_rows(decision, packet, presented):

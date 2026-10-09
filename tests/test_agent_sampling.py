@@ -65,6 +65,31 @@ class SamplingTests(unittest.TestCase):
             self.assertEqual(result['error']['code'], 'sampling_budget', result)
             self.assertFalse((task / 'score.pdf').exists())
 
+    def test_oversized_request_numbers_fail_without_exposing_values_or_changing_evidence(self):
+        import copy
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory); source = video_from_image(score_frame(), base); task = base / 'task'
+            state = self.cli(source, '--operation', 'prepare', '--output', task)
+            original = (task / 'observation.json').read_bytes()
+            frame = (task / 'frame-000.png').read_bytes()
+            request = dict(schema_version=1, task_id=state['task_id'], observation_sha256=state['observation_sha256'],
+                           observation_version=1, request_id='huge', issue=dict(reason='inspect gap', start=0, end=1), timestamps=[0.25])
+            path = base / 'request.json'
+            for field in ('start', 'end', 'timestamps'):
+                with self.subTest(field=field):
+                    bad = copy.deepcopy(request)
+                    if field == 'timestamps':
+                        bad[field] = [10**1000]
+                    else:
+                        bad['issue'][field] = 10**1000
+                    path.write_text(json.dumps(bad))
+                    result = self.cli('--operation', 'supplement', '--task', task, '--decision', path)
+                    self.assertEqual(result['status'], 'failed', result)
+                    self.assertEqual(result['error']['code'], 'invalid_request', result)
+                    self.assertNotIn(str(10**1000), json.dumps(result))
+                    self.assertEqual((task / 'observation.json').read_bytes(), original)
+                    self.assertEqual((task / 'frame-000.png').read_bytes(), frame)
+
     def test_long_pause_and_change_navigation_produce_overlapping_native_context(self):
         from PIL import ImageDraw
         with tempfile.TemporaryDirectory() as directory:

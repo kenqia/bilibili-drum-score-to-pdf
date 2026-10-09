@@ -136,3 +136,24 @@ class ContinuityValidationTests(unittest.TestCase):
                     result = self.cli('--operation', 'submit', '--task', task, '--decision', path)
                     self.assertEqual(result['status'], 'waiting', result)
                     self.assertEqual(result['error']['code'], 'review_required', result)
+
+    def test_oversized_geometry_returns_redacted_failure_and_preserves_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory); task, decision = self.prepare(base)
+            packet = (task / 'observation.json').read_bytes()
+            frame = (task / 'frame-000.png').read_bytes()
+            path = base / 'decision.json'
+            for field in ('spacing', 'staff_y'):
+                with self.subTest(field=field):
+                    bad = copy.deepcopy(decision)
+                    bad['observations'][0][field] = 10**1000
+                    path.write_text(json.dumps(bad))
+                    process = subprocess.run([sys.executable, str(CLI), '--operation', 'submit', '--task', str(task), '--decision', str(path)], capture_output=True, text=True)
+                    self.assertTrue(process.stdout, 'CLI must return a failure JSON')
+                    result = json.loads(process.stdout)
+                    self.assertEqual(result['status'], 'failed', result)
+                    self.assertEqual(result['error']['code'], 'invalid_decision', result)
+                    self.assertNotIn(str(10**1000), process.stdout + process.stderr)
+                    self.assertEqual((task / 'observation.json').read_bytes(), packet)
+                    self.assertEqual((task / 'frame-000.png').read_bytes(), frame)
+                    self.assertFalse((task / 'decision.json').exists())
