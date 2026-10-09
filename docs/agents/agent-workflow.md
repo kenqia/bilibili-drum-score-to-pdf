@@ -150,3 +150,41 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 本地视频和 BV 链接省略 --operation 时等同 prepare。任务目录存放观察、决定与历史；export/replay 使用另一个新空结果目录。没有图像访问能力或还有未决区间时保留 waiting，不能自动转为旧转换。真实双份独立视觉审阅与来源验证已完成，记录见 ../verification.md 的 #41 实验。
 
 恢复任务使用 resume；修改观察用 supplement 后重新审阅，修改接受决定用显式修订。完整产品回滚在独立 checkout 使用旧稳定提交 23ec65459807bed7a51f3fa0f1e9c08b51cc63dc，写到新的结果目录。旧任务与历史保留，不自动迁移。当前版本的旧转换入口可显式调用 --operation convert。
+
+## 任务性能报告，#44
+
+Agent-first 的每次 CLI 操作返回 `performance`。任务目录的 `performance.json` 保存提交时间、操作开始与结束，以及单调时钟测得的阶段耗时。`prepare` 的起点在匿名获取之前；`export` 或 `replay` 完成 PDF、来源检查和首次 manifest 发布后，记录首次可交付时间。跨进程墙钟历时包含操作间的等待，不等于阶段耗时之和。接受决定仍是 waiting，直到实际导出成功。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation report --task /absolute/task
+```
+
+`report` 核对既有任务后重建报告，不增加操作事件，也不写任务。旧任务没有提交时间时返回 null，不推测历史耗时。墙钟回拨保留异常记录，总历时返回 null。进程中断留下的 running 事件，在下次操作时改记 interrupted；该进程没有保存的单调耗时仍为 null。
+
+匿名获取失败只保存 `manifest.json`，性能账本嵌入其中。原目录重试成功后迁入 `performance.json`，保留失败成本和最早提交时间。存在视频或观察证据的中断任务沿用原恢复约定，不能靠性能账本恢复未发布的观察包。已有结果目录的拒绝不修改原账本。
+
+脚本记录匿名获取、导航、原生解码、完整帧分析、图像生成、决定验证、来源核验、PDF 导出及交付发布阶段。报告保留当前观察的 metrics、采样预算与来源信息；操作自身的 metrics 单列。`script_operation_count` 是实际执行的 CLI 操作数，重复提交会增加一次实际操作，但不会增加接受历史。它不是宿主工具调用数。seek 和分析尝试数来自脚本阶段事件，失败和中断尝试也保留。
+
+宿主可通过 `--performance-events /absolute/events.json` 提供受控计时事件，和 `resume`、`submit` 等操作一并导入。文件限 1 MiB，字段严格限定如下。
+
+```json
+{
+  "schema_version": 1,
+  "lifecycle_id": "报告中的 lifecycle_id",
+  "source": {"kind": "host", "id": "host-timing-1"},
+  "events": [
+    {
+      "event_id": "review-call-1",
+      "name": "agent_review",
+      "started_at": 1791500000.0,
+      "ended_at": 1791500002.0,
+      "elapsed_seconds": 2.0,
+      "status": "complete"
+    }
+  ]
+}
+```
+
+`source.kind` 为 host 或 controlled_fixture。后者用于离线测试，不能当作真实模型计量。`elapsed_seconds` 是调用方提供的单调耗时，时间戳使用 Unix 秒。事件名限 agent_review、model_queue、user_pause、decision_building；状态限 complete、failed、waiting。阶段允许重叠，相同 ID 与内容重复导入不记第二次成本，同 ID 内容变化会拒绝整批。独立调用须使用不同 ID。宿主事件不能填写脚本计数、宣告交付或覆盖脚本事件，`report` 不接收新事件。
+
+模型 Token、模型耗时、宿主工具调用数和实际图像呈交数没有可信来源时保留 null。决定声明的 presented_images 和生成图像数量仍保留原口径，不能替代实际呈交事件。审阅、排队、用户暂停与主动执行总耗时无法完整拆分时也为 null。这里的脚本计时不证明模型看清了谱面，也不证明总 Token 已降低。显式 `--operation convert` 继续使用旧报告口径。

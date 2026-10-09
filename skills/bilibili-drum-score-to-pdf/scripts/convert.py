@@ -77,6 +77,7 @@ def main():
     parser.add_argument('--operation', choices=['convert', 'prepare', 'submit', 'resume', 'supplement', 'export', 'replay', 'report'], default='prepare',
                         help='Operation (default: prepare; convert runs the legacy moving viewport path)')
     parser.add_argument('--task', help='Existing Agent observation task')
+    parser.add_argument('--performance-events', help='Controlled host timing events JSON, bound to the task lifecycle')
     parser.add_argument('--decision', help='Agent-authored JSON decision')
     parser.add_argument('--acquisition-timeout', type=float, default=ACQUISITION_SECONDS,
                         help='Overall anonymous acquisition deadline in seconds (default: 1800)')
@@ -87,7 +88,7 @@ def main():
         from agent_workflow import run
         previous = signal.signal(signal.SIGTERM, interrupt_conversion)
         try:
-            result = run(args.operation, args.input, args.task, args.decision, args.output, acquisition_timeout=args.acquisition_timeout)
+            result = run(args.operation, args.input, args.task, args.decision, args.output, acquisition_timeout=args.acquisition_timeout, performance_events=args.performance_events)
         finally:
             signal.signal(signal.SIGTERM, previous)
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))

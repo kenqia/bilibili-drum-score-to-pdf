@@ -248,10 +248,13 @@ def recover_publication(task):
     journal.unlink()
 
 
-def checked_task(task):
+def checked_task(task, recover=True):
     if task.is_symlink():
         raise ConversionError('invalid_task', '任务路径非法。')
-    recover_publication(task)
+    if recover:
+        recover_publication(task)
+    elif (task / 'publication.json').exists():
+        raise ConversionError('invalid_task', '观察发布尚未完成，请先 resume。')
     state = load_json(task / 'task.json')
     observation = load_json(task / 'observation.json')
     if not isinstance(state, dict) or not isinstance(observation, dict):
@@ -559,13 +562,15 @@ def supplement(task, path):
     return result
 
 
-def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS):
+def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None):
     target = Path(output) if output and operation in ('prepare', 'export', 'replay') else None
     performance = None
     token = None
     try:
+        if operation == 'report' and performance_events:
+            raise ConversionError('invalid_performance', '报告重建不接收新性能事件。')
         if operation == 'report':
-            state, observation = checked_task(Path(task))
+            state, observation = checked_task(Path(task), recover=False)
             recorder = Performance(Path(task), load_json, write_json)
             recorder.metadata(observation, state)
             return dict(status='success' if recorder.data['task_status'] == 'success' else 'waiting', complete=recorder.data['task_status'] == 'success', phase='report', performance=recorder.report())
@@ -584,6 +589,8 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
         if performance:
             performance.start(operation)
             token = ACTIVE.set(performance)
+            if performance_events:
+                performance.import_events(performance_events)
         if operation == 'prepare':
             origin = None
             if source and '://' in str(source):

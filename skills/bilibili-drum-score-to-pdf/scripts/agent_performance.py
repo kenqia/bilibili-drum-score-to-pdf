@@ -2,7 +2,11 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 import platform
+import hashlib
+from pathlib import Path
 import math
+import re
+from video_seek import ConversionError
 import time
 import uuid
 from PIL import __version__ as pillow_version
@@ -47,6 +51,8 @@ class Performance:
                              last_observed_at=now, first_deliverable_at=None, task_status='waiting',
                              operations=[], stages=[], clock_anomalies=[], source=None, metrics={},
                              environment=dict(python=platform.python_version(), pillow=pillow_version),
+                             script_sha256=hashlib.sha256(b''.join(p.name.encode()+b'\0'+p.read_bytes() for p in sorted(Path(__file__).parent.glob('*.py')))).hexdigest(),
+                             requirements_sha256=hashlib.sha256(Path(__file__).with_name('requirements.txt').read_bytes()).hexdigest(),
                              model=dict(id='unknown', version='unknown'), script_revision='unknown',
                              tool_versions=None, entry='prepare', cache_status='unknown')
         if not isinstance(self.data, dict) or self.data.get('schema_version') != 1 or not all(isinstance(self.data.get(k), list) for k in ('operations','stages','clock_anomalies')):
@@ -88,14 +94,18 @@ class Performance:
     def finish(self, result):
         now = time.time()
         self.observe(now)
-        self.operation.update(ended_at=now, elapsed_seconds=time.monotonic()-self.began, status=result['status'],
+        elapsed = time.monotonic()-self.began
+        if abs((now-self.operation['started_at'])-elapsed) > 1.0:
+            self.data['clock_anomalies'].append(dict(kind='wall_clock_discontinuity', operation_id=self.operation['event_id'],
+                                                   wall_seconds=now-self.operation['started_at'], monotonic_seconds=elapsed))
+        self.operation.update(ended_at=now, elapsed_seconds=elapsed, status=result['status'],
                               phase=result.get('phase'), error_code=result.get('error', {}).get('code'))
         delivered = self.operation['operation'] in ('export','replay') and result['status'] == 'success' and result.get('complete')
         if delivered and self.data['first_deliverable_at'] is None:
             self.data['first_deliverable_at'] = now
         if self.data['first_deliverable_at'] is None:
             self.data['task_status'] = result['status']
-        elif self.operation['operation'] in ('supplement','submit') and result['status'] == 'waiting':
+        elif self.operation['operation'] in ('supplement','submit') and self.operation.get('state_changed'):
             self.data['task_status'] = 'waiting'
         elif delivered:
             self.data['task_status'] = 'success'
@@ -105,8 +115,41 @@ class Performance:
             self.data['script_revision'] = result['script_revision']
         self.save()
 
+    def import_events(self, path):
+        try:
+            packet = self.load(path)
+            if not isinstance(packet, dict) or set(packet) != {'schema_version','lifecycle_id','source','events'} or type(packet['schema_version']) is not int or packet['schema_version'] != 1 or self.data['lifecycle_id'] is None or packet['lifecycle_id'] != self.data['lifecycle_id']:
+                raise ValueError
+            source = packet['source']
+            if not isinstance(source, dict) or set(source) != {'kind','id'} or source['kind'] not in ('host','controlled_fixture') or not isinstance(source['id'], str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', source['id']):
+                raise ValueError
+            if not isinstance(packet['events'], list) or len(packet['events']) > 1000:
+                raise ValueError
+            existing = {e['event_id']: e for e in self.data['stages'] + self.data['operations']}
+            additions = []
+            for event in packet['events']:
+                if not isinstance(event, dict) or set(event) != {'event_id','name','started_at','ended_at','elapsed_seconds','status'} or not isinstance(event['event_id'], str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', event['event_id']) or event['name'] not in ('agent_review','model_queue','user_pause','decision_building') or event['status'] not in ('complete','failed','waiting'):
+                    raise ValueError
+                if any(type(event[k]) not in (int,float) or not math.isfinite(event[k]) for k in ('started_at','ended_at','elapsed_seconds')) or event['elapsed_seconds'] < 0 or event['ended_at'] < event['started_at'] or event['ended_at'] > time.time():
+                    raise ValueError
+                imported = event | dict(source=source['kind'], source_id=source['id'], measurement='caller_supplied_monotonic')
+                if event['event_id'] in existing:
+                    if existing[event['event_id']] != imported:
+                        raise ValueError
+                else:
+                    additions.append(imported)
+                    existing[event['event_id']] = imported
+            self.data['stages'].extend(additions)
+            self.save()
+        except (ConversionError, OSError, ValueError, TypeError, KeyError):
+            raise ConversionError('invalid_performance', '性能事件字段、绑定或已有事件内容非法。') from None
+
     def metadata(self, observation, state):
-        self.data.update(task_id=state['task_id'], source=observation['source'], metrics=observation['metrics'])
+        revision = dict(observation_sha256=state['observation_sha256'], phase=state['phase'], complete=state['complete'],
+                        decision_sha256=state.get('decision_history', [{}])[-1].get('sha256') if state.get('decision_history') else None)
+        if self.operation:
+            self.operation['state_changed'] = self.data.get('state_revision') != revision
+        self.data.update(task_id=state['task_id'], source=observation['source'], metrics=observation['metrics'], state_revision=revision)
         history = state.get('decision_history', [])
         if history:
             value = self.load(self.directory / history[-1]['path'])
@@ -129,4 +172,4 @@ class Performance:
             native_seek_attempts=sum(e['name'] == 'native_decode' for e in self.data['stages']),
             source_redecode_attempts=sum(e['name'] == 'source_redecode' for e in self.data['stages']),
             full_frame_analysis_attempts=sum(e['name'] == 'native_analysis' for e in self.data['stages']),
-            generated_images=self.data['metrics'].get('native_images',0)+self.data['metrics'].get('detail_images',0)+self.data['metrics'].get('comparison_images',0))
+            generated_images=(self.data['metrics'].get('native_images',0)+self.data['metrics'].get('detail_images',0)+self.data['metrics'].get('comparison_images',0)) if self.data['metrics'] else None)
