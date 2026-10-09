@@ -74,7 +74,7 @@ def main():
     parser = argparse.ArgumentParser(description='Prepare native drum-score evidence for Agent review, then submit and export as A4 PDF.')
     parser.add_argument('input', nargs='?', help='Local video path or HTTPS Bilibili BV video URL')
     parser.add_argument('--output', help='Output directory')
-    parser.add_argument('--operation', choices=['convert', 'prepare', 'submit', 'resume', 'supplement', 'export', 'replay', 'report', 'confirm-delivery'], default='prepare',
+    parser.add_argument('--operation', choices=['convert', 'prepare', 'submit', 'resume', 'supplement', 'export', 'replay', 'report', 'confirm-delivery', 'build-decision'], default='prepare',
                         help='Operation (default: prepare; convert runs the legacy moving viewport path)')
     parser.add_argument('--task', help='Existing Agent observation task')
     parser.add_argument('--performance-events', help='Controlled host timing events JSON, bound to the task lifecycle')
