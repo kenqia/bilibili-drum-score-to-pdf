@@ -294,7 +294,7 @@ def checked_task(task, recover=True):
     return state, observation
 
 
-def validate(decision, state, observation):
+def validate(decision, state, observation, task=None, content_checks=None):
     fields = {'schema_version', 'task_id', 'observation_sha256', 'decision_id', 'model', 'prompt', 'presented_images',
               'visual_review', 'complete', 'evidence', 'selected_candidates', 'unresolved'}
     version = decision.get('schema_version') if isinstance(decision, dict) else None
@@ -328,9 +328,13 @@ def validate(decision, state, observation):
             raise ConversionError('review_required', '视觉审阅或完整性存在未决疑点。')
         if version in (3, 4):
             try:
-                return (ordered_segments if version == 4 else continuous_rows)(decision, observation, presented)[0]
+                chosen = (ordered_segments if version == 4 else continuous_rows)(decision, observation, presented)[0]
+                if observation.get('evidence_mode') == 'lazy':
+                    from agent_content import check_pairs
+                    check_pairs(task, decision, observation, content_checks)
+                return chosen
             except ConversionError as error:
-                error.issues = [dict(reason=error.code, start=a['timestamp'], end=b['timestamp'],
+                error.issues = getattr(error, 'issues', None) or [dict(reason=error.code, start=a['timestamp'], end=b['timestamp'],
                                      before_image=a['id'], after_image=b['id'],
                                      before_screenshot=a['path'], after_screenshot=b['path'])
                                 for a, b in zip(observation['frames'], observation['frames'][1:])]
@@ -426,7 +430,10 @@ def submit(task, path):
     if not isinstance(decision, dict) or any(i not in allowed for i in decision.get('presented_images', [])):
         raise ConversionError('invalid_decision', '批次不能引用未审尾部。')
     with stage('decision_validation'):
-        validate(decision, state, partial)
+        content_checks = []
+        validate(decision, state, partial, task, content_checks)
+    if content_checks:
+        state['content_checks'] = content_checks
     complete = len(reviewed) == len(observation['frames'])
     staged = task / 'accepted.next.json'
     write_json(staged, value)
@@ -455,7 +462,8 @@ def export(task, output):
     else:
         decision = load_json(task / 'decision.json')
     with stage('decision_validation'):
-        chosen = validate(decision, state, observation)
+        content_checks = []
+        chosen = validate(decision, state, observation, task, content_checks)
     count = metrics()
     reader = VideoReader(observation['source']['path'], observation['source'], count)
     rows, header = [], None
@@ -522,6 +530,8 @@ def export(task, output):
             result['coverage'] = continuous_rows(decision, observation, decision['presented_images'])[1]
         else:
             result['coverage'] = {'scope': 'fixed_layout_trial', 'hidden_content_proven_absent': False}
+        if content_checks:
+            result['content_checks'] = content_checks
         result['decision_history'] = state.get('decision_history', [])
         result['metrics']['presented_image_pixels'] = image_pixels(task, result['presented_images'])
         result['metrics']['model_elapsed'] = None

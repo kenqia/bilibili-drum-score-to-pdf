@@ -75,7 +75,7 @@ def validate_events(data, number):
             require(required <= set(event) <= required | {'ended_at'})
             require(event['operation_id'] in operations and number(event['offset_seconds']) and event['offset_seconds'] >= 0)
             require(event['name'] in ('source_verification','navigation','anonymous_acquisition','native_decode','native_analysis',
-                                    'image_generation','decision_building','review_planning','decision_validation','source_redecode','pdf_export','delivery_publication'))
+                                    'image_generation','decision_building','review_planning','decision_validation','content_validation','source_redecode','pdf_export','delivery_publication'))
             require(event['status'] in ('running','interrupted','complete','failed'))
         else:
             require(set(event) == common | {'ended_at','source_id','measurement'})
@@ -186,7 +186,7 @@ class Performance:
         else:
             self.data['task_status'] = 'waiting' if result['status'] == 'success' else result['status']
         if self.operation['operation'] in ('prepare','supplement','materialize','export','replay'):
-            self.operation['metrics'] = result.get('metrics', self.operation.get('metrics'))
+            self.operation['metrics'] = {**(self.operation.get('metrics') or {}), **(result.get('metrics') or {})}
         if result.get('script_revision'):
             self.data['script_revision'] = result['script_revision']
         self.save()
@@ -260,6 +260,8 @@ class Performance:
             native_seek_attempts=sum(e['name'] == 'native_decode' for e in self.data['stages']),
             source_redecode_attempts=sum(e['name'] == 'source_redecode' for e in self.data['stages']),
             full_frame_analysis_attempts=sum(e['name'] == 'native_analysis' for e in self.data['stages']),
+            content_validation={key: sum(((e.get('metrics') or {}).get('content_validation') or {}).get(key,0) for e in self.data['operations'])
+                                for key in ('pair_checks','analyzed_pixels','conflict_checks','uncertain_checks')},
             materialization=dict(
                 generated_images=sum((e.get('metrics') or {}).get('generated_images', 0) for e in self.data['operations'] if e['operation'] == 'materialize'),
                 generated_in_failed_operations=sum((e.get('metrics') or {}).get('generated_images', 0) for e in self.data['operations'] if e['operation'] == 'materialize' and e['status'] in ('failed', 'interrupted')),

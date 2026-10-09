@@ -271,17 +271,19 @@ def build(task, request_path, output):
         # Validation probes use only local copies to catch malformed fields even while waiting.
         probe=copy.deepcopy(decision)
         probe.update(visual_review=True,complete=True,unresolved=[],presented_images=list(allowed))
+        content_checks = []
+        probe_content_checks = []
         with stage('decision_validation'):
             try:
                 if not no_geometry:
-                    validate(probe,state,partial)
+                    validate(probe,state,partial,task,probe_content_checks)
             except ConversionError as error:
                 if error.code not in ('review_required','missing_evidence'):
                     raise
                 issues.append(dict(reason=error.code,message=str(error)))
             try:
                 if not no_geometry:
-                    validate(decision,state,partial)
+                    validate(decision,state,partial,task,content_checks)
             except ConversionError as error:
                 if error.code not in ('review_required','missing_evidence'):
                     raise
@@ -297,6 +299,7 @@ def build(task, request_path, output):
         sources=dict(task_id=state['task_id'],observation_sha256=state['observation_sha256'],source_sha256=packet['source']['sha256'],
                      observation_version=state['observation_version'],basis=origin,
                      accepted_sha256=history[-1]['sha256'] if history else None,
+                     content_checks=content_checks or probe_content_checks,
                      geometry=geometry['geometry'],suggestion_issues=geometry['issues'],script_visual_review=False,
                      agent_confirmations=copy.deepcopy(review),reused_review=reused['provenance'] if reused else None,
                      selected_frames=[dict(id=f['id'],sha256=f['sha256'],pts=f['pts'],time_base=f['time_base']) for f in partial['frames']])
