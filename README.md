@@ -42,3 +42,12 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 保留的 moving viewport 路径用 `--operation convert` 显式运行。三个核心模块合计不得超过 500 行，依赖防火墙继续约束它。需要回滚完整产品时，在独立 checkout 使用旧稳定提交 `23ec65459807bed7a51f3fa0f1e9c08b51cc63dc` 和新的结果目录；保留已有 Agent 任务，不迁移或覆盖其记录。
 
 授权宿主的真实 Token、工具与图像呈交可用 [计量适配器](docs/agents/host-usage.md) 采集和导入，汇总按真实审阅、重放与入口分别统计。缺失模型调用或呈交覆盖时保留 null，不将开发会话成本当作视频基线。
+
+
+## 显式实验入口
+
+在隔离的 `codex/issue-43-software-experiment` 分支，`prepare --evidence-mode lazy` 保留原帧和导航对照图，按 Agent 的原生 ROI 请求生成细节。`materialize` 保存来源与证据更新，`build-decision` 根据几何建议、修正和实际确认构建现有协议的决定。操作字段见 [惰性证据](docs/agents/lazy-evidence.md) 与 [决定构建](docs/agents/decision-building.md)。默认 full/prepare 与旧任务重放继续保留。
+
+`review-plan` 按疑点给出相邻实际 PTS、原生 ROI 和有界补采请求，输出尚未确认的构建模板。物化后需要沿用未改的实际判断时，使用显式历史复用，规则见 [疑点审阅](docs/agents/review-plan.md)。lazy 的局部内容检查可否决几何自洽的错误对应；污染必需接续帧时，当前不能仅靠新增干净帧解除等待，具体范围见 [内容检查](docs/agents/content-checks.md)。
+
+实验能力仍要求实际原图和原生细节审阅。合成验证不代表真实视频质量或端到端性能放行；完整真实成本未知时保持 null。自动接受和默认快路径尚未启用。使用新任务、草稿与结果目录，保留来源和接受历史；回退到冻结的 `d09fa9d` 使用另一独立目录。

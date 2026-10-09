@@ -297,7 +297,7 @@ def checked_task(task, recover=True):
     return state, observation
 
 
-def validate(decision, state, observation):
+def validate(decision, state, observation, task=None, content_checks=None):
     fields = {'schema_version', 'task_id', 'observation_sha256', 'decision_id', 'model', 'prompt', 'presented_images',
               'visual_review', 'complete', 'evidence', 'selected_candidates', 'unresolved'}
     version = decision.get('schema_version') if isinstance(decision, dict) else None
@@ -333,9 +333,13 @@ def validate(decision, state, observation):
             raise ConversionError('review_required', '视觉审阅或完整性存在未决疑点。')
         if version in (3, 4):
             try:
-                return (ordered_segments if version == 4 else continuous_rows)(decision, observation, presented)[0]
+                chosen = (ordered_segments if version == 4 else continuous_rows)(decision, observation, presented)[0]
+                if observation.get('evidence_mode') == 'lazy':
+                    from agent_content import check_pairs
+                    check_pairs(task, decision, observation, content_checks)
+                return chosen
             except ConversionError as error:
-                error.issues = [dict(reason=error.code, start=a['timestamp'], end=b['timestamp'],
+                error.issues = getattr(error, 'issues', None) or [dict(reason=error.code, start=a['timestamp'], end=b['timestamp'],
                                      before_image=a['id'], after_image=b['id'],
                                      before_screenshot=a['path'], after_screenshot=b['path'])
                                 for a, b in zip(observation['frames'], observation['frames'][1:])]
@@ -431,7 +435,10 @@ def submit(task, path):
     if not isinstance(decision, dict) or any(i not in allowed for i in decision.get('presented_images', [])):
         raise ConversionError('invalid_decision', '批次不能引用未审尾部。')
     with stage('decision_validation'):
-        validate(decision, state, partial)
+        content_checks = []
+        validate(decision, state, partial, task, content_checks)
+    if content_checks:
+        state['content_checks'] = content_checks
     audit = None
     if observation.get('evidence_mode') == 'lazy':
         from agent_audit import load_for_submit
@@ -471,7 +478,8 @@ def export(task, output):
     else:
         decision = load_json(task / 'decision.json')
     with stage('decision_validation'):
-        chosen = validate(decision, state, observation)
+        content_checks = []
+        chosen = validate(decision, state, observation, task, content_checks)
     audit = None
     if observation.get('evidence_mode') == 'lazy':
         from agent_audit import check
@@ -546,6 +554,8 @@ def export(task, output):
             result['coverage'] = continuous_rows(decision, observation, decision['presented_images'])[1]
         else:
             result['coverage'] = {'scope': 'fixed_layout_trial', 'hidden_content_proven_absent': False}
+        if content_checks:
+            result['content_checks'] = content_checks
         result['decision_history'] = state.get('decision_history', [])
         if audit is not None:
             result['score_audit'] = audit
@@ -596,7 +606,7 @@ def supplement(task, path):
 
 
 def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None, evidence_mode='full'):
-    target = Path(output) if output and operation in ('prepare', 'export', 'replay', 'build-decision') else None
+    target = Path(output) if output and operation in ('prepare', 'export', 'replay', 'build-decision', 'review-plan') else None
     performance = None
     token = None
     try:
@@ -616,7 +626,7 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
             report = recorder.report()
             status = report['task_status']
             return dict(status=status, complete=status == 'success', phase='report', performance=report)
-        if operation in ('prepare', 'export', 'replay', 'build-decision'):
+        if operation in ('prepare', 'export', 'replay', 'build-decision', 'review-plan'):
             if not target:
                 raise ConversionError('invalid_input', '需要新的结果目录。')
             retry = operation == 'prepare' and retryable_acquisition(target)
@@ -644,6 +654,9 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
         elif operation == 'materialize':
             from agent_evidence import materialize
             result = materialize(Path(task), decision)
+        elif operation == 'review-plan':
+            from agent_review import review_plan
+            result = review_plan(Path(task), target, decision)
         elif operation == 'build-decision':
             from agent_decision_builder import build
             result = build(Path(task), decision, target)

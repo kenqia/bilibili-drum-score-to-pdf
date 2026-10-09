@@ -182,11 +182,12 @@ def build(task, request_path, output):
         state,packet=checked_task(task)
     request=load_json(request_path)
     required={'schema_version','task_id','observation_sha256','observation_version','decision_id','model','prompt','corrections'}
-    optional={'proposal','review','reviewed_frames','revision_of'}
+    optional={'proposal','review','reviewed_frames','revision_of','reuse_accepted_review'}
     require(isinstance(request,dict) and required <= set(request) <= required|optional)
     require(type(request['schema_version']) is int and request['schema_version']==1)
     require(request['task_id']==state['task_id'] and request['observation_sha256']==state['observation_sha256'] and
             type(request['observation_version']) is int and request['observation_version']==state['observation_version'], '构建请求不属于当前观察包。')
+    require('reuse_accepted_review' not in request or type(request['reuse_accepted_review']) is bool)
     history=state.get('decision_history',[])
     if history:
         require(request.get('revision_of')==history[-1]['decision_id'], '已有接受历史，构建必须显式 revision_of 最新决定。')
@@ -208,7 +209,7 @@ def build(task, request_path, output):
         elif history:
             baseline=load_json(task/history[-1]['path']); baseline=baseline.get('decision',baseline)
             version=baseline['schema_version'];require(version in STRUCTURES)
-            structure={k:copy.deepcopy(baseline[k]) for k in STRUCTURES[version]|{'schema_version'}}
+            structure={k:copy.deepcopy(baseline[k]) for k in sorted(STRUCTURES[version]|{'schema_version'})}
             origin='accepted_decision'
         else:
             structure=copy.deepcopy(geometry['structure']);origin='script_geometry'
@@ -224,6 +225,11 @@ def build(task, request_path, output):
         check_structure(structure,partial)
         # Replacement objects may themselves contain stale positive judgments.
         clear_review(structure)
+        reused=None
+        if request.get('reuse_accepted_review'):
+            require(baseline is not None, '沿用审阅必须使用最新已接受结构，不能用新建议替代。')
+            from agent_review import reuse_accepted_review
+            reused=reuse_accepted_review(task,state,packet,reviewed,baseline,structure,JUDGMENTS)
         review=request.get('review',{})
         fields={'identity_verified','coverage_verified','outside_rows_verified','presented_images','visual_review','complete','evidence','unresolved','confirmations','rows','observations','transitions','score_audit'}
         require(isinstance(review,dict) and set(review)<=fields)
@@ -243,11 +249,17 @@ def build(task, request_path, output):
             from agent_audit import wrap_continuous
             structure = wrap_continuous(structure, partial['frames'], review)
             check_structure(structure,partial)
+
+        prior=reused['defaults'] if reused else {}
+        presented=review.get('presented_images',[])
+        require(isinstance(presented,list) and all(isinstance(i,str) and i in allowed for i in presented) and len(set(presented))==len(presented))
+        if reused:
+            presented=list(dict.fromkeys(reused['presented_images']+presented))
         decision={**structure,'task_id':state['task_id'],'observation_sha256':state['observation_sha256'],
                   'decision_id':request['decision_id'],'model':request['model'],'prompt':request['prompt'],
-                  'presented_images':review.get('presented_images',[]),'visual_review':review.get('visual_review',False),
-                  'complete':review.get('complete',False),'evidence':review.get('evidence','Draft; Agent confirmation required.'),
-                  'unresolved':review.get('unresolved',[])}
+                  'presented_images':presented,'visual_review':review.get('visual_review',prior.get('visual_review',False)),
+                  'complete':review.get('complete',prior.get('complete',False)),'evidence':review.get('evidence',prior.get('evidence','Draft; Agent confirmation required.')),
+                  'unresolved':review.get('unresolved',prior.get('unresolved',[]))}
         issues=[dict(reason='confirmation_required',field=k) for k in ('identity_verified','coverage_verified','outside_rows_verified') if review.get(k) is not True]
         for key in ('decision_id','evidence'):
             require(isinstance(decision[key],str) and bool(decision[key].strip()) and len(decision[key])<=2000)
@@ -264,17 +276,19 @@ def build(task, request_path, output):
         # Validation probes use only local copies to catch malformed fields even while waiting.
         probe=copy.deepcopy(decision)
         probe.update(visual_review=True,complete=True,unresolved=[],presented_images=list(allowed))
+        content_checks = []
+        probe_content_checks = []
         with stage('decision_validation'):
             try:
                 if not no_geometry:
-                    validate(probe,state,partial)
+                    validate(probe,state,partial,task,probe_content_checks)
             except ConversionError as error:
                 if error.code not in ('review_required','missing_evidence'):
                     raise
                 issues.append(dict(reason=error.code,message=str(error)))
             try:
                 if not no_geometry:
-                    validate(decision,state,partial)
+                    validate(decision,state,partial,task,content_checks)
             except ConversionError as error:
                 if error.code not in ('review_required','missing_evidence'):
                     raise
@@ -296,8 +310,9 @@ def build(task, request_path, output):
         sources=dict(task_id=state['task_id'],observation_sha256=state['observation_sha256'],source_sha256=packet['source']['sha256'],
                      observation_version=state['observation_version'],basis=origin,
                      accepted_sha256=history[-1]['sha256'] if history else None,
+                     content_checks=content_checks or probe_content_checks,
                      geometry=geometry['geometry'],suggestion_issues=geometry['issues'],script_visual_review=False,
-                     agent_confirmations=copy.deepcopy(review),
+                     agent_confirmations=copy.deepcopy(review),reused_review=reused['provenance'] if reused else None,
                      selected_frames=[dict(id=f['id'],sha256=f['sha256'],pts=f['pts'],time_base=f['time_base']) for f in partial['frames']])
         for name,data in [('decision.json',value),('diff.json',diff),('sources.json',sources),('unresolved.json',issues)]:
             write_json(output/name,data)
