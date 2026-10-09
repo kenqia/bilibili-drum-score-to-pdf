@@ -31,7 +31,7 @@ class LinkInputTests(unittest.TestCase):
         info = {'id': info_id or 'BV1b5411x7Ku_p2', 'formats': formats or [
             {'url': MEDIA, 'width': 1280, 'height': 960, 'vcodec': 'avc1', 'acodec': 'none', 'format_id': '80'}]}
         stdout, stderr = io.StringIO(), io.StringIO()
-        with patch.object(sys, 'argv', [str(CLI), url, '--output', str(output)]), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), (contextlib.nullcontext() if actual_backend else patch.object(YoutubeDL, 'extract_info', return_value=info, side_effect=backend_error)), (contextlib.nullcontext() if real_transport else patch('urllib.request.OpenerDirector.open', side_effect=response or (lambda *a, **k: io.BytesIO(video.read_bytes())))), patch('socket.getaddrinfo', return_value=dns or [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]):
+        with patch.object(sys, 'argv', [str(CLI), url, '--operation', 'convert', '--output', str(output)]), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), (contextlib.nullcontext() if actual_backend else patch.object(YoutubeDL, 'extract_info', return_value=info, side_effect=backend_error)), (contextlib.nullcontext() if real_transport else patch('urllib.request.OpenerDirector.open', side_effect=response or (lambda *a, **k: io.BytesIO(video.read_bytes())))), patch('socket.getaddrinfo', return_value=dns or [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]):
             code = cli.main()
         return code, json.loads(stdout.getvalue()), stdout.getvalue() + stderr.getvalue()
 
@@ -252,7 +252,7 @@ class LinkInputTests(unittest.TestCase):
                 return real_open(file, *args, **kwargs)
             ydl_module = importlib.import_module('yt_dlp.YoutubeDL')
             stdout, stderr = io.StringIO(), io.StringIO()
-            with patch.object(BiliBiliIE, '_real_extract', extractor), patch.object(builtins, 'open', guarded_open), patch.object(ydl_module, 'load_all_plugins', side_effect=AssertionError('plugins were loaded')), patch.object(sys, 'path', [str(base), *sys.path]), patch.dict('os.environ', {'XDG_CONFIG_HOME': str(base), 'HOME': str(base)}), patch.object(sys, 'argv', [str(CLI), URL, '--output', str(base / 'result')]), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), patch('urllib.request.OpenerDirector.open', side_effect=lambda *a, **k: io.BytesIO(video.read_bytes())), patch('socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]):
+            with patch.object(BiliBiliIE, '_real_extract', extractor), patch.object(builtins, 'open', guarded_open), patch.object(ydl_module, 'load_all_plugins', side_effect=AssertionError('plugins were loaded')), patch.object(sys, 'path', [str(base), *sys.path]), patch.dict('os.environ', {'XDG_CONFIG_HOME': str(base), 'HOME': str(base)}), patch.object(sys, 'argv', [str(CLI), URL, '--operation', 'convert', '--output', str(base / 'result')]), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), patch('urllib.request.OpenerDirector.open', side_effect=lambda *a, **k: io.BytesIO(video.read_bytes())), patch('socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]):
                 code = cli.main()
             result = json.loads(stdout.getvalue())
             self.assertEqual(code, 0, result)

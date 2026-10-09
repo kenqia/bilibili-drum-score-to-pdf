@@ -39,6 +39,10 @@ class VideoReader:
         self.scratch.cleanup()
 
     def read(self, timestamp=None):
+        record, image = self.read_record(timestamp)
+        return record["timestamp"], image
+
+    def read_record(self, timestamp=None):
         tail = timestamp is None
         start = max(0, self.metadata['duration'] - 1) if tail else timestamp
         path = Path(self.scratch.name) / 'frame.png'
@@ -65,7 +69,9 @@ class VideoReader:
             self.metrics['peak_temp_disk'] = max(self.metrics['peak_temp_disk'], path.stat().st_size)
             with Image.open(path) as image:
                 result = image.convert('RGB')
-            return (times[-1] if tail else times[0]), result
+            index = -1 if tail else 0
+            return {"timestamp": times[index], "pts": pts[index],
+                    "time_base": [int(base[1]), int(base[2])]}, result
         except (subprocess.SubprocessError, ValueError, OSError):
             raise ConversionError('decode_failed', '视频解码失败，无法建立原帧与时间的对应记录。') from None
         finally:

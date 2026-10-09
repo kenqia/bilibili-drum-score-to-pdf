@@ -56,7 +56,7 @@ class AcquisitionLifecycleTests(unittest.TestCase):
         return subprocess.Popen([sys.executable, str(launcher), str(CLI.parent), mode,
                                  str(base / 'pid'), str(CLI),
                                  'https://www.bilibili.com/video/BV1b5411x7Ku?p=2',
-                                 '--output', str(base / 'result'), '--acquisition-timeout', timeout],
+                                 '--operation', 'convert', '--output', str(base / 'result'), '--acquisition-timeout', timeout],
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
 
     def test_dns_timeout_stops_real_worker_and_leaves_only_retryable_diagnosis(self):

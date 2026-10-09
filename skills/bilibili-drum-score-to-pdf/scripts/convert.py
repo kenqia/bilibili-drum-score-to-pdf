@@ -10,31 +10,13 @@ import math
 import signal
 import sys
 from pathlib import Path
-from public_video import acquire, InputError, ACQUISITION_SECONDS
+from public_video import acquire, InputError, ACQUISITION_SECONDS, retryable_acquisition
 import time
 from video_seek import VideoReader, probe_video, ConversionError
 from viewport_sampler import ViewportSampler
 from viewport_tracker import ViewportError
 from manifest import export_rows, save_crop, persist
 from pdf_export import write_pdf
-
-
-def retryable_acquisition(output):
-    """Only our acquisition-only diagnosis may be replaced by a fresh task."""
-    try:
-        if output.is_symlink() or {entry.name for entry in output.iterdir()} != {'manifest.json'}:
-            return False
-        manifest = output / 'manifest.json'
-        if manifest.is_symlink() or not manifest.is_file():
-            return False
-        result = json.loads(manifest.read_text())
-        return (result.get('schema_version') == 1 and result.get('phase') == 'acquisition'
-                and result.get('status') == 'failed' and result.get('complete') is False
-                and result.get('rows') == [] and result.get('issues') == []
-                and isinstance(result.get('error'), dict) and not result.get('source')
-                and not result.get('pdf') and not result.get('state'))
-    except (OSError, ValueError, AttributeError):
-        return False
 
 
 def convert(source, output):
@@ -89,14 +71,27 @@ def interrupt_conversion(signum, frame):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Restore a local white multi-staff drum score as A4 PDF.')
+    parser = argparse.ArgumentParser(description='Prepare native drum-score evidence for Agent review, then submit and export as A4 PDF.')
     parser.add_argument('input', nargs='?', help='Local video path or HTTPS Bilibili BV video URL')
     parser.add_argument('--output', help='Output directory')
+    parser.add_argument('--operation', choices=['convert', 'prepare', 'submit', 'resume', 'supplement', 'export', 'replay'], default='prepare',
+                        help='Operation (default: prepare; convert runs the legacy moving viewport path)')
+    parser.add_argument('--task', help='Existing Agent observation task')
+    parser.add_argument('--decision', help='Agent-authored JSON decision')
     parser.add_argument('--acquisition-timeout', type=float, default=ACQUISITION_SECONDS,
                         help='Overall anonymous acquisition deadline in seconds (default: 1800)')
     args = parser.parse_args()
     if not math.isfinite(args.acquisition_timeout) or args.acquisition_timeout <= 0:
         parser.error('--acquisition-timeout must be a finite positive number')
+    if args.operation != 'convert':
+        from agent_workflow import run
+        previous = signal.signal(signal.SIGTERM, interrupt_conversion)
+        try:
+            result = run(args.operation, args.input, args.task, args.decision, args.output, acquisition_timeout=args.acquisition_timeout)
+        finally:
+            signal.signal(signal.SIGTERM, previous)
+        print(json.dumps(result, ensure_ascii=False, allow_nan=False))
+        return 0 if result['status'] == 'success' else 2
     if not args.input or not args.output:
         parser.error('conversion needs input and --output')
     target = Path(args.output)

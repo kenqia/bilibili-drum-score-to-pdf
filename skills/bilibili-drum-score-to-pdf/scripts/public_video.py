@@ -1,6 +1,7 @@
 """Anonymous public Bilibili input. Signed media addresses remain in memory."""
 from pathlib import Path
 import re
+import json
 import multiprocessing
 import os
 import shutil
@@ -169,3 +170,21 @@ def acquire(url, output, timeout=ACQUISITION_SECONDS):
                     pass
             if previous_term is not None:
                 signal.signal(signal.SIGTERM, previous_term)
+
+
+def retryable_acquisition(output):
+    """Only our acquisition-only diagnosis may be replaced by a fresh task."""
+    try:
+        if output.is_symlink() or {entry.name for entry in output.iterdir()} != {'manifest.json'}:
+            return False
+        manifest = output / 'manifest.json'
+        if manifest.is_symlink() or not manifest.is_file():
+            return False
+        result = json.loads(manifest.read_text())
+        return (result.get('schema_version') == 1 and result.get('phase') == 'acquisition'
+                and result.get('status') == 'failed' and result.get('complete') is False
+                and result.get('rows') == [] and result.get('issues') == []
+                and isinstance(result.get('error'), dict) and not result.get('source')
+                and not result.get('pdf') and not result.get('state'))
+    except (OSError, ValueError, AttributeError):
+        return False
