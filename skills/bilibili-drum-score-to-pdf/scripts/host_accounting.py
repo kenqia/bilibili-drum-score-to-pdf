@@ -41,10 +41,13 @@ def validate(packet, ledger, known_images):
     require(isinstance(source, dict) and set(source) == {'kind', 'id'} and source['kind'] in ('host', 'controlled_fixture', 'codex_desktop_jsonl'))
     identifier(source['id'])
     scope = packet['scope']
-    require(isinstance(scope, dict) and set(scope) == {'invocation_id', 'root_thread_id', 'root_turn_id', 'started_at', 'ended_at', 'mode'})
+    require(isinstance(scope, dict) and set(scope) == {'invocation_id', 'root_thread_id', 'root_turn_id', 'started_at', 'ended_at', 'mode', 'thread_ids'})
     for name in ('invocation_id', 'root_thread_id', 'root_turn_id'):
         identifier(scope[name])
-    require(scope['mode'] in ('review', 'replay'))
+    require(scope['mode'] in ('review', 'review_only', 'replay'))
+    require(isinstance(scope['thread_ids'], list) and bool(scope['thread_ids']) and len(set(scope['thread_ids'])) == len(scope['thread_ids']))
+    for thread in scope['thread_ids']:
+        identifier(thread)
     for name in ('started_at', 'ended_at'):
         number(scope[name])
     require(scope['started_at'] <= scope['ended_at'])
@@ -66,10 +69,11 @@ def validate(packet, ledger, known_images):
         kind = event.get('kind')
         fields = {'model_call': {'response_id', 'status', 'usage'},
                   'host_tool_call': {'call_id', 'tool_name', 'status'},
-                  'image_presented': {'call_id', 'image_id', 'width', 'height', 'panel_count', 'source_pixels'}}
+                  'image_presented': {'call_id', 'image_id', 'width', 'height', 'panel_count', 'source_pixels', 'image_source'}}
         require(kind in fields and set(event) == common | fields[kind])
         for name in ('event_id', 'thread_id'):
             identifier(event[name])
+        require(event['thread_id'] in scope['thread_ids'])
         number(event['timestamp'])
         require(scope['started_at'] <= event['timestamp'] <= scope['ended_at'])
         if kind == 'model_call':
@@ -94,11 +98,19 @@ def validate(packet, ledger, known_images):
             key = (kind, event['thread_id'], event['call_id'])
         else:
             identifier(event['call_id'])
-            require(event['image_id'] in known_images)
-            for name in ('width', 'height', 'panel_count', 'source_pixels'):
+            identifier(event['image_id'])
+            require(event['image_source'] in ('observation', 'delivery', 'diagnostic'))
+            for name in ('width', 'height', 'panel_count'):
                 count(event[name])
                 require(event[name] > 0)
-            require(event['source_pixels'] == known_images[event['image_id']])
+            if event['image_source'] == 'observation':
+                require(event['image_id'] in known_images)
+                require(event['source_pixels'] == known_images[event['image_id']])
+            else:
+                require(event['image_id'] not in known_images)
+                if event['source_pixels'] is not None:
+                    count(event['source_pixels'])
+                    require(event['source_pixels'] > 0)
             key = (kind, event['event_id'])  # repeat presentations each retain a delivery event
         require(event['event_id'] not in events or events[event['event_id']] == event)
         require(key not in semantic or semantic[key] == event)
@@ -155,7 +167,7 @@ def summarize(packet, ledger, directory, load):
     missing_usage = [e['response_id'] for e in models if e['usage'] is None]
     end = ledger.get('first_deliverable_at')
     scope_closed = (end is not None and packet['scope']['started_at'] <= ledger['submitted_at'] and packet['scope']['ended_at'] >= end)
-    complete = packet['coverage']['model_calls_complete'] and not missing and not missing_usage and scope_closed
+    complete = packet['scope']['mode'] != 'review_only' and packet['coverage']['model_calls_complete'] and not missing and not missing_usage and scope_closed
     reasons = list(packet['coverage']['missing_reasons'])
     if not packet['coverage']['model_calls_complete']:
         reasons.append('model call coverage unavailable')
@@ -169,6 +181,7 @@ def summarize(packet, ledger, directory, load):
         value = load(decision)
         declared = value.get('decision', value).get('presented_images')
     presented = {e['image_id'] for e in images}
+    evidence = {e['image_id'] for e in images if e['image_source'] == 'observation'}
     return dict(source=packet['source'], scope=packet['scope'], coverage=packet['coverage'],
                 observed_actual_tokens=observed, model_tokens=actual if complete else None, token_complete=complete,
                 model_call_count=len(models), failed_model_calls=sum(e['status'] == 'failed' for e in models),
@@ -177,9 +190,11 @@ def summarize(packet, ledger, directory, load):
                 host_tool_types={name: sum(e['tool_name'] == name for e in tools) for name in sorted({e['tool_name'] for e in tools})},
                 observed_image_presentations=len(images), actual_presented_images=len(images) if packet['coverage']['images_complete'] and scope_closed else None,
                 unique_presented_images=len(presented), repeated_presentations=len(images)-len(presented),
-                presented_pixels=sum(e['width']*e['height'] for e in images), source_pixels=sum(e['source_pixels'] for e in images),
+                presented_pixels=sum(e['width']*e['height'] for e in images), source_pixels=sum(e['source_pixels'] for e in images) if all(e['source_pixels'] is not None for e in images) else None,
+                verified_observation_source_pixels=sum(e['source_pixels'] for e in images if e['image_source'] == 'observation'),
+                additional_image_presentations=sum(e['image_source'] != 'observation' for e in images),
                 presented_panels=sum(e['panel_count'] for e in images),
-                declared_presented_images_match=None if declared is None or not packet['coverage']['images_complete'] else set(declared) == presented,
+                declared_presented_images_match=None if declared is None or not packet['coverage']['images_complete'] else set(declared) == evidence,
                 missing_measurements=sorted(set(reasons)))
 
 

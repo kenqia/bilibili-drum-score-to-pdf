@@ -26,7 +26,7 @@ class HostUsageTests(unittest.TestCase):
         return dict(schema_version=1, lifecycle_id=report['lifecycle_id'], task_id=report['task_id'],
                     source=dict(kind='controlled_fixture', id='fixture'),
                     scope=dict(invocation_id='run-1', root_thread_id='root', root_turn_id='turn',
-                               started_at=report['submitted_at'], ended_at=time.time(), mode='review'),
+                               started_at=report['submitted_at'], ended_at=time.time(), mode='review', thread_ids=['root']),
                     coverage=dict(model_calls_complete=True, tools_complete=True, images_complete=False,
                                   expected_response_ids=['response-1', 'response-retry'], missing_reasons=['images not instrumented']),
                     events=[dict(kind='model_call', event_id='usage-1', thread_id='root', response_id='response-1',
@@ -66,3 +66,102 @@ class HostUsageTests(unittest.TestCase):
             self.assertEqual(failed['error']['code'], 'invalid_host_usage')
             _, after = self.run_cli(CLI, '--operation', 'report', '--task', task)
             self.assertEqual(after['performance']['host_usage'], summary)
+
+    def test_collect_filters_lineage_turn_window_and_exports_only_allowed_metadata(self):
+        import os
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task, report = self.prepare(base)
+            home = base / 'host'
+            sessions = home / 'sessions' / '2026' / '10' / '09'
+            sessions.mkdir(parents=True)
+            start = report['submitted_at']
+            end = time.time()
+            usage = dict(input_tokens=20, output_tokens=2, total_tokens=22, cached_input_tokens=8, reasoning_output_tokens=1)
+            def row(kind, payload, timestamp=start):
+                return dict(type=kind, timestamp=timestamp, payload=payload)
+            meta = dict(id='root', session_id='root', cwd=str(Path.cwd()), originator='Codex Desktop', source='vscode')
+            records = [row('session_meta', meta), row('turn_context', dict(root_turn_id='turn', model='fixture-model')),
+                       row('response_item', dict(type='message', content='PRIVATE_BODY_SENTINEL')),
+                       row('token_usage_record', dict(thread_id='root', root_turn_id='turn', response_id='dev', usage=usage), start-1),
+                       row('token_usage_record', dict(thread_id='root', root_turn_id='other-turn', response_id='other', usage=usage)),
+                       row('token_usage_record', dict(thread_id='root', root_turn_id='turn', response_id='real', usage=usage,
+                           thread_token_usage=dict(total_tokens=999999))),
+                       row('event_msg', dict(type='token_count', info=dict(total_tokens=999999))),
+                       row('response_item', dict(type='custom_tool_call', call_id='call-1', name='exec', input='PRIVATE_ARGUMENT_SENTINEL', status='completed'))]
+            (sessions / 'root.jsonl').write_text('\n'.join(json.dumps(x) for x in records)+'\n')
+            child = dict(id='child', session_id='root', cwd=str(Path.cwd()), originator='Codex Desktop',
+                         source=dict(subagent=dict(thread_spawn=dict(parent_thread_id='root'))))
+            (sessions / 'child.jsonl').write_text('\n'.join(json.dumps(x) for x in [row('session_meta',child),
+                row('token_usage_record',dict(thread_id='child', root_turn_id='turn', response_id='child-response', usage=usage))])+'\n')
+            (sessions / 'unrelated.jsonl').write_text(json.dumps(row('session_meta',dict(meta,id='unrelated',session_id='unrelated')))+'\nNOT_PRIVATE_JSON\n')
+            # Windows/WSL aliases must not double the input files.
+            (home / 'archived_sessions').symlink_to(home / 'sessions', target_is_directory=True)
+            output = base / 'collected.json'
+            env = os.environ.copy()
+            env.update(CODEX_THREAD_ID='root', CODEX_HOME=str(home))
+            code, result = self.run_cli(HOST, 'collect', '--task', task, '--root-turn', 'turn', '--invocation', 'video-1',
+                '--start', start, '--end', end, '--output', output, '--thread-id', 'root', '--thread-id', 'child', env=env)
+            self.assertEqual(code, 0, result)
+            collected = json.loads(output.read_text())
+            self.assertEqual([e['response_id'] for e in collected['events'] if e['kind']=='model_call'], ['child-response','real'])
+            self.assertEqual(sum(e['usage']['total_tokens'] for e in collected['events'] if e['kind']=='model_call'),44)
+            self.assertFalse(collected['coverage']['model_calls_complete'])
+            self.assertNotIn('PRIVATE_', output.read_text())
+            self.assertNotIn('999999', output.read_text())
+            self.assertFalse((task / 'host-usage.json').exists())  # collect is read-only for task
+
+    def test_images_missing_usage_and_unknown_fields_preserve_cost_completeness(self):
+        from test_agent_performance import PerformanceTests
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task, report = self.prepare(base)
+            decision = PerformanceTests().decision(task, base)
+            self.run_cli(CLI, '--operation', 'submit', '--task', task, '--decision', decision)
+            _, exported = self.run_cli(CLI, '--operation', 'export', '--task', task, '--output', base/'output')
+            report = exported['performance']
+            packet = self.packet(report)
+            image = json.loads((task/'observation.json').read_text())['images'][0]
+            packet['coverage']['images_complete'] = True
+            packet['coverage']['missing_reasons'] = []
+            packet['events'].extend([dict(kind='image_presented', event_id='image-1', thread_id='root', call_id='present-1',
+                timestamp=report['submitted_at'], image_id=image['id'], image_source='observation', width=640,height=480,
+                panel_count=1,source_pixels=1280*960),dict(kind='image_presented', event_id='image-2', thread_id='root', call_id='present-2',
+                timestamp=report['submitted_at'], image_id=image['id'], image_source='observation', width=640,height=480,
+                panel_count=1,source_pixels=1280*960),dict(kind='image_presented', event_id='pdf-1',thread_id='root',call_id='pdf',
+                timestamp=report['submitted_at'],image_id='page-1',image_source='delivery',width=794,height=1123,panel_count=1,source_pixels=None)])
+            path = base/'usage.json'
+            path.write_text(json.dumps(packet))
+            code, result = self.run_cli(HOST,'import','--task',task,'--events',path)
+            self.assertEqual(code,0,result)
+            summary = result['usage']
+            self.assertEqual(summary['model_tokens']['total_tokens'],213)
+            self.assertIsNone(summary['model_tokens']['cached_input_tokens'])
+            self.assertEqual(summary['actual_presented_images'],3)
+            self.assertEqual(summary['unique_presented_images'],2)
+            self.assertEqual(summary['repeated_presentations'],1)
+            self.assertEqual(summary['presented_pixels'],1506062)
+            self.assertEqual(summary['additional_image_presentations'],1)
+            self.assertFalse(summary['declared_presented_images_match'])
+            # Missing failed-call usage cannot certify actual total.
+            packet['events'].append(dict(kind='model_call',event_id='missing',thread_id='root',response_id='missing',
+                timestamp=report['submitted_at'],status='failed',usage=None))
+            packet['coverage']['expected_response_ids'].append('missing')
+            packet['scope']['ended_at']=time.time()
+            path.write_text(json.dumps(packet))
+            code,result=self.run_cli(HOST,'import','--task',task,'--events',path)
+            self.assertEqual(code,0,result)
+            self.assertIsNone(result['usage']['model_tokens'])
+            self.assertEqual(result['usage']['observed_actual_tokens']['total_tokens'],213)
+            original=(task/'host-usage.json').read_bytes()
+            for mutate in ('unknown_usage','unknown_image','bad_dimensions','unbound_thread','huge_count'):
+                bad=json.loads(json.dumps(packet))
+                if mutate=='unknown_usage':bad['events'][0]['usage']['provider_magic_tokens']=7
+                elif mutate=='unknown_image':bad['events'][3]['image_id']='invented'
+                elif mutate=='bad_dimensions':bad['events'][3]['width']=True
+                elif mutate=='unbound_thread':bad['events'][0]['thread_id']='unrelated'
+                else:bad['events'][0]['usage']['input_tokens']=10**1000
+                path.write_text(json.dumps(bad))
+                code,value=self.run_cli(HOST,'import','--task',task,'--events',path)
+                self.assertEqual(code,2,mutate)
+                self.assertEqual((task/'host-usage.json').read_bytes(),original)
