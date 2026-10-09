@@ -81,3 +81,11 @@ Agent-first 入口用 `agent_performance.py` 保存独立性能账本。它不�
 ## 实验局部内容门禁
 
 显式 lazy 任务在现有 Agent 几何验证之后检查已提出的相邻 pair，内容仅否决明显矛盾或保留 uncertain。它不产生身份、不合并重复音乐，也不改变原裁剪。构建、提交和导出复用同一检查，保存来源与实际检查成本。默认 full 及旧任务保持原验证范围。有限支持范围与不可恢复遮挡见[内容检查](agents/content-checks.md)。
+
+## 隔离的软件实验
+
+用户确认 #46 至 #50 可先在 `codex/issue-43-software-experiment` 进行软件实现与合成验证。稳定分支的生产代码冻结于 `d09fa9d`，#45 的完整真实基线及 #51/#52 的自动接受与性能放行仍待验收。实验只新增显式操作与 lazy 模式，保留 full 默认流程、现有决定协议和三个 moving viewport 核心约束。
+
+`agent_evidence.py` 在已验证原帧上物化整数 ROI，不重解码、不缩放，也不改打印像素。新增证据沿原 publication 事务更新 observation hash/version，保留归档、已审前缀与接受历史。决定重绑通过现有显式修订，旧包决定拒绝。实际生成和失败生成另列计量，已发布图像总数不冒充实际呈交。
+
+`agent_proposals.py` 只用五线与空间顺序提出结构建议。`agent_decision_builder.py` 将绑定当前观察的建议、结构修正和调用方明确的视觉确认构造为现有 v2 至 v5 决定，输出差异、来源与未决事项。构建不接受决定，也不提前结束交付计时。没有确认或原生证据时保留 waiting。具体协议见 [惰性证据](agents/lazy-evidence.md) 与 [决定构建](agents/decision-building.md)。
