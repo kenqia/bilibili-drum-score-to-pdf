@@ -38,6 +38,48 @@ def stage(name):
         recorder.save()
 
 
+def validate_events(data, number):
+    def require(condition):
+        if not condition:
+            raise ValueError('invalid performance event')
+    operations = set()
+    ids = set()
+    for event in data['operations']:
+        required = {'event_id','operation','started_at','elapsed_seconds','ended_at','status'}
+        optional = {'phase','error_code','metrics','state_changed'}
+        require(isinstance(event, dict) and required <= set(event) <= required | optional)
+        require(event['operation'] in ('prepare','resume','submit','supplement','export','replay','confirm-delivery'))
+        require(event['status'] in ('running','interrupted','waiting','failed','success'))
+        require(number(event['started_at']) and (event['ended_at'] is None or number(event['ended_at'])))
+        require(event['elapsed_seconds'] is None or number(event['elapsed_seconds']) and event['elapsed_seconds'] >= 0)
+        require(isinstance(event['event_id'], str) and bool(re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', event['event_id'])) and event['event_id'] not in ids)
+        require('metrics' not in event or event['metrics'] is None or isinstance(event['metrics'], dict))
+        require('state_changed' not in event or type(event['state_changed']) is bool)
+        require(all(event.get(k) is None or isinstance(event[k], str) for k in ('phase','error_code')))
+        operations.add(event['event_id'])
+        ids.add(event['event_id'])
+    for event in data['stages']:
+        common = {'event_id','name','source','started_at','elapsed_seconds','status'}
+        require(isinstance(event, dict) and common <= set(event))
+        require(isinstance(event['event_id'], str) and bool(re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', event['event_id'])) and event['event_id'] not in ids)
+        require(number(event['started_at']) and (event['elapsed_seconds'] is None or number(event['elapsed_seconds']) and event['elapsed_seconds'] >= 0))
+        if event['source'] == 'script_monotonic':
+            required = common | {'operation_id','offset_seconds'}
+            require(required <= set(event) <= required | {'ended_at'})
+            require(event['operation_id'] in operations and number(event['offset_seconds']) and event['offset_seconds'] >= 0)
+            require(event['name'] in ('source_verification','navigation','anonymous_acquisition','native_decode','native_analysis',
+                                    'image_generation','decision_validation','source_redecode','pdf_export','delivery_publication'))
+            require(event['status'] in ('running','interrupted','complete','failed'))
+        else:
+            require(set(event) == common | {'ended_at','source_id','measurement'})
+            require(event['source'] in ('host','controlled_fixture') and event['measurement'] == 'caller_supplied_monotonic')
+            require(isinstance(event['source_id'], str) and bool(re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', event['source_id'])))
+            require(event['name'] in ('agent_review','model_queue','user_pause','decision_building') and event['status'] in ('complete','failed','waiting'))
+        require('ended_at' not in event or number(event['ended_at']))
+        require(event['status'] in ('running','interrupted') or ('ended_at' in event and event['elapsed_seconds'] is not None))
+        ids.add(event['event_id'])
+
+
 class Performance:
     def __init__(self, directory, load, write, embedded=False):
         self.directory, self.load, self.write = directory, load, write
@@ -68,9 +110,7 @@ class Performance:
                 return False
         if not number(self.data.get('last_observed_at')) or (self.data.get('submitted_at') is not None and not number(self.data['submitted_at'])) or (self.data.get('first_deliverable_at') is not None and not number(self.data['first_deliverable_at'])) or not isinstance(self.data.get('metrics'), dict):
             raise ValueError('invalid performance ledger')
-        for event in self.data['operations'] + self.data['stages']:
-            if not isinstance(event, dict) or not isinstance(event.get('event_id'), str) or event.get('status') not in ('running','interrupted','complete','waiting','failed','success') or not number(event.get('started_at')) or (event.get('elapsed_seconds') is not None and (not number(event['elapsed_seconds']) or event['elapsed_seconds'] < 0)):
-                raise ValueError('invalid performance event')
+        validate_events(self.data, number)
         self.operation = None
         self.began = None
         self.observe(now)

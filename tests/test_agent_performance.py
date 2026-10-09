@@ -227,3 +227,23 @@ class PerformanceTests(unittest.TestCase):
                 rejected = self.cli('--operation', 'report', '--task', task)
                 self.assertEqual(rejected['status'], 'failed')
                 self.assertEqual(path.read_bytes(), before)
+
+    def test_incomplete_internal_events_fail_before_resuming_or_mutating_ledger(self):
+        import copy
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task = base / 'task'
+            self.cli(video_from_image(score_frame(), base), '--output', task)
+            path = task / 'performance.json'
+            original = json.loads(path.read_text())
+            for kind, field in [('stages','name'), ('stages','source'), ('stages','operation_id'),
+                                ('stages','offset_seconds'), ('operations','operation'), ('operations','ended_at')]:
+                for operation in ('resume','report'):
+                    with self.subTest(kind=kind, field=field, operation=operation):
+                        damaged = copy.deepcopy(original)
+                        damaged[kind][0].pop(field)
+                        path.write_text(json.dumps(damaged))
+                        before = path.read_bytes()
+                        rejected = self.cli('--operation', operation, '--task', task)
+                        self.assertEqual(rejected['status'], 'failed')
+                        self.assertEqual(path.read_bytes(), before)
