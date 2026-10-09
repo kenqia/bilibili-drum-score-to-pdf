@@ -83,7 +83,7 @@ def image_pixels(output, images):
     return total
 
 
-def prepare(source, output, origin=None, timestamps=None, sampling=None, version=1, prior=None):
+def prepare(source, output, origin=None, timestamps=None, sampling=None, version=1, prior=None, evidence_mode='full'):
     total_began = time.monotonic()
     source = Path(source).resolve()
     with stage('source_verification'):
@@ -94,7 +94,7 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
     task_id = hashlib.sha256((source_hash + str(output.resolve())).encode()).hexdigest()[:24]
     observation = dict(schema_version=VERSION, task_id=task_id, source=dict(path=str(source), sha256=source_hash, **metadata),
                        frames=[], images=[], candidates=[], intervals=[], coordinate_space='native_pixels',
-                       fixed_layout_only=False)
+                       fixed_layout_only=False, evidence_mode=evidence_mode)
     if origin:
         observation['source']['origin'] = origin
     if timestamps is None:
@@ -110,6 +110,8 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
         if prior:
             for key in ('frames', 'images', 'candidates'):
                 observation[key] = copy.deepcopy(prior[key])
+            if 'evidence_updates' in prior:
+                observation['evidence_updates'] = copy.deepcopy(prior['evidence_updates'])
             observation['images'] = [i for i in observation['images'] if i['kind'] not in ('comparison', 'batch_comparison')]
             images = [Image.open(output / f['path']).convert('RGB') for f in observation['frames']]
         for index, requested in enumerate(timestamps):
@@ -135,7 +137,7 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
                 analysis = dict(bbox=[0, 0, image.width, image.height], row_bounds=[], groups=[],
                                 header_bbox=[0, 0, 0, 0], proposal_error=error.code)
             with stage('image_generation'):
-                for y in range(0, image.height, 280):
+                for y in (range(0, image.height, 280) if evidence_mode == 'full' else []):
                     for x in range(0, image.width, 640):
                         tile_box = [x, y, min(x + 800, image.width), min(y + 360, image.height)]
                         tile_id = f'{frame_id}-native-{x}-{y}'
@@ -149,10 +151,11 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
                     bbox = [analysis['bbox'][0], analysis['bbox'][1] + bounds[0], analysis['bbox'][2], analysis['bbox'][1] + bounds[1]]
                     candidate_id = f'{frame_id}-row-{row:03d}'
                     detail = f'{candidate_id}.png'
-                    image.crop(bbox).save(output / detail)
-                    observation['images'].append(dict(id=candidate_id, path=detail, sha256=digest(output / detail),
-                                                      frame_id=frame_id, kind='detail', bbox=bbox,
-                                                      mapping=dict(coordinate_space='native_pixels', scale=[1, 1], source_offset=bbox[:2])))
+                    if evidence_mode == 'full':
+                        image.crop(bbox).save(output / detail)
+                        observation['images'].append(dict(id=candidate_id, path=detail, sha256=digest(output / detail),
+                                                          frame_id=frame_id, kind='detail', bbox=bbox,
+                                                          mapping=dict(coordinate_space='native_pixels', scale=[1, 1], source_offset=bbox[:2])))
                     group = analysis['groups'][row]
                     native = image.crop(bbox)
                     clean = not cursor_occluded(native, group['spacing']) and not obstruction_detected(native, analysis['bbox'][1] + group['top'] - bbox[1], group['spacing'])
@@ -192,7 +195,9 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
                                       'supplement_requests': sampling['used']['requests'], 'prepare_elapsed': time.monotonic()-began,
                                       'total_elapsed': time.monotonic()-total_began,
                                       'native_processing_elapsed': time.monotonic()-began-count['decode_elapsed']}
-            for start, batch in zip(range(0, max(1, len(images)-1), 2), observation['batches']):
+            for batch in observation['batches']:
+                batch['image_id'] = 'comparison'
+            for start, batch in (zip(range(0, max(1, len(images)-1), 2), observation['batches']) if evidence_mode == 'full' else []):
                 batch_id = f'comparison-v{version}-{batch["id"]}'
                 batch_path = f'{batch_id}.png'
                 context = Image.new('RGB', (640 * len(batch['frames']), 510), 'white')
@@ -209,8 +214,8 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
                     sha256=digest(output / batch_path), panels=context_panels))
                 batch['image_id'] = batch_id
             observation['metrics']['image_pixels'] = image_pixels(output, observation['images'])
-            observation['metrics']['comparison_images'] += len(observation['batches'])
-            observation['metrics']['comparison_composed_frames'] += sum(len(b['frames']) for b in observation['batches'])
+            observation['metrics']['comparison_images'] += sum(i['kind'] == 'batch_comparison' for i in observation['images'])
+            observation['metrics']['comparison_composed_frames'] += sum(len(i['panels']) for i in observation['images'] if i['kind'] == 'batch_comparison')
         if len(json.dumps(observation, ensure_ascii=False, indent=2, allow_nan=False).encode()) > MAX_JSON - 4096:
             raise ConversionError('sampling_budget', '观察包达到可恢复 JSON 大小上限，请保留疑点。')
         previous = load_json(output / 'task.json') if (output / 'task.json').exists() else {}
@@ -219,6 +224,8 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
                       status='waiting', complete=False, phase='review', observation_version=version, rows=[], issues=[],
                       next_action='Read comparison and native detail images, then submit a visual decision.', metrics=observation['metrics'])
         result['decision_history'] = previous.get('decision_history', [])
+        if previous.get('reviewed_frames'):
+            result['reviewed_frames'] = previous['reviewed_frames']
         write_json(output / 'sampling.next.json', sampling)
         result['sampling_sha256'] = digest(output / 'sampling.next.json')
         result['sampling_usage'] = sampling['used']
@@ -555,14 +562,14 @@ def supplement(task, path):
         archive.write_bytes((task / 'observation.json').read_bytes())
     decision = task / 'decision.json'
     result = prepare(observation['source']['path'], task, origin=observation['source'].get('origin'),
-                     timestamps=timestamps, sampling=sampling, version=version+1, prior=observation)
+                     timestamps=timestamps, sampling=sampling, version=version+1, prior=observation, evidence_mode=observation.get('evidence_mode', 'full'))
     if decision.exists():
         decision.rename(task / f'decision-v{version}.json')
     write_json(task / f'request-{version+1}.json', request)
     return result
 
 
-def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None):
+def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None, evidence_mode='full'):
     target = Path(output) if output and operation in ('prepare', 'export', 'replay') else None
     performance = None
     token = None
@@ -607,7 +614,10 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
                     source, origin = acquire(source, target, timeout=acquisition_timeout)
             performance.embedded = False
             performance.save()
-            result = prepare(source, target, origin=origin)
+            result = prepare(source, target, origin=origin, evidence_mode=evidence_mode)
+        elif operation == 'materialize':
+            from agent_evidence import materialize
+            result = materialize(Path(task), decision)
         elif operation == 'supplement':
             result = supplement(Path(task), decision)
         elif operation == 'resume':

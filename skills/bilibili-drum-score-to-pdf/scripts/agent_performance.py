@@ -48,7 +48,7 @@ def validate_events(data, number):
         required = {'event_id','operation','started_at','elapsed_seconds','ended_at','status'}
         optional = {'phase','error_code','metrics','state_changed','artifact'}
         require(isinstance(event, dict) and required <= set(event) <= required | optional)
-        require(event['operation'] in ('prepare','resume','submit','supplement','export','replay','confirm-delivery'))
+        require(event['operation'] in ('prepare','resume','submit','supplement','materialize','export','replay','confirm-delivery'))
         require(event['status'] in ('running','interrupted','waiting','failed','success'))
         require(number(event['started_at']) and (event['ended_at'] is None or number(event['ended_at'])))
         require(event['elapsed_seconds'] is None or number(event['elapsed_seconds']) and event['elapsed_seconds'] >= 0)
@@ -169,7 +169,7 @@ class Performance:
                                                    wall_seconds=now-self.operation['started_at'], monotonic_seconds=elapsed))
         self.operation.update(ended_at=now, elapsed_seconds=elapsed, status=result['status'],
                               phase=result.get('phase'), error_code=result.get('error', {}).get('code'))
-        if self.operation['operation'] in ('supplement','submit') and self.operation.get('state_changed'):
+        if self.operation['operation'] in ('supplement','materialize','submit') and self.operation.get('state_changed'):
             self.data.update(delivered_at=None, delivery_review_id=None)
         if self.operation['operation'] == 'export' and result['status'] == 'success':
             self.data['exported_at'] = now
@@ -185,8 +185,8 @@ class Performance:
             self.data['task_status'] = 'success'
         else:
             self.data['task_status'] = 'waiting' if result['status'] == 'success' else result['status']
-        if self.operation['operation'] in ('prepare','supplement','export','replay'):
-            self.operation['metrics'] = result.get('metrics')
+        if self.operation['operation'] in ('prepare','supplement','materialize','export','replay'):
+            self.operation['metrics'] = result.get('metrics', self.operation.get('metrics'))
         if result.get('script_revision'):
             self.data['script_revision'] = result['script_revision']
         self.save()
@@ -260,4 +260,8 @@ class Performance:
             native_seek_attempts=sum(e['name'] == 'native_decode' for e in self.data['stages']),
             source_redecode_attempts=sum(e['name'] == 'source_redecode' for e in self.data['stages']),
             full_frame_analysis_attempts=sum(e['name'] == 'native_analysis' for e in self.data['stages']),
+            materialization=dict(
+                generated_images=sum((e.get('metrics') or {}).get('generated_images', 0) for e in self.data['operations'] if e['operation'] == 'materialize'),
+                generated_in_failed_operations=sum((e.get('metrics') or {}).get('generated_images', 0) for e in self.data['operations'] if e['operation'] == 'materialize' and e['status'] in ('failed', 'interrupted')),
+                cache_hits=sum((e.get('metrics') or {}).get('cache_hits', 0) for e in self.data['operations'] if e['operation'] == 'materialize')),
             generated_images=(self.data['metrics'].get('native_images',0)+self.data['metrics'].get('detail_images',0)+self.data['metrics'].get('comparison_images',0)) if self.data['metrics'] else None)
