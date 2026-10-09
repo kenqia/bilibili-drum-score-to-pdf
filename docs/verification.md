@@ -221,3 +221,27 @@ root 实际审阅原图、选行细节与两个渲染页面后记录完整 12 �
 
 
 默认切换后的本地完整回归为 84 项，133.370 秒通过。统一入口的默认 prepare 先记录 success 与 waiting 不符的 RED，再验证 waiting/review、resume 证据不变且无 PDF 的 GREEN。旧转换测试显式传 --operation convert 保留原断言。CI 的合成固定决定重放脚本也通过，范围仍为 fixed_decision_replay_only；这些本地结果不替代最终集成提交的 hosted CI。
+
+## 2026-10-09 最终 review 修复验证
+
+最终实现与测试快照为 `f7e176568a6309ffed76dd58e8ca50e40cd21219`，基于 `988b098`。统一 CLI 的未知观察引用先复现 waiting，非法引用类型还会落到 invalid_input；修复后均返回 failed/invalid_decision，合法引用的身份、帧和 bbox 冲突仍 waiting/review_required。
+
+v5 封装 v4 的同一末段续批先复现 failed/existing_decision。修复允许 frames、rows、observations、transitions 追加已接受前缀，同时保护此前各段、末段元数据、行外区域与已接受列表内容。合成用例覆盖新段翻页追加、末段继续观察、新增空间谱行、无 revision 的旧内容修改拒绝，以及显式 revision 保留三份历史。
+
+超大整数 `10**1000` 的 spacing、staff_y、补采范围与 timestamps 先复现 stdout 空和 OverflowError。数值验证器现在将转换溢出判为非法输入，统一 CLI 返回脱敏 failed JSON 与非零退出码，没有 traceback，原观察包及帧证据不变。段预检后的重复字段、帧引用与全段顺序检查已删除，保留前置预检及错误顺序；这项无行为变化清理没有新增镜像测试。
+
+CI 合成重放使用以下命令通过，验证时的生产代码与上述快照相同：
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python ci/verify_agent_replay.py --output /tmp/agent-first-review-fixes-ci-replay
+```
+
+结果范围为 fixed_decision_replay_only，3 行、1 页，最小 effective DPI 156.996，原裁剪相等，跨目录 PDF 相等；未知版本、越界和损坏图像分别返回预期失败。PDF SHA-256 为 `532b7cb98af23c0cc0b9fa10c0a04e459daf3686a2f9bc96de1c54a24f4b8f10`。这些结果不代替 hosted CI 或真实视觉验收。既有双份独立真实看图记录和原决定保持不变，最终集成提交的真实保存决定重放另行记录。
+
+完整回归在 `f7e1765` 保存全部代码与测试后重新执行，88 项测试、173.954 秒通过：
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
+```
+
+此前运行中的旧测试快照因补强 CLI 退出码和 stderr 断言而中断，不计为最终通过记录。上述全套执行期间只追加此验证文档，没有修改生产代码或测试。`git diff --check` 通过，已将最新 integration/agent-first 合入修复分支，结果为 Already up to date。
