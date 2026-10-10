@@ -99,4 +99,6 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 摘要的关键缺口、已有替代和其他必需审计动作保留具体区间、已有原帧及原生细节计数、可信内容证据和唯一下一步。仅一个覆盖审计区间为 pending 时，other_required_actions 给出该段真实端点和源时间，不把它压成一个无法定位的 count。内容桥存在歧义、partial、低信息或实际对齐失败时，content_blockers 列出实际对应，先核查或纠正这些原生证据，无法证明则等待；无关补采不能解除硬理由。
 
+同一区间同时有硬内容理由和光标替代不足时，硬内容核查优先，光标分支不能把下一步改成取得更多 clean 锚点。两类理由和已有证据都保留，动作须与实际 supplement_requests 一致。
+
 重复候选、低价值采样诊断和检测器提名按 reason 聚合原始区间范围，interval_scope 标为 raw_diagnostic_range。范围内的逐条位置、原始 ID 和完整 detail 留在 review-plan.json。摘要不要求逐项处理这些原始记录，也不把范围中的每个时刻都认定为缺口。没有通过几何绑定的空间身份为 null/unknown；只有实际绑定的决定能提供 affected_instances。没有可定位来源的必需动作同样标明未知范围，先查看 bound-build/unresolved.json，不能编造端点或身份。

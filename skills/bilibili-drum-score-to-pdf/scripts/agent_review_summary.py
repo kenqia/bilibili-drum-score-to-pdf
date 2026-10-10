@@ -115,7 +115,7 @@ def summarize(issues, checks, packet, bound, decision=None, review=None, require
                 item['native_blockers']=[dict(v) for v in {tuple((k,tuple(v) if isinstance(v,list) else v) for k,v in b.items()):b for b in native}.values()]
                 if any(b['reason']!='native_cursor_requires_alternative' for b in native):
                     item['next_action']='Verify each listed native instance and endpoint range. Explicitly revise an incorrect declaration using that original range; otherwise retain waiting. Unrelated new frames cannot clear these declarations.'
-                else:
+                elif not hard:
                     item['next_action']='Review the listed native cursor ranges and supplement this interval only to obtain two ordered clean witnesses under the existing alternative-chain contract.'
             missing.append(item)
         elif any(c['status']=='uncertain' for c in local):

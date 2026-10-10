@@ -158,6 +158,23 @@ class MinimumEvidenceChainTests(content_fixture.ContentChecksTests):
             self.assertTrue(all(g['affected_instances']==['C'] and g['content_blockers'][0]['matches']==['0-C','2-C'] for g in plan['summary']['critical_gaps']))
             self.assertEqual(plan['supplement_requests'],[])
 
+    def test_summary_hard_bridge_reason_takes_priority_over_cursor_alternative_action(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_bridge_ambiguous')
+            request,_=self.reviewed_request(task,decision)
+            for r in request['review']['native_clean_regions']:
+                if r['bbox'][1]==612:
+                    r.update(cursor='present',bbox=[1000,660,1010,670])
+            path=base/'review.json';path.write_text(json.dumps(request))
+            plan=self.cli('--operation','review-plan','--task',task,'--decision',path,'--output',base/'plan')
+            gaps=plan['summary']['critical_gaps']
+            self.assertEqual(len(gaps),2)
+            self.assertTrue(all(g['sufficient'] and 'ambiguous_local_notation' in g['reasons'] and 'native_cursor_requires_alternative' in g['reasons'] for g in gaps))
+            self.assertTrue(all(g['content_blockers'][0]['matches']==['0-C','2-C'] for g in gaps))
+            self.assertTrue(all('listed native correspondences' in g['next_action'] for g in gaps),gaps)
+            self.assertTrue(all('two ordered clean witnesses' not in g['next_action'] for g in gaps))
+            self.assertEqual(plan['supplement_requests'],[])
+
     def test_reliable_redundant_instance_without_native_declarations_is_not_an_anchor(self):
         with tempfile.TemporaryDirectory() as directory:
             base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_edge_support')
