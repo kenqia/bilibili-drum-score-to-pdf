@@ -27,7 +27,7 @@ def covered(target, rectangles):
     return all(any(contains(r, [a, c, b, d]) for r in rectangles) for a, b in zip(xs, xs[1:]) for c, d in zip(ys, ys[1:]))
 
 
-def native_rows(decision, observation, presented):
+def native_rows(decision, observation, presented, script_rows=None):
     rows = decision['rows']
     if not isinstance(rows, list) or not rows or len(rows) > 200:
         invalid('缺少有序谱行或谱行数量过大。')
@@ -62,13 +62,16 @@ def native_rows(decision, observation, presented):
                 invalid('精修边界核查状态非法。')
             if not refinement['boundary_verified']:
                 raise ConversionError('review_required', '精修边界可能截掉行外符号，需要复查。')
+        authority = (script_rows or {}).get(index)
         refs = row['evidence_images']
-        if not isinstance(refs, list) or not refs or any(not isinstance(i, str) or i not in images or i not in presented for i in refs) or len(set(refs)) != len(refs):
+        if authority is None and (not isinstance(refs, list) or not refs or any(not isinstance(i, str) or i not in images or i not in presented for i in refs) or len(set(refs)) != len(refs)):
             invalid('原生细节证据引用非法。')
+        if authority is not None and refs != []:
+            invalid('脚本接受项不得借用未呈交的细节引用。')
         details = [images[i] for i in refs]
         if any(i.get('frame_id') != frame['id'] or i['kind'] not in ('detail', 'native_detail') for i in details):
             invalid('必须使用所选同一原帧的无标注原生细节。')
-        if not covered(proposed, [i['bbox'] for i in details]) or not covered(executed, [i['bbox'] for i in details]):
+        if authority is None and (not covered(proposed, [i['bbox'] for i in details]) or not covered(executed, [i['bbox'] for i in details])):
             raise ConversionError('missing_evidence', '细节图没有覆盖完整建议与精修裁剪。')
         if not row['complete'] or not row['boundary_verified'] or row['cursor'] != 'clear' or row['occlusion'] != 'clear':
             raise ConversionError('review_required', '没有完整干净原帧或边界未核查，不得拼补。')
@@ -76,5 +79,9 @@ def native_rows(decision, observation, presented):
             raise ConversionError('review_required', '同帧谱行重复、交叠或顺序非法。')
         chosen.append(dict(id=f'agent-row-{index:03d}', frame_id=frame['id'], index=index, bbox=executed,
                            proposed_bbox=proposed, roi=roi, coordinate_space='native_pixels', complete=True, clean=True,
-                           refinement=refinement, visual_judgment={k: row[k] for k in ('complete', 'cursor', 'occlusion', 'boundary_verified', 'evidence', 'evidence_images')}))
+                           refinement=refinement))
+        if authority is None:
+            chosen[-1]['visual_judgment'] = {k: row[k] for k in ('complete','cursor','occlusion','boundary_verified','evidence','evidence_images')}
+        else:
+            chosen[-1]['script_acceptance'] = authority
     return chosen

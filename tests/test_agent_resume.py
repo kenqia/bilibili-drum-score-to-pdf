@@ -32,7 +32,9 @@ class ResumeTests(test_agent_continuity.ContinuityTests):
             self.assertFalse(resumed['complete'])
             original=(task/'task.json').read_bytes()
             retry=self.cli('--operation','submit','--task',task,'--decision',path)
-            self.assertEqual(retry,resumed)
+            self.assertEqual({k:v for k,v in retry.items() if k != 'performance'},
+                             {k:v for k,v in resumed.items() if k != 'performance'})
+            self.assertEqual(retry['performance']['script_operation_count'], resumed['performance']['script_operation_count']+1)
             self.assertEqual((task/'task.json').read_bytes(),original)
             result=self.cli('--operation','export','--task',task,'--output',base/'partial')
             self.assertEqual(result['status'],'waiting',result)

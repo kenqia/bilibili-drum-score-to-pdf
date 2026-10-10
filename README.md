@@ -40,3 +40,20 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 测试还需要 Poppler 的 pdfinfo、pdfimages 与 pdftoppm。GitHub Actions 运行全部离线回归与固定 Agent 决策重放。受控证据见 [离线 CI](docs/agents/offline-ci.md)，双份真实视觉审阅、独立来源核对与成本边界见 [verification](docs/verification.md)。架构、资源限额与安全边界见 [architecture](docs/architecture.md)。随仓库交付的 [SKILL.md](skills/bilibili-drum-score-to-pdf/SKILL.md) 使用同一默认流程。
 
 保留的 moving viewport 路径用 `--operation convert` 显式运行。三个核心模块合计不得超过 500 行，依赖防火墙继续约束它。需要回滚完整产品时，在独立 checkout 使用旧稳定提交 `23ec65459807bed7a51f3fa0f1e9c08b51cc63dc` 和新的结果目录；保留已有 Agent 任务，不迁移或覆盖其记录。
+
+授权宿主的真实 Token、工具与图像呈交可用 [计量适配器](docs/agents/host-usage.md) 采集和导入，汇总按真实审阅、重放与入口分别统计。缺失模型调用或呈交覆盖时保留 null，不将开发会话成本当作视频基线。
+
+
+## 显式实验入口
+
+#43的当前阶段开发已收口，支持能力、逐票交付和验证见[阶段最终版本](docs/agents/performance-stage-final.md)。标准视频的lazy任务因真实遮挡保留waiting；完整性能配对未证明，实验入口保持显式调用。
+
+在隔离的 `codex/issue-43-software-experiment` 分支，`prepare --evidence-mode lazy` 保留原帧和导航对照图，按 Agent 的原生 ROI 请求生成细节。`materialize` 保存来源与证据更新，`build-decision` 根据几何建议、修正和实际确认构建现有协议的决定。操作字段见 [惰性证据](docs/agents/lazy-evidence.md) 与 [决定构建](docs/agents/decision-building.md)。默认 full/prepare 与旧任务重放继续保留。
+
+`review-plan` 按疑点给出相邻实际 PTS、原生 ROI 和有界补采请求，输出尚未确认的构建模板。物化后需要沿用未改的实际判断时，使用显式历史复用，规则见 [疑点审阅](docs/agents/review-plan.md)。lazy 的局部内容检查可否决几何自洽的错误对应；污染必需接续帧时，当前不能仅靠新增干净帧解除等待，具体范围见 [内容检查](docs/agents/content-checks.md)。
+
+lazy 提交使用 v4 原生图块，并附绑定决定文件的 `audit.json`。标题、速度、拍号、行外区域、首尾与各相邻间隔都须显式核查，缺少证据时等待。字段与导航限额后的有界恢复见 [覆盖审计](docs/agents/coverage-audit.md)。
+
+显式新任务可加 `--script-acceptance`，由脚本重算普通内部行和可靠 gap，Agent 保留原生源 ROI clean、首尾、标题和行外核查。字段、命令、严格白色切带与恢复限制见[混合接受实验](docs/agents/script-acceptance.md)。全局 visual_review 保持 false，实际来源分开记录。
+
+实验能力仍要求实际原图和原生细节审阅。合成验证不代表真实视频质量或端到端性能放行；完整真实成本未知时保持 null。默认快路径保持关闭；显式混合接受尚未获真实放行。使用新任务、草稿与结果目录，保留来源和接受历史；回退到冻结的 `d09fa9d` 使用另一独立目录。

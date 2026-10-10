@@ -7,6 +7,7 @@ import time
 import copy
 import os
 from agent_sampling import plan, check_request, LIMITS
+from agent_performance import ACTIVE, Performance, stage
 from pathlib import Path
 import subprocess
 from PIL import Image, ImageDraw, __version__ as pillow_version
@@ -32,9 +33,10 @@ def digest(path):
     return h.hexdigest()
 
 
-def write_json(path, value):
+def write_json(path, value, compact=False):
     temporary = path.with_name(path.name + '.tmp')
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n')
+    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=None if compact else 2,
+                                   separators=(',', ':') if compact else None, allow_nan=False) + '\n', encoding='utf-8')
     os.replace(temporary, path)
 
 
@@ -82,21 +84,29 @@ def image_pixels(output, images):
     return total
 
 
-def prepare(source, output, origin=None, timestamps=None, sampling=None, version=1, prior=None):
+def prepare(source, output, origin=None, timestamps=None, sampling=None, version=1, prior=None, evidence_mode='full', script_acceptance=False, minimum_evidence_chain=False):
     total_began = time.monotonic()
     source = Path(source).resolve()
-    metadata = probe_video(source)
+    with stage('source_verification'):
+        metadata = probe_video(source)
     if metadata['width'] < 700:
         raise ConversionError('low_resolution', '原视频分辨率不足。')
     source_hash = digest(source)
     task_id = hashlib.sha256((source_hash + str(output.resolve())).encode()).hexdigest()[:24]
     observation = dict(schema_version=VERSION, task_id=task_id, source=dict(path=str(source), sha256=source_hash, **metadata),
                        frames=[], images=[], candidates=[], intervals=[], coordinate_space='native_pixels',
-                       fixed_layout_only=False)
+                       fixed_layout_only=False, evidence_mode=evidence_mode)
+    policy = prior.get('script_acceptance_policy') if prior else ('continuous_clean_v1' if script_acceptance else None)
+    if policy:
+        observation['script_acceptance_policy'] = policy
+    chain = prior.get('minimum_evidence_chain_policy') if prior else ('ordered_anchors_v1' if minimum_evidence_chain else None)
+    if chain:
+        observation['minimum_evidence_chain_policy'] = chain
     if origin:
         observation['source']['origin'] = origin
     if timestamps is None:
-        timestamps, sampling = plan(source, metadata)
+        with stage('navigation'):
+            timestamps, sampling = plan(source, metadata)
     count = metrics()
     initial_decode = sampling['used']['decode_seconds']
     count['decode_elapsed'] = initial_decode
@@ -107,10 +117,13 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
         if prior:
             for key in ('frames', 'images', 'candidates'):
                 observation[key] = copy.deepcopy(prior[key])
+            if 'evidence_updates' in prior:
+                observation['evidence_updates'] = copy.deepcopy(prior['evidence_updates'])
             observation['images'] = [i for i in observation['images'] if i['kind'] not in ('comparison', 'batch_comparison')]
             images = [Image.open(output / f['path']).convert('RGB') for f in observation['frames']]
         for index, requested in enumerate(timestamps):
-            record, image = reader.read_record(requested)
+            with stage('native_decode'):
+                record, image = reader.read_record(requested)
             if prior and any(f['pts'] == record['pts'] and f['time_base'] == record['time_base'] for f in observation['frames']):
                 raise ConversionError('invalid_request', '请求重解码了已有 PTS，不能声称新增观察。')
             frame_id = f'frame-{index:03d}' if version == 1 else f'v{version}-frame-{index:03d}'
@@ -125,85 +138,91 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
             images.append(image)
             # Detectors propose navigation boxes; Agent decisions may use any valid native ROI.
             try:
-                analysis = analyze_frame(image)
+                with stage('native_analysis'):
+                    analysis = analyze_frame(image)
             except ConversionError as error:
                 analysis = dict(bbox=[0, 0, image.width, image.height], row_bounds=[], groups=[],
                                 header_bbox=[0, 0, 0, 0], proposal_error=error.code)
-            for y in range(0, image.height, 280):
-                for x in range(0, image.width, 640):
-                    tile_box = [x, y, min(x + 800, image.width), min(y + 360, image.height)]
-                    tile_id = f'{frame_id}-native-{x}-{y}'
-                    tile_path = f'{tile_id}.png'
-                    image.crop(tile_box).save(output / tile_path)
-                    observation['images'].append(dict(id=tile_id, path=tile_path, sha256=digest(output / tile_path),
-                        frame_id=frame_id, kind='native_detail', bbox=tile_box,
-                        mapping=dict(coordinate_space='native_pixels', scale=[1, 1], source_offset=[x, y])))
-            frame['analysis'] = analysis
-            for row, bounds in enumerate(analysis['row_bounds']):
-                bbox = [analysis['bbox'][0], analysis['bbox'][1] + bounds[0], analysis['bbox'][2], analysis['bbox'][1] + bounds[1]]
-                candidate_id = f'{frame_id}-row-{row:03d}'
-                detail = f'{candidate_id}.png'
-                image.crop(bbox).save(output / detail)
-                observation['images'].append(dict(id=candidate_id, path=detail, sha256=digest(output / detail),
-                                                  frame_id=frame_id, kind='detail', bbox=bbox,
-                                                  mapping=dict(coordinate_space='native_pixels', scale=[1, 1], source_offset=bbox[:2])))
-                group = analysis['groups'][row]
-                native = image.crop(bbox)
-                clean = not cursor_occluded(native, group['spacing']) and not obstruction_detected(native, analysis['bbox'][1] + group['top'] - bbox[1], group['spacing'])
-                observation['candidates'].append(dict(id=candidate_id, frame_id=frame_id, index=row, bbox=bbox, clean=clean,
-                                                     coordinate_space='native_pixels', complete=not (analysis['partial_top'] or analysis['partial_bottom'])))
+            with stage('image_generation'):
+                for y in (range(0, image.height, 280) if evidence_mode == 'full' else []):
+                    for x in range(0, image.width, 640):
+                        tile_box = [x, y, min(x + 800, image.width), min(y + 360, image.height)]
+                        tile_id = f'{frame_id}-native-{x}-{y}'
+                        tile_path = f'{tile_id}.png'
+                        image.crop(tile_box).save(output / tile_path)
+                        observation['images'].append(dict(id=tile_id, path=tile_path, sha256=digest(output / tile_path),
+                            frame_id=frame_id, kind='native_detail', bbox=tile_box,
+                            mapping=dict(coordinate_space='native_pixels', scale=[1, 1], source_offset=[x, y])))
+                frame['analysis'] = analysis
+                for row, bounds in enumerate(analysis['row_bounds']):
+                    bbox = [analysis['bbox'][0], analysis['bbox'][1] + bounds[0], analysis['bbox'][2], analysis['bbox'][1] + bounds[1]]
+                    candidate_id = f'{frame_id}-row-{row:03d}'
+                    detail = f'{candidate_id}.png'
+                    if evidence_mode == 'full':
+                        image.crop(bbox).save(output / detail)
+                        observation['images'].append(dict(id=candidate_id, path=detail, sha256=digest(output / detail),
+                                                          frame_id=frame_id, kind='detail', bbox=bbox,
+                                                          mapping=dict(coordinate_space='native_pixels', scale=[1, 1], source_offset=bbox[:2])))
+                    group = analysis['groups'][row]
+                    native = image.crop(bbox)
+                    clean = not cursor_occluded(native, group['spacing']) and not obstruction_detected(native, analysis['bbox'][1] + group['top'] - bbox[1], group['spacing'])
+                    observation['candidates'].append(dict(id=candidate_id, frame_id=frame_id, index=row, bbox=bbox, clean=clean,
+                                                         coordinate_space='native_pixels', complete=not (analysis['partial_top'] or analysis['partial_bottom'])))
         paired = sorted(zip(observation['frames'], images), key=lambda pair: pair[0]['timestamp'])
         observation['frames'] = [f for f, _ in paired]
         images = [i for _, i in paired]
-        montage = Image.new('RGB', (640 * min(3, len(images)), 510 * math.ceil(len(images) / 3)), 'white')
-        panels = []
-        for index, (frame, image) in enumerate(zip(observation['frames'], images)):
-            scale = min(640 / image.width, 480 / image.height)
-            size = [round(image.width * scale), round(image.height * scale)]
-            montage.paste(image.resize(size), (640 * (index % 3), 30 + 510 * (index // 3)))
-            ImageDraw.Draw(montage).text((640 * (index % 3) + 5, 5 + 510 * (index // 3)), f'{frame["id"]}  {frame["timestamp"]:.6f} s', fill='black')
-            panels.append(dict(frame_id=frame['id'], scale=scale, offset=[640 * (index % 3), 30 + 510 * (index // 3)], size=size,
-                               source_bbox=[0, 0, image.width, image.height],
-                               mapping=dict(coordinate_space='comparison_pixels', scale=[size[0] / image.width, size[1] / image.height], source_offset=[0, 0], view_offset=[640 * (index % 3), 30 + 510 * (index // 3)])))
-        comparison_path = 'comparison.png' if version == 1 else f'comparison-v{version}.png'
-        montage.save(output / comparison_path)
-        observation['images'].append(dict(id='comparison', kind='comparison', path=comparison_path,
-                                          sha256=digest(output / comparison_path), panels=panels))
-        observation['intervals'] = [dict(start=a['timestamp'], end=b['timestamp']) for a, b in zip(observation['frames'], observation['frames'][1:])]
-        if not prior:
-            sampling['used']['native_frames'] += len(timestamps)
-        sampling['used']['decode_seconds'] = count['decode_elapsed']
-        count['decode_elapsed'] -= initial_decode
-        observation['sampling'] = sampling
-        observation['observation_version'] = version
-        observation['batches'] = [dict(id=f'batch-{i//2:03d}', frames=[f['id'] for f in observation['frames'][i:i+3]]) for i in range(0, max(1, len(images)-1), 2)]
-        observation['metrics'] = {**count, 'analyzed_frames': len(timestamps), 'native_images': len(images),
-                                  'detail_images': sum(i['kind'] in ('detail', 'native_detail') for i in observation['images']), 'comparison_images': 1,
-                                  'image_pixels': image_pixels(output, observation['images']),
-                                  'model_elapsed': None, 'model_tokens': None, 'thumbnail_checks': sampling['thumbnail_checks'],
-                                  'thumbnail_elapsed': sampling['thumbnail_elapsed'], 'comparison_composed_frames': len(images),
-                                  'supplement_requests': sampling['used']['requests'], 'prepare_elapsed': time.monotonic()-began,
-                                  'total_elapsed': time.monotonic()-total_began,
-                                  'native_processing_elapsed': time.monotonic()-began-count['decode_elapsed']}
-        for start, batch in zip(range(0, max(1, len(images)-1), 2), observation['batches']):
-            batch_id = f'comparison-v{version}-{batch["id"]}'
-            batch_path = f'{batch_id}.png'
-            context = Image.new('RGB', (640 * len(batch['frames']), 510), 'white')
-            context_panels = []
-            for position, panel in enumerate(panels[start:start+3]):
-                context.paste(montage.crop((panel['offset'][0], panel['offset'][1]-30,
-                    panel['offset'][0]+640, panel['offset'][1]+480)), (position*640, 0))
-                adjusted = copy.deepcopy(panel)
-                adjusted['offset'] = [position*640, 30]
-                adjusted['mapping']['view_offset'] = adjusted['offset']
-                context_panels.append(adjusted)
-            context.save(output / batch_path)
-            observation['images'].append(dict(id=batch_id, kind='batch_comparison', path=batch_path,
-                sha256=digest(output / batch_path), panels=context_panels))
-            batch['image_id'] = batch_id
-        observation['metrics']['image_pixels'] = image_pixels(output, observation['images'])
-        observation['metrics']['comparison_images'] += len(observation['batches'])
-        observation['metrics']['comparison_composed_frames'] += sum(len(b['frames']) for b in observation['batches'])
+        with stage('image_generation'):
+            montage = Image.new('RGB', (640 * min(3, len(images)), 510 * math.ceil(len(images) / 3)), 'white')
+            panels = []
+            for index, (frame, image) in enumerate(zip(observation['frames'], images)):
+                scale = min(640 / image.width, 480 / image.height)
+                size = [round(image.width * scale), round(image.height * scale)]
+                montage.paste(image.resize(size), (640 * (index % 3), 30 + 510 * (index // 3)))
+                ImageDraw.Draw(montage).text((640 * (index % 3) + 5, 5 + 510 * (index // 3)), f'{frame["id"]}  {frame["timestamp"]:.6f} s', fill='black')
+                panels.append(dict(frame_id=frame['id'], scale=scale, offset=[640 * (index % 3), 30 + 510 * (index // 3)], size=size,
+                                   source_bbox=[0, 0, image.width, image.height],
+                                   mapping=dict(coordinate_space='comparison_pixels', scale=[size[0] / image.width, size[1] / image.height], source_offset=[0, 0], view_offset=[640 * (index % 3), 30 + 510 * (index // 3)])))
+            comparison_path = 'comparison.png' if version == 1 else f'comparison-v{version}.png'
+            montage.save(output / comparison_path)
+            observation['images'].append(dict(id='comparison', kind='comparison', path=comparison_path,
+                                              sha256=digest(output / comparison_path), panels=panels))
+            observation['intervals'] = [dict(start=a['timestamp'], end=b['timestamp']) for a, b in zip(observation['frames'], observation['frames'][1:])]
+            if not prior:
+                sampling['used']['native_frames'] += len(timestamps)
+            sampling['used']['decode_seconds'] = count['decode_elapsed']
+            count['decode_elapsed'] -= initial_decode
+            observation['sampling'] = sampling
+            observation['observation_version'] = version
+            observation['batches'] = [dict(id=f'batch-{i//2:03d}', frames=[f['id'] for f in observation['frames'][i:i+3]]) for i in range(0, max(1, len(images)-1), 2)]
+            observation['metrics'] = {**count, 'analyzed_frames': len(timestamps), 'native_images': len(images),
+                                      'detail_images': sum(i['kind'] in ('detail', 'native_detail') for i in observation['images']), 'comparison_images': 1,
+                                      'image_pixels': image_pixels(output, observation['images']),
+                                      'model_elapsed': None, 'model_tokens': None, 'thumbnail_checks': sampling['thumbnail_checks'],
+                                      'thumbnail_elapsed': sampling['thumbnail_elapsed'], 'comparison_composed_frames': len(images),
+                                      'supplement_requests': sampling['used']['requests'], 'prepare_elapsed': time.monotonic()-began,
+                                      'total_elapsed': time.monotonic()-total_began,
+                                      'native_processing_elapsed': time.monotonic()-began-count['decode_elapsed']}
+            for batch in observation['batches']:
+                batch['image_id'] = 'comparison'
+            for start, batch in (zip(range(0, max(1, len(images)-1), 2), observation['batches']) if evidence_mode == 'full' else []):
+                batch_id = f'comparison-v{version}-{batch["id"]}'
+                batch_path = f'{batch_id}.png'
+                context = Image.new('RGB', (640 * len(batch['frames']), 510), 'white')
+                context_panels = []
+                for position, panel in enumerate(panels[start:start+3]):
+                    context.paste(montage.crop((panel['offset'][0], panel['offset'][1]-30,
+                        panel['offset'][0]+640, panel['offset'][1]+480)), (position*640, 0))
+                    adjusted = copy.deepcopy(panel)
+                    adjusted['offset'] = [position*640, 30]
+                    adjusted['mapping']['view_offset'] = adjusted['offset']
+                    context_panels.append(adjusted)
+                context.save(output / batch_path)
+                observation['images'].append(dict(id=batch_id, kind='batch_comparison', path=batch_path,
+                    sha256=digest(output / batch_path), panels=context_panels))
+                batch['image_id'] = batch_id
+            observation['metrics']['image_pixels'] = image_pixels(output, observation['images'])
+            observation['metrics']['comparison_images'] += sum(i['kind'] == 'batch_comparison' for i in observation['images'])
+            observation['metrics']['comparison_composed_frames'] += sum(len(i['panels']) for i in observation['images'] if i['kind'] == 'batch_comparison')
         if len(json.dumps(observation, ensure_ascii=False, indent=2, allow_nan=False).encode()) > MAX_JSON - 4096:
             raise ConversionError('sampling_budget', '观察包达到可恢复 JSON 大小上限，请保留疑点。')
         previous = load_json(output / 'task.json') if (output / 'task.json').exists() else {}
@@ -211,7 +230,14 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
         result = dict(schema_version=VERSION, task_id=task_id, observation_sha256=digest(output / 'observation.next.json'),
                       status='waiting', complete=False, phase='review', observation_version=version, rows=[], issues=[],
                       next_action='Read comparison and native detail images, then submit a visual decision.', metrics=observation['metrics'])
+        if chain:
+            result['minimum_evidence_chain_policy'] = chain
+        if policy:
+            result['script_acceptance_policy'] = policy
+            result['next_action']='Run review-plan, actually review native source clean scope and score edges, then build a mixed decision.'
         result['decision_history'] = previous.get('decision_history', [])
+        if previous.get('reviewed_frames'):
+            result['reviewed_frames'] = previous['reviewed_frames']
         write_json(output / 'sampling.next.json', sampling)
         result['sampling_sha256'] = digest(output / 'sampling.next.json')
         result['sampling_usage'] = sampling['used']
@@ -241,10 +267,13 @@ def recover_publication(task):
     journal.unlink()
 
 
-def checked_task(task):
+def checked_task(task, recover=True):
     if task.is_symlink():
         raise ConversionError('invalid_task', '任务路径非法。')
-    recover_publication(task)
+    if recover:
+        recover_publication(task)
+    elif (task / 'publication.json').exists():
+        raise ConversionError('invalid_task', '观察发布尚未完成，请先 resume。')
     state = load_json(task / 'task.json')
     observation = load_json(task / 'observation.json')
     if not isinstance(state, dict) or not isinstance(observation, dict):
@@ -259,6 +288,15 @@ def checked_task(task):
             raise ConversionError('invalid_task', '接受历史引用非法。')
         if entry.get('path') != f'accepted-{index:04d}-{entry.get("sha256")}.json' or digest(task / entry['path']) != entry['sha256']:
             raise ConversionError('source_mismatch', '接受决定历史已损坏。')
+        if 'continuity_path' in entry or 'continuity_sha256' in entry:
+            if entry.get('continuity_path') != entry['path'].replace('.json','.continuity.json') or (task / entry['continuity_path']).is_symlink() or digest(task / entry['continuity_path']) != entry.get('continuity_sha256'):
+                raise ConversionError('source_mismatch','连续证据历史已损坏。')
+        if 'acceptance_path' in entry or 'acceptance_sha256' in entry:
+            if entry.get('acceptance_path') != entry['path'].replace('.json','.acceptance.json') or (task / entry['acceptance_path']).is_symlink() or digest(task / entry['acceptance_path']) != entry.get('acceptance_sha256'):
+                raise ConversionError('source_mismatch', '接受决定的脚本依据历史已损坏。')
+        if 'audit_path' in entry or 'audit_sha256' in entry:
+            if entry.get('audit_path') != entry['path'].replace('.json','.audit.json') or (task / entry['audit_path']).is_symlink() or digest(task / entry['audit_path']) != entry.get('audit_sha256'):
+                raise ConversionError('source_mismatch', '接受决定的审计历史已损坏。')
     if digest(task / 'observation.json') != state['observation_sha256'] or observation['task_id'] != state['task_id']:
         raise ConversionError('source_mismatch', '观察包已改变。')
     for image in observation['images']:
@@ -274,10 +312,12 @@ def checked_task(task):
         raise ConversionError('invalid_request', '采样预算记录非法。')
     if digest(observation['source']['path']) != observation['source']['sha256']:
         raise ConversionError('source_mismatch', '原视频已改变。')
+    from agent_evidence_chain import enabled as chain_enabled
+    chain_enabled(state,observation)
     return state, observation
 
 
-def validate(decision, state, observation):
+def validate(decision, state, observation, task=None, content_checks=None, acceptance=None, continuity_clean=None):
     fields = {'schema_version', 'task_id', 'observation_sha256', 'decision_id', 'model', 'prompt', 'presented_images',
               'visual_review', 'complete', 'evidence', 'selected_candidates', 'unresolved'}
     version = decision.get('schema_version') if isinstance(decision, dict) else None
@@ -289,6 +329,8 @@ def validate(decision, state, observation):
         fields = fields - {'selected_candidates'} | {'segments','boundaries','coverage'}
     if not isinstance(decision, dict) or set(decision) != fields or type(version) is not int or version not in (1, 2, 3, 4):
         raise ConversionError('invalid_decision', '决定字段或版本非法。')
+    if observation.get('evidence_mode') == 'lazy' and version != 4:
+        raise ConversionError('review_required', '实验 lazy 需要 v4 显式标题、行外区域与覆盖审计，请通过 build-decision 升级。')
     if decision['task_id'] != state['task_id'] or decision['observation_sha256'] != state['observation_sha256']:
         raise ConversionError('invalid_decision', '决定不属于当前观察包。')
     if any(not isinstance(decision[k], str) or not decision[k].strip() or len(decision[k]) > 2000 for k in ('decision_id', 'evidence')):
@@ -305,15 +347,19 @@ def validate(decision, state, observation):
     if not isinstance(presented, list) or not all(isinstance(i, str) and i in known for i in presented) or len(set(presented)) != len(presented):
         raise ConversionError('invalid_decision', '图像呈交清单非法。')
     if version in (2, 3, 4):
-        if 'comparison' not in presented or any(f['id'] not in presented for f in observation['frames']):
+        if acceptance is None and ('comparison' not in presented or any(f['id'] not in presented for f in observation['frames'])):
             raise ConversionError('missing_evidence', '必须查看相邻对照图与全部原帧。')
-        if not decision['visual_review'] or not decision['complete'] or decision['unresolved']:
+        if (not decision['visual_review'] and acceptance is None) or not decision['complete'] or decision['unresolved']:
             raise ConversionError('review_required', '视觉审阅或完整性存在未决疑点。')
         if version in (3, 4):
             try:
-                return (ordered_segments if version == 4 else continuous_rows)(decision, observation, presented)[0]
+                chosen = ordered_segments(decision, observation, presented, acceptance)[0] if version == 4 else continuous_rows(decision, observation, presented)[0]
+                if observation.get('evidence_mode') == 'lazy':
+                    from agent_content import check_pairs
+                    check_pairs(task, decision, observation, content_checks, continuity_clean)
+                return chosen
             except ConversionError as error:
-                error.issues = [dict(reason=error.code, start=a['timestamp'], end=b['timestamp'],
+                error.issues = getattr(error, 'issues', None) or [dict(reason=error.code, start=a['timestamp'], end=b['timestamp'],
                                      before_image=a['id'], after_image=b['id'],
                                      before_screenshot=a['path'], after_screenshot=b['path'])
                                 for a, b in zip(observation['frames'], observation['frames'][1:])]
@@ -342,7 +388,8 @@ def validate(decision, state, observation):
 
 
 def submit(task, path):
-    state, observation = checked_task(task)
+    with stage('source_verification'):
+        state, observation = checked_task(task)
     value = load_json(path)
     batch = isinstance(value, dict) and type(value.get('schema_version')) is int and value['schema_version'] == 5
     decision = value.get('decision') if batch else value
@@ -356,8 +403,27 @@ def submit(task, path):
         if entry['decision_id'] == decision_id:
             if entry['observation_sha256'] != state['observation_sha256']:
                 raise ConversionError('invalid_decision', '旧包决定不能在新观察版本继续。')
+            if (decision.get('visual_review') is False or observation.get('minimum_evidence_chain_policy')) and digest(path) != entry['sha256']:
+                raise ConversionError('invalid_decision','重复混合提交也须使用精确已接受决定文件。')
             if load_json(task / entry['path']) != value:
                 raise ConversionError('existing_decision', '同一决定 ID 的内容不同。')
+            if decision.get('visual_review') is False or observation.get('minimum_evidence_chain_policy'):
+                reviewed_ids=value.get('reviewed_frames',[f['id'] for f in observation['frames']])
+                partial={**observation,'frames':[f for f in observation['frames'] if f['id'] in reviewed_ids]}
+                authority=None
+                if decision.get('visual_review') is False:
+                    from agent_acceptance import check
+                    saved=load_json(task/entry['acceptance_path'])
+                    authority=check(saved,value,state,partial,task)
+                continuity_clean=None
+                if observation.get('minimum_evidence_chain_policy'):
+                    from agent_evidence_chain import check as check_continuity
+                    if 'continuity_path' not in entry:
+                        raise ConversionError('review_required','接受历史缺少连续证据。')
+                    continuity_clean=check_continuity(load_json(task/entry['continuity_path']),value,state,partial)
+                validate(decision,state,partial,task,acceptance=authority,continuity_clean=continuity_clean)
+                from agent_audit import check as check_audit
+                check_audit(load_json(task/entry['audit_path']),value,state,partial,authority)
             return state
     reviewed = [f['id'] for f in observation['frames']]
     revision = None
@@ -407,7 +473,25 @@ def submit(task, path):
     allowed = {i['id'] for i in observation['images'] if i.get('frame_id') in reviewed or i['kind'] == 'comparison' or (i['kind'] == 'batch_comparison' and all(p['frame_id'] in reviewed for p in i['panels']))}
     if not isinstance(decision, dict) or any(i not in allowed for i in decision.get('presented_images', [])):
         raise ConversionError('invalid_decision', '批次不能引用未审尾部。')
-    validate(decision, state, partial)
+    acceptance_record, authority = None, None
+    if decision.get('visual_review') is False:
+        from agent_acceptance import load_for_submit
+        acceptance_record, authority = load_for_submit(path,value,state,partial,task,load_json)
+    continuity_record, continuity_clean = None, None
+    from agent_evidence_chain import enabled as chain_enabled
+    if chain_enabled(state,partial):
+        from agent_evidence_chain import load_for_submit as load_continuity
+        continuity_record,continuity_clean=load_continuity(path,value,state,partial,load_json)
+    with stage('decision_validation'):
+        content_checks = []
+        validate(decision, state, partial, task, content_checks, authority, continuity_clean)
+    if content_checks:
+        state['content_checks'] = content_checks
+    audit = None
+    if observation.get('evidence_mode') == 'lazy':
+        from agent_audit import load_for_submit
+        with stage('coverage_audit'):
+            audit = load_for_submit(path,value,state,partial,load_json,authority)
     complete = len(reviewed) == len(observation['frames'])
     staged = task / 'accepted.next.json'
     write_json(staged, value)
@@ -416,6 +500,24 @@ def submit(task, path):
                  observation_version=state['observation_version'], revision_of=revision)
     os.replace(staged, task / entry['path'])
     entry['sha256'] = record_hash
+    if continuity_record is not None:
+        entry['continuity_path']=entry['path'].replace('.json','.continuity.json')
+        if (task/entry['continuity_path']).is_symlink() or (task/(entry['continuity_path']+'.tmp')).is_symlink():
+            raise ConversionError('source_mismatch','连续证据历史路径非法。')
+        write_json(task/entry['continuity_path'],continuity_record)
+        entry['continuity_sha256']=digest(task/entry['continuity_path'])
+    if acceptance_record is not None:
+        entry['acceptance_path'] = entry['path'].replace('.json','.acceptance.json')
+        if (task / entry['acceptance_path']).is_symlink() or (task / (entry['acceptance_path']+'.tmp')).is_symlink():
+            raise ConversionError('source_mismatch','接受脚本依据路径非法。')
+        write_json(task / entry['acceptance_path'], acceptance_record)
+        entry['acceptance_sha256'] = digest(task / entry['acceptance_path'])
+    if audit is not None:
+        entry['audit_path'] = entry['path'].replace('.json','.audit.json')
+        if (task / entry['audit_path']).is_symlink() or (task / (entry['audit_path']+'.tmp')).is_symlink():
+            raise ConversionError('source_mismatch', '接受审计路径非法。')
+        write_json(task / entry['audit_path'],audit)
+        entry['audit_sha256'] = digest(task / entry['audit_path'])
     state.update(decision_history=history+[entry], reviewed_frames=reviewed, phase='accepted' if complete else 'batch_accepted',
                  complete=complete, status='waiting', issues=[] if complete else [{'reason':'unreviewed_tail','frames':[f['id'] for f in observation['frames'][len(reviewed):]]}],
                  next_action='Export to a new empty directory.' if complete else 'Review the next overlapping batch and submit the cumulative prefix.')
@@ -426,7 +528,8 @@ def submit(task, path):
 
 
 def export(task, output):
-    state, observation = checked_task(task)
+    with stage('source_verification'):
+        state, observation = checked_task(task)
     if state.get('decision_history'):
         if state.get('phase') != 'accepted' or not state.get('complete'):
             raise ConversionError('review_required', '仍有未审尾部或观察包已更新。')
@@ -434,13 +537,42 @@ def export(task, output):
         decision = record.get('decision', record)
     else:
         decision = load_json(task / 'decision.json')
-    chosen = validate(decision, state, observation)
+    authority, acceptance_record = None, None
+    if decision.get('visual_review') is False:
+        from agent_acceptance import check
+        latest = state.get('decision_history', [])[-1] if state.get('decision_history') else {}
+        if 'acceptance_path' not in latest:
+            raise ConversionError('review_required','混合决定缺少已保存脚本接受旁记录。')
+        acceptance_record = load_json(task/latest['acceptance_path'])
+        if acceptance_record.get('decision_sha256') != latest['sha256']:
+            raise ConversionError('invalid_decision','接受旁记录不属于精确保存决定。')
+        authority = check(acceptance_record,record,state,observation,task)
+    continuity_clean=None
+    from agent_evidence_chain import enabled as chain_enabled
+    if chain_enabled(state,observation):
+        from agent_evidence_chain import check as check_continuity
+        latest=state.get('decision_history',[])[-1] if state.get('decision_history') else {}
+        if 'continuity_path' not in latest:
+            raise ConversionError('review_required','缺少已接受的连续证据旁记录。')
+        continuity_clean=check_continuity(load_json(task/latest['continuity_path']),record,state,observation)
+    with stage('decision_validation'):
+        content_checks = []
+        chosen = validate(decision, state, observation, task, content_checks, authority, continuity_clean)
+    audit = None
+    if observation.get('evidence_mode') == 'lazy':
+        from agent_audit import check
+        latest = state.get('decision_history',[])[-1] if state.get('decision_history') else {}
+        if 'audit_path' not in latest:
+            raise ConversionError('review_required', '实验 lazy 缺少已接受的整曲审计记录。')
+        with stage('coverage_audit'):
+            audit = check(load_json(task/latest['audit_path']),record,state,observation,authority)
     count = metrics()
     reader = VideoReader(observation['source']['path'], observation['source'], count)
     rows, header = [], None
     try:
         for frame in observation['frames']:
-            actual, image = reader.read_record(frame['requested_timestamp'])
+            with stage('source_redecode'):
+                actual, image = reader.read_record(frame['requested_timestamp'])
             path = output / frame['path']
             image.save(path)
             if actual != {k: frame[k] for k in ('timestamp', 'pts', 'time_base')} or image.size != (frame['width'], frame['height']) or digest(path) != frame['sha256']:
@@ -465,7 +597,7 @@ def export(task, output):
             header = save_crop(output, first['path'], bbox, 'header')
             header.update(timestamp=first['timestamp'], pts=first['pts'], time_base=first['time_base'])
         if decision['schema_version'] == 4:
-            _, segment_audit, regions = ordered_segments(decision, observation, decision['presented_images'])
+            _, segment_audit, regions = ordered_segments(decision, observation, decision['presented_images'], authority)
             for index,c in enumerate(regions):
                 frame = next(f for f in observation['frames'] if f['id'] == c['frame_id'])
                 if (c['bbox'][2]-c['bbox'][0])/PRINTABLE_WIDTH_INCHES < 150:
@@ -478,9 +610,11 @@ def export(task, output):
                 blocks.extend(e for e in extras if e['segment_id']==segment['id'] and e['placement']=='before_rows')
                 blocks.extend(r for r in rows if r['segment_id']==segment['id'])
                 blocks.extend(e for e in extras if e['segment_id']==segment['id'] and e['placement']=='after_rows')
-            pages=write_pdf(output,None,blocks)
+            with stage('pdf_export'):
+                pages=write_pdf(output,None,blocks)
         else:
-            pages = write_pdf(output, header, rows)
+            with stage('pdf_export'):
+                pages = write_pdf(output, header, rows)
         try:
             revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=Path(__file__).parent, capture_output=True, text=True, check=True).stdout.strip()
         except (OSError, subprocess.SubprocessError):
@@ -498,7 +632,14 @@ def export(task, output):
             result['coverage'] = continuous_rows(decision, observation, decision['presented_images'])[1]
         else:
             result['coverage'] = {'scope': 'fixed_layout_trial', 'hidden_content_proven_absent': False}
+        if content_checks:
+            result['content_checks'] = content_checks
         result['decision_history'] = state.get('decision_history', [])
+        if acceptance_record is not None:
+            result['acceptance'] = acceptance_record
+            result['acceptance_counts']=dict(script_items=len(acceptance_record['items']),pending_script_items=0,agent_clean_regions=len(acceptance_record['native_clean_regions']))
+        if audit is not None:
+            result['score_audit'] = audit
         result['metrics']['presented_image_pixels'] = image_pixels(task, result['presented_images'])
         result['metrics']['model_elapsed'] = None
         result['metrics']['model_tokens'] = None
@@ -510,7 +651,8 @@ def export(task, output):
 
 
 def supplement(task, path):
-    state, observation = checked_task(task)
+    with stage('source_verification'):
+        state, observation = checked_task(task)
     request = load_json(path)
     timestamps = check_request(request, state, observation)
     sampling = copy.deepcopy(observation['sampling'])
@@ -537,33 +679,82 @@ def supplement(task, path):
         archive.write_bytes((task / 'observation.json').read_bytes())
     decision = task / 'decision.json'
     result = prepare(observation['source']['path'], task, origin=observation['source'].get('origin'),
-                     timestamps=timestamps, sampling=sampling, version=version+1, prior=observation)
+                     timestamps=timestamps, sampling=sampling, version=version+1, prior=observation, evidence_mode=observation.get('evidence_mode', 'full'))
     if decision.exists():
         decision.rename(task / f'decision-v{version}.json')
     write_json(task / f'request-{version+1}.json', request)
     return result
 
 
-def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS):
-    target = Path(output) if output and operation in ('prepare', 'export', 'replay') else None
+def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None, evidence_mode='full', script_acceptance=False, minimum_evidence_chain=False):
+    target = Path(output) if output and operation in ('prepare', 'export', 'replay', 'build-decision', 'review-plan') else None
+    performance = None
+    token = None
     try:
-        if operation in ('prepare', 'export', 'replay'):
+        if minimum_evidence_chain and (operation != 'prepare' or evidence_mode != 'lazy'):
+            raise ConversionError('invalid_input', '最小证据链只允许新 lazy prepare 任务。')
+        if script_acceptance and (operation != 'prepare' or evidence_mode != 'lazy'):
+            raise ConversionError('invalid_input', '脚本接受开关只允许新 lazy prepare 任务；关闭后在 full 新目录重跑。')
+        if operation == 'report' and performance_events:
+            raise ConversionError('invalid_performance', '报告重建不接收新性能事件。')
+        if operation == 'report':
+            directory = Path(task)
+            if directory.is_symlink():
+                raise ConversionError('invalid_task', '任务路径非法。')
+            embedded = retryable_acquisition(directory)
+            if not (directory / 'task.json').exists() and ((directory / 'performance.json').exists() or embedded):
+                recorder = Performance(directory, load_json, write_json, embedded=embedded)
+            else:
+                state, observation = checked_task(directory, recover=False)
+                recorder = Performance(directory, load_json, write_json)
+                recorder.metadata(observation, state)
+            report = recorder.report()
+            status = report['task_status']
+            return dict(status=status, complete=status == 'success', phase='report', performance=report)
+        if operation in ('prepare', 'export', 'replay', 'build-decision', 'review-plan'):
             if not target:
                 raise ConversionError('invalid_input', '需要新的结果目录。')
-            if operation == 'prepare' and retryable_acquisition(target):
+            retry = operation == 'prepare' and retryable_acquisition(target)
+            if retry:
+                performance = Performance(target, load_json, write_json, embedded=True)
                 (target / 'manifest.json').unlink()
             empty_output(target)
+            if operation == 'prepare':
+                performance = performance or Performance(target, load_json, write_json, embedded=bool(source and '://' in str(source)))
+        if operation != 'prepare' and task and Path(task).is_dir() and not Path(task).is_symlink():
+            performance = Performance(Path(task), load_json, write_json)
+        if performance:
+            performance.start(operation)
+            token = ACTIVE.set(performance)
+            if performance_events:
+                performance.import_events(performance_events)
         if operation == 'prepare':
             origin = None
             if source and '://' in str(source):
-                source, origin = acquire(source, target, timeout=acquisition_timeout)
-            result = prepare(source, target, origin=origin)
+                with stage('anonymous_acquisition'):
+                    source, origin = acquire(source, target, timeout=acquisition_timeout)
+            performance.embedded = False
+            performance.save()
+            result = prepare(source, target, origin=origin, evidence_mode=evidence_mode, script_acceptance=script_acceptance, minimum_evidence_chain=minimum_evidence_chain)
+        elif operation == 'materialize':
+            from agent_evidence import materialize
+            result = materialize(Path(task), decision)
+        elif operation == 'review-plan':
+            from agent_review import review_plan
+            result = review_plan(Path(task), target, decision)
+        elif operation == 'build-decision':
+            from agent_decision_builder import build
+            result = build(Path(task), decision, target)
         elif operation == 'supplement':
             result = supplement(Path(task), decision)
         elif operation == 'resume':
             result, _ = checked_task(Path(task))
         elif operation == 'submit':
             result = submit(Path(task), decision)
+        elif operation == 'confirm-delivery':
+            from agent_delivery import confirm
+            state, observation = checked_task(Path(task))
+            result = confirm(output, decision, performance, state, observation, load_json, digest)
         else:
             result = export(Path(task), target)
     except InputError as error:
@@ -577,7 +768,7 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
             result['error']['http_status'] = error.http_status
     except KeyboardInterrupt:
         result = dict(status='failed', complete=False, phase=operation, error={'code': 'interrupted', 'message': '任务已中断，请保留观察包并使用新的结果目录。'})
-    except (ConversionError, OSError, ValueError, TypeError, KeyError) as error:
+    except (ConversionError, OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError) as error:
         code = error.code if isinstance(error, ConversionError) else 'invalid_input'
         result = dict(status='waiting' if code in ('unsupported_layout', 'review_required', 'missing_evidence', 'sampling_budget') else 'failed',
                       complete=False, phase=operation, rows=[], issues=[], error={'code': code, 'message': str(error) if isinstance(error, ConversionError) else '记录或输入不可用。'})
@@ -589,6 +780,32 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
                 write_json(Path(task) / 'task.json', saved)
             except (ConversionError, OSError, ValueError, TypeError, KeyError):
                 pass
+    if performance:
+        if (performance.directory / 'observation.json').exists() and (performance.directory / 'task.json').exists():
+            try:
+                performance.metadata(load_json(performance.directory / 'observation.json'), load_json(performance.directory / 'task.json'))
+            except (ConversionError, OSError, ValueError, TypeError, KeyError):
+                pass
+        if target and result.get('status') == 'success' and operation in ('export','replay'):
+            state = load_json(performance.directory / 'task.json')
+            performance.operation['artifact'] = dict(directory=str(target.resolve()), pdf_sha256=digest(target / 'score.pdf'),
+                    observation_sha256=result['observation_sha256'], decision_sha256=state['decision_history'][-1]['sha256'] if state.get('decision_history') else digest(performance.directory / 'decision.json'))
+            with stage('delivery_publication'):
+                write_json(target / 'manifest.json', result)
+        performance.finish(result)
+        result['performance'] = performance.report()
+        if operation=='review-plan' and 'summary' in result:
+            full_report=result['performance']
+            write_json(target/'performance-report.json',full_report)
+            result['performance']={key:full_report.get(key) for key in ('wall_elapsed_seconds','wall_clock_valid','model_tokens','full_frame_analysis_attempts','native_staff_recheck_attempts','content_validation','script_operation_count')}
+            result['performance']['details_path']=str((target/'performance-report.json').resolve())
+        if performance.embedded:
+            result['performance_ledger'] = performance.data
+        if token is not None:
+            ACTIVE.reset(token)
     if target and target.exists() and result.get('error', {}).get('code') != 'existing_output':
         write_json(target / 'manifest.json', result)
+        if performance and performance.operation.get('artifact') and result['status'] == 'success':
+            performance.operation['artifact']['manifest_sha256'] = digest(target / 'manifest.json')
+            performance.save()
     return result

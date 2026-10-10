@@ -1,5 +1,66 @@
 # 验证记录
 
+2026-10-11，#43按用户决定收口当前阶段，停止标准视频遮挡恢复。最终源码验证对应3641caf，后继提交只补充文档；完整性能放行未证明的部分保留为限制。当前交付范围与验证摘要见[阶段最终版本](agents/performance-stage-final.md)，以下保留历史实验记录。
+
+## 2026-10-10 Desktop 续跑计量与新独立审阅
+
+`931b399` 的宿主计量测试 16 项通过，59.487 秒，Standards 与 Spec 各 0 finding。修复同一权威 home 的多续跑文件采集，保持不同 home 隔离、首行归属检查、实际时间选 turn、事件去重及冲突拒绝。未重复运行整个测试集；下文 163 项完整回归仍对应 `712437a`。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_host_usage.py -v
+```
+
+真实 `host_usage.py collect` 已按两个实际子线程、三个 root turn 分别成功采集。每个任务导入末段 partial scope，重复导入前后 host-usage.json 字节 hash 相同。前两段独立保存，没有修改 invocation 绑定。分段去重观察到 45/43 次模型响应、43/41 次外层工具调用、4,973,865/5,467,686 Token；完整 Token、完整工具与图像覆盖仍未知。证据在 `/home/kenqia/issue-43-resume-notes/issue45-usage-partitions-20261010/`，含原始受控事件、测试红绿、双轴报告、导入结果及 `real-partial-usage-summary.json`。
+
+两份新的标准 URL 独立审阅各有 49 原帧，实际 submit 均退出 2、保持 waiting。第一份补采 280 秒，186 个经过几何校验的必需 pair 有 91 个 uncertain；第二份补采 90 秒，保留完整性未决，其 185 pair 内容诊断有 92 个 uncertain，但该草稿诊断尚非几何资格验收。两份均保存实际图像查看记录及 12 行来源草稿，没有接受决定、PDF 分页、导出来源审核或 replay。用户消息与额度中断后续跑的时段不作为有效性能配对，#45/#51/#52 尚未放行。
+
+三份真实视频源已重新核对 SHA-256，均匹配冻结值；另外两份候选仅完成首、中、尾原图预检。恢复清单及新 hash 记录在 `/home/kenqia/issue-43-resume-notes/issue52-refrozen-sources-20261010/`。没有以预检代替整曲验收或执行 30 次成本配对。
+
+## 2026-10-10 #51 混合接受软件
+
+实现快照 `19f28a7` 完整 unittest 为 159 项，668.409 秒，全部通过。随后双轴审阅发现 gap clean 范围和 ROI 计量口径两项问题，由 `7449f2a` 修复；sources.json 持久化差异一并修正。修复后的快路径专项 10 项与性能专项 12 项通过，Standards、Spec 最终复核各 0 项未解决发现。计划规模修复随后合入 `712437a`，最终源码完整回归 163 项通过，745.659 秒，退出码 0。中断日志保留，未算作通过。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python ci/verify_agent_replay.py --output /home/kenqia/issue-43-resume-notes/issue51-review-fix-20261010/final-fixed-replay
+```
+
+最终代码 `712437a` 固定离线 CI 重放 passed，3 行、1 页，原裁剪及 export/replay PDF 字节相等，minimum effective DPI 156.996。保存决定错误版本、越界和破损图像被拒绝。
+
+两份历史 full 标准任务复制至新目录，在 `7449f2a` 下 replay 并以独立脚本核对来源、实际 PTS、灰度嵌入像素、DPI、空间顺序与分页。各 12 行、2 页，PDF 分别与原保存 export 字节相同，原任务 JSON 未变。最低 effective DPI 分别为 264.182 和 250.423。这是旧决定兼容性检查，没有新增视觉判断、呈交或交付确认。
+
+新真实 URL 两跑的源 hash、实际 PTS、48 帧和逐帧 hash 一致，各完整帧分析 48 次。修复计划规模后，各物化 48 张同帧原生 ROI，逐像素一致；此阶段观察版本 2、97 张图，仍 waiting。当时尚未完成新的独立视觉审阅、保存决定或 PDF，不计为真实放行。之后的补采与等待结果见本页最新记录。计划紧凑存储与超限等待验证见[实施状态](agents/performance-implementation-status.md)。
+
+原始日志、红绿回归、双轴报告、来源审核与重放产物分别保存于仓库外 `/home/kenqia/issue-43-resume-notes/issue51-implementation-20261010/`、`issue51-review-fix-20261010/`、`issue51-real-quality-20261010/`。完整回归日志 SHA-256 为 `3ef1f1198cd7b6d5030b4c58ea3d2cd1d1bb950a24bc8b24a0d373be26469bed`，记录路径 `/home/kenqia/issue-43-resume-notes/issue51-review-fix-20261010/unittest-final-complete.log`。显式策略边界见[实验协议](agents/script-acceptance.md)。默认 full 保持；#45 完整真实基线及 #51/#52 放行仍未完成。
+
+## 2026-10-10 真实基线资格修复
+
+`9f4e713` 收紧 `aggregate` 的真实基线资格，要求每次运行明确有效且提供非 null 墙钟耗时。公开 CLI 回归先复现无效墙钟、缺时钟标记、缺耗时及 null 耗时四个反例，再验证合法正例仍入选，提交状态和完整及观察 Token 保留。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_host_usage.py -v
+```
+
+宿主计量测试 10 项全部通过，26.115 秒。固定 `4926ee9...9f4e713` 的 Standards、Spec 两轴审阅各 0 项发现，记录在 `/home/kenqia/issue-43-resume-notes/issue45-clock-gate-fix-20261010/`。本次没有重跑整个测试集，没有新增真实视频双跑或模型调用，也没有完成 #45 基线及 #51/#52 放行。最新计量核查和兼容提案见[实施状态](agents/performance-implementation-status.md)。
+
+## 2026-10-10 隔离性能软件验证
+
+`codex/issue-43-software-experiment` 的 `6f344f0` 使用下列仓库入口完成新鲜回归，150 项全部通过，403.639 秒。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
+```
+
+覆盖按需原生证据、决定构建、疑点规划、历史判断复用、局部内容否决、精确绑定的覆盖审计、补采与修订、实际精修打印框、正常及异常时钟。旧 full 流程、来源核验、重复空间实例、DPI、分页与三个核心的依赖防火墙保持。
+
+`ci/verify_agent_replay.py --output NEW_EMPTY_OUTPUT` 在相同生产源码的 `2f9e231` 通过。固定决定输出 3 行、1 页，原生 RGB 裁剪一致，灰度 PDF 的 export/replay 字节相等。Standards、Spec 最终复核均无剩余 finding。详细快照、日志 hash、初审修复及一次时钟测试失败的诊断见 [实施状态](agents/performance-implementation-status.md#2026-10-10-隔离软件结果)。
+
+本轮没有重复真实 URL 下载或独立视觉审阅，不代表 #45 完整基线和 #51/#52 放行。模型与墙钟完整成本的原有缺口保留，不能从离线回归时间或固定决定重放声称端到端耗时、Token 降低。下文按日期保留历史验证记录。
+
+同一标准视频的本地配对入口测量已保存于 `/home/kenqia/issue-43-resume-notes/issue45-baseline-20261010/paired-summary.json`。冻结 full/prepare 与实验 lazy/prepare 都只到 waiting，分别单调耗时 41.460 秒和 32.721 秒，detail 图 770 对 0，墙钟和 model_tokens 均为 null。该结果是 prepare 层观察，不满足 #45 的完整生命周期资格。
+
+## 2026-10-08 重构基点
+
 2026-10-08，重构分支 `rewrite/minimal-moving-viewport` 从 GitHub 最新 main `0b4da0639c51bf121bfa0574e456409b643936af` 建立。正式产品只保留一个空间跟踪核心，旧恢复模块和旧像素例外测试已删除。
 
 ## 新鲜验证
@@ -245,3 +306,81 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 ```
 
 此前运行中的旧测试快照因补强 CLI 退出码和 stderr 断言而中断，不计为最终通过记录。上述全套执行期间只追加此验证文档，没有修改生产代码或测试。`git diff --check` 通过，已将最新 integration/agent-first 合入修复分支，结果为 Already up to date。
+
+### #44 生命周期计量
+
+新增 `tests/test_agent_performance.py`，从统一 CLI 检查 prepare、resume、report、submit、export 与 replay。用合成视频核对等待计入跨进程历时、重复决定保留单次接受历史、真实 CLI 重试留下不同事件、首次交付后恢复不改写交付时间，以及固定决定 PDF 重放一致。受控计时文件验证阶段重叠、相同事件去重和冲突拒绝。SIGKILL 用例在导出原生 seek 开始后中断进程，再用 resume 核对未结束事件和未知单调耗时。匿名获取夹具检查失败时仅保存 manifest，并在本地重试后保留最初提交和失败事件。墙钟回拨和操作内向前跳跃用受控 CLI 时钟验证，旧任务报告不编造提交时间。失败 prepare 在观察发布前也可重建报告；非法版本、未知字段、错误状态及超大数值账本均拒绝且不修改原记录。
+
+这些检查没有调用真实模型或访问真实 B站视频。计量字段与生命周期通过合成和受控输入验证，真实端到端基线与 Token 改善仍须另外验收。
+
+### #45 受控宿主计量
+
+`tests/test_host_usage.py` 从公开 host CLI 和统一任务 report 验证逐响应计量、失败重试、相同事件幂等导入、冲突拒绝、缺失 usage、未知字段、线程绑定、真实呈交尺寸与源像素区分、额外 PDF 图像、已认证零调用和 nearest-rank 汇总。受控 Desktop 文件含正文与工具参数哨兵，采集输出不出现这些内容；同 inode 的 sessions/archived_sessions 不重复计量，其他 turn、窗口外开发调用与无关线程排除。模型累计镜像不参加逐响应总量。source、entry、环境、模型版本和 review/replay 分组保留，controlled_fixture 不具有真实基线资格。
+
+这些都是合成视频和受控计量输入，不证明真实模型视觉质量或真实端到端提速。授权只读勘察已经找到本次 Desktop 的 `token_usage_record.usage`；失败模型调用完整账本与图像实际呈交覆盖仍未知，采集器始终输出 partial coverage。三类真实视频的完整新鲜基线与实际总 Token 降低尚未通过，不能据此开启性能快路径。
+
+
+### #43 审阅修复
+
+新增统一 CLI 负例，删除内部阶段或操作必需字段后，resume 与 report 在写入前拒绝并保留原账本字节。交付确认用合成 PDF 验证脚本导出后继续计时、实际逐页回执关闭当前范围、重复确认幂等、修订恢复计时并保留历史、旧回执与重放产物拒绝，以及缺失审核、错误 hash、空页依据和修改过的产物无法宣告完成。宿主完整成本范围必须覆盖当前确认，旧窗口与等待状态不提供完整总量。汇总成功样本要求当前交付确认，明确 fixture 审核不能作为真实基线。
+
+宿主补采回归保存旧 batch_comparison 的呈交事件，更新观察包后仍核验归档图像并累计成本，resume/report 和再次导入保持可用。新事件可绑定归档观察 hash，错包绑定不修改原宿主账本。另用四帧到五帧的同尺寸不同内容 comparison 验证，legacy 事件首次导入持久化观察 hash，后续补采和旧包重导入保留原绑定。这些测试验证软件契约，不证明真实模型视觉理解或真实性能下降。
+
+唯一图像计量补充反例覆盖同 comparison ID、不同观察绑定、相同尺寸但不同 PNG hash 的两个拼图，分别统计两张唯一图。无损合成视频另外验证同源图跨观察版本只算一张、不同实际 PTS 的源图 ID 即使 PNG hash 相同仍是两张，以及 delivery/diagnostic 同名图按来源区分。实际呈交次数和像素成本仍逐事件累计。
+
+### #44/#45 最终集成与恢复核对
+
+最终软件快照为 `d09fa9dc55d0ce5d836492116498b9a8ed991a14`。此前在该快照运行本页统一 unittest 入口，108 项测试、217.664 秒全部通过。日志保存在 `work/issue-43-context/final-tests.log`，SHA-256 为 `7732cefe17c35bebaec1d7b1b3a2a0c7449ab448cc25e5a08aaa428d10ca54b5`。同目录 `review-spec-final.md` 与 `review-standards-final.md` 对 `3c460ec..d09fa9d` 的已实施范围均无剩余 finding。早期 94 项回归及待修复记录是中间状态，最终状态以此处证据为准。
+
+2026-10-09 本次恢复仅核对既有证据，未重新运行完整回归、下载视频、实际视觉审阅或重解码原帧。现存两份独立标准样本审阅位于 `work/performance-43-20261009/standard-review-1/` 与 `standard-review-2/`。各自 `checked-source-audit.json` 记录 12 行、2 页、13 个 PDF 嵌入图块及 6 个独立重解码 PTS，最低 effective DPI 分别为 264.182 和 250.423。来源脚本没有作视觉判断，实际判断和逐页审核证据保存在原交付回执。
+
+本次逐份核对 `checked-export/score.pdf` 与 `checked-replay/score.pdf` 字节一致，导出 PDF 和 manifest 的 hash 与 `delivery-review.json` 相符。两份 PDF SHA-256 分别为 `f8c9754273fe90af9d6691d532d479413676284f6075ab3e286ab16e31500723` 和 `20bf4bf6fdb07d3d463095491fc1b9dcab2bf8fc0528255eea6cdcadf1712d5c`。两个独立决定之间不要求 PDF 字节一致。源文件完整性核对另见 `work/issue-43-resume-20261009/source-integrity.json`，两份 MP4 hash 与观察包记录一致，已保存的 48 帧实际 PTS 列表相同，没有新增解码。
+
+公开只读 `report` 的新鲜 smoke 两次均退出 0，全部任务 JSON hash 不变，当前交付确认有效。摘要为 `work/issue-43-resume-20261009/report-smoke-summary.json`，核对索引为同目录 `resume-evidence.json`。这验证现存任务的只读报告能力，不属于新一轮视觉或性能验收。
+
+宿主模式仍为 `review_only`，实际观察 Token 分别为 5,036,868 和 5,399,475，完整 `model_tokens` 均为 null。四项覆盖 `lifecycle_complete`、`model_calls_complete`、`tools_complete`、`images_complete` 均为 false。两份旧任务的 `wall_clock_valid=false`、`wall_elapsed_seconds=null`；prepare 墙钟与单调时钟分别为 58.896795 / 56.974424 秒、58.158619 / 56.198641 秒，已有账本记录 `wall_clock_discontinuity`。原因未知，账本未修改，这些任务不能进入耗时或完整成本基线。
+
+#44 本地验证完成，#45 软件完成但三类真实视频完整基线未验收，#46 至 #52 未启动，#43 未完成。GitHub 只读核对 #44 至 #52 均为 open，#46/#47 仍原生依赖 #45，没有关闭或修改工单。后续顺序提案见 [性能实施状态](agents/performance-implementation-status.md)，调整阻塞顺序仍待用户明确确认。
+
+## 离线 CI 分片与 15 分钟预算
+
+GitHub Actions 将完整 unittest discovery 按排序后的测试 ID 交替分成两个 shard，`fail-fast: false` 保留两个分片的结果。每次发现所有测试，新增测试也参与分配。任意 import error 使所有分片失败；测试失败、非法 index 和空分片都返回非零。每个分片仍限时 15 分钟，安装步骤也计入预算。
+
+```sh
+python ci/run_unittest_shard.py --index 0 --count 2 --list
+python ci/run_unittest_shard.py --index 1 --count 2 --list
+python ci/run_unittest_shard.py --index 0 --count 2
+python ci/run_unittest_shard.py --index 1 --count 2
+```
+
+两份 `--list` 的并集必须等于完整 discovery 的测试 ID，交集必须为空。固定决定 replay 独立为另一个 15 分钟 job，保留原工具安装、固定 action SHA、只读权限和有限 artifact。全量本地验证仍使用本页统一 unittest 命令。分片减少单个 job 的测试负担；实际 hosted 用时要在远端运行后确认，本地旧耗时不能证明新版 CI 稳定低于 15 分钟。
+
+## 8c117d3 标准证据链验证，2026-10-10
+
+源码冻结为 `8c117d3d4ee4ddf1d5bdb79b6dfa1eb0718706ed`，是 `931b399` 的后继。统一完整 unittest 在该提交运行 197 项，719.973 秒全部通过，wrapper 单调耗时 721.066 秒，退出码 0。运行起止提交相同，期间只补充实施状态文档，未改源码或测试。日志为 `/home/kenqia/issue-43-resume-notes/standard-evidence-chain-20261010/full-regression-8c117d3.log`，SHA-256 为 `67805161672e8bd4871f156f5f2c003ee1593edf9fc5e28587d9399e884eb2c8`；退出记录同目录 `full-regression-8c117d3.status.json`。
+
+固定决定 replay 在同一提交通过，3 行、1 页，原裁剪相等、PDF 字节一致。未知版本、越界和损坏图像保持拒绝。它只验证保存决定的执行，不代替真实内容审核。CI 分片清单为 99 / 98 项，交集为空、并集为完整 197 项；远端 CI 未运行。最终 `40e2cf5...8c117d3` 的 Standards 和 Spec 各 0 finding，汇总见同目录 `frozen-verification-8c117d3.json`。
+
+新增桥预算反例先复现大量无用短边耗尽上限，再验证只优先比较具备两个实际干净几何锚点的边。全部中间观察仍须完整，整条边的所有共同实例继续比较；第三实例没有锚点资格时，其明确内容冲突仍否决。受控光标、重复谱行、缺帧、未知遮挡、不同端点边单锚点、旁记录篡改和跨段共享 256 次预算均在完整回归内。
+
+标准 full 已新鲜交付 12 行、2 页并独立核验来源；原 `809ba23` lazy 审阅停在 waiting，3 帧定向补采后仍有 14 个关键接续缺口。`8c117d3` 的同任务质量恢复单列，不能替换原 A/B 版本或重置计时。WSL 重启和不完整宿主账本使该配对成本资格为 false，完整 Token 为 null。最新真实结果与限制以[实施状态](agents/performance-implementation-status.md)及仓库外 `standard-ab-20261010/` 为准。没有展开 30 次基准或默认启用快路径。
+
+## d37e8f4 冻结回归与后续反证，2026-10-10
+
+源码冻结 `d37e8f469ef049e061c4069ed9649d6f0dc2eb26`，统一完整 unittest 214 项全部通过，717.001 秒，wrapper 717.331 秒，退出码0。起止提交与源码、测试及 CI 文件 SHA-256 一致。日志为 `/home/kenqia/issue-43-resume-notes/standard-evidence-chain-20261010/full-regression-d37e8f4.log`，SHA-256 为 `09f4a3b7c43661bd4bb1263271439fd4c64f6ae02a531b9bfd3bace989315335`。没有将早期完整回归与后续专项拼成最终通过。
+
+同一提交的固定决定 replay、原裁剪与 PDF 字节核对及三项负例通过。最终 `40e2cf5...d37e8f4` Standards/Spec 各0 finding。CI 两分片各107项，交集为空，并集为214项；每个 job 仍限时15分钟，托管安装与运行时间尚未验证。完整汇总、退出与日志 hash 在同目录 `frozen-verification-d37e8f4.json`。
+
+新增公开 CLI 反例覆盖第三实例实际间距差、未知或存在遮挡、宽 clear 掩盖局部声明、桥第三实例累积内容差异、短五线隐藏边缘记谱、混合内容/光标理由、待审覆盖区间定位和大规模诊断摘要。阈值、256次额外桥预算、全部覆盖与空间身份检查不变；打印仍使用单个真实原裁剪。合成验证与软件审阅不替代标准真实12行2页PDF及可比较实际成本。最新同任务质量恢复见实施状态和仓库外 `standard-ab-20261010/`。
+
+此后针对实际污染端的组合反例发现新 P1。`2-D` 的 spacing 12.125及12.09375均被光标理由掩盖，错误ready；规划窗口高度144变145，但污染端mask为null，旧shape分支未阻止放行。记录为同目录 `combined-cursor-alignment-target-d37e8f4.json` 与 `review-spec-combined-cursor-alignment-d37e8f4.md`。因此本节214项通过仅说明既有测试范围，不构成该版本最终安全通过。修复后须在新冻结提交重跑完整入口、固定replay及分片清单。
+
+## 3641caf 组合对齐修复验证，2026-10-10
+
+冻结提交 `3641caf7b1b049dd8bba183d2d2fd923f3076953` 独立核查原帧宽度、由spacing计算的原生窗口高度与原有 .1间距限制。污染端mask为null也不能以cursor理由解除错配，endpoint_reasons仍保存实际原理由。新增公开CLI反例分别验证12.125与12.09375，保留两个干净锚点仍waiting；合法光标替代、导出及重放继续通过。受控1280/1279宽度反例也返回不可替代alignment。
+
+在该提交重新运行本页统一完整unittest入口，215项全部通过，768.771秒，wrapper769.382498秒，退出0。起止提交及源码、测试和CI文件校验值一致。日志为 `/home/kenqia/issue-43-resume-notes/standard-evidence-chain-20261010/full-regression-3641caf.log`，SHA-256为 `8c1742f3a0d8a55bf2b3f3888361c40fc5459c515e963fdec2350c32ce0e06bb`。固定replay在同提交通过，3行1页、原裁剪及PDF字节一致，三个来源/边界/版本负例拒绝。未将d37完整回归与新专项拼成最终结果。
+
+最终40e2cf5...3641caf的Standards与Spec复审各0 finding。分片108/107，交集为空、并集为全部215项，每个job仍限时15分钟；远端CI未运行，安装与托管执行预算未知。完整记录为同目录 `frozen-verification-3641caf.json`。真实标准样本的污染声明、内容及交付结果另行验收，软件通过不表示新版12行2页PDF或完整成本达标。
+
+同提交的真实标准任务在实际原生范围复核及三组独立五线修订后，公开build仍waiting，22.795341秒、退出2。关键区间33、已有替代17，保留10个存在遮挡和3个未知遮挡范围。frame-030/031的右上水印真实跨记谱，补锚点不能解除当前必需旧对应的硬阻塞。没有补采、接受或新版PDF；详细前后变化、实际比较计量和原裁剪来源在 `/home/kenqia/issue-43-resume-notes/standard-ab-20261010/lazy-1/quality-recovery-3641caf/handoff.md`。旧full的12行2页交付保留，完整A/B成本配对仍无资格，完整Token=null，#52不展开。

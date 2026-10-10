@@ -28,7 +28,7 @@ uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/
 
 任务与导出结果使用不同目录。只在决定接受且无未决区间后 export。检查 stdout JSON 的 status 和结果目录的 manifest.json。
 
-- `success`：检查 complete 为 true，逐页查看 score.pdf，交付 PDF 和 manifest。核对标题、速度、拍号、细小记号与首尾。每条 row 的 original_image 必须与 source_frame 的 bbox 精确一致；image 仅转灰度。timestamp 是实际源 PTS，global_y 与 index 给出空间顺序。
+- `success`：检查 complete 为 true，逐页查看 score.pdf，完成下文实际交付确认后交付 PDF 和 manifest。核对标题、速度、拍号、细小记号与首尾。每条 row 的 original_image 必须与 source_frame 的 bbox 精确一致；image 仅转灰度。timestamp 是实际源 PTS，global_y 与 index 给出空间顺序。
 - `waiting`：展示 issues 的 reason、timestamp 与 screenshot。没有完整干净观察或可靠空间接续时不得称为完整。可用 resume 查看已保存进度，再补采或按协议修订；证据不足时说明所需更好的视频。
 - `failed`：说明 error.code 和 error.message。不得输出后端原始异常、签名媒体地址或认证信息。
 
@@ -39,6 +39,18 @@ uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/
 谱行需达到 150 effective DPI；高 DPI 仍需逐页核对。任意遮挡、比例变化、倒退、快速滚动或缺乏重叠可能返回等待。用 supplement 获取有界局部原帧，用 resume 恢复任务；导出或代码回滚始终用新结果目录。
 
 获取默认限时 1800 秒，可用 `--acquisition-timeout` 缩短；原生解码累计最多 600 秒，导航解码另限 90 秒，单次最多 60 秒。可捕获中断清理解码临时文件，已有证据保留。完整仓库的 docs/architecture.md 记录架构和安全边界，docs/verification.md 记录本轮真实验收。
+
+## 实际交付与计量结束
+
+export 的 success 表示脚本完成输出。性能状态仍为 waiting，总墙钟时间继续包含逐页 PDF 审核、修订和补采。实际查看每一页并完成上文来源、整曲和符号检查后，由 Agent 写独立审核回执，用户无需填写 JSON。
+
+```sh
+uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/requirements.txt /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py --operation confirm-delivery --task /absolute/path/to/new-task --output /absolute/path/to/new-result --decision /absolute/path/to/delivery-review.json
+```
+
+回执格式见 docs/agents/agent-workflow.md 的实际交付确认节。绑定当前 task、lifecycle、观察包、最新接受记录、PDF 与 manifest 的 SHA256；每一页记录实际审核的正面 evidence，并在实际检查通过后填写 source_manifest_verified=true 和 complete_score_verified=true。reviewer.kind=agent，id 使用实际审阅线程 ID。不能把生成或重放 PDF 当作已实际审阅，也不能填入虚构依据。
+
+确认通过后，performance.delivery_confirmed=true，delivered_at 是当前版本端到端终点。首次确认历史和当前确认分开保存；修订或补采会撤销当前确认，需要对新导出重新实际审核。相同回执重复确认幂等，重放不会自动关闭计时。回执是实际审核调用方的声明，脚本核对来源绑定，不证明模型已经理解整页。
 
 ## 原帧审阅要求
 
@@ -63,3 +75,29 @@ Agent-first 的长视频 prepare 用低分辨率变化导航生成重叠观察�
 ## 回滚
 
 当前 moving viewport 路径可显式使用 --operation convert。完整回滚在独立 checkout 使用旧稳定提交 23ec65459807bed7a51f3fa0f1e9c08b51cc63dc 和新的结果目录。已有 Agent 任务及历史保留，不自动迁移或交给旧代码继续运行。源视频中的静态蓝色记号仅保留并转灰度，不能断言它来自作者配色或应用选择，更不能宣称已还原。
+
+
+## 显式实验模式
+
+只有用户要求实验路径时使用 `prepare --evidence-mode lazy`。先读仓库 `docs/agents/lazy-evidence.md`，按当前任务、观察 hash、实际 PTS 和原帧来源请求 `materialize`，取得真实原生细节。默认 full/prepare 保留。
+
+需要从几何建议和必要修正构建决定时，读 `docs/agents/decision-building.md` 后调用 `build-decision`。脚本建议保持未确认，Agent 根据实际原图、细节和相邻接续填写确认；waiting 草稿先解除疑点，成功草稿再走原有 submit/export/replay。补采与物化改变观察 hash 时按新绑定显式修订，保留历史。
+
+需要定位疑点、生成 ROI/补采请求或显式沿用未改的历史判断时，读 `docs/agents/review-plan.md` 后调用 `review-plan` 或构建器的历史复用入口。lazy 接续出现 content conflict/uncertain 时，读 `docs/agents/content-checks.md`，仅在全部必需对应具备可靠证据后继续；污染原帧不能仅凭新增干净帧放行。
+
+提交 lazy 决定前，读 `docs/agents/coverage-audit.md`，填写逐项原生核查并使用 v4 图块。`audit.json` 必须与构建决定同目录且绑定其精确文件 hash；v5 修订同样需要新绑定审计。导航限额风险仅按文档的实际补采和逐 gap 核查入口解除。
+
+这些能力尚未完成真实视频性能放行，只有下文显式混合任务可使用脚本普通行依据，不能声称已降低总 Token。保留全部原生视觉门禁、真实成本未知字段和实际逐页交付确认。回退到冻结提交 `d09fa9d` 时使用新目录，保留实验任务证据。
+
+
+### 已授权的混合接受实验
+
+用户明确要求该实验时，只在新 `prepare --evidence-mode lazy` 任务加 `--script-acceptance`。先读仓库 `docs/agents/script-acceptance.md`。Agent 实际查看完整同帧原生源 ROI 后填写有限 native_clean_regions，并保留首尾、标题、速度、拍号与行外符号核查。脚本只能重算普通内部行边界、完整五线几何和可靠 gap，不能证明任意遮挡不存在。混合决定保持 visual_review=false，acceptance.json 与精确决定同目录；submit/export/replay 都重算，历史修订重绑。不要把脚本读图列为实际呈交，真实自动接受支持范围仍为空。
+
+### 最小内容证据链
+
+用户明确要求时，只在新 `prepare --evidence-mode lazy` 任务加 `--minimum-evidence-chain`。先读仓库 `docs/agents/content-checks.md` 和 `docs/agents/review-plan.md`。旧任务不能迁移，默认 full 不变。原生清晰区域仍由 Agent 实际查看后填写，不自动声明 clean。
+
+每个区间须有同一端点边的两个独立、有序且几何已通过的内容锚点。桥检查全部端点共同实例；中间帧、空间实例、首尾、行外符号和逐区间审计全部保留。任何明确内容冲突仍否决；未知遮挡、partial、缺原生区域或缺覆盖审计仍等待。不要因为一端有光标，忽略另一端的硬缺口；检测到光标的端点必须实际记录 present，不能填 clear 绕过门禁。
+
+`review-plan` 返回短摘要与完整证据文件路径。可用当前绑定的 build 请求生成按必要缺口合并的局部补采建议，执行后重建新版本请求。`continuity.json` 与构建决定同目录，绑定其精确 hash 和实际原生核查；submit/export/replay 重算。不能将两个锚点当作任意遮挡不存在、唯一位移或未采样隐藏内容不存在的证明。标准真实 A/B 与性能放行须另验收。

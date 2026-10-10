@@ -2,6 +2,10 @@
 
 默认操作为 prepare，返回 waiting 并保存观察包，Agent 完成审阅、submit 和 export 后才生成 PDF。显式 --operation convert 保留 moving viewport 路径。v1/v2 保留固定白底多行谱面试验，v3 支持有可靠重叠的连续长谱，v4 支持可确认接续的顺序换页。观察包的 `fixed_layout_only=false` 表示可提交这些协议，并不放宽各协议的支持范围。v1/v2 仍限固定谱面。观察包用变化导航提出原帧，并保留首尾；不能证明采样之间没有短暂换谱。Agent 必须检查完整性，存在疑点时不能标记 complete。
 
+显式实验的 `lazy/materialize` 读取 [惰性证据](lazy-evidence.md)，构建决定读取 [决定构建](decision-building.md)，按疑点规划或沿用未改的实际判断读取 [疑点审阅](review-plan.md)。lazy 接续的内容门禁与恢复限制读取 [内容检查](content-checks.md)。这些入口仍要求实际原帧和原生细节审阅，自动接受尚未启用。
+
+lazy 提交另要求 v4 图块和当前决定文件旁的 `audit.json`，标题、速度、拍号、行外区域及覆盖逐项核查见 [覆盖审计](coverage-audit.md)。本文件下述旧协议说明仍适用于 full；lazy 直接提交 v1/v2/v3 会等待，构建器可把连续 v3 proposal 包装为单段 v4。
+
 ## 操作
 
 所有操作调用同一 `convert.py`，使用仓库已有 uv 环境。
@@ -150,3 +154,63 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 本地视频和 BV 链接省略 --operation 时等同 prepare。任务目录存放观察、决定与历史；export/replay 使用另一个新空结果目录。没有图像访问能力或还有未决区间时保留 waiting，不能自动转为旧转换。真实双份独立视觉审阅与来源验证已完成，记录见 ../verification.md 的 #41 实验。
 
 恢复任务使用 resume；修改观察用 supplement 后重新审阅，修改接受决定用显式修订。完整产品回滚在独立 checkout 使用旧稳定提交 23ec65459807bed7a51f3fa0f1e9c08b51cc63dc，写到新的结果目录。旧任务与历史保留，不自动迁移。当前版本的旧转换入口可显式调用 --operation convert。
+
+## 任务性能报告，#44
+
+Agent-first 的每次 CLI 操作返回 `performance`。任务目录的 `performance.json` 保存提交时间、操作开始与结束，以及单调时钟测得的阶段耗时。`prepare` 的起点在匿名获取之前；`export` 记录脚本导出时刻 `exported_at`。完成实际逐页 PDF 审核和来源、整曲检查后，`confirm-delivery` 才记录当前版本的 `delivered_at`。跨进程墙钟历时包含操作间的等待，不等于阶段耗时之和。接受决定、导出和重放的性能状态都保持 waiting，直到当前版本交付审核确认。原 export 返回的 success/complete 仍表示脚本执行成功，不代表实际交付审核已经完成。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation report --task /absolute/task
+```
+
+`report` 核对既有任务后重建报告，不增加操作事件，也不写任务。prepare 在观察包发布前失败时，它仍可读取已保存的失败性能账本；匿名获取失败也可从嵌入 manifest 的账本重建。观察发布中断时须先 resume，report 不替任务完成发布。旧任务没有提交时间时返回 null，不推测历史耗时。墙钟回拨保留异常记录，总历时返回 null。进程中断留下的 running 事件，在下次操作时改记 interrupted；该进程没有保存的单调耗时仍为 null。
+
+匿名获取失败只保存 `manifest.json`，性能账本嵌入其中。原目录重试成功后迁入 `performance.json`，保留失败成本和最早提交时间。存在视频或观察证据的中断任务沿用原恢复约定，不能靠性能账本恢复未发布的观察包。已有结果目录的拒绝不修改原账本。
+
+脚本记录匿名获取、导航、原生解码、完整帧分析、图像生成、决定验证、来源核验、PDF 导出及交付发布阶段。报告保留当前观察的 metrics、采样预算与来源信息；操作自身的 metrics 单列。`script_operation_count` 是实际执行的 CLI 操作数，重复提交会增加一次实际操作，但不会增加接受历史。它不是宿主工具调用数。seek 和分析尝试数来自脚本阶段事件，失败和中断尝试也保留。
+
+宿主可通过 `--performance-events /absolute/events.json` 提供受控计时事件，和 `resume`、`submit` 等操作一并导入。文件限 1 MiB，字段严格限定如下。
+
+```json
+{
+  "schema_version": 1,
+  "lifecycle_id": "报告中的 lifecycle_id",
+  "source": {"kind": "host", "id": "host-timing-1"},
+  "events": [
+    {
+      "event_id": "review-call-1",
+      "name": "agent_review",
+      "started_at": 1791500000.0,
+      "ended_at": 1791500002.0,
+      "elapsed_seconds": 2.0,
+      "status": "complete"
+    }
+  ]
+}
+```
+
+`source.kind` 为 host 或 controlled_fixture。后者用于离线测试，不能当作真实模型计量。`elapsed_seconds` 是调用方提供的单调耗时，时间戳使用 Unix 秒。事件名限 agent_review、model_queue、user_pause、decision_building；状态限 complete、failed、waiting。阶段允许重叠，相同 ID 与内容重复导入不记第二次成本，同 ID 内容变化会拒绝整批。独立调用须使用不同 ID。宿主事件不能填写脚本计数、宣告交付或覆盖脚本事件，`report` 不接收新事件。
+
+模型 Token、模型耗时、宿主工具调用数和实际图像呈交数没有可信来源时保留 null。决定声明的 presented_images 和生成图像数量仍保留原口径，不能替代实际呈交事件。审阅、排队、用户暂停与主动执行总耗时无法完整拆分时也为 null。这里的脚本计时不证明模型看清了谱面，也不证明总 Token 已降低。显式 `--operation convert` 继续使用旧报告口径。
+
+宿主实际 Token、工具和图像呈交使用独立 [计量适配器](host-usage.md)。`host_usage.py collect` 只读明确 invocation 的授权会话元数据，`import` 验证任务绑定并保存幂等账本，`aggregate` 按入口、真实审阅与重放分组。统一 report 的 `host_usage` 区分已观察实际量、完整实际量和缺失来源；Desktop partial 采集不能冒充完整视频基线。
+
+
+## 实际交付确认
+
+先按技能要求实际逐页查看 PDF，核对整曲完整性、行序、边界、标题和源图裁剪。完成后提交独立审核回执，原决定协议不变。回执是审核调用方的正面声明；脚本核对绑定和导出证据，不证明模型理解了每个图像区域，也不能防止调用方故意提交虚假声明。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation confirm-delivery --task /absolute/task --output /absolute/export --decision /absolute/delivery-review.json
+```
+
+回执字段严格限定为 schema_version=1、review_id、task_id、lifecycle_id、observation_sha256、decision_sha256、pdf_sha256、manifest_sha256、reviewer、source_manifest_verified、complete_score_verified、pages。task 与 lifecycle 来自当前任务和性能账本；observation_sha256 必须为当前观察包，decision_sha256 必须为最新接受历史记录的 sha256。PDF 和 manifest 使用导出目录实际文件的 SHA256。reviewer 仅含 kind 和 id，kind 为 agent、human 或 controlled_fixture；Agent 使用实际审阅线程 ID，未知模型精确版本仍为 unknown。
+
+两个 verified 字段只有实际检查通过后才能为 true。pages 必须按 1 至 page_count 顺序覆盖全部页，每项仅含 page 和非空 evidence，具体说明实际看到的完整谱行、边界和分页。空页审核、缺失正面检查、旧决定、旧观察包、修改后的 PDF/manifest、同 review_id 不同内容及单独重放产物均拒绝。回执必须绑定同一任务记录中的真实 export 产物。
+
+同回执重复确认不增加审核历史，也不重设确认时刻；实际 CLI 操作成本仍单列。修订或补采改变任务版本时撤销当前确认，`delivered_at` 变为 null，总墙钟时间继续从最早提交计算，直到修订版本重新导出并实际审核确认。`first_deliverable_at` 保留首次审核确认的历史时刻，不能作为当前版本终点。delivery_history 保存各次实际审核回执、产物目录和确认时刻。replay 记录执行成本，不自动补写确认。旧计量记录中的脚本成功不能替代实际审核回执。
+
+
+## 显式混合接受
+
+新 lazy prepare 可加 `--script-acceptance` 固定实验策略。普通内部行与 gap 的脚本依据、Agent 原生 clean 核查、acceptance.json 的精确绑定、提交和重放见[混合接受实验](script-acceptance.md)。未启用开关的任务保持完整视觉门禁；真实自动接受支持仍为空。
