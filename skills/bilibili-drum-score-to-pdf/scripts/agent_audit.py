@@ -34,7 +34,7 @@ def wrap_continuous(structure, frames, review):
     return dict(schema_version=4, segments=[segment], boundaries=[], coverage=structure['coverage'])
 
 
-def inspect(decision, packet, review):
+def inspect(decision, packet, review, acceptance=None):
     require(decision['schema_version'] == 4, '实验整曲审计只支持显式 v4 原生图块。')
     issues = []
     def pending(reason, **where):
@@ -80,7 +80,7 @@ def inspect(decision, packet, review):
         pending('segment_audit_required')
     else:
         require([s.get('id') for s in review['segments'] if isinstance(s,dict)] == [s['id'] for s in segments])
-    for segment, audit in zip(segments, review['segments']):
+    for segment_index, (segment, audit) in enumerate(zip(segments, review['segments'])):
         require(isinstance(audit, dict) and set(audit) == {'id', 'checks', 'first_edge', 'last_edge'})
         require(isinstance(audit['checks'], dict) and set(audit['checks']) == set(CHECKS))
         for name, check in audit['checks'].items():
@@ -104,7 +104,8 @@ def inspect(decision, packet, review):
                 candidate = ({k:v for k,v in raw.items() if k not in ('instance_id','observation_id')}
                              if target['kind'] == 'row' else raw)
                 try:
-                    selected.extend(native_rows({'rows':[candidate]}, packet, presented))
+                    authority = (acceptance or {}).get(('segments',segment_index,'rows',target['index'])) if target['kind']=='row' else None
+                    selected.extend(native_rows({'rows':[candidate]}, packet, presented, {0:authority} if authority else None))
                 except ConversionError as error:
                     if error.code not in ('review_required','missing_evidence'):
                         raise
@@ -128,10 +129,16 @@ def inspect(decision, packet, review):
         pending('interval_audit_required')
     else:
         require([(i.get('from_frame'),i.get('to_frame')) for i in review['intervals'] if isinstance(i,dict)] == [(a['id'],b['id']) for a,b in pairs])
-    for interval, (a,b) in zip(review['intervals'],pairs):
+    for interval_index, (interval, (a,b)) in enumerate(zip(review['intervals'],pairs)):
         require(isinstance(interval, dict) and set(interval) == {'from_frame','to_frame','status','regions','evidence'}
-                and interval['status'] in ('checked','pending'))
+                and interval['status'] in ('checked','pending','script'))
         text(interval['evidence'])
+        authority = (acceptance or {}).get(('segments',0,'transitions',interval_index))
+        if interval['status'] == 'script':
+            require(interval['regions'] == [], '普通 gap 脚本依据不能冒充呈交图像。')
+            if authority is None:
+                pending('unresolved_script_interval',start=a['timestamp'],end=b['timestamp'])
+            continue
         native = regions(interval['regions'], interval['status'] == 'checked')
         require(all(r['frame_id'] in (a['id'],b['id']) for r in native))
         if interval['status'] != 'checked' or {r['frame_id'] for r in native} != {a['id'],b['id']}:
@@ -182,13 +189,13 @@ def bind(value, state, audit):
                 decision_sha256=decision_hash(value), **audit)
 
 
-def check(record, value, state, packet):
+def check(record, value, state, packet, acceptance=None):
     require(isinstance(record, dict) and set(record) == {'schema_version','task_id','observation_sha256','decision_sha256','review','coverage','source_regions'}
             and type(record['schema_version']) is int and record['schema_version'] == 1, '审计记录字段或版本非法。')
     require(record['task_id'] == state['task_id'] and record['observation_sha256'] == state['observation_sha256']
             and record['decision_sha256'] == decision_hash(value), '审计不属于当前任务、观察包或精确决定。')
     decision = value.get('decision',value)
-    rebuilt, issues = inspect(decision, packet, record['review'])
+    rebuilt, issues = inspect(decision, packet, record['review'], acceptance)
     require(record == bind(value,state,rebuilt), '审计计算结果或来源记录已改变。')
     if issues:
         error = ConversionError('review_required', '整曲边界、标题或行外区域审计仍有未决事项。')
@@ -197,11 +204,11 @@ def check(record, value, state, packet):
     return record
 
 
-def load_for_submit(path, value, state, packet, load):
+def load_for_submit(path, value, state, packet, load, acceptance=None):
     from agent_workflow import digest
     target = Path(path).parent / 'audit.json'
     if not target.exists():
         raise ConversionError('review_required', '实验 lazy 缺少绑定当前决定的 audit.json，请通过 build-decision 完成原生核查。')
     record = load(target)
     require(record.get('decision_sha256') == digest(path), '审计须绑定构建决定文件的精确 hash，不能替换或重新序列化。')
-    return check(record,value,state,packet)
+    return check(record,value,state,packet,acceptance)

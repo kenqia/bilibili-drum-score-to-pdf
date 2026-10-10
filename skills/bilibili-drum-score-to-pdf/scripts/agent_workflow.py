@@ -83,7 +83,7 @@ def image_pixels(output, images):
     return total
 
 
-def prepare(source, output, origin=None, timestamps=None, sampling=None, version=1, prior=None, evidence_mode='full'):
+def prepare(source, output, origin=None, timestamps=None, sampling=None, version=1, prior=None, evidence_mode='full', script_acceptance=False):
     total_began = time.monotonic()
     source = Path(source).resolve()
     with stage('source_verification'):
@@ -95,6 +95,9 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
     observation = dict(schema_version=VERSION, task_id=task_id, source=dict(path=str(source), sha256=source_hash, **metadata),
                        frames=[], images=[], candidates=[], intervals=[], coordinate_space='native_pixels',
                        fixed_layout_only=False, evidence_mode=evidence_mode)
+    policy = prior.get('script_acceptance_policy') if prior else ('continuous_clean_v1' if script_acceptance else None)
+    if policy:
+        observation['script_acceptance_policy'] = policy
     if origin:
         observation['source']['origin'] = origin
     if timestamps is None:
@@ -223,6 +226,9 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
         result = dict(schema_version=VERSION, task_id=task_id, observation_sha256=digest(output / 'observation.next.json'),
                       status='waiting', complete=False, phase='review', observation_version=version, rows=[], issues=[],
                       next_action='Read comparison and native detail images, then submit a visual decision.', metrics=observation['metrics'])
+        if policy:
+            result['script_acceptance_policy'] = policy
+            result['next_action']='Run review-plan, actually review native source clean scope and score edges, then build a mixed decision.'
         result['decision_history'] = previous.get('decision_history', [])
         if previous.get('reviewed_frames'):
             result['reviewed_frames'] = previous['reviewed_frames']
@@ -276,6 +282,9 @@ def checked_task(task, recover=True):
             raise ConversionError('invalid_task', '接受历史引用非法。')
         if entry.get('path') != f'accepted-{index:04d}-{entry.get("sha256")}.json' or digest(task / entry['path']) != entry['sha256']:
             raise ConversionError('source_mismatch', '接受决定历史已损坏。')
+        if 'acceptance_path' in entry or 'acceptance_sha256' in entry:
+            if entry.get('acceptance_path') != entry['path'].replace('.json','.acceptance.json') or (task / entry['acceptance_path']).is_symlink() or digest(task / entry['acceptance_path']) != entry.get('acceptance_sha256'):
+                raise ConversionError('source_mismatch', '接受决定的脚本依据历史已损坏。')
         if 'audit_path' in entry or 'audit_sha256' in entry:
             if entry.get('audit_path') != entry['path'].replace('.json','.audit.json') or (task / entry['audit_path']).is_symlink() or digest(task / entry['audit_path']) != entry.get('audit_sha256'):
                 raise ConversionError('source_mismatch', '接受决定的审计历史已损坏。')
@@ -297,7 +306,7 @@ def checked_task(task, recover=True):
     return state, observation
 
 
-def validate(decision, state, observation, task=None, content_checks=None):
+def validate(decision, state, observation, task=None, content_checks=None, acceptance=None):
     fields = {'schema_version', 'task_id', 'observation_sha256', 'decision_id', 'model', 'prompt', 'presented_images',
               'visual_review', 'complete', 'evidence', 'selected_candidates', 'unresolved'}
     version = decision.get('schema_version') if isinstance(decision, dict) else None
@@ -327,13 +336,13 @@ def validate(decision, state, observation, task=None, content_checks=None):
     if not isinstance(presented, list) or not all(isinstance(i, str) and i in known for i in presented) or len(set(presented)) != len(presented):
         raise ConversionError('invalid_decision', '图像呈交清单非法。')
     if version in (2, 3, 4):
-        if 'comparison' not in presented or any(f['id'] not in presented for f in observation['frames']):
+        if acceptance is None and ('comparison' not in presented or any(f['id'] not in presented for f in observation['frames'])):
             raise ConversionError('missing_evidence', '必须查看相邻对照图与全部原帧。')
-        if not decision['visual_review'] or not decision['complete'] or decision['unresolved']:
+        if (not decision['visual_review'] and acceptance is None) or not decision['complete'] or decision['unresolved']:
             raise ConversionError('review_required', '视觉审阅或完整性存在未决疑点。')
         if version in (3, 4):
             try:
-                chosen = (ordered_segments if version == 4 else continuous_rows)(decision, observation, presented)[0]
+                chosen = ordered_segments(decision, observation, presented, acceptance)[0] if version == 4 else continuous_rows(decision, observation, presented)[0]
                 if observation.get('evidence_mode') == 'lazy':
                     from agent_content import check_pairs
                     check_pairs(task, decision, observation, content_checks)
@@ -383,8 +392,19 @@ def submit(task, path):
         if entry['decision_id'] == decision_id:
             if entry['observation_sha256'] != state['observation_sha256']:
                 raise ConversionError('invalid_decision', '旧包决定不能在新观察版本继续。')
+            if decision.get('visual_review') is False and digest(path) != entry['sha256']:
+                raise ConversionError('invalid_decision','重复混合提交也须使用精确已接受决定文件。')
             if load_json(task / entry['path']) != value:
                 raise ConversionError('existing_decision', '同一决定 ID 的内容不同。')
+            if decision.get('visual_review') is False:
+                from agent_acceptance import check
+                reviewed_ids=value.get('reviewed_frames',[f['id'] for f in observation['frames']])
+                partial={**observation,'frames':[f for f in observation['frames'] if f['id'] in reviewed_ids]}
+                saved=load_json(task/entry['acceptance_path'])
+                authority=check(saved,value,state,partial,task)
+                validate(decision,state,partial,task,acceptance=authority)
+                from agent_audit import check as check_audit
+                check_audit(load_json(task/entry['audit_path']),value,state,partial,authority)
             return state
     reviewed = [f['id'] for f in observation['frames']]
     revision = None
@@ -434,16 +454,20 @@ def submit(task, path):
     allowed = {i['id'] for i in observation['images'] if i.get('frame_id') in reviewed or i['kind'] == 'comparison' or (i['kind'] == 'batch_comparison' and all(p['frame_id'] in reviewed for p in i['panels']))}
     if not isinstance(decision, dict) or any(i not in allowed for i in decision.get('presented_images', [])):
         raise ConversionError('invalid_decision', '批次不能引用未审尾部。')
+    acceptance_record, authority = None, None
+    if decision.get('visual_review') is False:
+        from agent_acceptance import load_for_submit
+        acceptance_record, authority = load_for_submit(path,value,state,partial,task,load_json)
     with stage('decision_validation'):
         content_checks = []
-        validate(decision, state, partial, task, content_checks)
+        validate(decision, state, partial, task, content_checks, authority)
     if content_checks:
         state['content_checks'] = content_checks
     audit = None
     if observation.get('evidence_mode') == 'lazy':
         from agent_audit import load_for_submit
         with stage('coverage_audit'):
-            audit = load_for_submit(path,value,state,partial,load_json)
+            audit = load_for_submit(path,value,state,partial,load_json,authority)
     complete = len(reviewed) == len(observation['frames'])
     staged = task / 'accepted.next.json'
     write_json(staged, value)
@@ -452,6 +476,12 @@ def submit(task, path):
                  observation_version=state['observation_version'], revision_of=revision)
     os.replace(staged, task / entry['path'])
     entry['sha256'] = record_hash
+    if acceptance_record is not None:
+        entry['acceptance_path'] = entry['path'].replace('.json','.acceptance.json')
+        if (task / entry['acceptance_path']).is_symlink() or (task / (entry['acceptance_path']+'.tmp')).is_symlink():
+            raise ConversionError('source_mismatch','接受脚本依据路径非法。')
+        write_json(task / entry['acceptance_path'], acceptance_record)
+        entry['acceptance_sha256'] = digest(task / entry['acceptance_path'])
     if audit is not None:
         entry['audit_path'] = entry['path'].replace('.json','.audit.json')
         if (task / entry['audit_path']).is_symlink() or (task / (entry['audit_path']+'.tmp')).is_symlink():
@@ -477,9 +507,19 @@ def export(task, output):
         decision = record.get('decision', record)
     else:
         decision = load_json(task / 'decision.json')
+    authority, acceptance_record = None, None
+    if decision.get('visual_review') is False:
+        from agent_acceptance import check
+        latest = state.get('decision_history', [])[-1] if state.get('decision_history') else {}
+        if 'acceptance_path' not in latest:
+            raise ConversionError('review_required','混合决定缺少已保存脚本接受旁记录。')
+        acceptance_record = load_json(task/latest['acceptance_path'])
+        if acceptance_record.get('decision_sha256') != latest['sha256']:
+            raise ConversionError('invalid_decision','接受旁记录不属于精确保存决定。')
+        authority = check(acceptance_record,record,state,observation,task)
     with stage('decision_validation'):
         content_checks = []
-        chosen = validate(decision, state, observation, task, content_checks)
+        chosen = validate(decision, state, observation, task, content_checks, authority)
     audit = None
     if observation.get('evidence_mode') == 'lazy':
         from agent_audit import check
@@ -487,7 +527,7 @@ def export(task, output):
         if 'audit_path' not in latest:
             raise ConversionError('review_required', '实验 lazy 缺少已接受的整曲审计记录。')
         with stage('coverage_audit'):
-            audit = check(load_json(task/latest['audit_path']),record,state,observation)
+            audit = check(load_json(task/latest['audit_path']),record,state,observation,authority)
     count = metrics()
     reader = VideoReader(observation['source']['path'], observation['source'], count)
     rows, header = [], None
@@ -519,7 +559,7 @@ def export(task, output):
             header = save_crop(output, first['path'], bbox, 'header')
             header.update(timestamp=first['timestamp'], pts=first['pts'], time_base=first['time_base'])
         if decision['schema_version'] == 4:
-            _, segment_audit, regions = ordered_segments(decision, observation, decision['presented_images'])
+            _, segment_audit, regions = ordered_segments(decision, observation, decision['presented_images'], authority)
             for index,c in enumerate(regions):
                 frame = next(f for f in observation['frames'] if f['id'] == c['frame_id'])
                 if (c['bbox'][2]-c['bbox'][0])/PRINTABLE_WIDTH_INCHES < 150:
@@ -557,6 +597,9 @@ def export(task, output):
         if content_checks:
             result['content_checks'] = content_checks
         result['decision_history'] = state.get('decision_history', [])
+        if acceptance_record is not None:
+            result['acceptance'] = acceptance_record
+            result['acceptance_counts']=dict(script_items=len(acceptance_record['items']),pending_script_items=0,agent_clean_regions=len(acceptance_record['native_clean_regions']))
         if audit is not None:
             result['score_audit'] = audit
         result['metrics']['presented_image_pixels'] = image_pixels(task, result['presented_images'])
@@ -605,11 +648,13 @@ def supplement(task, path):
     return result
 
 
-def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None, evidence_mode='full'):
+def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None, evidence_mode='full', script_acceptance=False):
     target = Path(output) if output and operation in ('prepare', 'export', 'replay', 'build-decision', 'review-plan') else None
     performance = None
     token = None
     try:
+        if script_acceptance and (operation != 'prepare' or evidence_mode != 'lazy'):
+            raise ConversionError('invalid_input', '脚本接受开关只允许新 lazy prepare 任务；关闭后在 full 新目录重跑。')
         if operation == 'report' and performance_events:
             raise ConversionError('invalid_performance', '报告重建不接收新性能事件。')
         if operation == 'report':
@@ -650,7 +695,7 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
                     source, origin = acquire(source, target, timeout=acquisition_timeout)
             performance.embedded = False
             performance.save()
-            result = prepare(source, target, origin=origin, evidence_mode=evidence_mode)
+            result = prepare(source, target, origin=origin, evidence_mode=evidence_mode, script_acceptance=script_acceptance)
         elif operation == 'materialize':
             from agent_evidence import materialize
             result = materialize(Path(task), decision)

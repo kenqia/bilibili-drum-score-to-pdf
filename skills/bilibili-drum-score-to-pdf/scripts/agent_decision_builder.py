@@ -231,7 +231,7 @@ def build(task, request_path, output):
             from agent_review import reuse_accepted_review
             reused=reuse_accepted_review(task,state,packet,reviewed,baseline,structure,JUDGMENTS)
         review=request.get('review',{})
-        fields={'identity_verified','coverage_verified','outside_rows_verified','presented_images','visual_review','complete','evidence','unresolved','confirmations','rows','observations','transitions','score_audit'}
+        fields={'identity_verified','coverage_verified','outside_rows_verified','presented_images','visual_review','complete','evidence','unresolved','confirmations','rows','observations','transitions','score_audit','native_clean_regions'}
         require(isinstance(review,dict) and set(review)<=fields)
         for key in ('identity_verified','coverage_verified','outside_rows_verified','visual_review','complete'):
             require(key not in review or type(review[key]) is bool)
@@ -260,7 +260,26 @@ def build(task, request_path, output):
                   'presented_images':presented,'visual_review':review.get('visual_review',prior.get('visual_review',False)),
                   'complete':review.get('complete',prior.get('complete',False)),'evidence':review.get('evidence',prior.get('evidence','Draft; Agent confirmation required.')),
                   'unresolved':review.get('unresolved',prior.get('unresolved',[]))}
-        issues=[dict(reason='confirmation_required',field=k) for k in ('identity_verified','coverage_verified','outside_rows_verified') if review.get(k) is not True]
+        acceptance_context, acceptance_items = None, []
+        reused_acceptance=None
+        if reused and history[-1].get('acceptance_path'):
+            reused_acceptance=load_json(task/history[-1]['acceptance_path'])
+        native_clean = review.get('native_clean_regions',copy.deepcopy(reused_acceptance['native_clean_regions']) if reused_acceptance else [])
+        if packet.get('script_acceptance_policy'):
+            from agent_acceptance import compute, fill
+            script_paths=copy.deepcopy([i['path'] for i in reused_acceptance['items']]) if reused_acceptance else []
+            for si,part in enumerate(decision['segments']):
+                for collection in ('rows','observations','transitions'):
+                    for ri,node in enumerate(part[collection]):
+                        unconfirmed = not node.get('complete',False) if collection != 'transitions' else node['evidence'].startswith('Script suggestion;')
+                        if unconfirmed and ['segments',si,collection,ri] not in script_paths:
+                            script_paths.append(['segments',si,collection,ri])
+            if script_paths:
+                acceptance_context, acceptance_items = compute(task,state,partial,decision,script_paths,native_clean)
+                fill(decision,acceptance_context)
+                decision['visual_review']=False
+                decision['complete']=review.get('complete',prior.get('complete',False))
+        issues=[dict(reason='confirmation_required',field=k) for k in ('identity_verified','coverage_verified','outside_rows_verified') if review.get(k) is not True and (acceptance_context is None or k == 'outside_rows_verified')]
         for key in ('decision_id','evidence'):
             require(isinstance(decision[key],str) and bool(decision[key].strip()) and len(decision[key])<=2000)
         shape(decision['model'],{'id','version'})
@@ -275,20 +294,21 @@ def build(task, request_path, output):
             issues.extend(geometry['issues'])
         # Validation probes use only local copies to catch malformed fields even while waiting.
         probe=copy.deepcopy(decision)
-        probe.update(visual_review=True,complete=True,unresolved=[],presented_images=list(allowed))
+        if acceptance_context is None:
+            probe.update(visual_review=True,complete=True,unresolved=[],presented_images=list(allowed))
         content_checks = []
         probe_content_checks = []
         with stage('decision_validation'):
             try:
                 if not no_geometry:
-                    validate(probe,state,partial,task,probe_content_checks)
+                    validate(probe,state,partial,task,probe_content_checks,acceptance_context)
             except ConversionError as error:
                 if error.code not in ('review_required','missing_evidence'):
                     raise
                 issues.append(dict(reason=error.code,message=str(error)))
             try:
                 if not no_geometry:
-                    validate(decision,state,partial,task,content_checks)
+                    validate(decision,state,partial,task,content_checks,acceptance_context)
             except ConversionError as error:
                 if error.code not in ('review_required','missing_evidence'):
                     raise
@@ -297,8 +317,15 @@ def build(task, request_path, output):
         if packet.get('evidence_mode') == 'lazy':
             from agent_audit import inspect
             with stage('coverage_audit'):
-                score_audit, audit_issues = inspect(decision,partial,review.get('score_audit'))
+                score_review=copy.deepcopy(review.get('score_audit'))
+                if acceptance_context and isinstance(score_review,dict):
+                    for index,interval in enumerate(score_review['intervals']):
+                        if ('segments',0,'transitions',index) in acceptance_context and interval['status']=='pending':
+                            interval.update(status='script',regions=[],evidence='Recomputed common geometry, complete required pairs and native clean review authority.')
+                score_audit, audit_issues = inspect(decision,partial,score_review,acceptance_context)
                 issues.extend(audit_issues)
+        if acceptance_items:
+            issues.extend(dict(reason='script_acceptance_unresolved',path=i['path'],checks=i['unresolved']) for i in acceptance_items if i['unresolved'])
         if issues:
             decision['complete']=False
         value=decision
@@ -313,13 +340,19 @@ def build(task, request_path, output):
                      content_checks=content_checks or probe_content_checks,
                      geometry=geometry['geometry'],suggestion_issues=geometry['issues'],script_visual_review=False,
                      agent_confirmations=copy.deepcopy(review),reused_review=reused['provenance'] if reused else None,
+                     reused_acceptance_sha256=history[-1].get('acceptance_sha256') if reused_acceptance else None,
                      selected_frames=[dict(id=f['id'],sha256=f['sha256'],pts=f['pts'],time_base=f['time_base']) for f in partial['frames']])
         for name,data in [('decision.json',value),('diff.json',diff),('sources.json',sources),('unresolved.json',issues)]:
             write_json(output/name,data)
+        if acceptance_items:
+            from agent_acceptance import bind as bind_acceptance
+            write_json(output/'acceptance.json',bind_acceptance(value,state,partial,acceptance_items,native_clean))
+            sources['script_acceptance_items']=acceptance_items
         if score_audit is not None:
             from agent_audit import bind
             write_json(output/'audit.json',bind(value,state,score_audit))
     return dict(status='waiting' if issues else 'success',complete=False,phase='decision_built',
+                acceptance_counts=dict(script_items=len(acceptance_context or {}),pending_script_items=sum(bool(i['unresolved']) for i in acceptance_items),agent_clean_regions=len(native_clean)),
                 ready_to_submit=not issues,decision=str((output/'decision.json').resolve()),
                 diff=diff,sources=sources,unresolved=issues,
                 next_action='Resolve draft confirmations.' if issues else 'Submit the built decision; no decision has been accepted by building.')

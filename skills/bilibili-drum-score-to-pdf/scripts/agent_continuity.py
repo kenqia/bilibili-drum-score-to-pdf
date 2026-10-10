@@ -20,7 +20,7 @@ def number(value):
         return False
 
 
-def continuous_rows(decision, packet, presented):
+def continuous_rows(decision, packet, presented, script_rows=None):
     frames = {f['id']: f for f in packet['frames']}
     ordered = list(frames)
     sightings = decision['observations']
@@ -115,7 +115,7 @@ def continuous_rows(decision, packet, presented):
         if not s['complete']:
             waiting('半行必须等到完整出现才能打印。')
         native.append({k:v for k,v in r.items() if k not in ('instance_id','observation_id')})
-    chosen=native_rows({**decision,'rows':native},packet,presented)
+    chosen=native_rows({**decision,'rows':native},packet,presented,script_rows)
     for c,r in zip(chosen,rows):
         c.update(instance_id=r['instance_id'],observation_id=r['observation_id'],global_y=instances[r['instance_id']],scroll_offset=offsets[r['frame_id']])
     audit=dict(first_frame=ordered[0],last_frame=ordered[-1],first_timestamp=frames[ordered[0]]['timestamp'],last_timestamp=frames[ordered[-1]]['timestamp'],

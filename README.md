@@ -52,4 +52,6 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 lazy 提交使用 v4 原生图块，并附绑定决定文件的 `audit.json`。标题、速度、拍号、行外区域、首尾与各相邻间隔都须显式核查，缺少证据时等待。字段与导航限额后的有界恢复见 [覆盖审计](docs/agents/coverage-audit.md)。
 
-实验能力仍要求实际原图和原生细节审阅。合成验证不代表真实视频质量或端到端性能放行；完整真实成本未知时保持 null。自动接受和默认快路径尚未启用。使用新任务、草稿与结果目录，保留来源和接受历史；回退到冻结的 `d09fa9d` 使用另一独立目录。
+显式新任务可加 `--script-acceptance`，由脚本重算普通内部行和可靠 gap，Agent 保留原生源 ROI clean、首尾、标题和行外核查。字段、命令、严格白色切带与恢复限制见[混合接受实验](docs/agents/script-acceptance.md)。全局 visual_review 保持 false，实际来源分开记录。
+
+实验能力仍要求实际原图和原生细节审阅。合成验证不代表真实视频质量或端到端性能放行；完整真实成本未知时保持 null。默认快路径保持关闭；显式混合接受尚未获真实放行。使用新任务、草稿与结果目录，保留来源和接受历史；回退到冻结的 `d09fa9d` 使用另一独立目录。

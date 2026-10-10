@@ -3,7 +3,7 @@ from agent_continuity import continuous_rows, waiting, text
 from agent_regions import native_rows, invalid
 
 
-def ordered_segments(decision, packet, presented):
+def ordered_segments(decision, packet, presented, acceptance=None):
     segments, boundaries = decision['segments'], decision['boundaries']
     frames = {f['id']: f for f in packet['frames']}
     if not isinstance(segments, list) or not segments or len(segments) > 100:
@@ -20,7 +20,7 @@ def ordered_segments(decision, packet, presented):
     if len(set(ids))!=len(ids) or flattened!=list(frames):
         waiting('谱面段缺帧、重复、回跳或顺序非法。')
     chosen, audits, extras = [], [], []
-    for segment in segments:
+    for segment_index, segment in enumerate(segments):
         sf = segment['frames']
         if type(segment['outside_rows_verified']) is not bool:
             invalid('行外符号核查状态非法。')
@@ -29,7 +29,8 @@ def ordered_segments(decision, packet, presented):
         subpacket = {**packet,'frames':[frames[f] for f in sf]}
         subdecision = {**decision, **{k:segment[k] for k in ('rows','observations','transitions')},
                        'coverage':dict(first_frame=sf[0],last_frame=sf[-1],unresolved=[])}
-        rows, audit = continuous_rows(subdecision, subpacket, presented)
+        script_rows = {p[3]: item for p,item in (acceptance or {}).items() if p[:3] == ('segments',segment_index,'rows')}
+        rows, audit = continuous_rows(subdecision, subpacket, presented, script_rows)
         for row in rows:
             row.update(index=len(chosen),id=f'agent-row-{len(chosen):03d}',segment_id=segment['id'])
             chosen.append(row)

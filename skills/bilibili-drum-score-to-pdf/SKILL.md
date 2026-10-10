@@ -87,4 +87,9 @@ Agent-first 的长视频 prepare 用低分辨率变化导航生成重叠观察�
 
 提交 lazy 决定前，读 `docs/agents/coverage-audit.md`，填写逐项原生核查并使用 v4 图块。`audit.json` 必须与构建决定同目录且绑定其精确文件 hash；v5 修订同样需要新绑定审计。导航限额风险仅按文档的实际补采和逐 gap 核查入口解除。
 
-这些能力尚未完成真实视频性能放行，不能自动接受普通行或声称已降低总 Token。保留全部原生视觉门禁、真实成本未知字段和实际逐页交付确认。回退到冻结提交 `d09fa9d` 时使用新目录，保留实验任务证据。
+这些能力尚未完成真实视频性能放行，只有下文显式混合任务可使用脚本普通行依据，不能声称已降低总 Token。保留全部原生视觉门禁、真实成本未知字段和实际逐页交付确认。回退到冻结提交 `d09fa9d` 时使用新目录，保留实验任务证据。
+
+
+### 已授权的混合接受实验
+
+用户明确要求该实验时，只在新 `prepare --evidence-mode lazy` 任务加 `--script-acceptance`。先读仓库 `docs/agents/script-acceptance.md`。Agent 实际查看完整同帧原生源 ROI 后填写有限 native_clean_regions，并保留首尾、标题、速度、拍号与行外符号核查。脚本只能重算普通内部行边界、完整五线几何和可靠 gap，不能证明任意遮挡不存在。混合决定保持 visual_review=false，acceptance.json 与精确决定同目录；submit/export/replay 都重算，历史修订重绑。不要把脚本读图列为实际呈交，真实自动接受支持范围仍为空。

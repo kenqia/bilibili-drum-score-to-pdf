@@ -75,7 +75,7 @@ def validate_events(data, number):
             require(required <= set(event) <= required | {'ended_at'})
             require(event['operation_id'] in operations and number(event['offset_seconds']) and event['offset_seconds'] >= 0)
             require(event['name'] in ('source_verification','navigation','anonymous_acquisition','native_decode','native_analysis',
-                                    'image_generation','decision_building','review_planning','decision_validation','content_validation','source_redecode','pdf_export','delivery_publication','coverage_audit'))
+                                    'image_generation','decision_building','review_planning','decision_validation','content_validation','script_acceptance','source_redecode','pdf_export','delivery_publication','coverage_audit'))
             require(event['status'] in ('running','interrupted','complete','failed'))
         else:
             require(set(event) == common | {'ended_at','source_id','measurement'})
@@ -108,9 +108,13 @@ class Performance:
         fields = {'schema_version','lifecycle_id','submitted_at','last_observed_at','first_deliverable_at','task_status',
                   'operations','stages','clock_anomalies','source','metrics','environment','script_sha256','requirements_sha256',
                   'model','script_revision','tool_versions','entry','cache_status','state_revision','task_id','sampling_usage',
-                  'delivered_at','exported_at','delivery_history','delivery_review_id'}
+                  'delivered_at','exported_at','delivery_history','delivery_review_id','acceptance_counts'}
         if not isinstance(self.data, dict) or set(self.data)-fields or type(self.data.get('schema_version')) is not int or self.data.get('schema_version') != 1 or self.data.get('task_status') not in ('waiting','failed','success') or not all(isinstance(self.data.get(k), list) for k in ('operations','stages','clock_anomalies')):
             raise ValueError('invalid performance ledger')
+        if 'acceptance_counts' in self.data:
+            counts=self.data['acceptance_counts']
+            if not isinstance(counts,dict) or set(counts)!={'script_items','pending_script_items','agent_clean_regions'} or any(type(v) is not int or v<0 for v in counts.values()):
+                raise ValueError('invalid acceptance counts')
         def number(value):
             try:
                 return type(value) in (int,float) and math.isfinite(value)
@@ -227,6 +231,11 @@ class Performance:
             self.operation['state_changed'] = self.data.get('state_revision') != revision
         self.data.update(task_id=state['task_id'], source=observation['source'], metrics=observation['metrics'], state_revision=revision)
         history = state.get('decision_history', [])
+        if history and history[-1].get('acceptance_path') and history[-1]['observation_sha256']==state['observation_sha256']:
+            record=self.load(self.directory/history[-1]['acceptance_path'])
+            self.data['acceptance_counts']=dict(script_items=len(record['items']),pending_script_items=0,agent_clean_regions=len(record['native_clean_regions']))
+        elif 'acceptance_counts' in self.data:
+            self.data.pop('acceptance_counts')
         if history:
             value = self.load(self.directory / history[-1]['path'])
             self.data['model'] = value.get('decision', value)['model']
@@ -262,6 +271,8 @@ class Performance:
             full_frame_analysis_attempts=sum(e['name'] == 'native_analysis' for e in self.data['stages']),
             content_validation={key: sum(((e.get('metrics') or {}).get('content_validation') or {}).get(key,0) for e in self.data['operations'])
                                 for key in ('pair_checks','analyzed_pixels','conflict_checks','uncertain_checks')},
+            script_acceptance={key:sum(((e.get('metrics') or {}).get('script_acceptance') or {}).get(key,0) for e in self.data['operations'])
+                               for key in ('native_reads','read_pixels','items_checked')},
             materialization=dict(
                 generated_images=sum((e.get('metrics') or {}).get('generated_images', 0) for e in self.data['operations'] if e['operation'] == 'materialize'),
                 generated_in_failed_operations=sum((e.get('metrics') or {}).get('generated_images', 0) for e in self.data['operations'] if e['operation'] == 'materialize' and e['status'] in ('failed', 'interrupted')),

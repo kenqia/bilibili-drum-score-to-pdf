@@ -209,3 +209,8 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 两个 verified 字段只有实际检查通过后才能为 true。pages 必须按 1 至 page_count 顺序覆盖全部页，每项仅含 page 和非空 evidence，具体说明实际看到的完整谱行、边界和分页。空页审核、缺失正面检查、旧决定、旧观察包、修改后的 PDF/manifest、同 review_id 不同内容及单独重放产物均拒绝。回执必须绑定同一任务记录中的真实 export 产物。
 
 同回执重复确认不增加审核历史，也不重设确认时刻；实际 CLI 操作成本仍单列。修订或补采改变任务版本时撤销当前确认，`delivered_at` 变为 null，总墙钟时间继续从最早提交计算，直到修订版本重新导出并实际审核确认。`first_deliverable_at` 保留首次审核确认的历史时刻，不能作为当前版本终点。delivery_history 保存各次实际审核回执、产物目录和确认时刻。replay 记录执行成本，不自动补写确认。旧计量记录中的脚本成功不能替代实际审核回执。
+
+
+## 显式混合接受
+
+新 lazy prepare 可加 `--script-acceptance` 固定实验策略。普通内部行与 gap 的脚本依据、Agent 原生 clean 核查、acceptance.json 的精确绑定、提交和重放见[混合接受实验](script-acceptance.md)。未启用开关的任务保持完整视觉门禁；真实自动接受支持仍为空。

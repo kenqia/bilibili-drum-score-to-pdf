@@ -76,7 +76,7 @@ def review_plan(task, output, request_path=None):
                 add('no_clean_observation',[s['frame_id'] for s in same],'printable_source_unavailable',
                     [(s['frame_id'],s['bbox']) for s in same],row['instance_id'])
             details=[i for i in packet['images'] if i.get('frame_id')==row['frame_id'] and i['kind'] in ('detail','native_detail')]
-            if not covered(row['bbox'],[i['bbox'] for i in details]):
+            if not packet.get('script_acceptance_policy') and not covered(row['bbox'],[i['bbox'] for i in details]):
                 add('native_detail_required',[row['frame_id']],'ordinary_row_still_requires_native_review',[(row['frame_id'],row['bbox'])],row['instance_id'])
         audits={(a['from_frame'],a['to_frame']):a for a in proposal['geometry']}
         for before,after in zip(frames,frames[1:]):
@@ -128,6 +128,11 @@ def review_plan(task, output, request_path=None):
             else:
                 issue['supplement_available']=True
                 supplements.append(dict(issue_id=issue['id'],request=request))
+        if packet.get('script_acceptance_policy'):
+            required_regions={}
+            for frame in frames:
+                bbox=[0,0,frame['width'],frame['height']]
+                add('native_clean_roi',[frame['id']],'actual_agent_clean_scope_required',[(frame['id'],bbox)])
         requests=[]
         needed=[]
         for region in required_regions.values():
@@ -150,6 +155,9 @@ def review_plan(task, output, request_path=None):
             corrections=[],proposal=proposal['structure'],review=dict(identity_verified=False,coverage_verified=False,outside_rows_verified=False,
                 presented_images=[],visual_review=False,complete=False,evidence='Unconfirmed review template.',
                 unresolved=[i['id'] for i in issues],confirmations=[]))
+        if packet.get('script_acceptance_policy'):
+            template['review']['native_clean_regions']=[dict(frame_id=f['id'],frame_sha256=f['sha256'],pts=f['pts'],time_base=f['time_base'],
+                bbox=[0,0,f['width'],f['height']],evidence_images=[],cursor='uncertain',occlusion='uncertain',evidence='Actually review the native source ROI before confirming clean.') for f in frames]
         if state.get('decision_history'):
             template['revision_of']=state['decision_history'][-1]['decision_id']
         if packet.get('evidence_mode')=='lazy':
@@ -163,10 +171,14 @@ def review_plan(task, output, request_path=None):
                     status='waiting',complete=False,phase='review_plan',image_access=image_access,
                     suggestion=proposal,issues=issues,materialize_requests=requests,supplement_requests=supplements,
                     sampling_usage=sampling['used'],sampling_limits=LIMITS,actual_presented_images=None,
-                    required_review=dict(native_frames=[f['id'] for f in frames],all_selected_native_details=True,
+                    required_review=dict(native_frames=[f['id'] for f in frames],all_selected_native_details=not bool(packet.get('script_acceptance_policy')),
                         native_detail_materialization_required=bool(needed),automatic_acceptance=False,
                         hidden_content_proven_absent=False),build_template='build-template.json',score_audit_template='score-audit-template.json' if packet.get('evidence_mode')=='lazy' else None,
                     next_action='Materialize required ROIs, actually review native evidence, then rebuild this plan after observation updates.')
+        if packet.get('script_acceptance_policy'):
+            result['script_acceptance']=dict(policy=packet['script_acceptance_policy'],enabled=True,
+                requires_actual_native_clean_review=True,first_last_and_outside_agent_review=True,
+                real_validated_support=[],script_reads_are_presentations=False)
         if len(json.dumps(result,ensure_ascii=False,indent=2,allow_nan=False).encode())>MAX_JSON:
             raise ConversionError('sampling_budget','审阅计划超过 JSON 上限，保留任务与疑点。')
         write_json(output/'review-plan.json',result)

@@ -91,3 +91,8 @@ Agent-first 入口用 `agent_performance.py` 保存独立性能账本。它不�
 `agent_proposals.py` 只用五线与空间顺序提出结构建议。`agent_decision_builder.py` 将绑定当前观察的建议、结构修正和调用方明确的视觉确认构造为现有 v2 至 v5 决定，输出差异、来源与未决事项。构建不接受决定，也不提前结束交付计时。没有确认或原生证据时保留 waiting。具体协议见 [惰性证据](agents/lazy-evidence.md) 与 [决定构建](agents/decision-building.md)。
 
 `agent_review.py` 提供分类疑点及绑定的 ROI/补采请求，显式历史复用仅沿用来源与结构未改的实际判断。`agent_audit.py` 为 lazy 要求 v4 原生图块及逐项覆盖审计，在 submit/export/replay 统一核验决定文件、任务与来源绑定。接受历史保存审计副本与 hash，证据更新后重新绑定。首尾、相邻 gap、空间实例和段边界都保留，未采样隐藏内容仍未知。操作与有限导航恢复见 [疑点审阅](agents/review-plan.md) 和 [覆盖审计](agents/coverage-audit.md)。
+
+
+## 混合接受兼容层
+
+显式新 lazy 任务可固定 continuous_clean_v1 策略。agent_acceptance.py 从当前原帧重算完整五线组、全部合理位移和内部行间带，Agent 仍实际确认同帧原生 clean 范围、首尾和行外内容。旁记录绑定精确决定文件，submit/export/replay 使用共享原生、几何、来源和 PDF 门禁。脚本读取与模型呈交分别记账，混合决定的 visual_review 保持 false，旧任务不迁移。严格切带使许多真实输入仍等待；此软件能力不构成 #45/#51/#52 真实放行。契约见[混合接受实验](agents/script-acceptance.md)。
