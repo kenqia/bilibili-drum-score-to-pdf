@@ -33,9 +33,10 @@ def digest(path):
     return h.hexdigest()
 
 
-def write_json(path, value):
+def write_json(path, value, compact=False):
     temporary = path.with_name(path.name + '.tmp')
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n')
+    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=None if compact else 2,
+                                   separators=(',', ':') if compact else None, allow_nan=False) + '\n', encoding='utf-8')
     os.replace(temporary, path)
 
 

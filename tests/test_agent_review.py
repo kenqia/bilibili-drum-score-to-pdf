@@ -37,6 +37,63 @@ class ReviewTests(unittest.TestCase):
             path=base/'review-input.json';path.write_text(json.dumps(decision));args+=['--decision',path]
         return self.cli(*args)
 
+    def large_task(self,base,rows):
+        for index in range(48):
+            image=score_frame((1280,400+220*rows),rows)
+            draw=ImageDraw.Draw(image)
+            for top in range(220,220*(rows+1),220):
+                left=450+50*(index%2)
+                draw.rectangle((left,top-40,left+15,top+100),fill='blue')
+            image.save(base/f'{index:03d}.png')
+        source=base/'large.mp4'
+        subprocess.run(['ffmpeg','-v','error','-y','-framerate','4','-i',str(base/'%03d.png'),
+            '-r','24','-pix_fmt','yuv420p',str(source)],check=True)
+        task=base/'task'
+        prepared=self.cli(source,'--output',task,'--evidence-mode','lazy','--script-acceptance')
+        self.assertEqual(prepared['status'],'waiting',prepared)
+        self.assertNotIn('error',prepared)
+        return task
+
+    def test_large_review_plan_preserves_all_context_within_original_byte_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task=self.large_task(base,5)
+            before=(task/'observation.json').read_bytes()
+            packet=json.loads(before)
+            result=self.plan(base,task)
+            self.assertEqual(result.get('phase'),'review_plan',result.get('error'))
+            saved=(base/'plan/review-plan.json').read_bytes()
+            plan=json.loads(saved)
+            self.assertGreater(len((json.dumps(plan,ensure_ascii=False,indent=2)+'\n').encode('utf-8')),1024*1024)
+            self.assertLessEqual(len(saved),1024*1024)
+            self.assertEqual(plan,{k:v for k,v in result.items() if k!='performance'})
+            self.assertGreaterEqual(len(packet['frames']),40)
+            self.assertEqual(len(plan['suggestion']['structure']['observations']),5*len(packet['frames']))
+            self.assertEqual(len(plan['suggestion']['geometry']),len(packet['frames'])-1)
+            ambiguous=[i for i in plan['issues'] if i['reason']=='multiple_displacements']
+            self.assertEqual(len(ambiguous),len(packet['frames'])-1)
+            self.assertTrue(all(len(i['detail'])==4 and len(i['context'])==2 for i in ambiguous))
+            self.assertEqual(len([i for i in plan['issues'] if i['reason']=='native_clean_roi']),len(packet['frames']))
+            for entry in plan['materialize_requests']+plan['supplement_requests']:
+                self.assertEqual(json.loads((base/'plan'/entry['path']).read_text()),entry['request'])
+            self.assertEqual((task/'observation.json').read_bytes(),before)
+            self.assertIn(b'\n  "schema_version": 1,',before)
+            template=(base/'plan/build-template.json').read_bytes()
+            self.assertIn(b'\n  "schema_version": 1,',template)
+            self.assertFalse(json.loads(template)['review']['visual_review'])
+            self.assertFalse((task/'decision.json').exists())
+
+    def test_review_plan_above_compact_byte_limit_keeps_original_task_waiting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task=self.large_task(base,9)
+            before=(task/'observation.json').read_bytes()
+            result=self.plan(base,task)
+            self.assertEqual(result['status'],'waiting',result)
+            self.assertEqual(result.get('error',{}).get('code'),'sampling_budget',result.get('error'))
+            self.assertFalse((base/'plan/review-plan.json').exists())
+            self.assertEqual((task/'observation.json').read_bytes(),before)
+            self.assertFalse((task/'decision.json').exists())
+            self.assertFalse((base/'plan/score.pdf').exists())
+
     def test_mixed_clean_and_occluded_frames_produce_bound_native_review_context(self):
         with tempfile.TemporaryDirectory() as directory:
             base=Path(directory);task=self.prepare(base)

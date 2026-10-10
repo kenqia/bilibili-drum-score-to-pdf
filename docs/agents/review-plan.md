@@ -8,6 +8,8 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 输出目录必须为空。`review-plan.json` 保存当前观察绑定、建议、分类疑点、实际 PTS 前后关系、必须审阅的原图范围、已有预算和下一步。`build-template.json` 是 `build-decision` 的输入模板；其中视觉审阅、完整性和覆盖确认均为 false，实际呈交清单为空。Agent 必须完成实际审阅后填写，不能把模板当作已确认决定。
 
+`review-plan.json` 使用紧凑 JSON 保存全部字段。限额仍为 1 MiB，按实际 UTF-8 字节计算，包括末尾换行。多帧、多行的上下文和全部合理位移不因排版空白过大而丢弃；紧凑内容本身超限时继续返回 `sampling_budget`，保留任务和疑点。观察包、决定、请求与构建模板继续使用原来的缩进格式。
+
 ## 能力声明与原生证据
 
 脚本不知道 Agent 是否能查看图像。默认 `image_access=unknown`，保留能力疑点。可通过 `--decision /absolute/capability.json` 声明能力，文件只含以下字段。

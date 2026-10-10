@@ -179,9 +179,10 @@ def review_plan(task, output, request_path=None):
             result['script_acceptance']=dict(policy=packet['script_acceptance_policy'],enabled=True,
                 requires_actual_native_clean_review=True,first_last_and_outside_agent_review=True,
                 real_validated_support=[],script_reads_are_presentations=False)
-        if len(json.dumps(result,ensure_ascii=False,indent=2,allow_nan=False).encode())>MAX_JSON:
+        serialized=json.dumps(result,ensure_ascii=False,separators=(',',':'),allow_nan=False)+'\n'
+        if len(serialized.encode('utf-8'))>MAX_JSON:
             raise ConversionError('sampling_budget','审阅计划超过 JSON 上限，保留任务与疑点。')
-        write_json(output/'review-plan.json',result)
+        write_json(output/'review-plan.json',result,compact=True)
         write_json(output/'build-template.json',template)
     return result
 
