@@ -96,3 +96,5 @@ Agent-first 入口用 `agent_performance.py` 保存独立性能账本。它不�
 ## 混合接受兼容层
 
 显式新 lazy 任务可固定 continuous_clean_v1 策略。agent_acceptance.py 从当前原帧重算完整五线组、全部合理位移和内部行间带，Agent 仍实际确认同帧原生 clean 范围、首尾和行外内容。旁记录绑定精确决定文件，submit/export/replay 使用共享原生、几何、来源和 PDF 门禁。脚本读取与模型呈交分别记账，混合决定的 visual_review 保持 false，旧任务不迁移。严格切带使许多真实输入仍等待；此软件能力不构成 #45/#51/#52 真实放行。契约见[混合接受实验](agents/script-acceptance.md)。
+
+显式新 lazy 任务的 `ordered_anchors_v1` 最小内容证据链保留全部空间与覆盖契约，将充分接续证据与冗余诊断分开。`agent_evidence_chain.py` 只在完整几何验证之后检查既有原生对应与桥，所有共同实例冲突仍否决。有限 continuity 旁记录保存实际 Agent 原生区域声明，绑定精确决定并在提交、导出、重放重算。`agent_review_summary.py` 给出关键缺口及去重的局部补采，不用检测 proposal 冒充实际漏行。实验软件通过不表示标准真实样本或性能放行。详见[内容门禁](agents/content-checks.md)与[疑点摘要](agents/review-plan.md)。

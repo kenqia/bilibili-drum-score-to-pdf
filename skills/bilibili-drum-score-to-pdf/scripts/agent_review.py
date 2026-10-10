@@ -14,16 +14,23 @@ def review_plan(task, output, request_path=None):
     with stage('source_verification'):
         state, packet = checked_task(task)
     image_access = 'unknown'
+    bound_draft=None
     if request_path:
         request = load_json(request_path)
-        fields = {'schema_version','task_id','observation_sha256','observation_version','image_access'}
-        if (not isinstance(request,dict) or set(request)!=fields or type(request['schema_version']) is not int
-                or request['schema_version']!=1 or request['task_id']!=state['task_id']
-                or request['observation_sha256']!=state['observation_sha256']
-                or type(request['observation_version']) is not int or request['observation_version']!=state['observation_version']
-                or type(request['image_access']) is not bool):
-            raise ConversionError('invalid_request','审阅能力声明必须绑定当前观察包。')
-        image_access = 'available' if request['image_access'] else 'unavailable'
+        if packet.get('minimum_evidence_chain_policy') and isinstance(request,dict) and 'corrections' in request:
+            from agent_decision_builder import build
+            (output/'bound-build').mkdir()
+            bound_draft=build(task,request_path,output/'bound-build')
+            image_access='available' if request.get('review',{}).get('presented_images') else 'unknown'
+        else:
+            fields = {'schema_version','task_id','observation_sha256','observation_version','image_access'}
+            if (not isinstance(request,dict) or set(request)!=fields or type(request['schema_version']) is not int
+                    or request['schema_version']!=1 or request['task_id']!=state['task_id']
+                    or request['observation_sha256']!=state['observation_sha256']
+                    or type(request['observation_version']) is not int or request['observation_version']!=state['observation_version']
+                    or type(request['image_access']) is not bool):
+                raise ConversionError('invalid_request','审阅能力声明必须绑定当前观察包。')
+            image_access = 'available' if request['image_access'] else 'unavailable'
     with stage('review_planning'):
         proposal = suggest(packet)
         frames = packet['frames']; by_frame = {f['id']:f for f in frames}
@@ -128,6 +135,19 @@ def review_plan(task, output, request_path=None):
             else:
                 issue['supplement_available']=True
                 supplements.append(dict(issue_id=issue['id'],request=request))
+        summary=None
+        if packet.get('minimum_evidence_chain_policy'):
+            from agent_review_summary import summarize, targeted
+            checks=bound_draft['sources']['content_checks'] if bound_draft else []
+            summary=summarize(issues,checks,packet,bool(checks))
+            if bound_draft:
+                summary['draft_ready_to_submit']=bound_draft['ready_to_submit']
+                action_groups={}
+                for issue in bound_draft['unresolved']:
+                    reason=issue.get('reason','native_review_required')
+                    action_groups[reason]=action_groups.get(reason,0)+1
+                summary['other_required_actions']=[dict(reason=reason,count=count) for reason,count in sorted(action_groups.items())]
+            supplements=targeted(summary,state,supplement_packet) if bound_draft else []
         if packet.get('script_acceptance_policy'):
             required_regions={}
             for frame in frames:
@@ -175,6 +195,9 @@ def review_plan(task, output, request_path=None):
                         native_detail_materialization_required=bool(needed),automatic_acceptance=False,
                         hidden_content_proven_absent=False),build_template='build-template.json',score_audit_template='score-audit-template.json' if packet.get('evidence_mode')=='lazy' else None,
                     next_action='Materialize required ROIs, actually review native evidence, then rebuild this plan after observation updates.')
+        if summary is not None:
+            result['summary']=summary
+            write_json(output/'review-summary.json',summary)
         if packet.get('script_acceptance_policy'):
             result['script_acceptance']=dict(policy=packet['script_acceptance_policy'],enabled=True,
                 requires_actual_native_clean_review=True,first_last_and_outside_agent_review=True,
@@ -184,6 +207,11 @@ def review_plan(task, output, request_path=None):
             raise ConversionError('sampling_budget','审阅计划超过 JSON 上限，保留任务与疑点。')
         write_json(output/'review-plan.json',result,compact=True)
         write_json(output/'build-template.json',template)
+    if summary is not None:
+        return dict(status='waiting',complete=False,phase='review_plan',summary=summary,
+            details_path=str((output/'review-plan.json').resolve()),
+            materialize_requests=[dict(path=str((output/r['path']).resolve()),region_count=len(r['request']['regions'])) for r in requests],
+            supplement_requests=supplements,build_template='build-template.json')
     return result
 
 

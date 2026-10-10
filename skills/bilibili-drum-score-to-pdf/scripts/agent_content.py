@@ -37,8 +37,10 @@ def local_ink(image, sighting):
     left, right = max(0,left-round(spacing)), min(image.width,right+round(spacing))
     native = window.crop((left,0,right,window.height))
     gray = np.asarray(native.convert('L'))
-    if cursor_occluded(native,spacing) or obstruction_detected(native,y-top,spacing):
+    if cursor_occluded(native,spacing):
         return None, 'cursor_or_obstruction', analyzed_pixels
+    if obstruction_detected(native,y-top,spacing):
+        return None, 'native_obstruction', analyzed_pixels
     if float((gray > 210).mean()) < .75:
         return None, 'unreliable_clean_background', analyzed_pixels
     ink = (gray < 180).astype(np.uint8)
@@ -77,7 +79,7 @@ def compare(before, after, a, b):
     return result
 
 
-def check_pairs(task, decision, packet, audits=None):
+def check_pairs(task, decision, packet, audits=None, native_review=None):
     """Called only after v3/v4 geometry validation for explicitly lazy observations."""
     if task is None:
         raise ConversionError('invalid_decision','内容检查缺少已核验的任务来源。')
@@ -111,9 +113,32 @@ def check_pairs(task, decision, packet, audits=None):
                             count['conflict_checks']+=result['status']=='conflict'
                             count['uncertain_checks']+=result['status']=='uncertain'
                             recorder.save()
+        if packet.get('minimum_evidence_chain_policy'):
+            from agent_evidence_chain import POLICY, select
+            if packet['minimum_evidence_chain_policy'] != POLICY:
+                raise ConversionError('invalid_decision','最小证据链策略非法。')
+            def bridge_check(a,b,bridge=False):
+                first,last=frames[a['frame_id']],frames[b['frame_id']]
+                with Image.open(Path(task)/first['path']) as old, Image.open(Path(task)/last['path']) as new:
+                    result=compare(old,new,a,b)
+                result.update(from_frame=first['id'],to_frame=last['id'],matches=[a['id'],b['id']],
+                    source_sha256=packet['source']['sha256'],frame_sha256=[first['sha256'],last['sha256']],
+                    pts=[first['pts'],last['pts']],time_base=[first['time_base'],last['time_base']],
+                    proposed_bboxes=[a['bbox'],b['bbox']],staff_y=[a['staff_y'],b['staff_y']],spacing=[a['spacing'],b['spacing']],
+                    analysis_windows=[[0,round(s['staff_y'])-round(4*s['spacing']),f['width'],round(s['staff_y'])+round(8*s['spacing'])] for s,f in ((a,first),(b,last))],
+                    start=first['timestamp'],end=last['timestamp'],before_image=first['id'],after_image=last['id'],
+                    scope='geometry_established_bridge',identity_established_by_content=False)
+                recorder=ACTIVE.get()
+                if recorder and recorder.operation:
+                    count=recorder.operation.setdefault('metrics',{}).setdefault('content_validation',dict(pair_checks=0,analyzed_pixels=0,conflict_checks=0,uncertain_checks=0))
+                    count['pair_checks']+=1;count['analyzed_pixels']+=result['analyzed_pixels']
+                    count['conflict_checks']+=result['status']=='conflict';count['uncertain_checks']+=result['status']=='uncertain'
+                    recorder.save()
+                return result
+            select(task,decision,packet,checks,bridge_check,native_review or [])
         if audits is not None:
             audits.extend(checks)
-        unresolved=[c for c in checks if c['status']!='not_contradicted']
+        unresolved=[c for c in checks if c.get('blocking',c['status']!='not_contradicted')]
         if unresolved:
             error=ConversionError('review_required','原生局部内容冲突或证据不可靠，请修正对应、完整裁剪或补采干净来源。')
             error.issues=unresolved

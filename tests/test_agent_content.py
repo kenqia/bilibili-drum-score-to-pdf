@@ -65,17 +65,35 @@ class ContentChecksTests(unittest.TestCase):
                     draw.line((x+10, y+31, x+10, y-32), fill='black', width=3)
                     draw.line((x+10, y-32, x+55, y-32), fill='black', width=4)
         for index in range(8):
-            shift = 220 if index >= 4 else 0
+            shift = 220 if index >= 4 and variant!='stationary_bridge_conflict' else 0
             frame = long_score.crop((0, shift, 1280, shift+960))
             if variant == 'overlay':
                 ImageDraw.Draw(frame).rectangle((150,196,350,256),fill='black')
+            if variant == 'stationary_bridge_conflict' and 4 <= index < 6:
+                ImageDraw.Draw(frame).rectangle((490,400,506,760),fill='#e05050')
+            if variant == 'single_bridge_cursor' and index >= 6:
+                ImageDraw.Draw(frame).rectangle((490,400,506,570),fill='#e05050')
+            if variant in ('bridge_cursor','single_bridge_cursor') and 4 <= index < 6:
+                ImageDraw.Draw(frame).rectangle((490,180,506,570),fill='#e05050')
+            if variant == 'redundant_cursor' and index >= 6:
+                ImageDraw.Draw(frame).rectangle((490,640,506,760),fill='#e05050')
             if variant == 'cursor' and index >= 4:
                 ImageDraw.Draw(frame).rectangle((490, 180, 506, 760), fill='#e05050')
+            if variant in ('third_conflict','stationary_bridge_conflict') and index >= 6:
+                changed=ImageDraw.Draw(frame)
+                changed.rectangle((70,612,1210,760),fill='white')
+                for line in range(5):
+                    changed.line((80,660+12*line,1200,660+12*line),fill='black',width=2)
+                for n in range(5):
+                    x=235+n*155
+                    changed.ellipse((x-10,683,x+10,699),fill='black')
+                    changed.line((x+10,691,x+10,628),fill='black',width=3)
+                    changed.line((x+10,628,x+55,628),fill='black',width=4)
             frame.save(base / f'{index:03d}.png')
         video = base / 'input.mp4'
         subprocess.run(['ffmpeg', '-v', 'error', '-y', '-framerate', '4', '-i', str(base/'%03d.png'), '-pix_fmt', 'yuv420p', str(video)], check=True)
         task = base / 'task'
-        state = self.cli(video, '--output', task, '--evidence-mode', mode)
+        state = self.cli(video, '--output', task, '--evidence-mode', mode, *(['--minimum-evidence-chain'] if mode=='lazy' and getattr(self,'minimum_chain',False) else []))
         self.assertEqual(state['status'], 'waiting', state)
         packet = json.loads((task/'observation.json').read_text())
         if mode == 'lazy':
@@ -94,7 +112,7 @@ class ContentChecksTests(unittest.TestCase):
             presented_images=[i['id'] for i in packet['images']],visual_review=True,complete=True,
             evidence='Controlled fixture reviews full native margins and geometric correspondences.', unresolved=[],
             rows=[],observations=[],transitions=[],coverage=dict(first_frame=frames[0]['id'],last_frame=frames[-1]['id'],unresolved=[]))
-        instances = [list('ABC'), list('ABC' if wrong else 'BCD'), list('ABC' if wrong else 'BCD')]
+        instances = [list('ABC'), list('ABC' if wrong or variant=='stationary_bridge_conflict' else 'BCD'), list('ABC' if wrong or variant=='stationary_bridge_conflict' else 'BCD')]
         for fi, (frame, labels) in enumerate(zip(frames, instances)):
             for instance, y in zip(labels, (220,440,660)):
                 sighting = dict(id=f'{fi}-{instance}',frame_id=frame['id'],instance_id=instance,staff_y=y,spacing=12,

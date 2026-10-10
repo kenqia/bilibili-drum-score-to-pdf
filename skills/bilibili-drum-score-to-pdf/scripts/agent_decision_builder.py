@@ -301,14 +301,14 @@ def build(task, request_path, output):
         with stage('decision_validation'):
             try:
                 if not no_geometry:
-                    validate(probe,state,partial,task,probe_content_checks,acceptance_context)
+                    validate(probe,state,partial,task,probe_content_checks,acceptance_context,native_clean)
             except ConversionError as error:
                 if error.code not in ('review_required','missing_evidence'):
                     raise
                 issues.append(dict(reason=error.code,message=str(error)))
             try:
                 if not no_geometry:
-                    validate(decision,state,partial,task,content_checks,acceptance_context)
+                    validate(decision,state,partial,task,content_checks,acceptance_context,native_clean)
             except ConversionError as error:
                 if error.code not in ('review_required','missing_evidence'):
                     raise
@@ -348,6 +348,9 @@ def build(task, request_path, output):
             sources['script_acceptance_items']=acceptance_items
         for name,data in [('decision.json',value),('diff.json',diff),('sources.json',sources),('unresolved.json',issues)]:
             write_json(output/name,data)
+        from agent_evidence_chain import enabled as chain_enabled, bind as bind_continuity
+        if chain_enabled(state,partial):
+            write_json(output/'continuity.json',bind_continuity(value,state,partial,native_clean))
         if score_audit is not None:
             from agent_audit import bind
             write_json(output/'audit.json',bind(value,state,score_audit))

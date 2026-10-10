@@ -86,3 +86,11 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 2026-10-10，合入 #49/#50 门禁后，旧 lazy 正例缺少逐项审计，专项 RED 保持 waiting。测试改为通过公开 ROI 操作取得首尾和 gap 的完整原生证据，再提供显式 v4 title extra 与有效 `review.score_audit`，没有改动生产门禁。适配后 7 项专项通过，25.872 秒。干净 lazy 的三个打印行选择末帧真实裁剪，标题使用首帧显式区域，接受历史保存审计 hash；export/replay 的 PDF 字节一致，`hidden_content_proven_absent=false` 保留。删除审计后不能提交，混合光标片段即使声称全部确认仍 waiting，导出没有成功 PDF。full 历史复用单独保留其兼容范围。
 
 同一门禁快照的 #47 既有 9 项兼容回归通过，25.074 秒。`git diff --check` 通过。本次适配只修改测试和本页文档，没有执行完整仓库回归、下载真实视频或调用真实模型。
+
+## 最小链任务的短摘要
+
+仅新任务的 `--minimum-evidence-chain` 开关启用这个输出。CLI 返回 `summary` 和详细 `review-plan.json` 的绝对路径，不再把原始数百条 issues 全部送回调用方；详细文件仍保存全部证据。摘要区分关键接续缺口、已有替代证据、重复几何候选和低价值诊断，列出每个关键区间的下一步。首尾、行外、所有原帧、全部区间和打印来源的实际审阅仍必需。
+
+初始检测 proposal 没有建立身份，不能据此把重复候选当作漏行。Agent 已实际确认结构后，可将当前绑定的 build-decision 请求交给 `review-plan --decision`。计划会复用构建与几何、内容、覆盖门禁，保存 `bound-build/` 草稿，仍不接受决定。没有实际原生核查时，草稿和摘要保持等待，不自动填写 true。
+
+定向补采只针对关键内容证据不足的区间；已有可靠替代的光标诊断不再重复补采，明确 conflict 先纠正对应或核查源内容。相邻缺口按不超过 30 秒的局部范围合并，单份最多 8 个新时间，去重并按当前账本模拟累计请求和帧预算。计划不扣预算，一份请求执行后改变观察绑定，必须重建其余请求。预算拒绝原因保留在摘要。

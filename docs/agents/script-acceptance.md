@@ -43,3 +43,5 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 报告分别记录脚本接受项、Agent clean 区域、未决脚本项、实际原生读取像素及所有完整帧分析。`full_frame_analysis_attempts` 统计 `native_analysis`；ROI 五线复核保存为独立 `native_staff_recheck` 阶段，由 `native_staff_recheck_attempts` 统计。两类尝试均保留失败次数与阶段耗时。生成图像、脚本读图与模型实际呈交分别记账，未知宿主 usage 与总 Token 保持 null。首版省掉部分普通行重复判断，仍需要实际源 ROI 审阅，不保证总 Token 或端到端时间下降。
 
 关闭开关，在新的结果目录运行默认 full prepare；保留实验任务、历史、决定与日志。`--script-acceptance` 与 convert、resume 或其他旧任务操作组合会拒绝。也可在独立 checkout 使用冻结稳定代码 `d09fa9d` 和新的任务目录回退。
+
+显式最小证据链是另一个独立的新任务开关，契约见[内容接续证据](content-checks.md)。它不扩大此脚本接受策略的严格几何和原生切带范围；混合 gap 本身不符合脚本权限时，仍由 Agent 实际核查与原覆盖审计承担。不得把内容链的两个锚点当作任意原生 clean 或唯一位移证明。

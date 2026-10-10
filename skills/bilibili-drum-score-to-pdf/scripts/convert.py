@@ -79,6 +79,7 @@ def main():
     parser.add_argument('--task', help='Existing Agent observation task')
     parser.add_argument('--performance-events', help='Controlled host timing events JSON, bound to the task lifecycle')
     parser.add_argument('--evidence-mode', choices=['full', 'lazy'], default='full', help='Prepare full details or experimental on-demand native evidence')
+    parser.add_argument('--minimum-evidence-chain', action='store_true', help='Opt in new lazy task to minimal ordered content witnesses')
     parser.add_argument('--script-acceptance', action='store_true', help='Opt in new lazy task to isolated mixed script/Agent acceptance')
     parser.add_argument('--decision', help='Agent-authored JSON decision')
     parser.add_argument('--acquisition-timeout', type=float, default=ACQUISITION_SECONDS,
@@ -86,14 +87,14 @@ def main():
     args = parser.parse_args()
     if not math.isfinite(args.acquisition_timeout) or args.acquisition_timeout <= 0:
         parser.error('--acquisition-timeout must be a finite positive number')
-    if args.script_acceptance and args.operation == 'convert':
+    if (args.script_acceptance or args.minimum_evidence_chain) and args.operation == 'convert':
         print(json.dumps(dict(status='failed',complete=False,error=dict(code='invalid_input',message='脚本接受仅支持新 lazy prepare 任务。')),ensure_ascii=False))
         return 2
     if args.operation != 'convert':
         from agent_workflow import run
         previous = signal.signal(signal.SIGTERM, interrupt_conversion)
         try:
-            result = run(args.operation, args.input, args.task, args.decision, args.output, acquisition_timeout=args.acquisition_timeout, performance_events=args.performance_events, evidence_mode=args.evidence_mode, script_acceptance=args.script_acceptance)
+            result = run(args.operation, args.input, args.task, args.decision, args.output, acquisition_timeout=args.acquisition_timeout, performance_events=args.performance_events, evidence_mode=args.evidence_mode, script_acceptance=args.script_acceptance, minimum_evidence_chain=args.minimum_evidence_chain)
         finally:
             signal.signal(signal.SIGTERM, previous)
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))

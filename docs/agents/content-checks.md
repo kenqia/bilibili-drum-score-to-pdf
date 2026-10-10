@@ -24,7 +24,7 @@
 
 沿用 `build-decision` 的结构修正与实际审阅确认。纠正对应或恢复实际完整 crop 后，再绑定当前观察包构建。`supplement` 仍用于取得局部原生证据，但只有修正后的所有必需对应都有可靠局部内容时才能解除门禁。缩去矛盾音符、改确认标志或绕过构建直接提交不会解除门禁。不能取得可靠证据时继续 waiting，预算不放宽。
 
-当前保留全部观察与共同实例对应，没有间接 clean-witness 协议。光标或遮挡污染某个必需对应原帧时，补一张 clean 帧或改选打印来源仍不能删除旧对应中的 uncertain，该任务继续 waiting。不能宣称任意遮挡都可用补采恢复。当前可到达的 uncertain 恢复正例是修正实际完整原生 bbox，恢复被错误排除的五线范围；它不改原帧或缩小观察范围。
+未启用最小证据链的任务保留全部观察与共同实例对应，没有间接 clean-witness 协议。光标或遮挡污染某个必需对应原帧时，补一张 clean 帧或改选打印来源仍不能删除旧对应中的 uncertain，该任务继续 waiting。不能宣称任意遮挡都可用补采恢复。当前可到达的 uncertain 恢复正例是修正实际完整原生 bbox，恢复被错误排除的五线范围；它不改原帧或缩小观察范围。
 
 `build-decision` 的 `sources.content_checks` 保存检查结果。`submit` 重新检查并将成功依据写入任务的 `content_checks`；`export` 和 `replay` 再次检查，并在 manifest 保存同名结果。冲突与不确定项通过公开 `issues` 或草稿未决项返回。审计包含源 hash、帧 hash、实际 PTS/time_base、pair、staff_y、提出的 bbox、局部窗口、差异与有限分析像素，明确标记内容没有建立身份。
 
@@ -45,3 +45,13 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 这份记录不含真实下载、模型调用或端到端性能验收。#50 已增加显式标题、行外与覆盖审计。当前实验正例逐项提供 native ROI、真实打印 row/extra、首尾和相邻 gap 声明，builder 将 audit 绑定精确决定文件，submit/export/replay 重新核查；旧 full 兼容边界保持。完整真实宿主基线与自动接受放行仍等待 #45 和真实验收。
 
 #50 接线合入后，旧实验正例因缺少 score_audit 先失败。补齐逐项原生审计后，本票八项 CLI 专项全部通过，耗时 26.691 秒，内容负例与 full 兼容保持。此次适配只修改测试请求和本页说明，没有修改生产门禁。
+
+## 显式最小充分证据链
+
+新 lazy 任务可指定 `--minimum-evidence-chain`，固定 `ordered_anchors_v1`。旧任务不能迁移，默认 full 和未指定开关的 lazy 保留原内容门禁。这个实验区分承担接续证明的内容证据与冗余诊断，仍检查所有提出的共同实例对应，任何明确 conflict 都否决。
+
+每个相邻区间需要两个独立、有序的空间实例内容证据。优先使用当前对应，也可检查现有原帧之间的几何桥。桥的所有共同实例均检查后才选择锚点；空间实例必须在桥覆盖的每帧完整出现，global_y、尺度、横向布局和原有共同位移保持一致。不跨谱面段，不跳过中间帧的审计，不利用内容创建身份。一次检查最多尝试 256 条桥对应，额度用尽而关键证据仍缺失时保持 waiting。所有实际比较读像素与失败检查计入原 content_validation。
+
+`review.native_clean_regions` 复用既有原生核查字段，绑定真实 PTS、原帧 hash、同帧原生细节和实际呈交清单。内容锚点需要 clear cursor 与 clear occlusion，范围完整覆盖分析窗口和观察框。冗余光标对应只在充分链已成立、Agent 已实际确认该窗口 cursor present、occlusion clear 时才不阻塞；未知遮挡、缺记录、低信息、partial、丢失边界或内容差异不降级。尺寸舍入导致的 unreliable_alignment 还要求两端真实 clear 原生核查。标题、首尾、行外内容、每帧每区间覆盖与所选打印来源都继续执行原审计。
+
+构建保存小型 `continuity.json`，绑定 task、观察版本/hash、源 hash、精确决定文件 hash、固定策略和原生核查记录。submit、export、replay 从原帧重新比较；接受历史保存旁记录及 hash。改变观察、补采、改来源或改决定后须重绑。没有旁记录或绑定不符时不能导出。未采样隐藏内容仍未知，脚本读像素不作为实际图像呈交或 Token。
