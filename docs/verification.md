@@ -352,3 +352,33 @@ python ci/run_unittest_shard.py --index 1 --count 2
 ```
 
 两份 `--list` 的并集必须等于完整 discovery 的测试 ID，交集必须为空。固定决定 replay 独立为另一个 15 分钟 job，保留原工具安装、固定 action SHA、只读权限和有限 artifact。全量本地验证仍使用本页统一 unittest 命令。分片减少单个 job 的测试负担；实际 hosted 用时要在远端运行后确认，本地旧耗时不能证明新版 CI 稳定低于 15 分钟。
+
+## 8c117d3 标准证据链验证，2026-10-10
+
+源码冻结为 `8c117d3d4ee4ddf1d5bdb79b6dfa1eb0718706ed`，是 `931b399` 的后继。统一完整 unittest 在该提交运行 197 项，719.973 秒全部通过，wrapper 单调耗时 721.066 秒，退出码 0。运行起止提交相同，期间只补充实施状态文档，未改源码或测试。日志为 `/home/kenqia/issue-43-resume-notes/standard-evidence-chain-20261010/full-regression-8c117d3.log`，SHA-256 为 `67805161672e8bd4871f156f5f2c003ee1593edf9fc5e28587d9399e884eb2c8`；退出记录同目录 `full-regression-8c117d3.status.json`。
+
+固定决定 replay 在同一提交通过，3 行、1 页，原裁剪相等、PDF 字节一致。未知版本、越界和损坏图像保持拒绝。它只验证保存决定的执行，不代替真实内容审核。CI 分片清单为 99 / 98 项，交集为空、并集为完整 197 项；远端 CI 未运行。最终 `40e2cf5...8c117d3` 的 Standards 和 Spec 各 0 finding，汇总见同目录 `frozen-verification-8c117d3.json`。
+
+新增桥预算反例先复现大量无用短边耗尽上限，再验证只优先比较具备两个实际干净几何锚点的边。全部中间观察仍须完整，整条边的所有共同实例继续比较；第三实例没有锚点资格时，其明确内容冲突仍否决。受控光标、重复谱行、缺帧、未知遮挡、不同端点边单锚点、旁记录篡改和跨段共享 256 次预算均在完整回归内。
+
+标准 full 已新鲜交付 12 行、2 页并独立核验来源；原 `809ba23` lazy 审阅停在 waiting，3 帧定向补采后仍有 14 个关键接续缺口。`8c117d3` 的同任务质量恢复单列，不能替换原 A/B 版本或重置计时。WSL 重启和不完整宿主账本使该配对成本资格为 false，完整 Token 为 null。最新真实结果与限制以[实施状态](agents/performance-implementation-status.md)及仓库外 `standard-ab-20261010/` 为准。没有展开 30 次基准或默认启用快路径。
+
+## d37e8f4 冻结回归与后续反证，2026-10-10
+
+源码冻结 `d37e8f469ef049e061c4069ed9649d6f0dc2eb26`，统一完整 unittest 214 项全部通过，717.001 秒，wrapper 717.331 秒，退出码0。起止提交与源码、测试及 CI 文件 SHA-256 一致。日志为 `/home/kenqia/issue-43-resume-notes/standard-evidence-chain-20261010/full-regression-d37e8f4.log`，SHA-256 为 `09f4a3b7c43661bd4bb1263271439fd4c64f6ae02a531b9bfd3bace989315335`。没有将早期完整回归与后续专项拼成最终通过。
+
+同一提交的固定决定 replay、原裁剪与 PDF 字节核对及三项负例通过。最终 `40e2cf5...d37e8f4` Standards/Spec 各0 finding。CI 两分片各107项，交集为空，并集为214项；每个 job 仍限时15分钟，托管安装与运行时间尚未验证。完整汇总、退出与日志 hash 在同目录 `frozen-verification-d37e8f4.json`。
+
+新增公开 CLI 反例覆盖第三实例实际间距差、未知或存在遮挡、宽 clear 掩盖局部声明、桥第三实例累积内容差异、短五线隐藏边缘记谱、混合内容/光标理由、待审覆盖区间定位和大规模诊断摘要。阈值、256次额外桥预算、全部覆盖与空间身份检查不变；打印仍使用单个真实原裁剪。合成验证与软件审阅不替代标准真实12行2页PDF及可比较实际成本。最新同任务质量恢复见实施状态和仓库外 `standard-ab-20261010/`。
+
+此后针对实际污染端的组合反例发现新 P1。`2-D` 的 spacing 12.125及12.09375均被光标理由掩盖，错误ready；规划窗口高度144变145，但污染端mask为null，旧shape分支未阻止放行。记录为同目录 `combined-cursor-alignment-target-d37e8f4.json` 与 `review-spec-combined-cursor-alignment-d37e8f4.md`。因此本节214项通过仅说明既有测试范围，不构成该版本最终安全通过。修复后须在新冻结提交重跑完整入口、固定replay及分片清单。
+
+## 3641caf 组合对齐修复验证，2026-10-10
+
+冻结提交 `3641caf7b1b049dd8bba183d2d2fd923f3076953` 独立核查原帧宽度、由spacing计算的原生窗口高度与原有 .1间距限制。污染端mask为null也不能以cursor理由解除错配，endpoint_reasons仍保存实际原理由。新增公开CLI反例分别验证12.125与12.09375，保留两个干净锚点仍waiting；合法光标替代、导出及重放继续通过。受控1280/1279宽度反例也返回不可替代alignment。
+
+在该提交重新运行本页统一完整unittest入口，215项全部通过，768.771秒，wrapper769.382498秒，退出0。起止提交及源码、测试和CI文件校验值一致。日志为 `/home/kenqia/issue-43-resume-notes/standard-evidence-chain-20261010/full-regression-3641caf.log`，SHA-256为 `8c1742f3a0d8a55bf2b3f3888361c40fc5459c515e963fdec2350c32ce0e06bb`。固定replay在同提交通过，3行1页、原裁剪及PDF字节一致，三个来源/边界/版本负例拒绝。未将d37完整回归与新专项拼成最终结果。
+
+最终40e2cf5...3641caf的Standards与Spec复审各0 finding。分片108/107，交集为空、并集为全部215项，每个job仍限时15分钟；远端CI未运行，安装与托管执行预算未知。完整记录为同目录 `frozen-verification-3641caf.json`。真实标准样本的污染声明、内容及交付结果另行验收，软件通过不表示新版12行2页PDF或完整成本达标。
+
+同提交的真实标准任务在实际原生范围复核及三组独立五线修订后，公开build仍waiting，22.795341秒、退出2。关键区间33、已有替代17，保留10个存在遮挡和3个未知遮挡范围。frame-030/031的右上水印真实跨记谱，补锚点不能解除当前必需旧对应的硬阻塞。没有补采、接受或新版PDF；详细前后变化、实际比较计量和原裁剪来源在 `/home/kenqia/issue-43-resume-notes/standard-ab-20261010/lazy-1/quality-recovery-3641caf/handoff.md`。旧full的12行2页交付保留，完整A/B成本配对仍无资格，完整Token=null，#52不展开。
