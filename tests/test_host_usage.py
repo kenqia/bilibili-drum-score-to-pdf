@@ -119,6 +119,162 @@ class HostUsageTests(unittest.TestCase):
             self.assertEqual(len(child_packet['events']), 1)
             self.assertEqual(child_packet['events'][0]['thread_id'], 'child')
 
+    def continuation_fixture(self, base):
+        import os
+        task, report = self.prepare(base)
+        home = base / 'host'
+        sessions = home / 'sessions'
+        sessions.mkdir(parents=True)
+        start = report['submitted_at']
+        # A later filename has an older turn. A copied root metadata record inside
+        # the child file does not transfer that file's ownership to the root.
+        meta = dict(id='root', session_id='root', cwd=str(Path.cwd()), originator='Codex Desktop', source='vscode')
+        child = dict(meta, id='child', source=dict(subagent=dict(thread_spawn=dict(parent_thread_id='root'))))
+        usage = dict(input_tokens=20, output_tokens=2, total_tokens=22)
+        def row(kind, payload, offset=0):
+            return dict(type=kind, timestamp=start + offset, payload=payload)
+        def model(thread, response, turn='latest', offset=2):
+            return row('token_usage_record', dict(thread_id=thread, root_turn_id=turn, response_id=response, usage=usage), offset)
+        def write(name, records):
+            path = sessions / name
+            path.write_text('\n'.join(json.dumps(record) for record in records) + '\n')
+            return path
+        latest = [row('session_meta', meta), row('turn_context', dict(root_turn_id='latest'), 1),
+                  model('root', 'real'), model('root', 'retry'),
+                  row('response_item', dict(type='custom_tool_call', call_id='call', name='exec', status='completed', input='PRIVATE_ARGS'), 2)]
+        write('a-latest.jsonl', latest)
+        write('z-old.jsonl', [row('session_meta', meta), row('turn_context', dict(root_turn_id='old')),
+                             model('root', 'old-response', turn='old'),
+                             row('turn_context', dict(root_turn_id='future'), 5)])
+        write('child.jsonl', [row('session_meta', child), row('session_meta', meta),
+                             model('child', 'child-response'), model('root', 'wrong-owner'),
+                             row('response_item', dict(type='message', content='PRIVATE_BODY'))])
+        env = os.environ.copy()
+        env.update(CODEX_THREAD_ID='root', CODEX_HOME=str(home))
+        return task, home, start, env, latest, write
+
+    def test_collect_continuations_choose_latest_turn_and_keep_child_ownership(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task, home, start, env, _, _ = self.continuation_fixture(base)
+            for threads, expected in ((['root'], {'real', 'retry'}), (['child'], {'child-response'})):
+                output = base / (threads[0] + '.json')
+                args = [arg for thread in threads for arg in ('--thread-id', thread)]
+                code, result = self.run_cli(HOST, 'collect', '--task', task, '--invocation', 'continuation',
+                    '--start', start, '--end', start+3, '--output', output, *args, env=env)
+                self.assertEqual(code, 0, result)
+                packet = json.loads(output.read_text())
+                self.assertEqual(packet['scope']['root_turn_id'], 'latest')
+                self.assertEqual({event['response_id'] for event in packet['events'] if event['kind']=='model_call'}, expected)
+                self.assertTrue(all(packet['coverage'][name] is False for name in
+                    ('lifecycle_complete', 'model_calls_complete', 'tools_complete', 'images_complete')))
+                self.assertNotIn('PRIVATE_', output.read_text())
+            self.assertFalse((task/'host-usage.json').exists())
+
+    def test_collect_duplicate_continuations_are_idempotent_and_reject_conflicts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task, _, start, env, latest, write = self.continuation_fixture(base)
+            duplicate = write('copied.jsonl', latest)
+            output = base / 'duplicates.json'
+            args = ('collect', '--task', task, '--invocation', 'duplicate', '--root-turn', 'latest',
+                    '--start', start, '--end', start+3, '--thread-id', 'root')
+            code, result = self.run_cli(HOST, *args, '--output', output, env=env)
+            self.assertEqual(code, 0, result)
+            packet = json.loads(output.read_text())
+            self.assertEqual(len(packet['events']), 3)
+            self.assertEqual(sum(e['usage']['total_tokens'] for e in packet['events'] if e['kind']=='model_call'), 44)
+            # Changed usage and changed tool metadata for an existing stable ID fail
+            # before writing any partial output or changing the video task.
+            for index, changes in ((2, dict(usage=dict(input_tokens=21, output_tokens=2, total_tokens=23))),
+                                   (4, dict(name='other_tool'))):
+                records = json.loads(json.dumps(latest))
+                records[index]['payload'].update(changes)
+                write(duplicate.name, records)
+                failed_output = base / f'conflict-{index}.json'
+                code, result = self.run_cli(HOST, *args, '--output', failed_output, env=env)
+                self.assertEqual(code, 2, result)
+                self.assertFalse(failed_output.exists())
+            self.assertFalse((task/'host-usage.json').exists())
+
+    def test_collect_rejects_conflicting_first_metadata_for_scoped_thread(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task, _, start, env, latest, write = self.continuation_fixture(base)
+            records = json.loads(json.dumps(latest))
+            records[0]['payload']['cwd'] = str(base/'another-project')
+            write('conflicting-owner.jsonl', records)
+            output = base/'conflict.json'
+            code, result = self.run_cli(HOST, 'collect', '--task', task, '--invocation', 'conflict',
+                '--start', start, '--end', start+3, '--thread-id', 'root', '--output', output, env=env)
+            self.assertEqual(code, 2, result)
+            self.assertFalse(output.exists())
+
+    def test_collect_prefers_current_home_and_keeps_explicit_historical_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task, home, start, env, latest, _ = self.continuation_fixture(base)
+            fallback = base/'fallback-home'/'.codex'/'sessions'
+            fallback.mkdir(parents=True)
+            mirror = json.loads(json.dumps(latest))
+            mirror[2]['payload']['response_id'] = 'mirror-only'
+            (fallback/'root.jsonl').write_text('\n'.join(json.dumps(record) for record in mirror)+'\n')
+            env['HOME'] = str(base/'fallback-home')
+            output = base/'historical.json'
+            code, result = self.run_cli(HOST, 'collect', '--task', task, '--invocation', 'historical',
+                '--root-turn', 'old', '--start', start+1, '--end', start+3,
+                '--thread-id', 'root', '--output', output, env=env)
+            self.assertEqual(code, 0, result)
+            packet = json.loads(output.read_text())
+            self.assertEqual([event['response_id'] for event in packet['events']], ['old-response'])
+            current = base/'current.json'
+            code, result = self.run_cli(HOST, 'collect', '--task', task, '--invocation', 'current',
+                '--start', start+1, '--end', start+3, '--thread-id', 'root', '--output', current, env=env)
+            self.assertEqual(code, 0, result)
+            self.assertEqual({event['response_id'] for event in json.loads(current.read_text())['events']
+                if event['kind']=='model_call'}, {'real', 'retry'})
+            after = base/'after.json'
+            code, result = self.run_cli(HOST, 'collect', '--task', task, '--invocation', 'after',
+                '--root-turn', 'latest', '--start', start+2.5, '--end', start+3,
+                '--thread-id', 'root', '--output', after, env=env)
+            self.assertEqual(code, 0, result)
+            self.assertEqual(json.loads(after.read_text())['events'], [])
+
+    def test_collect_requires_explicit_turn_for_simultaneous_conflicting_turns(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task, _, start, env, latest, write = self.continuation_fixture(base)
+            records = json.loads(json.dumps(latest[:2]))
+            records[1]['payload']['root_turn_id'] = 'same-time-other-turn'
+            write('same-time.jsonl', records)
+            output = base/'ambiguous.json'
+            code, result = self.run_cli(HOST, 'collect', '--task', task, '--invocation', 'ambiguous',
+                '--start', start, '--end', start+3, '--thread-id', 'root', '--output', output, env=env)
+            self.assertEqual(code, 2, result)
+            self.assertFalse(output.exists())
+            code, result = self.run_cli(HOST, 'collect', '--task', task, '--invocation', 'explicit',
+                '--root-turn', 'latest', '--start', start, '--end', start+3,
+                '--thread-id', 'root', '--output', output, env=env)
+            self.assertEqual(code, 0, result)
+
+    def test_collect_requires_root_session_and_no_parent(self):
+        for changes in (dict(session_id='another-session'),
+                        dict(source=dict(subagent=dict(thread_spawn=dict(parent_thread_id='another-root'))))):
+            with self.subTest(changes=changes), tempfile.TemporaryDirectory() as directory:
+                base = Path(directory)
+                task, home, start, env, _, _ = self.continuation_fixture(base)
+                for name in ('a-latest.jsonl', 'z-old.jsonl'):
+                    path = home/'sessions'/name
+                    records = [json.loads(line) for line in path.read_text().splitlines()]
+                    records[0]['payload'].update(changes)
+                    path.write_text('\n'.join(json.dumps(record) for record in records)+'\n')
+                output = base/'wrong-root.json'
+                code, result = self.run_cli(HOST, 'collect', '--task', task, '--invocation', 'wrong-root',
+                    '--root-turn', 'latest', '--start', start, '--end', start+3,
+                    '--thread-id', 'root', '--output', output, env=env)
+                self.assertEqual(code, 2, result)
+                self.assertFalse(output.exists())
+
     def test_images_missing_usage_and_unknown_fields_preserve_cost_completeness(self):
         from test_agent_performance import PerformanceTests
         with tempfile.TemporaryDirectory() as directory:

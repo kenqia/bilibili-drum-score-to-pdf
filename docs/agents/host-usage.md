@@ -4,7 +4,9 @@
 
 ## 从当前 Codex Desktop 采集
 
-Agent 为每次视频任务记录 invocation ID、开始与结束时间，以及实际参与的 thread ID。默认读取 `CODEX_HOME` 和 `CODEX_THREAD_ID`；必要时按顺序检查 WSL home 与自动发现的 Windows 用户目录。先读取会话首行元数据，核对 ID、cwd、`Codex Desktop` 来源及父子关系。相同 inode 只读一次，找到优先来源后不合并其他目录。当前 root turn 可从该根会话的安全元数据自动发现，历史调用可显式指定 `--root-turn`。
+Agent 为每次视频任务记录 invocation ID、开始与结束时间，以及实际参与的 thread ID。默认读取 `CODEX_HOME` 和 `CODEX_THREAD_ID`；必要时按顺序检查 WSL home 与自动发现的 Windows 用户目录。先读取会话首行元数据，核对 ID、cwd、`Codex Desktop` 来源及父子关系。相同 inode 只读一次，找到优先来源后不合并其他目录。同一优先目录内，同线程可有多个续跑文件；采集器核对每个文件的首行归属元数据，冲突时拒绝采集。文件中后来出现的 session_meta 不改变首行归属。相同响应或工具调用的稳定 ID 与计量字段完全一致时只计一次，字段冲突时拒绝，不同 ID 的实际重试分别累计。
+
+自动发现 root turn 时，采集器比较所有根线程续跑文件中不晚于 `--end` 的 turn 时间，选择实际时间最新的 turn，不按文件名排序推断。最新时间同时对应多个 turn 时须显式提供 `--root-turn`。历史调用也应显式指定，避免后来开发工作的 turn 改变采集范围。
 
 ```sh
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python skills/bilibili-drum-score-to-pdf/scripts/host_usage.py collect \

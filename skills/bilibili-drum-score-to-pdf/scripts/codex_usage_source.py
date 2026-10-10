@@ -78,20 +78,27 @@ def collect(directory, root, root_turn, invocation, start, end, home, load, cwd,
         if roots:
             matches.append((metas, roots))
             break  # Prefer the authoritative current home; never merge fallback homes.
-    # Distinct data sources claiming the root are ambiguous, never merged.
     require(len(matches) == 1)
     metas, roots = matches[0]
-    require(len(roots) == 1)
+    require(all(meta['session_id'] == root and meta['parent'] is None for _, meta in roots))
     if root_turn is None:
-        with roots[0][0].open() as stream:
-            for line in stream:
-                try:
-                    record = json.loads(line)
-                    payload = record.get('payload', {})
-                    if record.get('type') in ('turn_context', 'event_msg') and payload.get('root_turn_id') and timestamp(record.get('timestamp')) <= end:
-                        root_turn = payload['root_turn_id']
-                except json.JSONDecodeError:
-                    continue
+        latest, turns = None, set()
+        for path, _ in roots:
+            with path.open() as stream:
+                for line in stream:
+                    try:
+                        record = json.loads(line)
+                        payload = record.get('payload', {})
+                        if record.get('type') in ('turn_context', 'event_msg') and payload.get('root_turn_id'):
+                            when = timestamp(record.get('timestamp'))
+                            if when <= end and (latest is None or when > latest):
+                                latest, turns = when, {payload['root_turn_id']}
+                            elif when == latest:
+                                turns.add(payload['root_turn_id'])
+                    except json.JSONDecodeError:
+                        continue
+        require(len(turns) == 1)
+        root_turn = turns.pop()
     identifier(root_turn)
     lineage = {root}
     changed = True
@@ -99,6 +106,13 @@ def collect(directory, root, root_turn, invocation, start, end, home, load, cwd,
         before = len(lineage)
         lineage.update(meta['id'] for _, meta in metas if meta['parent'] in lineage and meta['session_id'] == root and meta['cwd'] == str(Path(cwd).resolve()) and meta['originator'] == 'Codex Desktop')
         changed = len(lineage) != before
+    # Continuations share first-record ownership; a conflicting owner cannot
+    # contribute events merely because another file granted the same thread ID.
+    owners = {}
+    for _, meta in metas:
+        if meta['id'] in lineage:
+            require(meta['id'] not in owners or owners[meta['id']] == meta)
+            owners[meta['id']] = meta
     require(bool(threads) and set(threads) <= lineage)
     for thread in threads:
         identifier(thread)
