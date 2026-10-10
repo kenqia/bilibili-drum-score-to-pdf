@@ -1,5 +1,19 @@
 # 验证记录
 
+## 2026-10-10 Desktop 续跑计量与新独立审阅
+
+`931b399` 的宿主计量测试 16 项通过，59.487 秒，Standards 与 Spec 各 0 finding。修复同一权威 home 的多续跑文件采集，保持不同 home 隔离、首行归属检查、实际时间选 turn、事件去重及冲突拒绝。未重复运行整个测试集；下文 163 项完整回归仍对应 `712437a`。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_host_usage.py -v
+```
+
+真实 `host_usage.py collect` 已按两个实际子线程、三个 root turn 分别成功采集。每个任务导入末段 partial scope，重复导入前后 host-usage.json 字节 hash 相同。前两段独立保存，没有修改 invocation 绑定。分段去重观察到 45/43 次模型响应、43/41 次外层工具调用、4,973,865/5,467,686 Token；完整 Token、完整工具与图像覆盖仍未知。证据在 `/home/kenqia/issue-43-resume-notes/issue45-usage-partitions-20261010/`，含原始受控事件、测试红绿、双轴报告、导入结果及 `real-partial-usage-summary.json`。
+
+两份新的标准 URL 独立审阅各有 49 原帧，实际 submit 均退出 2、保持 waiting。第一份补采 280 秒，186 个经过几何校验的必需 pair 有 91 个 uncertain；第二份补采 90 秒，保留完整性未决，其 185 pair 内容诊断有 92 个 uncertain，但该草稿诊断尚非几何资格验收。两份均保存实际图像查看记录及 12 行来源草稿，没有接受决定、PDF 分页、导出来源审核或 replay。用户消息与额度中断后续跑的时段不作为有效性能配对，#45/#51/#52 尚未放行。
+
+三份真实视频源已重新核对 SHA-256，均匹配冻结值；另外两份候选仅完成首、中、尾原图预检。恢复清单及新 hash 记录在 `/home/kenqia/issue-43-resume-notes/issue52-refrozen-sources-20261010/`。没有以预检代替整曲验收或执行 30 次成本配对。
+
 ## 2026-10-10 #51 混合接受软件
 
 实现快照 `19f28a7` 完整 unittest 为 159 项，668.409 秒，全部通过。随后双轴审阅发现 gap clean 范围和 ROI 计量口径两项问题，由 `7449f2a` 修复；sources.json 持久化差异一并修正。修复后的快路径专项 10 项与性能专项 12 项通过，Standards、Spec 最终复核各 0 项未解决发现。计划规模修复随后合入 `712437a`，最终源码完整回归 163 项通过，745.659 秒，退出码 0。中断日志保留，未算作通过。
@@ -13,7 +27,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 两份历史 full 标准任务复制至新目录，在 `7449f2a` 下 replay 并以独立脚本核对来源、实际 PTS、灰度嵌入像素、DPI、空间顺序与分页。各 12 行、2 页，PDF 分别与原保存 export 字节相同，原任务 JSON 未变。最低 effective DPI 分别为 264.182 和 250.423。这是旧决定兼容性检查，没有新增视觉判断、呈交或交付确认。
 
-新真实 URL 两跑的源 hash、实际 PTS、48 帧和逐帧 hash 一致，各完整帧分析 48 次。修复计划规模后，各物化 48 张同帧原生 ROI，逐像素一致；当前观察版本 2、97 张图，仍 waiting。未完成新的完整独立视觉判断、保存决定或 PDF，不计为真实放行。计划紧凑存储与超限等待验证见[实施状态](agents/performance-implementation-status.md)。
+新真实 URL 两跑的源 hash、实际 PTS、48 帧和逐帧 hash 一致，各完整帧分析 48 次。修复计划规模后，各物化 48 张同帧原生 ROI，逐像素一致；此阶段观察版本 2、97 张图，仍 waiting。当时尚未完成新的独立视觉审阅、保存决定或 PDF，不计为真实放行。之后的补采与等待结果见本页最新记录。计划紧凑存储与超限等待验证见[实施状态](agents/performance-implementation-status.md)。
 
 原始日志、红绿回归、双轴报告、来源审核与重放产物分别保存于仓库外 `/home/kenqia/issue-43-resume-notes/issue51-implementation-20261010/`、`issue51-review-fix-20261010/`、`issue51-real-quality-20261010/`。完整回归日志 SHA-256 为 `3ef1f1198cd7b6d5030b4c58ea3d2cd1d1bb950a24bc8b24a0d373be26469bed`，记录路径 `/home/kenqia/issue-43-resume-notes/issue51-review-fix-20261010/unittest-final-complete.log`。显式策略边界见[实验协议](agents/script-acceptance.md)。默认 full 保持；#45 完整真实基线及 #51/#52 放行仍未完成。
 
