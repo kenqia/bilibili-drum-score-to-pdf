@@ -94,3 +94,5 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 初始检测 proposal 没有建立身份，不能据此把重复候选当作漏行。Agent 已实际确认结构后，可将当前绑定的 build-decision 请求交给 `review-plan --decision`。计划会复用构建与几何、内容、覆盖门禁，保存 `bound-build/` 草稿，仍不接受决定。没有实际原生核查时，草稿和摘要保持等待，不自动填写 true。
 
 定向补采只针对关键内容证据不足的区间；已有可靠替代的光标诊断不再重复补采，明确 conflict 先纠正对应或核查源内容。相邻缺口按不超过 30 秒的局部范围合并，单份最多 8 个新时间，去重并按当前账本模拟累计请求和帧预算。计划不扣预算，一份请求执行后改变观察绑定，必须重建其余请求。预算拒绝原因保留在摘要。
+
+原生 cursor uncertain 或 occlusion present/uncertain 是当前范围的实际声明，摘要给出受影响实例、端点和 bbox。已检查桥上的这类阻塞也列入其覆盖的相邻区间，像素 not_contradicted 不会把它隐藏。先核查列出的原生范围，只有声明确实错误时才显式修订；无法证明则维持 waiting。这类缺口不自动请求无关 midpoint。cursor present 且 occlusion clear 缺少充分替代时，仍可按既有契约定向取得两个有序 clean 证据。

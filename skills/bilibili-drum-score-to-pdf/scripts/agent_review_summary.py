@@ -18,11 +18,18 @@ def summarize(issues, checks, packet, bound):
     alternatives = []
     for key,item in intervals.items():
         local=[c for c in checks if (c['from_frame'],c['to_frame'])==key]
-        spanning_conflicts=[c for c in checks if c['status']=='conflict' and c.get('scope')=='geometry_established_bridge' and all(fid in c.get('covered_frames',[]) for fid in key)]
+        spanning_conflicts=[c for c in checks if c.get('blocking') and c.get('scope')=='geometry_established_bridge' and all(fid in c.get('covered_frames',[]) for fid in key)]
         blocking=[c for c in local if c.get('blocking',c['status']!='not_contradicted')]+spanning_conflicts
         if blocking:
-            item['reasons']=sorted({c['reason'] for c in blocking})
+            native=[b for c in blocking for b in c.get('native_blockers',[])]
+            item['reasons']=sorted({b['reason'] for b in native}|{c['reason'] for c in blocking if c['status']=='conflict' or not c.get('native_blockers')})
             item['next_action']='Review the native interval and request a new original frame only if existing evidence cannot resolve these reasons.'
+            if native:
+                item['native_blockers']=[dict(v) for v in {tuple((k,tuple(v) if isinstance(v,list) else v) for k,v in b.items()):b for b in native}.values()]
+                if any(b['reason']!='native_cursor_requires_alternative' for b in native):
+                    item['next_action']='Verify each listed native instance and endpoint range. Explicitly revise an incorrect declaration using that original range; otherwise retain waiting. Unrelated new frames cannot clear these declarations.'
+                else:
+                    item['next_action']='Review the listed native cursor ranges and supplement this interval only to obtain two ordered clean witnesses under the existing alternative-chain contract.'
             missing.append(item)
         elif any(c['status']=='uncertain' for c in local):
             item['diagnostic_count']=sum(c['status']=='uncertain' for c in local)
@@ -41,7 +48,7 @@ def targeted(summary,state,packet):
     intervals=[]
     for gap in summary['critical_gaps']:
         # Actual conflicts need correspondence correction, not automatic extra frames.
-        if 'contradictory_local_notation' in gap['reasons']:
+        if 'contradictory_local_notation' in gap['reasons'] or any(b['reason']!='native_cursor_requires_alternative' for b in gap.get('native_blockers',[])):
             continue
         start=frames[gap['from_frame']]['timestamp'];end=frames[gap['to_frame']]['timestamp']
         if 0 <= start < end <= packet['source']['duration'] and end-start <=30:

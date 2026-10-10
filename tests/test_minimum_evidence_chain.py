@@ -75,6 +75,98 @@ class MinimumEvidenceChainTests(content_fixture.ContentChecksTests):
             state=self.cli(base/'input.mp4','--output',base/'full','--minimum-evidence-chain')
             self.assertEqual(state['status'],'failed',state)
 
+    def test_third_native_unknown_or_occluded_region_overrides_pixel_pass_and_wide_clear(self):
+        import copy
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_edge_support')
+            original,_=self.reviewed_request(task,decision)
+            for field,value in (('occlusion','uncertain'),('occlusion','present'),('cursor','uncertain')):
+                with self.subTest(field=field,value=value):
+                    request=copy.deepcopy(original)
+                    regions=request['review']['native_clean_regions']
+                    wide=[]
+                    for r in regions:
+                        if r['bbox'][1]==612:
+                            r[field]=value
+                            clear=copy.deepcopy(r);clear.update(bbox=[0,0,1280,960],cursor='clear',occlusion='clear')
+                            wide.append(clear)
+                    regions.extend(wide)
+                    draft=self.build(base,task,request,f'{field}-{value}')
+                    self.assertFalse(draft['ready_to_submit'],draft.get('unresolved'))
+                    third=[c for c in draft['sources']['content_checks'] if c['matches'] and c['matches'][0].endswith('-C')]
+                    self.assertTrue(all(c['status']=='not_contradicted' and c['reason']=='local_ink_not_contradicted' for c in third))
+                    self.assertTrue(all(c['blocking'] and c.get('native_blockers') for c in third))
+                    path=base/'review.json';path.write_text(json.dumps(request))
+                    plan=self.cli('--operation','review-plan','--task',task,'--decision',path,'--output',base/f'plan-{field}-{value}')
+                    self.assertEqual(plan['supplement_requests'],[])
+                    gaps=plan['summary']['critical_gaps']
+                    self.assertTrue(gaps)
+                    self.assertTrue(all(f'native_{field}_{value}' in g['reasons'] for g in gaps))
+                    self.assertTrue(all(b['instance_id']=='C' for g in gaps for b in g['native_blockers']))
+                    self.assertTrue(all('Explicitly revise' in g['next_action'] for g in gaps))
+
+    def test_third_native_bridge_blocker_is_reported_for_all_spanned_intervals(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_bridge_cursor')
+            request,packet=self.reviewed_request(task,decision)
+            last=packet['frames'][-1]['id']
+            for r in request['review']['native_clean_regions']:
+                if r['frame_id']==last and r['bbox'][1]==612:
+                    r['occlusion']='uncertain'
+            draft=self.build(base,task,request)
+            self.assertFalse(draft['ready_to_submit'],draft.get('unresolved'))
+            third=next(c for c in draft['sources']['content_checks'] if c['scope']=='geometry_established_bridge' and c['matches']==['0-C','2-C'])
+            self.assertEqual(third['status'],'not_contradicted')
+            self.assertTrue(third['blocking'])
+            self.assertTrue(third['native_blockers'])
+            path=base/'review.json';path.write_text(json.dumps(request))
+            plan=self.cli('--operation','review-plan','--task',task,'--decision',path,'--output',base/'plan')
+            self.assertEqual(len(plan['summary']['critical_gaps']),2)
+            self.assertTrue(all('native_occlusion_uncertain' in g['reasons'] for g in plan['summary']['critical_gaps']))
+            self.assertEqual(plan['supplement_requests'],[])
+
+    def test_reliable_redundant_instance_without_native_declarations_is_not_an_anchor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_edge_support')
+            request,_=self.reviewed_request(task,decision)
+            request['review']['native_clean_regions']=[r for r in request['review']['native_clean_regions'] if r['bbox'][1]!=612]
+            draft=self.build(base,task,request)
+            self.assertTrue(draft['ready_to_submit'],draft.get('unresolved'))
+            intervals=[c['evidence_chain'] for c in draft['sources']['content_checks']]
+            self.assertTrue(all(w['matches'][0].endswith(('-A','-B')) for i in intervals for w in i['witnesses']))
+
+    def test_native_unknown_outside_analysis_and_crop_does_not_poison_clean_witnesses(self):
+        import copy
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_edge_support')
+            request,_=self.reviewed_request(task,decision)
+            outside=copy.deepcopy(request['review']['native_clean_regions'][0])
+            outside.update(bbox=[0,850,1280,900],cursor='uncertain',occlusion='present')
+            request['review']['native_clean_regions'].append(outside)
+            draft=self.build(base,task,request)
+            self.assertTrue(draft['ready_to_submit'],draft.get('unresolved'))
+            self.assertTrue(all(not c['native_blockers'] for c in draft['sources']['content_checks']))
+
+    def test_pixel_pass_with_native_cursor_present_needs_authorized_alternative(self):
+        import copy
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_edge_support')
+            original,_=self.reviewed_request(task,decision)
+            for complete in (False,True):
+                with self.subTest(complete=complete):
+                    request=copy.deepcopy(original)
+                    for r in request['review']['native_clean_regions']:
+                        if r['bbox'][1]==612:
+                            r['cursor']='present'
+                            if not complete:
+                                r['bbox']=[1000,660,1010,670]
+                    draft=self.build(base,task,request,f'present-{complete}')
+                    self.assertEqual(draft['ready_to_submit'],complete,draft.get('unresolved'))
+                    third=[c for c in draft['sources']['content_checks'] if c['matches'][0].endswith('-C')]
+                    self.assertTrue(all(c['status']=='not_contradicted' for c in third))
+                    self.assertTrue(all(c['blocking']==(not complete) for c in third))
+                    self.assertTrue(all(w['matches'][0].endswith(('-A','-B')) for c in third for w in c['evidence_chain']['witnesses']))
+
     def test_two_clean_ordered_anchors_cover_redundant_cursor_pair_and_replay(self):
         with tempfile.TemporaryDirectory() as directory:
             base=Path(directory);task,decision=self.prepare_score(base,variant='redundant_cursor')
@@ -160,6 +252,15 @@ class MinimumEvidenceChainTests(content_fixture.ContentChecksTests):
             self.assertFalse(result['ready_to_submit'],result)
             conflicts=[c for c in result['sources']['content_checks'] if c['status']=='conflict']
             self.assertTrue(any(c['matches']==['1-D','2-D'] for c in conflicts),conflicts)
+            for r in request['review']['native_clean_regions']:
+                if r['bbox'][1]==612:
+                    r['occlusion']='uncertain'
+            path=base/'review.json';path.write_text(json.dumps(request))
+            plan=self.cli('--operation','review-plan','--task',task,'--decision',path,'--output',base/'plan')
+            last_gap=plan['summary']['critical_gaps'][-1]
+            self.assertIn('contradictory_local_notation',last_gap['reasons'])
+            self.assertIn('native_occlusion_uncertain',last_gap['reasons'])
+            self.assertEqual(plan['supplement_requests'],[])
 
     def test_only_missing_intervals_generate_one_deduplicated_local_request(self):
         with tempfile.TemporaryDirectory() as directory:

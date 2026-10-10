@@ -59,7 +59,7 @@ class ContentChecksTests(unittest.TestCase):
             for line in range(5):
                 draw.line((80, y + 12*line, 1200, y + 12*line), fill='black', width=2)
             if variant != 'empty':
-                for n in range(1 if variant == 'stationary_edge_notation' else 5):
+                for n in range(1 if variant in ('stationary_edge_notation','stationary_union_extent') else 5):
                     x = 180 + (row % 3)*55 + n*155
                     draw.ellipse((x-10, y+23, x+10, y+39), fill='black')
                     draw.line((x+10, y+31, x+10, y-32), fill='black', width=3)
@@ -78,10 +78,21 @@ class ContentChecksTests(unittest.TestCase):
                     else:
                         for line in range(5):
                             changed.rectangle((80,y+12*line,119,y+12*line+1),fill='white')
+            if variant == 'stationary_union_extent':
+                changed=ImageDraw.Draw(frame)
+                for y in (220,440,660):
+                    # One shortened line leaves reliable common support but must
+                    # not remove the music beside the other four full long lines.
+                    changed.rectangle((1021,y,1200,y+1),fill='white')
+                    if index < 4:
+                        for x in range(1050,1190,10):
+                            changed.rectangle((x,y+55,x+4,y+91),fill='black')
             if variant == 'overlay':
                 ImageDraw.Draw(frame).rectangle((150,196,350,256),fill='black')
             if variant == 'stationary_middle_cursor' and 4 <= index < 6:
                 ImageDraw.Draw(frame).rectangle((490,640,506,760),fill='#e05050')
+            if variant == 'stationary_bridge_cursor' and 4 <= index < 6:
+                ImageDraw.Draw(frame).rectangle((490,180,506,570),fill='#e05050')
             if variant == 'stationary_mixed_obstruction':
                 if 4 <= index < 6:
                     ImageDraw.Draw(frame).rectangle((490,640,506,760),fill='#e05050')
@@ -108,7 +119,7 @@ class ContentChecksTests(unittest.TestCase):
                     changed.line((x+10,691,x+10,628),fill='black',width=3)
                     changed.line((x+10,628,x+55,628),fill='black',width=4)
             frame.save(base / f'{index:03d}.png')
-        lossless = variant in ('stationary_edge_support','stationary_edge_notation')
+        lossless = variant in ('stationary_edge_support','stationary_edge_notation','stationary_union_extent')
         video = base / ('input.mkv' if lossless else 'input.mp4')
         encoding = ['-c:v','ffv1'] if lossless else ['-pix_fmt','yuv420p']
         subprocess.run(['ffmpeg', '-v', 'error', '-y', '-framerate', '4', '-i', str(base/'%03d.png'), *encoding, str(video)], check=True)
@@ -181,7 +192,7 @@ class ContentChecksTests(unittest.TestCase):
             draft=self.build(base,task,request)
             self.assertFalse(draft['ready_to_submit'],draft.get('unresolved'))
             before=[c for c in draft['sources']['content_checks'] if c['matches']==['0-A','1-A']]
-            self.assertEqual([c['status'] for c in before],['conflict'])
+            self.assertEqual([c['status'] for c in before],['conflict'],before)
             rejected=self.cli('--operation','submit','--task',task,'--decision',base/'draft/decision.json')
             self.assertNotEqual(rejected.get('phase'),'accepted')
             exported=self.cli('--operation','export','--task',task,'--output',base/'out')
@@ -202,6 +213,19 @@ class ContentChecksTests(unittest.TestCase):
                     self.assertFalse(draft['ready_to_submit'],draft.get('unresolved'))
                     before=[c for c in draft['sources']['content_checks'] if c['matches']==['0-A','1-A']]
                     self.assertEqual([c['reason'] for c in before],['unreliable_alignment'])
+
+    def test_one_short_staff_line_cannot_hide_changed_notation_beside_long_lines(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_union_extent')
+            request,_=self.reviewed_request(task,decision)
+            draft=self.build(base,task,request)
+            self.assertFalse(draft['ready_to_submit'],draft.get('unresolved'))
+            before=[c for c in draft['sources']['content_checks'] if c['matches']==['0-A','1-A']]
+            self.assertEqual([c['status'] for c in before],['conflict'],before)
+            rejected=self.cli('--operation','submit','--task',task,'--decision',base/'draft/decision.json')
+            self.assertNotEqual(rejected.get('phase'),'accepted')
+            exported=self.cli('--operation','export','--task',task,'--output',base/'out')
+            self.assertNotEqual(exported['status'],'success')
 
     def test_geometrically_self_consistent_wrong_correspondence_cannot_export(self):
         with tempfile.TemporaryDirectory() as directory:

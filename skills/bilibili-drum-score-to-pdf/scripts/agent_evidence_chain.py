@@ -7,12 +7,39 @@ def select(task, decision, packet, checks, inspect_pair, native_review):
     frames = {f['id']: f for f in packet['frames']}
     from agent_regions import contains
     native_review = check_native_review(decision,packet,native_review)
+    native_cache = {}
+    def relevant(s):
+        key=(s['frame_id'],s['id'])
+        if key not in native_cache:
+            f=frames[s['frame_id']]
+            window=[0,round(s['staff_y'])-round(4*s['spacing']),f['width'],round(s['staff_y'])+round(8*s['spacing'])]
+            def overlaps(a,b):
+                return max(a[0],b[0]) < min(a[2],b[2]) and max(a[1],b[1]) < min(a[3],b[3])
+            native_cache[key]=[r for r in native_review if r['frame_id']==s['frame_id']
+                and (overlaps(r['bbox'],window) or overlaps(r['bbox'],s['bbox']))]
+        return native_cache[key]
+    def native_blockers(c,sightings):
+        return [dict(sighting_id=s['id'],instance_id=s['instance_id'],frame_id=s['frame_id'],
+                     bbox=r['bbox'],reason=f'native_{field}_{r[field]}')
+                for i in c['matches'] for s in [sightings[i]] for r in relevant(s)
+                for field in ('cursor','occlusion')
+                if r[field]=='uncertain' or (field=='occlusion' and r[field]=='present')]
     def reviewed(s, cursor):
         f=frames[s['frame_id']]
         window=[0,round(s['staff_y'])-round(4*s['spacing']),f['width'],round(s['staff_y'])+round(8*s['spacing'])]
-        return any(r['frame_id']==s['frame_id'] and r['cursor']==cursor and r['occlusion']=='clear' and contains(r['bbox'],window) and contains(r['bbox'],s['bbox']) for r in native_review)
+        records=relevant(s)
+        if any(r['occlusion']!='clear' or r['cursor']=='uncertain' or (cursor=='clear' and r['cursor']=='present') for r in records):
+            return False
+        return any(r['cursor']==cursor and r['occlusion']=='clear' and contains(r['bbox'],window) and contains(r['bbox'],s['bbox']) for r in records)
     def trusted(c,sightings):
         return c['status']=='not_contradicted' and c.get('bridge_eligible',True) and all(reviewed(sightings[i],'clear') for i in c['matches'])
+    def require_cursor_alternative(c,sightings,sufficient):
+        for i in c['matches']:
+            s=sightings[i]
+            present=[r for r in relevant(s) if r['cursor']=='present']
+            if present and (not sufficient or not reviewed(s,'present')):
+                c['native_blockers'].extend(dict(sighting_id=s['id'],instance_id=s['instance_id'],
+                    frame_id=s['frame_id'],bbox=r['bbox'],reason='native_cursor_requires_alternative') for r in present)
     intervals = []
     bridge_attempts = 0
     parts = decision['segments'] if decision['schema_version'] == 4 else [decision]
@@ -26,6 +53,8 @@ def select(task, decision, packet, checks, inspect_pair, native_review):
             delta = sum(sightings[a]['staff_y'] - sightings[b]['staff_y'] for a, b in t['matches']) / len(t['matches'])
             offsets[t['to_frame']] = offsets[t['from_frame']] + max(0, delta)
         local = [c for c in checks if c.get('segment_id') == part.get('id')]
+        for c in local:
+            c['native_blockers']=native_blockers(c,sightings)
         # Check every geometry-established candidate, not just the selected anchors.
         # Bridges cannot cross a frame where the instance disappears or is incomplete.
         bridges = []
@@ -71,6 +100,7 @@ def select(task, decision, packet, checks, inspect_pair, native_review):
                     result['segment_id']=part['id']
                 result['covered_frames']=ids[left:right+1]
                 result['bridge_eligible']=eligible
+                result['native_blockers']=native_blockers(result,sightings)
                 bridges.append(result)
             for a,b in list(gaps):
                 edges={}
@@ -103,11 +133,14 @@ def select(task, decision, packet, checks, inspect_pair, native_review):
                     reasons=c['endpoint_reasons']
                     replaceable=c['reason'] in REPLACEABLE and all(reason is None or reason in REPLACEABLE for reason in reasons)
                     actual_review=all(reviewed(sightings[i],'present' if reason=='cursor_or_obstruction' else 'clear') for i,reason in zip(c['matches'],reasons))
-                    c['blocking'] = c['status'] == 'conflict' or (c['status'] == 'uncertain' and (not sufficient or not replaceable or not actual_review))
+                    require_cursor_alternative(c,sightings,sufficient)
+                    c['blocking'] = bool(c['native_blockers']) or c['status'] == 'conflict' or (c['status'] == 'uncertain' and (not sufficient or not replaceable or not actual_review))
                     c['evidence_chain'] = intervals[-1]
         checks.extend(bridges)
         for c in bridges:
-            c['blocking'] = c['status'] == 'conflict'
+            same_edge=[p for p in all_checks if (p['from_frame'],p['to_frame'])==(c['from_frame'],c['to_frame']) and trusted(p,sightings)]
+            require_cursor_alternative(c,sightings,len({sightings[p['matches'][0]]['instance_id'] for p in same_edge})>=2)
+            c['blocking'] = bool(c['native_blockers']) or c['status'] == 'conflict'
     return intervals
 
 

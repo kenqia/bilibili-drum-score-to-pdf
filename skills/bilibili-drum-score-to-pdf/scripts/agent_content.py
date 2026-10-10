@@ -31,6 +31,9 @@ def local_ink(image, sighting):
     columns = np.flatnonzero(common)
     if len(columns) < image.width*.45:
         return None, 'unreliable_five_line_support', analyzed_pixels
+    # A watermark can shorten one line without erasing music beside the others.
+    # Common support proves reliability; the union retains every long-line extent.
+    columns = np.flatnonzero(np.logical_or.reduce(bands))
     left, right = int(columns[0]), int(columns[-1])+1
     if box[0] > left or box[2] < right:
         return None, 'crop_excludes_native_staff', analyzed_pixels
