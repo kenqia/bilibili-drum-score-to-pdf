@@ -78,6 +78,6 @@ observation 图像 ID 必须属于当前观察包或任务保留的 observation-
 
 报告按上述运行条件分组。成功、具有当前版本交付确认且墙钟有效的任务计算 nearest-rank，P50/P90 的秩为 ceil(q × N)。等待、失败、取消、超时均保留已发生时间，所有状态率使用全部提交任务作分母。成功交付样本小于十次时标记小样本局限，P90 可能就是最大值。完整实际 Token 只在分组全部任务有完整值时累计，未知不作为零；观察到的实际量另报。
 
-固定决定重放、review_only 和 controlled_fixture 单列，不能作为真实 Agent 性能放行依据。`real_baseline_eligible` 检查真实来源、完整模型/工具/图像覆盖、完整 review 范围及当前审核回执。明确 controlled_fixture 的交付审核不能进入真实基线，即使 measurement_source 声称 host。该标记不检查曲谱质量、样本数量或配对降幅。真实基线仍须冻结至少三类视频、入口、hash、时限、环境与重复次数，完成标准 URL 双跑及各自独立视觉、来源与 PDF 验收。
+固定决定重放、review_only 和 controlled_fixture 单列，不能作为真实 Agent 性能放行依据。`real_baseline_eligible` 检查真实来源、完整模型/工具/图像覆盖、完整 review 范围及当前审核回执。每次运行还须明确 `wall_clock_valid=true`，并提供非 null 的 `wall_elapsed_seconds`。无效或缺失墙钟不能进入真实基线，提交状态和已知 Token 仍保留在汇总中。明确 controlled_fixture 的交付审核不能进入真实基线，即使 measurement_source 声称 host。该标记不检查曲谱质量、样本数量或配对降幅。真实基线仍须冻结至少三类视频、入口、hash、时限、环境与重复次数，完成标准 URL 双跑及各自独立视觉、来源与 PDF 验收。
 
 #45 软件边界可通过合成 CLI 与受控事件验证。当前 Desktop 来源无法证明全部失败调用和图像呈交覆盖；新鲜多视频完整基线及实际总 Token 降低仍未验收。开发会话成本、历史 prepare 时间和固定决定重放不能填补这些缺口。

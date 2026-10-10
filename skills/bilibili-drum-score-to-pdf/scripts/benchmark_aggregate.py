@@ -64,6 +64,7 @@ def aggregate(packet):
             observed_token_run_count=len(observed),known_observed_total_tokens=sum(observed) if observed else None,
             small_sample_limit=len(successful)<10,
             real_baseline_eligible=group['measurement_source'] in ('host','codex_desktop_jsonl') and group['mode']=='review' and len(complete)==n and all(
+                r.get('wall_clock_valid') is True and r.get('wall_elapsed_seconds') is not None and
                 current_delivery(r) is not None and current_delivery(r)['review']['reviewer']['kind'] in ('agent','human') and
                 isinstance(r.get('host_usage'),dict) and r['host_usage'].get('token_complete') is True and r['host_usage'].get('declared_presented_images_match') is not False and
                 r['host_usage'].get('source',{}).get('kind')==group['measurement_source'] and

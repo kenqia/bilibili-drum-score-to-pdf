@@ -176,6 +176,52 @@ class HostUsageTests(unittest.TestCase):
                 self.assertEqual(code,2,mutate)
                 self.assertEqual((task/'host-usage.json').read_bytes(),original)
 
+    def test_real_baseline_requires_valid_wall_clock_and_elapsed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'runs.json'
+            performance = dict(
+                task_id='task', lifecycle_id='life', task_status='success',
+                delivered_at=25, delivery_confirmed=True, delivery_review_id='review',
+                wall_clock_valid=True, wall_elapsed_seconds=20,
+                state_revision=dict(phase='accepted', complete=True,
+                                    observation_sha256='a'*64, decision_sha256='b'*64),
+                delivery_history=[dict(confirmed_at=25, review=dict(
+                    review_id='review', task_id='task', lifecycle_id='life',
+                    observation_sha256='a'*64, decision_sha256='b'*64,
+                    reviewer=dict(kind='agent', id='reviewer')))],
+                model_tokens=dict(input_tokens=100, output_tokens=10, total_tokens=110),
+                host_usage=dict(token_complete=True, declared_presented_images_match=True,
+                    source=dict(kind='host'), observed_actual_tokens=dict(total_tokens=110),
+                    coverage=dict(lifecycle_complete=True, model_calls_complete=True,
+                                  tools_complete=True, images_complete=True)))
+            run = dict(run_id='run', sample_id='standard', code_version='candidate',
+                entry='url', mode='review', input_sha256='c'*64, environment_id='frozen-env',
+                model_id='model', model_version='unknown', measurement_source='host',
+                timeout_seconds=1200)
+            for case in ('valid', 'invalid_clock', 'missing_clock_flag', 'missing_elapsed', 'null_elapsed'):
+                with self.subTest(case=case):
+                    report = json.loads(json.dumps(performance))
+                    if case == 'invalid_clock':
+                        report.update(wall_clock_valid=False, wall_elapsed_seconds=None)
+                    elif case == 'missing_clock_flag':
+                        del report['wall_clock_valid']
+                    elif case == 'missing_elapsed':
+                        del report['wall_elapsed_seconds']
+                    elif case == 'null_elapsed':
+                        report['wall_elapsed_seconds'] = None
+                    path.write_text(json.dumps(dict(schema_version=1, runs=[run|dict(performance=report)])))
+                    code, result = self.run_cli(HOST, 'aggregate', '--runs', path)
+                    self.assertEqual(code, 0, result)
+                    group = result['groups'][0]
+                    self.assertEqual(group['submitted_count'], 1)
+                    self.assertEqual(group['status_counts']['success'], 1)
+                    self.assertEqual(group['actual_total_tokens'], 110)
+                    self.assertEqual(group['known_observed_total_tokens'], 110)
+                    self.assertEqual(group['known_elapsed_seconds_by_status']['success'],
+                                     [report.get('wall_elapsed_seconds')])
+                    self.assertEqual(group['delivery_seconds']['p50'], 20 if case == 'valid' else None)
+                    self.assertEqual(group['real_baseline_eligible'], case == 'valid')
+
     def test_aggregate_keeps_status_denominator_and_replay_separate(self):
         with tempfile.TemporaryDirectory() as directory:
             base=Path(directory)
