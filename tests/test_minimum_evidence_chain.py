@@ -248,6 +248,31 @@ class MinimumEvidenceChainTests(content_fixture.ContentChecksTests):
             self.assertEqual(replay['status'],'success',replay)
             self.assertEqual((base/'out/score.pdf').read_bytes(),(base/'replay/score.pdf').read_bytes())
 
+    def test_cursor_cannot_replace_native_spacing_or_window_height_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='redundant_cursor')
+            for spacing in (12.125,12.09375):
+                with self.subTest(spacing=spacing):
+                    next(s for s in decision['segments'][0]['observations'] if s['id']=='2-D')['spacing']=spacing
+                    request,packet=self.reviewed_request(task,decision)
+                    cursor=next(r for r in request['review']['native_clean_regions']
+                                if r['frame_id']==packet['frames'][-1]['id'] and r['bbox'][1]==612)
+                    self.assertEqual((cursor['cursor'],cursor['occlusion']),('present','clear'))
+                    draft=self.build(base,task,request,f'cursor-spacing-{spacing}')
+                    pair=next(c for c in draft['sources']['content_checks'] if c['matches']==['1-D','2-D'])
+                    self.assertEqual(pair['endpoint_reasons'],[None,'cursor_or_obstruction'])
+                    self.assertEqual(pair['spacing'],[12,spacing])
+                    self.assertEqual(pair['analysis_windows'],[[0,612,1280,756],[0,612,1280,757]])
+                    self.assertTrue(pair['evidence_chain']['sufficient'])
+                    self.assertEqual([w['matches'] for w in pair['evidence_chain']['witnesses']],
+                                     [['1-B','2-B'],['1-C','2-C']])
+                    self.assertFalse(draft['ready_to_submit'],draft.get('unresolved'))
+                    self.assertEqual(pair['reason'],'unreliable_alignment')
+                    self.assertTrue(pair['blocking'])
+                    rejected=self.cli('--operation','submit','--task',task,
+                                      '--decision',base/f'cursor-spacing-{spacing}/decision.json')
+                    self.assertNotEqual(rejected.get('phase'),'accepted')
+
     def test_clean_bridge_keeps_every_intermediate_frame_and_instance(self):
         with tempfile.TemporaryDirectory() as directory:
             base=Path(directory);task,decision=self.prepare_score(base,variant='bridge_cursor')

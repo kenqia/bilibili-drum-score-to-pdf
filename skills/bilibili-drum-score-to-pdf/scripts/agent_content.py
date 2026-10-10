@@ -69,7 +69,12 @@ def compare(before, after, a, b):
     ink_b, reason_b, pixels_b = local_ink(after,b)
     result = dict(status='uncertain', reason=reason_a or reason_b or 'unreliable_alignment',
                   analyzed_pixels=pixels_a+pixels_b, endpoint_reasons=[reason_a,reason_b])
-    if ink_a is None or ink_b is None or ink_a.shape != ink_b.shape or abs(a['spacing']-b['spacing']) > .1:
+    # Alignment remains a hard veto even when a cursor prevents mask extraction.
+    heights = [round(4*s['spacing'])+round(8*s['spacing']) for s in (a,b)]
+    if before.width != after.width or heights[0] != heights[1] or abs(a['spacing']-b['spacing']) > .1:
+        result['reason'] = 'unreliable_alignment'
+        return result
+    if ink_a is None or ink_b is None or ink_a.shape != ink_b.shape:
         return result
     # Native codec noise gets a small fixed tolerance; no scaling or output reconstruction.
     kernel = np.ones((3,3),np.uint8)
