@@ -1,5 +1,7 @@
 # Issue tracker
 
+2026-10-11，用户调整 #43 的当前阶段交付范围，停止标准视频遮挡恢复并收口 #44至#52 的现有开发成果。阶段交付与原始性能放行条件分开记录，详见[阶段最终版本](performance-stage-final.md)。本地阶段完成不改远端工单状态，不自动关闭Issues。
+
 项目跟踪在 https://github.com/kenqia/bilibili-drum-score-to-pdf 。Agent-first 规格是 #32，任务图是 #33 至 #41。标签 ready-for-agent 表示可由 Agent 接手，是否可开始由原生 blocking 关系决定。
 
 实施工作汇入 integration/agent-first，通过 PR 的 closing references 收尾规格与任务。草稿 PR 验证完成后转为待审阅，不自动合并 main。Issue 和远端写操作遵守用户授权，父规格不因拆票而关闭。

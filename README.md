@@ -46,6 +46,8 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 ## 显式实验入口
 
+#43的当前阶段开发已收口，支持能力、逐票交付和验证见[阶段最终版本](docs/agents/performance-stage-final.md)。标准视频的lazy任务因真实遮挡保留waiting；完整性能配对未证明，实验入口保持显式调用。
+
 在隔离的 `codex/issue-43-software-experiment` 分支，`prepare --evidence-mode lazy` 保留原帧和导航对照图，按 Agent 的原生 ROI 请求生成细节。`materialize` 保存来源与证据更新，`build-decision` 根据几何建议、修正和实际确认构建现有协议的决定。操作字段见 [惰性证据](docs/agents/lazy-evidence.md) 与 [决定构建](docs/agents/decision-building.md)。默认 full/prepare 与旧任务重放继续保留。
 
 `review-plan` 按疑点给出相邻实际 PTS、原生 ROI 和有界补采请求，输出尚未确认的构建模板。物化后需要沿用未改的实际判断时，使用显式历史复用，规则见 [疑点审阅](docs/agents/review-plan.md)。lazy 的局部内容检查可否决几何自洽的错误对应；污染必需接续帧时，当前不能仅靠新增干净帧解除等待，具体范围见 [内容检查](docs/agents/content-checks.md)。
