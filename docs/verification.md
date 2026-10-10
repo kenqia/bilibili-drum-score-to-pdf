@@ -339,3 +339,16 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 宿主模式仍为 `review_only`，实际观察 Token 分别为 5,036,868 和 5,399,475，完整 `model_tokens` 均为 null。四项覆盖 `lifecycle_complete`、`model_calls_complete`、`tools_complete`、`images_complete` 均为 false。两份旧任务的 `wall_clock_valid=false`、`wall_elapsed_seconds=null`；prepare 墙钟与单调时钟分别为 58.896795 / 56.974424 秒、58.158619 / 56.198641 秒，已有账本记录 `wall_clock_discontinuity`。原因未知，账本未修改，这些任务不能进入耗时或完整成本基线。
 
 #44 本地验证完成，#45 软件完成但三类真实视频完整基线未验收，#46 至 #52 未启动，#43 未完成。GitHub 只读核对 #44 至 #52 均为 open，#46/#47 仍原生依赖 #45，没有关闭或修改工单。后续顺序提案见 [性能实施状态](agents/performance-implementation-status.md)，调整阻塞顺序仍待用户明确确认。
+
+## 离线 CI 分片与 15 分钟预算
+
+GitHub Actions 将完整 unittest discovery 按排序后的测试 ID 交替分成两个 shard，`fail-fast: false` 保留两个分片的结果。每次发现所有测试，新增测试也参与分配。任意 import error 使所有分片失败；测试失败、非法 index 和空分片都返回非零。每个分片仍限时 15 分钟，安装步骤也计入预算。
+
+```sh
+python ci/run_unittest_shard.py --index 0 --count 2 --list
+python ci/run_unittest_shard.py --index 1 --count 2 --list
+python ci/run_unittest_shard.py --index 0 --count 2
+python ci/run_unittest_shard.py --index 1 --count 2
+```
+
+两份 `--list` 的并集必须等于完整 discovery 的测试 ID，交集必须为空。固定决定 replay 独立为另一个 15 分钟 job，保留原工具安装、固定 action SHA、只读权限和有限 artifact。全量本地验证仍使用本页统一 unittest 命令。分片减少单个 job 的测试负担；实际 hosted 用时要在远端运行后确认，本地旧耗时不能证明新版 CI 稳定低于 15 分钟。
