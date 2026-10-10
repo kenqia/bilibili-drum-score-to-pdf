@@ -54,7 +54,11 @@ def local_ink(image, sighting):
         return None, 'possible_overlay', analyzed_pixels
     if int(ink.sum()) < max(100,spacing*spacing):
         return None, 'insufficient_notation_ink', analyzed_pixels
-    return ink, None, analyzed_pixels
+    # Keep every analyzed ink pixel at its native x even when staff support edges
+    # fluctuate. Zero padding is an analysis mask; source and print pixels stay intact.
+    absolute_x = np.zeros((ink.shape[0], image.width), dtype=ink.dtype)
+    absolute_x[:, left:right] = ink
+    return absolute_x, None, analyzed_pixels
 
 
 def compare(before, after, a, b):

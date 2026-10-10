@@ -59,7 +59,7 @@ class ContentChecksTests(unittest.TestCase):
             for line in range(5):
                 draw.line((80, y + 12*line, 1200, y + 12*line), fill='black', width=2)
             if variant != 'empty':
-                for n in range(5):
+                for n in range(1 if variant == 'stationary_edge_notation' else 5):
                     x = 180 + (row % 3)*55 + n*155
                     draw.ellipse((x-10, y+23, x+10, y+39), fill='black')
                     draw.line((x+10, y+31, x+10, y-32), fill='black', width=3)
@@ -67,6 +67,17 @@ class ContentChecksTests(unittest.TestCase):
         for index in range(8):
             shift = 220 if index >= 4 and not variant.startswith('stationary_') else 0
             frame = long_score.crop((0, shift, 1280, shift+960))
+            if variant == 'stationary_edge_support' and index >= 4:
+                for y in (220,440,660):
+                    ImageDraw.Draw(frame).rectangle((80,y,80,y+1),fill='white')
+            if variant == 'stationary_edge_notation':
+                changed=ImageDraw.Draw(frame)
+                for y in (220,440,660):
+                    if index < 4:
+                        changed.rectangle((74,y+55,93,y+99),fill='black')
+                    else:
+                        for line in range(5):
+                            changed.rectangle((80,y+12*line,119,y+12*line+1),fill='white')
             if variant == 'overlay':
                 ImageDraw.Draw(frame).rectangle((150,196,350,256),fill='black')
             if variant == 'stationary_middle_cursor' and 4 <= index < 6:
@@ -97,8 +108,10 @@ class ContentChecksTests(unittest.TestCase):
                     changed.line((x+10,691,x+10,628),fill='black',width=3)
                     changed.line((x+10,628,x+55,628),fill='black',width=4)
             frame.save(base / f'{index:03d}.png')
-        video = base / 'input.mp4'
-        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-framerate', '4', '-i', str(base/'%03d.png'), '-pix_fmt', 'yuv420p', str(video)], check=True)
+        lossless = variant in ('stationary_edge_support','stationary_edge_notation')
+        video = base / ('input.mkv' if lossless else 'input.mp4')
+        encoding = ['-c:v','ffv1'] if lossless else ['-pix_fmt','yuv420p']
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-framerate', '4', '-i', str(base/'%03d.png'), *encoding, str(video)], check=True)
         task = base / 'task'
         state = self.cli(video, '--output', task, '--evidence-mode', mode, *(['--minimum-evidence-chain'] if mode=='lazy' and getattr(self,'minimum_chain',False) else []))
         self.assertEqual(state['status'], 'waiting', state)
@@ -142,6 +155,53 @@ class ContentChecksTests(unittest.TestCase):
             outside_rows_verified=True,evidence='Controlled native title and row margins reviewed.')
         decision.update(schema_version=4,segments=[segment],boundaries=[])
         return task, decision
+
+    def test_one_column_staff_support_change_keeps_native_notes_and_replays(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_edge_support')
+            request,_=self.reviewed_request(task,decision)
+            draft=self.build(base,task,request)
+            self.assertTrue(draft.get('ready_to_submit'),draft.get('error') or draft.get('unresolved'))
+            self.assertTrue(all(c['status']=='not_contradicted' for c in draft['sources']['content_checks']))
+            accepted=self.cli('--operation','submit','--task',task,'--decision',base/'draft/decision.json')
+            self.assertEqual(accepted['phase'],'accepted',accepted.get('error'))
+            exported=self.cli('--operation','export','--task',task,'--output',base/'out')
+            replay=self.cli('--operation','replay','--task',task,'--output',base/'replay')
+            self.assertEqual(exported['status'],'success',exported.get('error'))
+            self.assertEqual(replay['status'],'success',replay.get('error'))
+            self.assertEqual((base/'out/score.pdf').read_bytes(),(base/'replay/score.pdf').read_bytes())
+            for row in exported['rows']:
+                with Image.open(base/'out'/row['source_frame']) as frame,Image.open(base/'out'/row['original_image']) as crop:
+                    self.assertEqual(frame.crop(row['bbox']).tobytes(),crop.tobytes())
+
+    def test_changed_edge_notation_is_not_discarded_with_staff_support_difference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_edge_notation')
+            request,_=self.reviewed_request(task,decision)
+            draft=self.build(base,task,request)
+            self.assertFalse(draft['ready_to_submit'],draft.get('unresolved'))
+            before=[c for c in draft['sources']['content_checks'] if c['matches']==['0-A','1-A']]
+            self.assertEqual([c['status'] for c in before],['conflict'])
+            rejected=self.cli('--operation','submit','--task',task,'--decision',base/'draft/decision.json')
+            self.assertNotEqual(rejected.get('phase'),'accepted')
+            exported=self.cli('--operation','export','--task',task,'--output',base/'out')
+            self.assertNotEqual(exported['status'],'success')
+
+    def test_native_height_and_spacing_disagreements_keep_existing_limits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_edge_support')
+            # The first disagreement is below .1 but gives a different rounded
+            # window height. The second also exceeds the unchanged spacing limit.
+            for spacing in (12.09375,12.125):
+                with self.subTest(spacing=spacing):
+                    for sighting in decision['segments'][0]['observations']:
+                        if not sighting['id'].startswith('0-'):
+                            sighting['spacing']=spacing
+                    request,_=self.reviewed_request(task,decision)
+                    draft=self.build(base,task,request,f'draft-{spacing}')
+                    self.assertFalse(draft['ready_to_submit'],draft.get('unresolved'))
+                    before=[c for c in draft['sources']['content_checks'] if c['matches']==['0-A','1-A']]
+                    self.assertEqual([c['reason'] for c in before],['unreliable_alignment'])
 
     def test_geometrically_self_consistent_wrong_correspondence_cannot_export(self):
         with tempfile.TemporaryDirectory() as directory:
