@@ -50,7 +50,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 新 lazy 任务可指定 `--minimum-evidence-chain`，固定 `ordered_anchors_v1`。旧任务不能迁移，默认 full 和未指定开关的 lazy 保留原内容门禁。这个实验区分承担接续证明的内容证据与冗余诊断，仍检查所有提出的共同实例对应，任何明确 conflict 都否决。
 
-每个相邻区间需要两个独立、有序的空间实例内容证据。优先使用当前对应，也可检查现有原帧之间的几何桥。桥的所有共同实例均检查后才选择锚点；空间实例必须在桥覆盖的每帧完整出现，global_y、尺度、横向布局和原有共同位移保持一致。不跨谱面段，不跳过中间帧的审计，不利用内容创建身份。一次检查最多尝试 256 条桥对应，额度用尽而关键证据仍缺失时保持 waiting。所有实际比较读像素与失败检查计入原 content_validation。
+每个相邻区间需要两个独立、有序的空间实例内容证据。优先使用当前对应，也可检查现有原帧之间的几何桥。桥的所有共同实例均检查后才选择锚点；空间实例必须在桥覆盖的每帧完整出现，global_y、尺度、横向布局和原有共同位移保持一致。不跨谱面段，不跳过中间帧的审计，不利用内容创建身份。每次完整决定重算共享最多 256 条桥对应，所有谱面段合计，额度用尽而关键证据仍缺失时保持 waiting。所有实际比较读像素与失败检查计入原 content_validation。
 
 `review.native_clean_regions` 复用既有原生核查字段，绑定真实 PTS、原帧 hash、同帧原生细节和实际呈交清单。内容锚点需要 clear cursor 与 clear occlusion，范围完整覆盖分析窗口和观察框。冗余光标对应只在充分链已成立、Agent 已实际确认该窗口 cursor present、occlusion clear 时才不阻塞；未知遮挡、缺记录、低信息、partial、丢失边界或内容差异不降级。尺寸舍入导致的 unreliable_alignment 还要求两端真实 clear 原生核查。标题、首尾、行外内容、每帧每区间覆盖与所选打印来源都继续执行原审计。
 

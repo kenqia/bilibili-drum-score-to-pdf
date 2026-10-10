@@ -14,6 +14,7 @@ def select(task, decision, packet, checks, inspect_pair, native_review):
     def trusted(c,sightings):
         return c['status']=='not_contradicted' and c.get('bridge_eligible',True) and all(reviewed(sightings[i],'clear') for i in c['matches'])
     intervals = []
+    bridge_attempts = 0
     parts = decision['segments'] if decision['schema_version'] == 4 else [decision]
     for part in parts:
         ids = part.get('frames', list(frames))
@@ -55,11 +56,12 @@ def select(task, decision, packet, checks, inspect_pair, native_review):
             if not any(left <= index[a] < index[b] <= right for a,b in gaps):
                 continue
             batch=[(first,last,eligible) for _,l,r,_,first,last,eligible in candidates if (l,r)==(left,right)]
-            if len(bridges)+len(batch)>256:
+            if bridge_attempts+len(batch)>256:
                 break
             # All common spatial pairs for this bridge are inspected before choosing anchors.
             for first,last,eligible in batch:
                 result=inspect_pair(first,last,bridge=True)
+                bridge_attempts+=1
                 if 'id' in part:
                     result['segment_id']=part['id']
                 result['covered_frames']=ids[left:right+1]
