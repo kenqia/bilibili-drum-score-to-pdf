@@ -52,6 +52,6 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 每个相邻区间需要两个独立、有序的空间实例内容证据。优先使用当前对应，也可检查现有原帧之间的几何桥。桥的所有共同实例均检查后才选择锚点；空间实例必须在桥覆盖的每帧完整出现，global_y、尺度、横向布局和原有共同位移保持一致。不跨谱面段，不跳过中间帧的审计，不利用内容创建身份。每次完整决定重算共享最多 256 条桥对应，所有谱面段合计，额度用尽而关键证据仍缺失时保持 waiting。所有实际比较读像素与失败检查计入原 content_validation。
 
-`review.native_clean_regions` 复用既有原生核查字段，绑定真实 PTS、原帧 hash、同帧原生细节和实际呈交清单。内容锚点需要 clear cursor 与 clear occlusion，范围完整覆盖分析窗口和观察框。冗余光标对应只在充分链已成立、Agent 已实际确认该窗口 cursor present、occlusion clear 时才不阻塞；未知遮挡、缺记录、低信息、partial、丢失边界或内容差异不降级。尺寸舍入导致的 unreliable_alignment 还要求两端真实 clear 原生核查。标题、首尾、行外内容、每帧每区间覆盖与所选打印来源都继续执行原审计。
+`review.native_clean_regions` 复用既有原生核查字段，绑定真实 PTS、原帧 hash、同帧原生细节和实际呈交清单。内容锚点需要 clear cursor 与 clear occlusion，范围完整覆盖分析窗口和观察框。冗余光标对应只在充分链已成立、Agent 已实际确认该窗口 cursor present、occlusion clear 时才不阻塞；未知遮挡、缺记录、低信息、partial、丢失边界或内容差异不降级。每端的检测理由分别保存在 endpoint_reasons，任意一端有不可替代的硬理由都继续阻塞，另一端的光标不能掩盖它。检测到光标的端点必须有 actual present 声明；all-clear 声明不能覆盖已检测光标。尺寸舍入导致的 unreliable_alignment 还要求两端真实 clear 原生核查。标题、首尾、行外内容、每帧每区间覆盖与所选打印来源都继续执行原审计。
 
 构建保存小型 `continuity.json`，绑定 task、观察版本/hash、源 hash、精确决定文件 hash、固定策略和原生核查记录。submit、export、replay 从原帧重新比较；接受历史保存旁记录及 hash。改变观察、补采、改来源或改决定后须重绑。没有旁记录或绑定不符时不能导出。未采样隐藏内容仍未知，脚本读像素不作为实际图像呈交或 Token。

@@ -95,8 +95,10 @@ def select(task, decision, packet, checks, inspect_pair, native_review):
                     from_frame=a,to_frame=b,matches=[],analyzed_pixels=0,evidence_chain=intervals[-1],scope='required_interval',identity_established_by_content=False))
             for c in local:
                 if (c['from_frame'],c['to_frame']) == (a,b):
-                    actual_review = all(reviewed(sightings[i], 'present' if c['reason']=='cursor_or_obstruction' and not reviewed(sightings[i],'clear') else 'clear') for i in c['matches'])
-                    c['blocking'] = c['status'] == 'conflict' or (c['status'] == 'uncertain' and (not sufficient or c['reason'] not in REPLACEABLE or not actual_review))
+                    reasons=c['endpoint_reasons']
+                    replaceable=c['reason'] in REPLACEABLE and all(reason is None or reason in REPLACEABLE for reason in reasons)
+                    actual_review=all(reviewed(sightings[i],'present' if reason=='cursor_or_obstruction' else 'clear') for i,reason in zip(c['matches'],reasons))
+                    c['blocking'] = c['status'] == 'conflict' or (c['status'] == 'uncertain' and (not sufficient or not replaceable or not actual_review))
                     c['evidence_chain'] = intervals[-1]
         checks.extend(bridges)
         for c in bridges:

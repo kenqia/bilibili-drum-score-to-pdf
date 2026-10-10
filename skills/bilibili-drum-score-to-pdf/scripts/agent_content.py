@@ -61,7 +61,7 @@ def compare(before, after, a, b):
     ink_a, reason_a, pixels_a = local_ink(before,a)
     ink_b, reason_b, pixels_b = local_ink(after,b)
     result = dict(status='uncertain', reason=reason_a or reason_b or 'unreliable_alignment',
-                  analyzed_pixels=pixels_a+pixels_b)
+                  analyzed_pixels=pixels_a+pixels_b, endpoint_reasons=[reason_a,reason_b])
     if ink_a is None or ink_b is None or ink_a.shape != ink_b.shape or abs(a['spacing']-b['spacing']) > .1:
         return result
     # Native codec noise gets a small fixed tolerance; no scaling or output reconstruction.

@@ -93,3 +93,11 @@ Agent-first 的长视频 prepare 用低分辨率变化导航生成重叠观察�
 ### 已授权的混合接受实验
 
 用户明确要求该实验时，只在新 `prepare --evidence-mode lazy` 任务加 `--script-acceptance`。先读仓库 `docs/agents/script-acceptance.md`。Agent 实际查看完整同帧原生源 ROI 后填写有限 native_clean_regions，并保留首尾、标题、速度、拍号与行外符号核查。脚本只能重算普通内部行边界、完整五线几何和可靠 gap，不能证明任意遮挡不存在。混合决定保持 visual_review=false，acceptance.json 与精确决定同目录；submit/export/replay 都重算，历史修订重绑。不要把脚本读图列为实际呈交，真实自动接受支持范围仍为空。
+
+### 最小内容证据链
+
+用户明确要求时，只在新 `prepare --evidence-mode lazy` 任务加 `--minimum-evidence-chain`。先读仓库 `docs/agents/content-checks.md` 和 `docs/agents/review-plan.md`。旧任务不能迁移，默认 full 不变。原生清晰区域仍由 Agent 实际查看后填写，不自动声明 clean。
+
+每个区间须有同一端点边的两个独立、有序且几何已通过的内容锚点。桥检查全部端点共同实例；中间帧、空间实例、首尾、行外符号和逐区间审计全部保留。任何明确内容冲突仍否决；未知遮挡、partial、缺原生区域或缺覆盖审计仍等待。不要因为一端有光标，忽略另一端的硬缺口；检测到光标的端点必须实际记录 present，不能填 clear 绕过门禁。
+
+`review-plan` 返回短摘要与完整证据文件路径。可用当前绑定的 build 请求生成按必要缺口合并的局部补采建议，执行后重建新版本请求。`continuity.json` 与构建决定同目录，绑定其精确 hash 和实际原生核查；submit/export/replay 重算。不能将两个锚点当作任意遮挡不存在、唯一位移或未采样隐藏内容不存在的证明。标准真实 A/B 与性能放行须另验收。

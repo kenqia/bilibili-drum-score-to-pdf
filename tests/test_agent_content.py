@@ -65,10 +65,17 @@ class ContentChecksTests(unittest.TestCase):
                     draw.line((x+10, y+31, x+10, y-32), fill='black', width=3)
                     draw.line((x+10, y-32, x+55, y-32), fill='black', width=4)
         for index in range(8):
-            shift = 220 if index >= 4 and variant!='stationary_bridge_conflict' else 0
+            shift = 220 if index >= 4 and not variant.startswith('stationary_') else 0
             frame = long_score.crop((0, shift, 1280, shift+960))
             if variant == 'overlay':
                 ImageDraw.Draw(frame).rectangle((150,196,350,256),fill='black')
+            if variant == 'stationary_middle_cursor' and 4 <= index < 6:
+                ImageDraw.Draw(frame).rectangle((490,640,506,760),fill='#e05050')
+            if variant == 'stationary_mixed_obstruction':
+                if 4 <= index < 6:
+                    ImageDraw.Draw(frame).rectangle((490,640,506,760),fill='#e05050')
+                elif index >= 6:
+                    ImageDraw.Draw(frame).rectangle((150,636,350,696),fill='black')
             if variant == 'stationary_bridge_conflict' and 4 <= index < 6:
                 ImageDraw.Draw(frame).rectangle((490,400,506,760),fill='#e05050')
             if variant == 'single_bridge_cursor' and index >= 6:
@@ -112,7 +119,7 @@ class ContentChecksTests(unittest.TestCase):
             presented_images=[i['id'] for i in packet['images']],visual_review=True,complete=True,
             evidence='Controlled fixture reviews full native margins and geometric correspondences.', unresolved=[],
             rows=[],observations=[],transitions=[],coverage=dict(first_frame=frames[0]['id'],last_frame=frames[-1]['id'],unresolved=[]))
-        instances = [list('ABC'), list('ABC' if wrong or variant=='stationary_bridge_conflict' else 'BCD'), list('ABC' if wrong or variant=='stationary_bridge_conflict' else 'BCD')]
+        instances = [list('ABC'), list('ABC' if wrong or variant.startswith('stationary_') else 'BCD'), list('ABC' if wrong or variant.startswith('stationary_') else 'BCD')]
         for fi, (frame, labels) in enumerate(zip(frames, instances)):
             for instance, y in zip(labels, (220,440,660)):
                 sighting = dict(id=f'{fi}-{instance}',frame_id=frame['id'],instance_id=instance,staff_y=y,spacing=12,

@@ -182,3 +182,36 @@ class MinimumEvidenceChainTests(content_fixture.ContentChecksTests):
             self.assertNotEqual(rejected.get('phase'),'accepted',rejected)
             exported=self.cli('--operation','export','--task',task,'--output',base/'out')
             self.assertNotEqual(exported['status'],'success',exported)
+
+    def test_cursor_reason_cannot_hide_other_endpoint_hard_obstruction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_mixed_obstruction')
+            request,_=self.reviewed_request(task,decision)
+            result=self.build(base,task,request)
+            self.assertFalse(result['ready_to_submit'],result)
+            pair=next(c for c in result['sources']['content_checks'] if c['matches']==['1-C','2-C'])
+            self.assertTrue(pair['blocking'],pair)
+
+    def test_detected_cursor_endpoint_cannot_be_declared_clear(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='redundant_cursor')
+            request,_=self.reviewed_request(task,decision)
+            for region in request['review']['native_clean_regions']:
+                region['cursor']='clear'
+            result=self.build(base,task,request)
+            self.assertFalse(result['ready_to_submit'],result)
+
+    def test_partial_endpoint_cannot_be_hidden_by_other_endpoint_cursor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_middle_cursor')
+            for sighting in decision['segments'][0]['observations']:
+                if sighting['id']=='2-C':
+                    sighting['complete']=False
+            request,_=self.reviewed_request(task,decision)
+            result=self.build(base,task,request)
+            self.assertFalse(result['ready_to_submit'],result)
+            pair=next(c for c in result['sources']['content_checks'] if c['matches']==['1-C','2-C'])
+            self.assertEqual(pair['endpoint_reasons'],['cursor_or_obstruction','partial_or_missing_margin'])
+            self.assertTrue(pair['blocking'],pair)
+            rejected=self.cli('--operation','submit','--task',task,'--decision',base/'draft/decision.json')
+            self.assertNotEqual(rejected.get('phase'),'accepted',rejected)
