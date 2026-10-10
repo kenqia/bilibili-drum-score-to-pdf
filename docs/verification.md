@@ -1,5 +1,22 @@
 # 验证记录
 
+## 2026-10-10 #51 混合接受软件
+
+实现快照 `19f28a7` 完整 unittest 为 159 项，668.409 秒，全部通过。随后双轴审阅发现 gap clean 范围和 ROI 计量口径两项问题，由 `7449f2a` 修复；sources.json 持久化差异一并修正。修复后的快路径专项 10 项与性能专项 12 项通过，Standards、Spec 最终复核各 0 项未解决发现。计划规模修复随后合入 `712437a`，最终源码完整回归 163 项通过，745.659 秒，退出码 0。中断日志保留，未算作通过。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python ci/verify_agent_replay.py --output /home/kenqia/issue-43-resume-notes/issue51-review-fix-20261010/final-fixed-replay
+```
+
+最终代码 `712437a` 固定离线 CI 重放 passed，3 行、1 页，原裁剪及 export/replay PDF 字节相等，minimum effective DPI 156.996。保存决定错误版本、越界和破损图像被拒绝。
+
+两份历史 full 标准任务复制至新目录，在 `7449f2a` 下 replay 并以独立脚本核对来源、实际 PTS、灰度嵌入像素、DPI、空间顺序与分页。各 12 行、2 页，PDF 分别与原保存 export 字节相同，原任务 JSON 未变。最低 effective DPI 分别为 264.182 和 250.423。这是旧决定兼容性检查，没有新增视觉判断、呈交或交付确认。
+
+新真实 URL 两跑的源 hash、实际 PTS、48 帧和逐帧 hash 一致，各完整帧分析 48 次。修复计划规模后，各物化 48 张同帧原生 ROI，逐像素一致；当前观察版本 2、97 张图，仍 waiting。未完成新的完整独立视觉判断、保存决定或 PDF，不计为真实放行。计划紧凑存储与超限等待验证见[实施状态](agents/performance-implementation-status.md)。
+
+原始日志、红绿回归、双轴报告、来源审核与重放产物分别保存于仓库外 `/home/kenqia/issue-43-resume-notes/issue51-implementation-20261010/`、`issue51-review-fix-20261010/`、`issue51-real-quality-20261010/`。完整回归日志 SHA-256 为 `3ef1f1198cd7b6d5030b4c58ea3d2cd1d1bb950a24bc8b24a0d373be26469bed`，记录路径 `/home/kenqia/issue-43-resume-notes/issue51-review-fix-20261010/unittest-final-complete.log`。显式策略边界见[实验协议](agents/script-acceptance.md)。默认 full 保持；#45 完整真实基线及 #51/#52 放行仍未完成。
+
 ## 2026-10-10 真实基线资格修复
 
 `9f4e713` 收紧 `aggregate` 的真实基线资格，要求每次运行明确有效且提供非 null 墙钟耗时。公开 CLI 回归先复现无效墙钟、缺时钟标记、缺耗时及 null 耗时四个反例，再验证合法正例仍入选，提交状态和完整及观察 Token 保留。

@@ -24,7 +24,7 @@
 
 实际发现 `CODEX_HOME` 指向 Windows 的 `.codex`。通过当前会话 ID、项目 cwd 与 `originator=Codex Desktop` 匹配到 rollout；WSL 候选路径解析为相同文件且 inode 一致，未合并两份计量，也无需查询 SQLite。该记录包含逐响应 `token_usage_record` 的 `response_id` 与真实 `usage`，以及镜像的累计 `token_count`。二者不能重复累加。
 
-实际数据源已可定位，#45 的采集、受控导入和汇总代码最初集成至 `782518b`，最终软件修复集成至 `d09fa9d`。每个真实视频的完整成本归属仍待验收。当前开发会话成本不等于视频基线；未知字段仍保留 `null`。#46 至 #50 按用户确认的隔离顺序进行软件研发，真实验收仍依赖 #45。#51/#52 尚未启动，不能声称性能目标达标。
+实际数据源已可定位，#45 的采集、受控导入和汇总代码最初集成至 `782518b`，最终软件修复集成至 `d09fa9d`。每个真实视频的完整成本归属仍待验收。当前开发会话成本不等于视频基线；未知字段仍保留 `null`。#46 至 #50 按用户确认的隔离顺序进行软件研发，真实验收仍依赖 #45。#51 的显式兼容软件已获确认并进入隔离实现与审阅，#52 的真实放行仍未完成，不能声称性能目标达标。
 
 标准真实样本为 `BV1rH4y1R7Rk`。本轮另匿名取得 `BV1zy4y127hV` 与 `BV1pu41127z3`，实际查看首、中、尾原帧，分别作为重复节奏与滚动接续、光标及固定界面覆盖的候选。后两类仍需完整视觉验收，三张预检不能证明整曲覆盖。
 
@@ -148,8 +148,40 @@ lazy 入口在这次相同输入上少生成 770 张 detail 图，少生成 794 
 
 预检发现汇总资格缺口：完整成本报告即使墙钟无效或耗时缺失，也能取得 `real_baseline_eligible=true`。本次最小修复要求每次运行明确有效且提供非 null 耗时，保留提交状态、完整及观察 Token 和原 null。公开 CLI 红绿验证覆盖合法正例和四个反例，完整宿主计量测试 10 项通过，26.115 秒。记录见 `/home/kenqia/issue-43-resume-notes/issue45-clock-gate-fix-20261010/`。此次没有重跑整个 150 项测试集，也没有进行新的真实视频基准；旧完整回归仍对应上文冻结快照。
 
-#51 的现有校验要求每行实际视觉确认，不能直接填充脚本结果。具体兼容影响、有限范围和回滚入口见[最小兼容提案](fast-path-compatibility-proposal.md)。这是待实施前确认的提案，自动接受范围尚无真实放行。详查记录为 `/home/kenqia/issue-43-resume-notes/issue51-contract-audit-20261010.md`。
+#51 的现有校验要求每行实际视觉确认，不能直接填充脚本结果。具体兼容影响、有限范围和回滚入口见[最小兼容提案](fast-path-compatibility-proposal.md)。用户随后确认此提案，已实施的显式混合接受见[实验协议](script-acceptance.md)。自动接受范围尚无真实放行。详查记录为 `/home/kenqia/issue-43-resume-notes/issue51-contract-audit-20261010.md`。
 
 #52 的逐项矩阵和串行采集计划见 `/home/kenqia/issue-43-resume-notes/issue52-preflight-20261010.md`。在已检索的两个项目 work 目录及 resume-notes 内，仅找到标准视频源；另两类候选需要恢复或重新冻结。一次入口组的三样本、两版本、每侧五次计划共需 30 个新鲜 review run，不能以保存决定 replay 代替。取得完整宿主来源并通过最小探针后，才展开真实配对。
 
 #45 完整真实基线及 #51/#52 质量和性能放行仍未完成。未启用默认快路径，未 push、创建 PR 或修改工单。
+
+## #51 显式混合接受实现，2026-10-10
+
+用户确认兼容提案后，独立分支 `codex/issue51-acceptance` 完成首版软件，提交 `7186397`，合并最新授权记录后以 `19f28a7` 快进集成。只在新 `prepare --evidence-mode lazy --script-acceptance` 任务启用 `continuous_clean_v1`。默认 full、旧任务和旧决定不迁移，没有新增生产依赖或决定协议版本。
+
+Agent 必须实际核查同帧完整原生 ROI 的 clean 状态，并确认首尾、标题、速度、拍号与行外区域。脚本重算全部五线、普通内部行 ownership band 和必需 gap，保留所有合理位移。脚本项记为 `script_acceptance`，混合决定的 `visual_review=false`；`acceptance.json` 精确绑定决定，submit/export/replay 均复验。有限像素规则不能证明任意小遮挡或擦线不存在，真实自动支持范围仍为空。
+
+公开 CLI 专项 8 项通过，157.962 秒，涵盖混合提交、原裁剪、PDF 字节重放、缺 clean、未知遮挡、裁框外小符号、歧义位移、遗漏五线、gap、首尾及标题、精修缩框、旁记录和历史篡改、物化后显式修订。固定离线 CI 重放 passed，3 行、1 页，export/replay 字节一致；这不代表真实视觉或性能验收。
+
+以 `a646a61...19f28a7` 进行 code-review 双轴审阅。Standards 发现 1 项 P2，ROI 五线复查混入完整帧分析计数。Spec 发现 1 项 P1，gap clean 只覆盖内容窗口，未覆盖旁记录声明的完整 band/ROI，合成 CLI 能错误成功。另有 sources.json 写入顺序造成返回与磁盘字段不同。全部由独立修复分支提交 `7449f2a` 修复后快进集成，Standards 与 Spec 最终复核各 0 项未解决发现。gap 反例保留 waiting，不产成功 PDF；ROI 复核单列次数、失败耗时与恢复；sources.json 与返回值一致。
+
+实现代理因服务限流中断，`unittest-full.log` 无完整尾部，不计为完整回归。主 Agent 在同源码集成工作区重启统一 unittest，日志为 `unittest-integration.log`。初版 `19f28a7` 完整回归 159 项通过，668.409 秒。`7449f2a` 的完整回归保存在修复目录 `unittest-final.log`，中断未计为通过；最终 `712437a` 结果见下文。快路径专项 10 项通过，128.957 秒；性能专项 12 项通过，51.013 秒；最终固定 CI 重放 passed。原始证据和审阅报告保存在 `/home/kenqia/issue-43-resume-notes/issue51-implementation-20261010/`，修复红绿证据在 `/home/kenqia/issue-43-resume-notes/issue51-review-fix-20261010/`。
+
+标准视频旧观察包的只读几何预检为 48 帧、47 个接续，其中 44 个有多个合理位移。这只是规划依据，不是新的真实双跑；不会用内容、颜色或最大重叠方案删掉其他合理位移。新鲜真实验证仍在软件回归后运行，等待和回退必须如实保留。
+
+#45 完整真实成本账本缺口保持，#51/#52 尚未放行。没有默认启用、push、PR 或工单修改。本文按 unslop 自审。
+
+`7449f2a` 将两份历史标准 full 任务复制到新目录后执行 replay，随后用当前独立验收脚本重解码核对原裁剪、灰度 PDF 嵌入像素、DPI、行序及分页。各 12 行、2 页，PDF 字节分别与保存 export 相同，原始任务全部 JSON hash 不变。新结果见 `/home/kenqia/issue-43-resume-notes/issue51-real-quality-20261010/historical-replay-summary.json`。这两份是保存决定执行，不属于新鲜视觉判断或真实成本配对，不能重复算为五次 review run。
+
+## 真实 URL 等待路径与计划规模修复
+
+`7449f2a` 通过统一 URL 入口新建两份标准 lazy/script 任务。两次取得同一源 hash `80f9a8d19515cf624d7d13c27ea758e88118fddb4341fa06deaad040272877fe`，48 帧、相同实际 PTS 与逐帧 hash，初始 49 张图、0 张 detail，完整帧分析各 48 次。prepare 的单调外部计时分别为 74.862、71.821 秒。这些运行与回归并行，只用于质量预检，不进入性能配对统计；完整 model_tokens=null。prepare 时墙钟有效，但没有交付终点，不能据此建立端到端基线。
+
+新真实任务的 review-plan 首次返回 `sampling_budget`，因为缩进 JSON 为 1,173,688 字节，超出 1 MiB。`712437a` 将计划保存为紧凑 UTF-8 JSON，并按实际写入字节含末尾换行核对同一上限。其他 JSON 默认格式不变，不删字段或证据。修复后真实完整计划 644,614 字节，460 个疑点、48 帧及 163 份补采建议与修复前捕获的完整计划逐字段相同。受控 47 帧、5 行规模用例 RED→GREEN；紧凑仍超限的 9 行反例继续 waiting。review 专项 9 项、138.528 秒，workflow 6 项、41.347 秒，通过。该修复的 Standards/Spec 各 0 finding。证据在 `/home/kenqia/issue-43-resume-notes/issue51-plan-size-fix-20261010/`。
+
+随后两份任务各物化完整同帧 ROI 48 张，观察版本 2，总图像 97 张，全部逐像素与当前原帧裁剪一致。重建计划各 637,858 字节，无剩余物化请求，460 个疑点仍保留，automatic_acceptance=false。仅实际查看第一任务首帧和第二任务末帧作为有限原生核查；没有填写全部 clean、身份或整曲确认，也没有保存决定、PDF 或交付回执。两份完整独立视觉判断、各自保存决定重放和 PDF 验收尚未完成。不可把两份历史决定重放替代这项工作。
+
+新输入与实际 PTS 对照为 `/home/kenqia/issue-43-resume-notes/issue51-real-quality-20261010/new-url-input-comparison.json`，原生物化核对为同目录 `materialization-comparison.json`，实际有限查看记录为 `limited-native-inspection.json`。这些字段不是完整宿主图像呈交事件，真实事件账本缺口保持。
+
+`7449f2a` 的完整回归第二次执行因工具状态恢复后进程消失且没有完成尾部，未认定通过。最终源码 `712437a` 使用带退出结果的 wrapper 重跑统一入口，日志为 `/home/kenqia/issue-43-resume-notes/issue51-review-fix-20261010/unittest-final-complete.log`，最终 163 项通过，745.659 秒，退出码 0；wrapper 单调耗时 746.506 秒。日志 SHA-256 为 `3ef1f1198cd7b6d5030b4c58ea3d2cd1d1bb950a24bc8b24a0d373be26469bed`，退出记录 `unittest-final-exit.json`。所有中断日志保留。
+
+最终代码 `712437a` 完整回归 163 项通过，固定离线 CI 重放再次 passed，Standards/Spec 对兼容软件与规模修复各 0 项未解决发现。实验记录索引为 `/home/kenqia/issue-43-resume-notes/issue51-evidence-index-20261010.json`。本次收尾只完成 #51 显式隔离兼容软件；#45 完整真实基线、#51 真实支持范围及两份新完整视觉决定、#52 三类视频完整配对与耗时/Token 放行均未完成。缺完整宿主账本时保持总 Token 未知，无法取得真实自动支持范围。没有默认启用或远端工单状态变更。
