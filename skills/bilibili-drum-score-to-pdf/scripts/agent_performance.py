@@ -74,7 +74,7 @@ def validate_events(data, number):
             required = common | {'operation_id','offset_seconds'}
             require(required <= set(event) <= required | {'ended_at'})
             require(event['operation_id'] in operations and number(event['offset_seconds']) and event['offset_seconds'] >= 0)
-            require(event['name'] in ('source_verification','navigation','anonymous_acquisition','native_decode','native_analysis',
+            require(event['name'] in ('source_verification','navigation','anonymous_acquisition','native_decode','native_analysis','native_staff_recheck',
                                     'image_generation','decision_building','review_planning','decision_validation','content_validation','script_acceptance','source_redecode','pdf_export','delivery_publication','coverage_audit'))
             require(event['status'] in ('running','interrupted','complete','failed'))
         else:
@@ -269,6 +269,7 @@ class Performance:
             native_seek_attempts=sum(e['name'] == 'native_decode' for e in self.data['stages']),
             source_redecode_attempts=sum(e['name'] == 'source_redecode' for e in self.data['stages']),
             full_frame_analysis_attempts=sum(e['name'] == 'native_analysis' for e in self.data['stages']),
+            native_staff_recheck_attempts=sum(e['name'] == 'native_staff_recheck' for e in self.data['stages']),
             content_validation={key: sum(((e.get('metrics') or {}).get('content_validation') or {}).get(key,0) for e in self.data['operations'])
                                 for key in ('pair_checks','analyzed_pixels','conflict_checks','uncertain_checks')},
             script_acceptance={key:sum(((e.get('metrics') or {}).get('script_acceptance') or {}).get(key,0) for e in self.data['operations'])

@@ -75,6 +75,8 @@ class FastPathTests(unittest.TestCase):
             base=Path(directory);task,state,packet,request=self.mixed(base)
             built=self.build(base,task,request)
             self.assertTrue(built.get('ready_to_submit'),built)
+            saved_sources=json.loads((base/'built/sources.json').read_text())
+            self.assertEqual(saved_sources,built['sources'])
             decision=json.loads((base/'built/decision.json').read_text())
             self.assertFalse(decision['visual_review'])
             self.assertEqual(decision['segments'][0]['rows'][1]['evidence_images'],[])
@@ -110,6 +112,67 @@ class FastPathTests(unittest.TestCase):
             duplicate=self.cli('--operation','submit','--task',task,'--decision',decision)
             self.assertEqual(duplicate['status'],'failed',duplicate)
             self.assertEqual(duplicate['error']['code'],'invalid_decision')
+
+    def test_full_frame_and_roi_recheck_costs_are_separate_and_failed_attempts_survive(self):
+        from unittest.mock import patch
+        from test_agent_performance import PerformanceTests
+        import test_link_input
+        from video_seek import ConversionError
+        import score_detect
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,state,packet,request=self.mixed(base)
+            built=self.build(base,task,request)
+            self.assertTrue(built.get('ready_to_submit'),built)
+            report=built['performance']
+            self.assertEqual(report['full_frame_analysis_attempts'],6)
+            self.assertEqual(report['native_staff_recheck_attempts'],3)
+            actual_staff_groups=score_detect.staff_groups
+            calls=0
+            def fail_recheck(image):
+                nonlocal calls
+                calls+=1
+                if calls%2==0:
+                    raise ConversionError('review_required','Controlled ROI recheck failure.')
+                return actual_staff_groups(image)
+            request_path=base/'build-request.json'
+            with patch('score_detect.staff_groups',side_effect=fail_recheck):
+                failed=PerformanceTests().controlled_cli('--operation','build-decision','--task',task,
+                    '--decision',request_path,'--output',base/'failed-recheck')
+            self.assertFalse(failed.get('ready_to_submit'),failed)
+            report=self.cli('--operation','report','--task',task)['performance']
+            self.assertEqual(report['full_frame_analysis_attempts'],9)
+            self.assertEqual(report['native_staff_recheck_attempts'],6)
+            stages=[e for e in report['stages'] if e['name']=='native_staff_recheck']
+            self.assertEqual(sum(e['status']=='failed' for e in stages),3)
+            self.assertTrue(all(e['elapsed_seconds'] is not None for e in stages))
+            resumed=self.cli('--operation','resume','--task',task)['performance']
+            self.assertEqual(resumed['native_staff_recheck_attempts'],6)
+
+    def test_gap_clean_windows_cannot_replace_endpoint_ownership_review(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,state,packet,request=self.mixed(base)
+            original=test_agent_audit.AuditTests.reviewed_request(self,state,packet)
+            request['review']['confirmations'] += [c for c in original['review']['confirmations']
+                if len(c['path'])>=4 and c['path'][2] in ('rows','observations')
+                and c not in request['review']['confirmations']]
+            refs={r['frame_id']:r['evidence_images'] for r in request['review']['native_clean_regions']}
+            request['review']['native_clean_regions']=[dict(frame_id=f['id'],frame_sha256=f['sha256'],
+                pts=f['pts'],time_base=f['time_base'],bbox=[0,round(s['staff_y'])-round(4*s['spacing']),
+                    f['width'],round(s['staff_y'])+round(8*s['spacing'])],evidence_images=refs[f['id']],
+                cursor='clear',occlusion='clear',evidence='Reviewed only the required pair window.')
+                for f in packet['frames'] for s in request['proposal']['segments'][0]['observations']
+                if s['frame_id']==f['id']]
+            built=self.build(base,task,request)
+            self.assertFalse(built.get('ready_to_submit'),built)
+            transitions=[i for i in built['sources']['script_acceptance_items'] if i['kind']=='transitions']
+            self.assertEqual(len(transitions),2)
+            self.assertTrue(all('clean_candidate' in i['unresolved'] for i in transitions))
+            submitted=self.cli('--operation','submit','--task',task,'--decision',base/'built/decision.json')
+            self.assertNotEqual(submitted.get('phase'),'accepted',submitted)
+            for operation in ('export','replay'):
+                result=self.cli('--operation',operation,'--task',task,'--output',base/operation)
+                self.assertNotEqual(result['status'],'success',result)
+                self.assertFalse((base/operation/'score.pdf').exists())
 
     def test_unresolved_clean_gap_boundary_geometry_and_outside_never_publish_success(self):
         with tempfile.TemporaryDirectory() as directory:

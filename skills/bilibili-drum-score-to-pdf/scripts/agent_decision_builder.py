@@ -342,12 +342,12 @@ def build(task, request_path, output):
                      agent_confirmations=copy.deepcopy(review),reused_review=reused['provenance'] if reused else None,
                      reused_acceptance_sha256=history[-1].get('acceptance_sha256') if reused_acceptance else None,
                      selected_frames=[dict(id=f['id'],sha256=f['sha256'],pts=f['pts'],time_base=f['time_base']) for f in partial['frames']])
-        for name,data in [('decision.json',value),('diff.json',diff),('sources.json',sources),('unresolved.json',issues)]:
-            write_json(output/name,data)
         if acceptance_items:
             from agent_acceptance import bind as bind_acceptance
             write_json(output/'acceptance.json',bind_acceptance(value,state,partial,acceptance_items,native_clean))
             sources['script_acceptance_items']=acceptance_items
+        for name,data in [('decision.json',value),('diff.json',diff),('sources.json',sources),('unresolved.json',issues)]:
+            write_json(output/name,data)
         if score_audit is not None:
             from agent_audit import bind
             write_json(output/'audit.json',bind(value,state,score_audit))

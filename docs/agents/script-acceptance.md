@@ -11,6 +11,8 @@ prepare 保存 waiting 观察包。review-plan 请求每个参与原帧的完整
 
 每个 `native_clean_regions` 项只含 `frame_id`、`frame_sha256`、`pts`、`time_base`、`bbox`、`evidence_images`、`cursor`、`occlusion`、`evidence`。hash、PTS 与 time_base 必须匹配当前原帧。bbox 使用原生整数坐标，引用实际已呈交的同帧 detail/native_detail，并完整覆盖核查区域。cursor 与 occlusion 为 clear、present 或 uncertain，只有实际查看后才能填 clear。该判断覆盖脚本使用的完整行间带、实际执行框与必需 pair 的分析窗口，不能只查看调用方已缩小的打印框。
 
+脚本接受普通 gap 时，对每个必需 pair 的两端分别重算检测器的行间带；外行使用完整谱面 ROI。每个端点须有同帧的 clear 记录，同时覆盖这一区域、观察框、对应所选行的精修执行框和 pair 分析窗口。Agent 已确认行与观察也不能替代 gap 的 clean 覆盖。只查看 `staff_y - 4 * spacing` 到 `staff_y + 8 * spacing` 的窗口时，gap 继续 waiting。
+
 标题、速度、拍号、行外符号以及首尾完整边缘继续由 Agent 核查，使用现有 confirmations、原生图块与 score_audit。普通内部行、五线观察与相邻 gap 可交给脚本重算，保留其未确认字段即可。构建器会为通过的普通 gap 将 pending 改为 script；手动填 script 不能产生接受权威。未通过的项需实际审阅或补采，不能将 uncertainty 改成高置信度。
 
 ```sh
@@ -32,12 +34,12 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 ## 旁记录、来源与恢复
 
-构建器输出 `acceptance.json`，绑定 task_id、观察 hash/version、源 hash、精确决定文件 hash 与固定策略。items 使用现有 segments/rows/observations/transitions 路径，保存 script 权威、实际同帧原生区域、规则结果与未决项。`native_clean_regions` 独立保留 Agent 实际判断及原生来源。调用方填写 passed 或修改保存检查结果不能替代重算。
+构建器输出 `acceptance.json`，绑定 task_id、观察 hash/version、源 hash、精确决定文件 hash 与固定策略。items 使用现有 segments/rows/observations/transitions 路径，保存 script 权威、实际同帧原生区域、规则结果与未决项。`native_clean_regions` 独立保留 Agent 实际判断及原生来源。调用方填写 passed 或修改保存检查结果不能替代重算。保存的 `sources.json` 与 CLI 返回的 sources 包含相同的 `script_acceptance_items`。
 
 有脚本项时决定的全局 `visual_review=false`，脚本读取不会加入 presented_images。所选行来源分别记为 `script_acceptance` 或 `visual_judgment`。submit、export、replay 与重复混合提交复用同一验证入口，重新计算旁记录、几何、内容与整曲审计，再执行原裁剪、150 effective DPI、灰度和整行分页门禁。普通 gap 仍逐项保留，`hidden_content_proven_absent=false`。
 
 接受历史保存决定、审计、接受旁记录与各自 hash。物化或补采改变观察版本后，旧绑定失效；修改 bbox、来源或对应关系须显式 revision_of 最新接受决定并重绑。实际判断的历史复用仍须显式启用，并验证同一源、同一帧、未改呈交证据与结构。新采原帧不自动继承旧 clean 判断。
 
-报告分别记录脚本接受项、Agent clean 区域、未决脚本项、实际原生读取像素及所有完整帧分析。失败重算同样计数。生成图像、脚本读图与模型实际呈交分别记账，未知宿主 usage 与总 Token 保持 null。首版省掉部分普通行重复判断，仍需要实际源 ROI 审阅，不保证总 Token 或端到端时间下降。
+报告分别记录脚本接受项、Agent clean 区域、未决脚本项、实际原生读取像素及所有完整帧分析。`full_frame_analysis_attempts` 统计 `native_analysis`；ROI 五线复核保存为独立 `native_staff_recheck` 阶段，由 `native_staff_recheck_attempts` 统计。两类尝试均保留失败次数与阶段耗时。生成图像、脚本读图与模型实际呈交分别记账，未知宿主 usage 与总 Token 保持 null。首版省掉部分普通行重复判断，仍需要实际源 ROI 审阅，不保证总 Token 或端到端时间下降。
 
 关闭开关，在新的结果目录运行默认 full prepare；保留实验任务、历史、决定与日志。`--script-acceptance` 与 convert、resume 或其他旧任务操作组合会拒绝。也可在独立 checkout 使用冻结稳定代码 `d09fa9d` 和新的任务目录回退。

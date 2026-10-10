@@ -126,7 +126,7 @@ def compute(task, state, packet, decision, paths, clean):
             try:
                 with stage('native_analysis'):
                     actual=analyze_frame(image)
-                with stage('native_analysis'):
+                with stage('native_staff_recheck'):
                     groups=staff_groups(image.crop(actual['bbox']))
                 if groups != actual['groups']:
                     all_groups_accounted=False
@@ -198,7 +198,19 @@ def compute(task, state, packet, decision, paths, clean):
             expected_pairs=[[proposed[i]['staff_y'] for i in pair] for pair in expected['matches']] if expected else []
             checks['ordered_overlap']='pass' if len(pairs)>=2 and len(actual_pairs)==len(expected_pairs) and all(abs(a-b)<=.75 for pair_a,pair_b in zip(actual_pairs,expected_pairs) for a,b in zip(pair_a,pair_b)) else 'uncertain'
             checks.setdefault('staff_geometry','pass')
-            checks['clean_candidate']='pass' if pairs and all(any(r['frame_id']==s['frame_id'] and r['cursor']=='clear' and r['occlusion']=='clear' and contains(r['bbox'],[0,round(s['staff_y'])-round(4*s['spacing']),next(f['width'] for f in packet['frames'] if f['id']==s['frame_id']),round(s['staff_y'])+round(8*s['spacing'])]) for r in clean) for pair in pairs for s in pair) else 'uncertain'
+            checks['clean_candidate']='pass' if pairs else 'uncertain'
+            for pair in pairs:
+                for s in pair:
+                    frame=next(f for f in packet['frames'] if f['id']==s['frame_id'])
+                    _,regions=raw[s['id']]
+                    required=[r['bbox'] for r in regions]+[s['bbox'],
+                        [0,round(s['staff_y'])-round(4*s['spacing']),frame['width'],round(s['staff_y'])+round(8*s['spacing'])]]
+                    required += [r.get('refinement',{}).get('bbox',r['bbox']) for r in segment['rows']
+                                 if r['observation_id']==s['id']]
+                    if not regions or not any(r['frame_id']==s['frame_id'] and r['cursor']=='clear'
+                            and r['occlusion']=='clear' and all(contains(r['bbox'],bbox) for bbox in required)
+                            for r in clean):
+                        checks['clean_candidate']='uncertain'
         passed=all(v=='pass' for v in checks.values())
         item=dict(path=path,authority='script',kind=kind,source_regions=sources,checks=checks,
                   evidence='Recomputed native ink ownership and geometry; clean scope requires actual Agent native-ROI review.',
