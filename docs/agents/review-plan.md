@@ -96,3 +96,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 定向补采只针对关键内容证据不足的区间；已有可靠替代的光标诊断不再重复补采，明确 conflict 先纠正对应或核查源内容。相邻缺口按不超过 30 秒的局部范围合并，单份最多 8 个新时间，去重并按当前账本模拟累计请求和帧预算。计划不扣预算，一份请求执行后改变观察绑定，必须重建其余请求。预算拒绝原因保留在摘要。
 
 原生 cursor uncertain 或 occlusion present/uncertain 是当前范围的实际声明，摘要给出受影响实例、端点和 bbox。已检查桥上的这类阻塞也列入其覆盖的相邻区间，像素 not_contradicted 不会把它隐藏。先核查列出的原生范围，只有声明确实错误时才显式修订；无法证明则维持 waiting。这类缺口不自动请求无关 midpoint。cursor present 且 occlusion clear 缺少充分替代时，仍可按既有契约定向取得两个有序 clean 证据。
+
+摘要的关键缺口、已有替代和其他必需审计动作保留具体区间、已有原帧及原生细节计数、可信内容证据和唯一下一步。仅一个覆盖审计区间为 pending 时，other_required_actions 给出该段真实端点和源时间，不把它压成一个无法定位的 count。内容桥存在歧义、partial、低信息或实际对齐失败时，content_blockers 列出实际对应，先核查或纠正这些原生证据，无法证明则等待；无关补采不能解除硬理由。
+
+重复候选、低价值采样诊断和检测器提名按 reason 聚合原始区间范围，interval_scope 标为 raw_diagnostic_range。范围内的逐条位置、原始 ID 和完整 detail 留在 review-plan.json。摘要不要求逐项处理这些原始记录，也不把范围中的每个时刻都认定为缺口。没有通过几何绑定的空间身份为 null/unknown；只有实际绑定的决定能提供 affected_instances。没有可定位来源的必需动作同样标明未知范围，先查看 bound-build/unresolved.json，不能编造端点或身份。

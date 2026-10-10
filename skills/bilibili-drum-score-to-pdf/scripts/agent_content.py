@@ -93,6 +93,23 @@ def check_pairs(task, decision, packet, audits=None, native_review=None):
     frames = {f['id']:f for f in packet['frames']}
     parts = decision['segments'] if decision['schema_version']==4 else [decision]
     checks=[]
+    def inspect(before,after,a,b,first,last,scope):
+        result=compare(before,after,a,b)
+        result.update(from_frame=first['id'],to_frame=last['id'],matches=[a['id'],b['id']],
+            source_sha256=packet['source']['sha256'],frame_sha256=[first['sha256'],last['sha256']],
+            pts=[first['pts'],last['pts']],time_base=[first['time_base'],last['time_base']],
+            proposed_bboxes=[a['bbox'],b['bbox']],staff_y=[a['staff_y'],b['staff_y']],spacing=[a['spacing'],b['spacing']],
+            analysis_windows=[[0,round(s['staff_y'])-round(4*s['spacing']),f['width'],round(s['staff_y'])+round(8*s['spacing'])]
+                for s,f in ((a,first),(b,last))],
+            start=first['timestamp'],end=last['timestamp'],before_image=first['id'],after_image=last['id'],
+            scope=scope,identity_established_by_content=False)
+        recorder=ACTIVE.get()
+        if recorder is not None and recorder.operation:
+            count=recorder.operation.setdefault('metrics',{}).setdefault('content_validation',dict(pair_checks=0,analyzed_pixels=0,conflict_checks=0,uncertain_checks=0))
+            count['pair_checks']+=1;count['analyzed_pixels']+=result['analyzed_pixels']
+            count['conflict_checks']+=result['status']=='conflict';count['uncertain_checks']+=result['status']=='uncertain'
+            recorder.save()
+        return result
     with stage('content_validation'):
         for part in parts:
             sightings={s['id']:s for s in part['observations']}
@@ -101,25 +118,10 @@ def check_pairs(task, decision, packet, audits=None, native_review=None):
                 with Image.open(Path(task)/first['path']) as old, Image.open(Path(task)/last['path']) as new:
                     for pair in transition['matches']:
                         a,b=(sightings[i] for i in pair)
-                        result=compare(old,new,a,b)
-                        result.update(from_frame=first['id'],to_frame=last['id'],matches=pair,
-                            source_sha256=packet['source']['sha256'],frame_sha256=[first['sha256'],last['sha256']],
-                            pts=[first['pts'],last['pts']],time_base=[first['time_base'],last['time_base']],
-                            proposed_bboxes=[a['bbox'],b['bbox']],staff_y=[a['staff_y'],b['staff_y']],spacing=[a['spacing'],b['spacing']],
-                            analysis_windows=[[0,round(s['staff_y'])-round(4*s['spacing']),f['width'],round(s['staff_y'])+round(8*s['spacing'])]
-                                              for s,f in ((a,first),(b,last))],
-                            start=first['timestamp'],end=last['timestamp'],before_image=first['id'],after_image=last['id'],
-                            scope='proposed_geometric_pair_only',identity_established_by_content=False)
+                        result=inspect(old,new,a,b,first,last,'proposed_geometric_pair_only')
                         if 'id' in part:
                             result['segment_id']=part['id']
                         checks.append(result)
-                        recorder=ACTIVE.get()
-                        if recorder is not None:
-                            count=recorder.operation.setdefault('metrics',{}).setdefault('content_validation',dict(pair_checks=0,analyzed_pixels=0,conflict_checks=0,uncertain_checks=0))
-                            count['pair_checks']+=1;count['analyzed_pixels']+=result['analyzed_pixels']
-                            count['conflict_checks']+=result['status']=='conflict'
-                            count['uncertain_checks']+=result['status']=='uncertain'
-                            recorder.save()
         if packet.get('minimum_evidence_chain_policy'):
             from agent_evidence_chain import POLICY, select
             if packet['minimum_evidence_chain_policy'] != POLICY:
@@ -127,21 +129,7 @@ def check_pairs(task, decision, packet, audits=None, native_review=None):
             def bridge_check(a,b,bridge=False):
                 first,last=frames[a['frame_id']],frames[b['frame_id']]
                 with Image.open(Path(task)/first['path']) as old, Image.open(Path(task)/last['path']) as new:
-                    result=compare(old,new,a,b)
-                result.update(from_frame=first['id'],to_frame=last['id'],matches=[a['id'],b['id']],
-                    source_sha256=packet['source']['sha256'],frame_sha256=[first['sha256'],last['sha256']],
-                    pts=[first['pts'],last['pts']],time_base=[first['time_base'],last['time_base']],
-                    proposed_bboxes=[a['bbox'],b['bbox']],staff_y=[a['staff_y'],b['staff_y']],spacing=[a['spacing'],b['spacing']],
-                    analysis_windows=[[0,round(s['staff_y'])-round(4*s['spacing']),f['width'],round(s['staff_y'])+round(8*s['spacing'])] for s,f in ((a,first),(b,last))],
-                    start=first['timestamp'],end=last['timestamp'],before_image=first['id'],after_image=last['id'],
-                    scope='geometry_established_bridge',identity_established_by_content=False)
-                recorder=ACTIVE.get()
-                if recorder and recorder.operation:
-                    count=recorder.operation.setdefault('metrics',{}).setdefault('content_validation',dict(pair_checks=0,analyzed_pixels=0,conflict_checks=0,uncertain_checks=0))
-                    count['pair_checks']+=1;count['analyzed_pixels']+=result['analyzed_pixels']
-                    count['conflict_checks']+=result['status']=='conflict';count['uncertain_checks']+=result['status']=='uncertain'
-                    recorder.save()
-                return result
+                    return inspect(old,new,a,b,first,last,'geometry_established_bridge')
             select(task,decision,packet,checks,bridge_check,native_review or [])
         if audits is not None:
             audits.extend(checks)

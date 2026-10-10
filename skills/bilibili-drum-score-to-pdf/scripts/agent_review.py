@@ -135,24 +135,24 @@ def review_plan(task, output, request_path=None):
             else:
                 issue['supplement_available']=True
                 supplements.append(dict(issue_id=issue['id'],request=request))
-        summary=None
-        if packet.get('minimum_evidence_chain_policy'):
-            from agent_review_summary import summarize, targeted
-            checks=bound_draft['sources']['content_checks'] if bound_draft else []
-            summary=summarize(issues,checks,packet,bool(checks))
-            if bound_draft:
-                summary['draft_ready_to_submit']=bound_draft['ready_to_submit']
-                action_groups={}
-                for issue in bound_draft['unresolved']:
-                    reason=issue.get('reason','native_review_required')
-                    action_groups[reason]=action_groups.get(reason,0)+1
-                summary['other_required_actions']=[dict(reason=reason,count=count) for reason,count in sorted(action_groups.items())]
-            supplements=targeted(summary,state,supplement_packet) if bound_draft else []
         if packet.get('script_acceptance_policy'):
             required_regions={}
             for frame in frames:
                 bbox=[0,0,frame['width'],frame['height']]
                 add('native_clean_roi',[frame['id']],'actual_agent_clean_scope_required',[(frame['id'],bbox)])
+        summary=None
+        if packet.get('minimum_evidence_chain_policy'):
+            from agent_review_summary import summarize, targeted
+            checks=bound_draft['sources']['content_checks'] if bound_draft else []
+            decision=load_json(output/'bound-build'/'decision.json') if bound_draft else None
+            if decision and decision.get('schema_version')==5:
+                decision=decision['decision']
+            summary=summarize(issues,checks,packet,bool(checks),decision,
+                bound_draft['sources']['agent_confirmations'] if bound_draft else None,
+                bound_draft['unresolved'] if bound_draft else None)
+            if bound_draft:
+                summary['draft_ready_to_submit']=bound_draft['ready_to_submit']
+            supplements=targeted(summary,state,supplement_packet) if bound_draft else []
         requests=[]
         needed=[]
         for region in required_regions.values():

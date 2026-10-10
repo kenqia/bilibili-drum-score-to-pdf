@@ -1,6 +1,6 @@
 """Select content witnesses only after complete spatial geometry has passed."""
 POLICY = 'ordered_anchors_v1'
-REPLACEABLE = {'cursor_or_obstruction', 'unreliable_alignment'}
+REPLACEABLE = {'cursor_or_obstruction'}
 
 
 def select(task, decision, packet, checks, inspect_pair, native_review):
@@ -40,6 +40,12 @@ def select(task, decision, packet, checks, inspect_pair, native_review):
             if present and (not sufficient or not reviewed(s,'present')):
                 c['native_blockers'].extend(dict(sighting_id=s['id'],instance_id=s['instance_id'],
                     frame_id=s['frame_id'],bbox=r['bbox'],reason='native_cursor_requires_alternative') for r in present)
+    def blocking(c,sightings,sufficient):
+        reasons=c['endpoint_reasons']
+        replaceable=c['reason'] in REPLACEABLE and all(reason is None or reason in REPLACEABLE for reason in reasons)
+        actual_review=all(reviewed(sightings[i],'present' if reason=='cursor_or_obstruction' else 'clear') for i,reason in zip(c['matches'],reasons))
+        require_cursor_alternative(c,sightings,sufficient)
+        return bool(c['native_blockers']) or c['status']=='conflict' or (c['status']=='uncertain' and (not sufficient or not replaceable or not actual_review))
     intervals = []
     bridge_attempts = 0
     parts = decision['segments'] if decision['schema_version'] == 4 else [decision]
@@ -130,17 +136,12 @@ def select(task, decision, packet, checks, inspect_pair, native_review):
                     from_frame=a,to_frame=b,matches=[],analyzed_pixels=0,evidence_chain=intervals[-1],scope='required_interval',identity_established_by_content=False))
             for c in local:
                 if (c['from_frame'],c['to_frame']) == (a,b):
-                    reasons=c['endpoint_reasons']
-                    replaceable=c['reason'] in REPLACEABLE and all(reason is None or reason in REPLACEABLE for reason in reasons)
-                    actual_review=all(reviewed(sightings[i],'present' if reason=='cursor_or_obstruction' else 'clear') for i,reason in zip(c['matches'],reasons))
-                    require_cursor_alternative(c,sightings,sufficient)
-                    c['blocking'] = bool(c['native_blockers']) or c['status'] == 'conflict' or (c['status'] == 'uncertain' and (not sufficient or not replaceable or not actual_review))
+                    c['blocking'] = blocking(c,sightings,sufficient)
                     c['evidence_chain'] = intervals[-1]
         checks.extend(bridges)
         for c in bridges:
             same_edge=[p for p in all_checks if (p['from_frame'],p['to_frame'])==(c['from_frame'],c['to_frame']) and trusted(p,sightings)]
-            require_cursor_alternative(c,sightings,len({sightings[p['matches'][0]]['instance_id'] for p in same_edge})>=2)
-            c['blocking'] = bool(c['native_blockers']) or c['status'] == 'conflict'
+            c['blocking'] = blocking(c,sightings,len({sightings[p['matches'][0]]['instance_id'] for p in same_edge})>=2)
     return intervals
 
 

@@ -91,8 +91,11 @@ class ContentChecksTests(unittest.TestCase):
                 ImageDraw.Draw(frame).rectangle((150,196,350,256),fill='black')
             if variant == 'stationary_middle_cursor' and 4 <= index < 6:
                 ImageDraw.Draw(frame).rectangle((490,640,506,760),fill='#e05050')
-            if variant == 'stationary_bridge_cursor' and 4 <= index < 6:
+            if variant in ('stationary_bridge_cursor','stationary_bridge_ambiguous') and 4 <= index < 6:
                 ImageDraw.Draw(frame).rectangle((490,180,506,570),fill='#e05050')
+            if variant == 'stationary_bridge_ambiguous':
+                for k in range(0 if index < 4 else 1 if index < 6 else 2):
+                    ImageDraw.Draw(frame).rectangle((400+k*30,718,412+k*30,742),fill='black')
             if variant == 'stationary_mixed_obstruction':
                 if 4 <= index < 6:
                     ImageDraw.Draw(frame).rectangle((490,640,506,760),fill='#e05050')
@@ -119,7 +122,7 @@ class ContentChecksTests(unittest.TestCase):
                     changed.line((x+10,691,x+10,628),fill='black',width=3)
                     changed.line((x+10,628,x+55,628),fill='black',width=4)
             frame.save(base / f'{index:03d}.png')
-        lossless = variant in ('stationary_edge_support','stationary_edge_notation','stationary_union_extent')
+        lossless = variant in ('stationary_edge_support','stationary_edge_notation','stationary_union_extent','stationary_bridge_ambiguous')
         video = base / ('input.mkv' if lossless else 'input.mp4')
         encoding = ['-c:v','ffv1'] if lossless else ['-pix_fmt','yuv420p']
         subprocess.run(['ffmpeg', '-v', 'error', '-y', '-framerate', '4', '-i', str(base/'%03d.png'), *encoding, str(video)], check=True)

@@ -54,11 +54,13 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 每个相邻区间需要两个独立、有序的空间实例内容证据。优先使用当前对应，也可检查现有原帧之间的几何桥。桥的所有共同实例均检查后才选择锚点；空间实例必须在桥覆盖的每帧完整出现，global_y、尺度、横向布局和原有共同位移保持一致。不跨谱面段，不跳过中间帧的审计，不利用内容创建身份。每次完整决定重算共享最多 256 条桥对应，所有谱面段合计，额度用尽而关键证据仍缺失时保持 waiting。所有实际比较读像素与失败检查计入原 content_validation。
 
-桥比较先筛选至少两个不同实例在全中间帧完整、几何合格且两端已有实际原生 clear 核查的端点边，再按距离及时间顺序检查。明知不足两个锚点的额外桥不消耗比较预算，原必需相邻对应仍全部检查。clear 声明只决定比较顺序，不证明内容一致。每条被检查的桥仍比较全部共同实例，包括不能作为锚点的第三实例；发现明确 conflict 就等待。
+桥比较先筛选至少两个不同实例在全中间帧完整、几何合格且两端已有实际原生 clear 核查的端点边，再按距离及时间顺序检查。明知不足两个锚点的额外桥不消耗比较预算，原必需相邻对应仍全部检查。clear 声明只决定比较顺序，不证明内容一致。每条被检查的桥仍比较全部共同实例，包括不能作为锚点的第三实例。桥和必需相邻对应使用同一阻塞判断；conflict、ambiguous_local_notation、partial、低信息、实际 spacing 或原生窗口尺寸不一致都等待。两段相邻比较各自差异较小，不能解除首尾桥已经发现的歧义。
 
-`review.native_clean_regions` 复用既有原生核查字段，绑定真实 PTS、原帧 hash、同帧原生细节和实际呈交清单。内容锚点需要 clear cursor 与 clear occlusion，范围完整覆盖分析窗口和观察框。冗余光标对应只在充分链已成立、Agent 已实际确认该窗口 cursor present、occlusion clear 时才不阻塞；未知遮挡、缺记录、低信息、partial、丢失边界或内容差异不降级。每端的检测理由分别保存在 endpoint_reasons，任意一端有不可替代的硬理由都继续阻塞，另一端的光标不能掩盖它。检测到光标的端点必须有 actual present 声明；all-clear 声明不能覆盖已检测光标。尺寸舍入导致的 unreliable_alignment 还要求两端真实 clear 原生核查。标题、首尾、行外内容、每帧每区间覆盖与所选打印来源都继续执行原审计。
+`review.native_clean_regions` 复用既有原生核查字段，绑定真实 PTS、原帧 hash、同帧原生细节和实际呈交清单。内容锚点需要 clear cursor 与 clear occlusion，范围完整覆盖分析窗口和观察框。冗余光标对应只在充分链已成立、Agent 已实际确认该窗口 cursor present、occlusion clear 时才不阻塞；未知遮挡、缺记录、低信息、partial、丢失边界或内容差异不降级。每端的检测理由分别保存在 endpoint_reasons，任意一端有不可替代的硬理由都继续阻塞，另一端的光标不能掩盖它。检测到光标的端点必须有 actual present 声明；all-clear 声明不能覆盖已检测光标。绝对 x 分析 mask 已解决长线支撑边缘导致的宽度差，剩余 unreliable_alignment 不再允许替代。实际 spacing 差超过 .1、窗口高度或原帧宽度不一致时，即使其他两个锚点可信、两端声明 clear，也继续等待。标题、首尾、行外内容、每帧每区间覆盖与所选打印来源都继续执行原审计。
 
 原生声明按与当前分析窗口或观察框有面积交集的范围匹配。任一相关声明有 cursor uncertain 或 occlusion present/uncertain，必需对应和已检查桥都保持 blocking，即使像素结果为 not_contradicted、另两个锚点已有充分证据，也不能解除。宽范围 clear 声明不能覆盖局部未知或遮挡声明；其他位置的无关声明不污染该对应。像素 status/reason 保留原值，native_blockers 另列实例、端点帧、原生范围和声明理由。
+
+相邻对应和桥复用同一来源字段与计量函数。每次实际比较均记录相同的原帧 hash、PTS/time_base、分析窗口和像素数；失败及重复构建中的实际检查仍逐次累计。
 
 可靠的冗余非锚点没有相关未知或遮挡声明时，不强迫追加 native 记录；缺记录的实例不能成为 clean 锚点。不可靠或需替代的对应仍要求完整原生 authority。实际 cursor present 即使未被有限检测器发现，也只能在充分替代链和完整 present/clear 原生核查同时成立时不阻塞。
 

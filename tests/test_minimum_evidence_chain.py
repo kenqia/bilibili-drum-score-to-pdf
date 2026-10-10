@@ -125,6 +125,39 @@ class MinimumEvidenceChainTests(content_fixture.ContentChecksTests):
             self.assertTrue(all('native_occlusion_uncertain' in g['reasons'] for g in plan['summary']['critical_gaps']))
             self.assertEqual(plan['supplement_requests'],[])
 
+    def test_third_bridge_notation_ambiguity_vetoes_two_trustworthy_bridge_anchors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_bridge_ambiguous')
+            request,packet=self.reviewed_request(task,decision)
+            draft=self.build(base,task,request)
+            self.assertFalse(draft['ready_to_submit'],draft.get('unresolved'))
+            third=[c for c in draft['sources']['content_checks'] if c['matches'] and c['matches'][0].endswith('-C')]
+            adjacent=[c for c in third if c['scope']=='proposed_geometric_pair_only']
+            self.assertTrue(all(c['status']=='not_contradicted' and c['unmatched_ink_fraction']<=.08 for c in adjacent))
+            bridge=next(c for c in third if c['scope']=='geometry_established_bridge')
+            self.assertEqual(bridge['matches'],['0-C','2-C'])
+            self.assertEqual(bridge['reason'],'ambiguous_local_notation')
+            self.assertTrue(bridge['blocking'])
+            self.assertEqual(bridge['frame_sha256'],[packet['frames'][0]['sha256'],packet['frames'][2]['sha256']])
+            self.assertEqual(bridge['pts'],[packet['frames'][0]['pts'],packet['frames'][2]['pts']])
+            self.assertEqual(bridge['source_sha256'],packet['source']['sha256'])
+            report=self.cli('--operation','report','--task',task)['performance']
+            # Two public build-validation passes each read six adjacent and three
+            # bridge pairs, at two 1280x144 native windows per comparison.
+            self.assertEqual(report['content_validation']['pair_checks'],18)
+            self.assertEqual(report['content_validation']['analyzed_pixels'],6635520)
+            self.assertEqual(report['content_validation']['uncertain_checks'],10)
+            rejected=self.cli('--operation','submit','--task',task,'--decision',base/'draft/decision.json')
+            self.assertNotEqual(rejected.get('phase'),'accepted')
+            exported=self.cli('--operation','export','--task',task,'--output',base/'out')
+            self.assertNotEqual(exported['status'],'success')
+            path=base/'review.json';path.write_text(json.dumps(request))
+            plan=self.cli('--operation','review-plan','--task',task,'--decision',path,'--output',base/'plan')
+            self.assertEqual(len(plan['summary']['critical_gaps']),2)
+            self.assertTrue(all('ambiguous_local_notation' in g['reasons'] for g in plan['summary']['critical_gaps']))
+            self.assertTrue(all(g['affected_instances']==['C'] and g['content_blockers'][0]['matches']==['0-C','2-C'] for g in plan['summary']['critical_gaps']))
+            self.assertEqual(plan['supplement_requests'],[])
+
     def test_reliable_redundant_instance_without_native_declarations_is_not_an_anchor(self):
         with tempfile.TemporaryDirectory() as directory:
             base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_edge_support')
@@ -134,6 +167,21 @@ class MinimumEvidenceChainTests(content_fixture.ContentChecksTests):
             self.assertTrue(draft['ready_to_submit'],draft.get('unresolved'))
             intervals=[c['evidence_chain'] for c in draft['sources']['content_checks']]
             self.assertTrue(all(w['matches'][0].endswith(('-A','-B')) for i in intervals for w in i['witnesses']))
+
+    def test_third_instance_native_spacing_or_height_mismatch_cannot_borrow_clean_anchors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_edge_support')
+            for spacing in (12.09375,12.125):
+                with self.subTest(spacing=spacing):
+                    next(s for s in decision['segments'][0]['observations'] if s['id']=='1-C')['spacing']=spacing
+                    request,_=self.reviewed_request(task,decision)
+                    draft=self.build(base,task,request,f'spacing-{spacing}')
+                    self.assertFalse(draft['ready_to_submit'],draft.get('unresolved'))
+                    third=[c for c in draft['sources']['content_checks'] if c['matches'] and c['matches'][0].endswith('-C')]
+                    self.assertTrue(all(c['status']=='uncertain' and c['reason']=='unreliable_alignment' and c['blocking'] for c in third))
+                    self.assertTrue(all(c['evidence_chain']['sufficient'] for c in third))
+                    rejected=self.cli('--operation','submit','--task',task,'--decision',base/f'spacing-{spacing}/decision.json')
+                    self.assertNotEqual(rejected.get('phase'),'accepted')
 
     def test_native_unknown_outside_analysis_and_crop_does_not_poison_clean_witnesses(self):
         import copy
@@ -244,6 +292,34 @@ class MinimumEvidenceChainTests(content_fixture.ContentChecksTests):
             self.assertNotIn('issues',result)
             self.assertTrue(json.loads((base/'plan/review-plan.json').read_text())['issues'])
 
+    def test_summary_locates_pending_audit_and_groups_diagnostics_without_raw_ids(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_edge_support')
+            request,packet=self.reviewed_request(task,decision)
+            request['review']['score_audit']['intervals'][1]['status']='pending'
+            path=base/'review.json';path.write_text(json.dumps(request))
+            plan=self.cli('--operation','review-plan','--task',task,'--decision',path,'--output',base/'plan')
+            summary=plan['summary']
+            self.assertFalse(summary['draft_ready_to_submit'])
+            pending=next(i for i in summary['other_required_actions'] if 'unresolved_sampling_interval' in i.get('reasons',[]))
+            self.assertEqual(pending['interval'],dict(from_frame=packet['frames'][1]['id'],to_frame=packet['frames'][2]['id'],start=packet['frames'][1]['timestamp'],end=packet['frames'][2]['timestamp']))
+            self.assertEqual(pending['affected_instances'],list('ABC'))
+            self.assertEqual(pending['existing_evidence']['coverage_audit_status'],'pending')
+            self.assertEqual(pending['existing_evidence']['trusted_content_witness_count'],2)
+            self.assertTrue(pending['next_action'])
+            categories=[summary['duplicate_candidates'],summary['low_value_diagnostics'],summary['required_native_review']['detector_diagnostic_groups']]
+            self.assertTrue(all(categories))
+            self.assertNotIn('record_ids',json.dumps(summary))
+            for items in categories:
+                for item in items:
+                    self.assertTrue({'interval','affected_instances','existing_evidence','next_action','count'}<=item.keys(),item)
+                    self.assertIsNotNone(item['interval']['from_frame'])
+                    if item['affected_instances'] is not None:
+                        self.assertTrue(set(item['affected_instances'])<=set('ABC'))
+            raw=json.loads((base/'plan/review-plan.json').read_text())
+            self.assertTrue(all('id' in i for i in raw['issues']))
+            self.assertEqual(len(raw['issues']),summary['raw_diagnostic_count'])
+
     def test_third_row_conflict_vetoes_two_other_trustworthy_anchors(self):
         with tempfile.TemporaryDirectory() as directory:
             base=Path(directory);task,decision=self.prepare_score(base,variant='third_conflict')
@@ -341,6 +417,11 @@ class MinimumEvidenceChainTests(content_fixture.ContentChecksTests):
             self.assertEqual(raw['supplement_requests'],[])
             self.assertEqual(result['summary']['critical_gaps'],[])
             self.assertFalse(result['summary']['bound_geometry_checked'])
+            summary=result['summary']
+            groups=[*summary['duplicate_candidates'],*summary['low_value_diagnostics'],*summary['required_native_review']['detector_diagnostic_groups']]
+            self.assertTrue(all(i['affected_instances'] is None and i['identity_scope']=='unknown' for i in groups))
+            self.assertNotIn('record_ids',json.dumps(summary))
+            self.assertEqual(summary['raw_diagnostic_count'],len(raw['issues']))
 
     def test_supplement_preserves_opt_in_and_rejects_old_decision_binding(self):
         with tempfile.TemporaryDirectory() as directory:
