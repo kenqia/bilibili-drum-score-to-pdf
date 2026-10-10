@@ -139,3 +139,17 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 lazy 入口在这次相同输入上少生成 770 张 detail 图，少生成 794 张图像，单调 prepare 时间少 8.740 秒。这个差异不是端到端耗时或 Token 改善。两次均缺少完整模型调用、工具和图像呈交覆盖，也没有独立视觉审阅。配对原始报告、观察包和 `report` 输出保存在 `/home/kenqia/issue-43-resume-notes/issue45-baseline-20261010/paired-summary.json`。
 
 当前仍不能完成 #45：完整生命周期需要统一入口获取、视觉审阅、补采/修订、PDF 检查和交付确认；当前宿主 JSONL 无法证明所有失败调用、嵌套工具和实际图像呈交。历史两份真实审阅各有 12 行、2 页和来源 replay，但都是 `review_only`，墙钟和完整 Token 为 `null`，不能与本次 prepare 结果拼成基线。
+
+## #45/#51/#52 新核查，2026-10-10
+
+用户确认继续完成真实基线和放行工作。本次核对当前 CLI 0.149.0 的 app-server 协议，并以只读代理检查快路径契约和最终验收准备。默认 daemon control socket 不存在；生成的协议提供线程/turn 用量、错误和工具 item，但不能证明逐失败模型调用、嵌套工具与实际图像呈交完整。没有启动服务、修改认证或配置，也没有调用新模型。能力字段与 hash 见 `/home/kenqia/issue-43-resume-notes/app-server-capability-20261010.json`，结论见同目录 `issue45-metering-capability-20261010.md`。
+
+三个一秒本地时钟探针当前连续，不能修复旧任务账本或证明下一次完整运行有效。旧配对和 review_only 记录继续排除在完整基线外；真实 model_tokens 仍为 null，不将 coverage 改为 true。
+
+预检发现汇总资格缺口：完整成本报告即使墙钟无效或耗时缺失，也能取得 `real_baseline_eligible=true`。本次最小修复要求每次运行明确有效且提供非 null 耗时，保留提交状态、完整及观察 Token 和原 null。公开 CLI 红绿验证覆盖合法正例和四个反例，完整宿主计量测试 10 项通过，26.115 秒。记录见 `/home/kenqia/issue-43-resume-notes/issue45-clock-gate-fix-20261010/`。此次没有重跑整个 150 项测试集，也没有进行新的真实视频基准；旧完整回归仍对应上文冻结快照。
+
+#51 的现有校验要求每行实际视觉确认，不能直接填充脚本结果。具体兼容影响、有限范围和回滚入口见[最小兼容提案](fast-path-compatibility-proposal.md)。这是待实施前确认的提案，自动接受范围尚无真实放行。详查记录为 `/home/kenqia/issue-43-resume-notes/issue51-contract-audit-20261010.md`。
+
+#52 的逐项矩阵和串行采集计划见 `/home/kenqia/issue-43-resume-notes/issue52-preflight-20261010.md`。在已检索的两个项目 work 目录及 resume-notes 内，仅找到标准视频源；另两类候选需要恢复或重新冻结。一次入口组的三样本、两版本、每侧五次计划共需 30 个新鲜 review run，不能以保存决定 replay 代替。取得完整宿主来源并通过最小探针后，才展开真实配对。
+
+#45 完整真实基线及 #51/#52 质量和性能放行仍未完成。未启用默认快路径，未 push、创建 PR 或修改工单。

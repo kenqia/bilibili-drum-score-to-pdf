@@ -1,5 +1,15 @@
 # 验证记录
 
+## 2026-10-10 真实基线资格修复
+
+`9f4e713` 收紧 `aggregate` 的真实基线资格，要求每次运行明确有效且提供非 null 墙钟耗时。公开 CLI 回归先复现无效墙钟、缺时钟标记、缺耗时及 null 耗时四个反例，再验证合法正例仍入选，提交状态和完整及观察 Token 保留。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p test_host_usage.py -v
+```
+
+宿主计量测试 10 项全部通过，26.115 秒。固定 `4926ee9...9f4e713` 的 Standards、Spec 两轴审阅各 0 项发现，记录在 `/home/kenqia/issue-43-resume-notes/issue45-clock-gate-fix-20261010/`。本次没有重跑整个测试集，没有新增真实视频双跑或模型调用，也没有完成 #45 基线及 #51/#52 放行。最新计量核查和兼容提案见[实施状态](agents/performance-implementation-status.md)。
+
 ## 2026-10-10 隔离性能软件验证
 
 `codex/issue-43-software-experiment` 的 `6f344f0` 使用下列仓库入口完成新鲜回归，150 项全部通过，403.639 秒。
