@@ -35,7 +35,7 @@ def select(task, decision, packet, checks, inspect_pair, native_review):
             good = [c for c in local if c['from_frame'] == a and c['to_frame'] == b and trusted(c, sightings)]
             if len(good) < 2:
                 gaps.append((a, b))
-        candidates = []
+        candidates = {}
         for left in range(len(ids)):
             for right in range(left + 2, len(ids)):
                 if not any(left <= index[a] < index[b] <= right for a, b in gaps):
@@ -50,12 +50,17 @@ def select(task, decision, packet, checks, inspect_pair, native_review):
                             or abs(first['spacing'] / last['spacing'] - 1) > .03
                             or abs((first['bbox'][2] - first['bbox'][0]) / (last['bbox'][2] - last['bbox'][0]) - 1) > .03
                             or abs(first['bbox'][0] - last['bbox'][0]) > max(2, first['spacing'] / 2))
-                    candidates.append((right-left, left, right, first['staff_y'], first, last,not geometry_bad))
-        endpoint_pairs=sorted({(distance,left,right) for distance,left,right,_,first,last,eligible in candidates})
-        for _,left,right in endpoint_pairs:
+                    eligible = not geometry_bad and all(s is not None and s['complete'] for s in span)
+                    candidates.setdefault((right-left,left,right),[]).append((first,last,eligible))
+        # Reserve the bounded comparisons for edges that can supply two native
+        # clean anchors. Their content remains unproven until the entire edge is read.
+        endpoint_pairs = sorted(key for key,batch in candidates.items()
+            if len({first['instance_id'] for first,last,eligible in batch
+                    if eligible and reviewed(first,'clear') and reviewed(last,'clear')}) >= 2)
+        for distance,left,right in endpoint_pairs:
             if not any(left <= index[a] < index[b] <= right for a,b in gaps):
                 continue
-            batch=[(first,last,eligible) for _,l,r,_,first,last,eligible in candidates if (l,r)==(left,right)]
+            batch=candidates[(distance,left,right)]
             if bridge_attempts+len(batch)>256:
                 break
             # All common spatial pairs for this bridge are inspected before choosing anchors.
@@ -65,7 +70,7 @@ def select(task, decision, packet, checks, inspect_pair, native_review):
                 if 'id' in part:
                     result['segment_id']=part['id']
                 result['covered_frames']=ids[left:right+1]
-                result['bridge_eligible']=eligible and all(observed[fid].get(first['instance_id']) is not None and observed[fid][first['instance_id']]['complete'] for fid in ids[left:right+1])
+                result['bridge_eligible']=eligible
                 bridges.append(result)
             for a,b in list(gaps):
                 edges={}

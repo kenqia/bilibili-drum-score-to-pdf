@@ -7,6 +7,67 @@ import test_agent_content as content_fixture
 class MinimumEvidenceChainTests(content_fixture.ContentChecksTests):
     minimum_chain = True
 
+    def test_existing_clean_long_bridge_is_found_after_many_useless_short_edges(self):
+        import copy
+        import subprocess
+        from PIL import Image, ImageDraw
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory)
+            _,decision=self.prepare_score(base,variant='stationary_middle_cursor')
+            # Only the two endpoints are clear. Thirty-three intervening real frames
+            # preserve every instance but have a deliberate cursor over B and C.
+            with Image.open(base/'000.png') as image:
+                image.save(base/'clean.png')
+                masked=image.copy()
+                ImageDraw.Draw(masked).rectangle((490,400,506,760),fill='#e05050')
+                masked.save(base/'masked.png')
+            for i in range(128):
+                (base/f'long-{i:03d}.png').write_bytes((base/('clean.png' if i in (0,127) else 'masked.png')).read_bytes())
+            video=base/'long.mp4'
+            subprocess.run(['ffmpeg','-v','error','-y','-framerate','64','-i',str(base/'long-%03d.png'),
+                            '-pix_fmt','yuv420p',str(video)],check=True)
+            task=base/'long-task'
+            state=self.cli(video,'--output',task,'--evidence-mode','lazy','--minimum-evidence-chain')
+            self.assertEqual(state['status'],'waiting',state)
+            for batch in range(4):
+                packet=json.loads((task/'observation.json').read_text())
+                supplement=dict(schema_version=1,task_id=state['task_id'],observation_sha256=state['observation_sha256'],
+                    observation_version=state['observation_version'],request_id=f'cursor-gap-{batch}',
+                    issue=dict(reason='Controlled cursor gap requires native endpoints.',start=0,end=2),
+                    timestamps=[i/64 for i in range(1+batch*8,9+batch*8)])
+                path=base/'supplement.json';path.write_text(json.dumps(supplement))
+                state=self.cli('--operation','supplement','--task',task,'--decision',path)
+                self.assertEqual(state['status'],'waiting',state)
+            packet=json.loads((task/'observation.json').read_text())
+            materialize=dict(schema_version=1,task_id=state['task_id'],observation_sha256=state['observation_sha256'],
+                observation_version=state['observation_version'],source_sha256=packet['source']['sha256'],request_id='long-native',
+                reason='Controlled fixture native rows reviewed.',regions=[dict(frame_id=f['id'],frame_sha256=f['sha256'],
+                    pts=f['pts'],time_base=f['time_base'],bbox=[0,0,1280,960]) for f in packet['frames']])
+            path=base/'materialize-long.json';path.write_text(json.dumps(materialize))
+            state=self.cli('--operation','materialize','--task',task,'--decision',path)
+            self.assertEqual(state['phase'],'review',state)
+            packet=json.loads((task/'observation.json').read_text())
+            frames=packet['frames'];self.assertEqual(len(frames),35)
+            decision.update(task_id=state['task_id'],observation_sha256=state['observation_sha256'],
+                presented_images=[i['id'] for i in packet['images']],
+                coverage=dict(first_frame=frames[0]['id'],last_frame=frames[-1]['id'],unresolved=[]))
+            part=decision['segments'][0]
+            for row in [*part['rows'],part['extras'][0]['region']]:
+                row['evidence_images']=[i['id'] for i in packet['images'] if i.get('frame_id')==row['frame_id'] and i['kind']=='native_detail']
+            templates=copy.deepcopy(part['observations'][:3])
+            part['frames']=[f['id'] for f in frames]
+            part['observations']=[dict(copy.deepcopy(s),id=f'{fi}-{s["instance_id"]}',frame_id=f['id'])
+                                  for fi,f in enumerate(frames) for s in templates]
+            part['transitions']=[dict(from_frame=a['id'],to_frame=b['id'],
+                matches=[[f'{fi}-{label}',f'{fi+1}-{label}'] for label in 'ABC'],
+                evidence='Controlled stationary ordered correspondences.') for fi,(a,b) in enumerate(zip(frames,frames[1:]))]
+            request,_=self.reviewed_request(task,decision)
+            draft=self.build(base,task,request)
+            self.assertTrue(draft.get('ready_to_submit'),draft.get('error') or draft.get('unresolved'))
+            bridges=[c for c in draft['sources']['content_checks'] if c['scope']=='geometry_established_bridge']
+            self.assertEqual({tuple(c['matches']) for c in bridges},{('0-A','34-A'),('0-B','34-B'),('0-C','34-C')})
+            self.assertTrue(all(c['status']=='not_contradicted' for c in bridges))
+
     def test_new_lazy_flag_is_persisted_and_full_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             base=Path(directory);task,_=self.prepare_score(base)
@@ -134,6 +195,23 @@ class MinimumEvidenceChainTests(content_fixture.ContentChecksTests):
             self.assertFalse(result['ready_to_submit'],result)
             checks=result['sources']['content_checks']
             self.assertTrue(any(c['matches']==['0-C','2-C'] and c['scope']=='geometry_established_bridge' and c['status']=='conflict' for c in checks),checks)
+
+    def test_bridge_ineligible_third_common_instance_still_vetoes_conflicting_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);task,decision=self.prepare_score(base,variant='stationary_bridge_conflict')
+            # Each adjacent crop shift is permitted, but accumulated endpoint shift
+            # makes C ineligible as a bridge anchor. Its content must still be read.
+            for s in decision['segments'][0]['observations']:
+                if s['id'] in ('1-C','2-C'):
+                    s['bbox'][0]+=4*int(s['id'][0])
+            request,_=self.reviewed_request(task,decision)
+            draft=self.build(base,task,request)
+            self.assertFalse(draft['ready_to_submit'],draft.get('unresolved'))
+            third=next(c for c in draft['sources']['content_checks']
+                       if c['scope']=='geometry_established_bridge' and c['matches']==['0-C','2-C'])
+            self.assertFalse(third['bridge_eligible'])
+            self.assertEqual(third['status'],'conflict')
+            self.assertTrue(third['blocking'])
 
     def test_two_single_anchors_on_different_edges_do_not_form_one_proof(self):
         with tempfile.TemporaryDirectory() as directory:
