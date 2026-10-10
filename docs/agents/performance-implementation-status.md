@@ -126,3 +126,16 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 污染必需对应的光标或遮挡仍不能仅靠补一张干净帧解除；所有必需对应必须具备可靠内容证据。导航限额只能按当前全部 gap 核查和真实新增 PTS 的有限入口解除，历史风险记录保留，`hidden_content_proven_absent=false`。这些支持限制没有被改成成功输出。
 
 原工作区仍为 `39ce3ab`，原有未跟踪资产保留。七个已合入且干净的实现工作树已正常清理，分支和仓库外实验记录保留。没有新增生产依赖，三个 moving viewport 核心未改，防火墙通过。没有 push、PR、远端合并或工单修改；#45 的完整真实基线、各票真实验收及 #51/#52 仍待完成，#43 未完成。
+
+## #45 配对入口测量，2026-10-10
+
+使用同一份本地缓存的 `BV1rH4y1R7Rk-p1.mp4`，源 SHA-256 为 `80f9a8d19515cf624d7d13c27ea758e88118fddb4341fa06deaad040272877fe`，顺序运行冻结入口 `stable-39ce3ab` 的 `full/prepare` 与实验入口 `e35ae33` 的 `lazy/prepare`。两次都只到 `waiting`，没有提交视觉决定、PDF 或交付确认，因此这组数据只说明 prepare 层的观察生成差异。
+
+| 入口 | 单调 prepare 秒 | 完整帧分析 | detail 图 | generated_images | 墙钟 | model_tokens |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| stable full | 41.460 | 48 | 770 | 843 | `null`，clock discontinuity | `null` |
+| experiment lazy | 32.721 | 48 | 0 | 49 | `null`，clock discontinuity | `null` |
+
+lazy 入口在这次相同输入上少生成 770 张 detail 图，少生成 794 张图像，单调 prepare 时间少 8.740 秒。这个差异不是端到端耗时或 Token 改善。两次均缺少完整模型调用、工具和图像呈交覆盖，也没有独立视觉审阅。配对原始报告、观察包和 `report` 输出保存在 `/home/kenqia/issue-43-resume-notes/issue45-baseline-20261010/paired-summary.json`。
+
+当前仍不能完成 #45：完整生命周期需要统一入口获取、视觉审阅、补采/修订、PDF 检查和交付确认；当前宿主 JSONL 无法证明所有失败调用、嵌套工具和实际图像呈交。历史两份真实审阅各有 12 行、2 页和来源 replay，但都是 `review_only`，墙钟和完整 Token 为 `null`，不能与本次 prepare 结果拼成基线。

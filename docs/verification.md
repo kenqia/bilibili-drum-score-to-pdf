@@ -14,6 +14,8 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 本轮没有重复真实 URL 下载或独立视觉审阅，不代表 #45 完整基线和 #51/#52 放行。模型与墙钟完整成本的原有缺口保留，不能从离线回归时间或固定决定重放声称端到端耗时、Token 降低。下文按日期保留历史验证记录。
 
+同一标准视频的本地配对入口测量已保存于 `/home/kenqia/issue-43-resume-notes/issue45-baseline-20261010/paired-summary.json`。冻结 full/prepare 与实验 lazy/prepare 都只到 waiting，分别单调耗时 41.460 秒和 32.721 秒，detail 图 770 对 0，墙钟和 model_tokens 均为 null。该结果是 prepare 层观察，不满足 #45 的完整生命周期资格。
+
 ## 2026-10-08 重构基点
 
 2026-10-08，重构分支 `rewrite/minimal-moving-viewport` 从 GitHub 最新 main `0b4da0639c51bf121bfa0574e456409b643936af` 建立。正式产品只保留一个空间跟踪核心，旧恢复模块和旧像素例外测试已删除。
