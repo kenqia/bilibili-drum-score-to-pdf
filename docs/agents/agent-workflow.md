@@ -214,3 +214,9 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 ## 显式混合接受
 
 新 lazy prepare 可加 `--script-acceptance` 固定实验策略。普通内部行与 gap 的脚本依据、Agent 原生 clean 核查、acceptance.json 的精确绑定、提交和重放见[混合接受实验](script-acceptance.md)。未启用开关的任务保持完整视觉门禁；真实自动接受支持仍为空。
+
+## 按谱名交付
+
+实际核对谱面标题后，日常导出添加 `--title '谱名'`，重放使用相同参数。顶层保留 `谱名.pdf`，其余来源和决定放入 `材料/`，manifest 路径为 `材料/manifest.json`。行框、原裁剪和灰度图路径仍相对整个结果目录。PDF 内容及来源像素不变。文件名替换 Windows 不允许的字符并限制字节长度，不对谱面做文字识别或重绘。
+
+读取 stdout 的 `pdf` 和 `manifest` 找到文件，不硬编码 score.pdf。confirm-delivery 保持原回执格式，由保存的成功 export 记录确定路径后核对 SHA256。审核回执和后续核验报告也保存在材料内，最终优先链接顶层 PDF。旧未带 title 的导出与审核继续兼容，已有结果不原地迁移。

@@ -39,11 +39,23 @@ def confirm(output, path, recorder, state, observation, load, digest):
         if any(value[k] != v for k,v in dict(task_id=state['task_id'], lifecycle_id=recorder.data['lifecycle_id'],
                   observation_sha256=state['observation_sha256'], decision_sha256=latest['sha256']).items()):
             raise ValueError
-        pdf, manifest_path = output / 'score.pdf', output / 'manifest.json'
+        artifacts = [e['artifact'] for e in recorder.data['operations'] if e['operation'] == 'export'
+                     and e['status'] == 'success' and e.get('artifact', {}).get('directory') == str(output.resolve())]
+        if not artifacts:
+            raise ValueError
+        artifact = artifacts[-1]
+        name, manifest_name = artifact.get('pdf', 'score.pdf'), artifact.get('manifest', 'manifest.json')
+        if not isinstance(name, str) or Path(name).name != name or '/' in name or '\\' in name or not name.endswith('.pdf'):
+            raise ValueError
+        if manifest_name not in ('manifest.json', '材料/manifest.json') or (output/'材料').is_symlink():
+            raise ValueError
+        pdf, manifest_path = output / name, output / manifest_name
         if pdf.is_symlink() or manifest_path.is_symlink() or digest(pdf) != value['pdf_sha256'] or digest(manifest_path) != value['manifest_sha256']:
             raise ValueError
         expected = dict(directory=str(output.resolve()), pdf_sha256=value['pdf_sha256'], manifest_sha256=value['manifest_sha256'],
                         observation_sha256=value['observation_sha256'], decision_sha256=value['decision_sha256'])
+        if 'pdf' in artifact or 'manifest' in artifact:
+            expected.update(pdf=name, manifest=manifest_name)
         if not any(e['operation'] == 'export' and e['status'] == 'success' and e.get('artifact') == expected for e in recorder.data['operations']):
             raise ValueError
         # Generated provenance can exceed the external decision limit. Only

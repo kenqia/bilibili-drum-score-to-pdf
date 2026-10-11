@@ -60,9 +60,13 @@ def validate_events(data, number):
         if 'artifact' in event:
             artifact = event['artifact']
             required_artifact = {'directory','pdf_sha256','observation_sha256','decision_sha256'}
-            require(isinstance(artifact, dict) and required_artifact <= set(artifact) <= required_artifact | {'manifest_sha256'})
+            require(isinstance(artifact, dict) and required_artifact <= set(artifact) <= required_artifact | {'manifest_sha256','pdf','manifest'})
             require(isinstance(artifact['directory'], str) and Path(artifact['directory']).is_absolute())
-            require(all(isinstance(v, str) and bool(re.fullmatch(r'[a-f0-9]{64}', v)) for k,v in artifact.items() if k != 'directory'))
+            require(all(isinstance(v, str) and bool(re.fullmatch(r'[a-f0-9]{64}', v)) for k,v in artifact.items() if k not in ('directory','pdf','manifest')))
+            if 'pdf' in artifact or 'manifest' in artifact:
+                name = artifact.get('pdf')
+                require(isinstance(name, str) and Path(name).name == name and '/' not in name and '\\' not in name and name.endswith('.pdf'))
+                require(artifact.get('manifest') == '材料/manifest.json')
         operations.add(event['event_id'])
         ids.add(event['event_id'])
     for event in data['stages']:

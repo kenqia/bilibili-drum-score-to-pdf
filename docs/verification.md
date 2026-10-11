@@ -414,3 +414,13 @@ python ci/run_unittest_shard.py --index 1 --count 2
 冻结改动后，两分片完整执行 228 项，227 项通过。分片 0 为 114 项、566.175 秒，1 项失败；分片 1 为 114 项、536.635 秒，全部通过。失败为既有 `test_real_baseline_gate_preserves_explicit_fixture_delivery_provenance`。单独诊断失败时，聚合结果的有效耗时为 null；再次执行完整宿主用量专项 16 项、52.019 秒全部通过，基线 079e510 的同项测试 1 项、4.799 秒通过。表现为宿主时钟相关的不稳定性，没有修改计量门禁或把失败结果改成成功。不能宣称最终全量一次通过。
 
 最终日志为 `modes-final-all-shard-0.log`、`modes-final-all-shard-1.log`、`modes-host-regression.log` 与 `modes-host-baseline-test.log`。`modes-verification-final.json` 保存结果、日志 SHA256 与源码未变核对。完整回归期间代码及测试 hash 不变，之后只追加本节文档。远端 CI 尚未运行。
+
+## 谱名 PDF 与材料目录，2026-10-12
+
+`export/replay --title` 在渲染后整理交付，顶层仅保留谱名 PDF 与材料文件夹。manifest、决定、原帧和裁剪进入材料，逐行来源仍相对结果目录。性能记录保存实际 PDF、manifest 路径，交付确认保持 hash 与当前接受记录绑定。未传 title 的旧接口兼容；已有结果不原地修改。无效标题不能覆写已有输出。
+
+新增公开 CLI 测试验证中日文标题、非法文件名字符、字节长度、精确 RGB 原裁剪、仅灰度打印、重放 PDF 字节相等、交付确认与 PDF 篡改拒绝。最终两项测试在 4.645 秒通过，日志为本聊天 `work/recovery/title-layout-tests-final.log`。Python 语法与 diff 检查通过。完整 230 项回归本次未重跑，按导出、交付、计量与恢复范围验证。
+
+BV1bD421u7vu 在新目录重新导出成功，37 行、4 页。`空白とカタルシス（空白与宣泄）.pdf` 与此前逐页实际审核版本字节相等，SHA256 为 `4ad57d3ab8be22a59cb2c1d7cbad586739099349a594a0bcfdc70f671939cfc3`。全部行与标题区域原裁剪及灰度图再次逐像素核对通过。沿用原实际逐页审核依据，明确记录 PDF 字节相同与新来源路径核验，未宣称新增视觉审阅或不同歌验收。交付目录为本聊天 `outputs/BV1bD421u7vu-title-delivery/`，核验和回执在材料内。
+
+最后兼容回归为计量 12 项、43.249 秒，恢复 4 项、24.638 秒，旧交付 manifest 1 项、0.159 秒，均通过。日志为 `work/recovery/title-final-test_agent_performance.py.log`、`title-final-test_agent_resume.py.log` 和 `title-final-test_agent_delivery.py.log`。新布局实际 confirm-delivery 成功，当前 `delivery_confirmed=true`。自审核对目录整理、文件名安全、登记路径、hash 门禁和旧布局兼容，无剩余问题。

@@ -703,11 +703,17 @@ def supplement(task, path):
     return result
 
 
-def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None, evidence_mode='full', script_acceptance=False, minimum_evidence_chain=False, reuse_task=None, evidence_recovery=False, mode=None):
+def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None, evidence_mode='full', script_acceptance=False, minimum_evidence_chain=False, reuse_task=None, evidence_recovery=False, mode=None, title=None):
     target = Path(output) if output and operation in ('prepare', 'export', 'replay', 'build-decision', 'review-plan', 'candidate-plan') else None
     performance = None
     token = None
+    target_ready = False
     try:
+        if title is not None:
+            from delivery_layout import pdf_name
+            if operation not in ('export', 'replay'):
+                raise ConversionError('invalid_input', '谱名只用于导出或重放。')
+            pdf_name(title)
         if mode is not None:
             if operation != 'prepare' or mode not in ('auto', 'fast', 'full'):
                 raise ConversionError('invalid_input', '模式只在新 prepare 任务选择，后续操作继承任务策略。')
@@ -748,6 +754,7 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
                 performance = Performance(target, load_json, write_json, embedded=True)
                 (target / 'manifest.json').unlink()
             empty_output(target)
+            target_ready = True
             if operation == 'prepare':
                 performance = performance or Performance(target, load_json, write_json, embedded=bool(source and '://' in str(source)))
         if operation != 'prepare' and task and Path(task).is_dir() and not Path(task).is_symlink():
@@ -798,6 +805,9 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
             result = confirm(output, decision, performance, state, observation, load_json, digest)
         else:
             result = export(Path(task), target)
+            if title is not None:
+                from delivery_layout import package
+                package(target, result, title)
     except InputError as error:
         result = dict(schema_version=VERSION, status='failed', complete=False, phase='acquisition', rows=[], issues=[],
                       error={'code': error.code, 'message': str(error)})
@@ -837,10 +847,12 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
                 pass
         if target and result.get('status') == 'success' and operation in ('export','replay'):
             state = load_json(performance.directory / 'task.json')
-            performance.operation['artifact'] = dict(directory=str(target.resolve()), pdf_sha256=digest(target / 'score.pdf'),
+            performance.operation['artifact'] = dict(directory=str(target.resolve()), pdf_sha256=digest(target / result['pdf']),
                     observation_sha256=result['observation_sha256'], decision_sha256=state['decision_history'][-1]['sha256'] if state.get('decision_history') else digest(performance.directory / 'decision.json'))
+            if result.get('manifest'):
+                performance.operation['artifact'].update(pdf=result['pdf'], manifest=result['manifest'])
             with stage('delivery_publication'):
-                write_json(target / 'manifest.json', result)
+                write_json(target / result.get('manifest', 'manifest.json'), result)
         performance.finish(result)
         result['performance'] = performance.report()
         if operation=='review-plan' and 'summary' in result:
@@ -852,9 +864,9 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
             result['performance_ledger'] = performance.data
         if token is not None:
             ACTIVE.reset(token)
-    if target and target.exists() and result.get('error', {}).get('code') != 'existing_output':
-        write_json(target / 'manifest.json', result)
+    if target_ready and target and target.exists() and result.get('error', {}).get('code') != 'existing_output':
+        write_json(target / result.get('manifest', 'manifest.json'), result)
         if performance and performance.operation.get('artifact') and result['status'] == 'success':
-            performance.operation['artifact']['manifest_sha256'] = digest(target / 'manifest.json')
+            performance.operation['artifact']['manifest_sha256'] = digest(target / result.get('manifest', 'manifest.json'))
             performance.save()
     return result

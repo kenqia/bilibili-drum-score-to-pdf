@@ -26,11 +26,20 @@ uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/
 
 ```sh
 uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/requirements.txt /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py --operation submit --task /absolute/path/to/new-task --decision /absolute/path/to/agent-decision.json
-uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/requirements.txt /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py --operation export --task /absolute/path/to/new-task --output /absolute/path/to/new-result
-uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/requirements.txt /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py --operation replay --task /absolute/path/to/new-task --output /absolute/path/to/new-replay
+uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/requirements.txt /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py --operation export --task /absolute/path/to/new-task --output /absolute/path/to/new-result --title '实际核对的谱名'
+uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/requirements.txt /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py --operation replay --task /absolute/path/to/new-task --output /absolute/path/to/new-replay --title '实际核对的谱名'
 ```
 
-任务与导出结果使用不同目录。只在决定接受且无未决区间后 export。检查 stdout JSON 的 status 和结果目录的 manifest.json。
+任务与导出结果使用不同目录。只在决定接受且无未决区间后 export。检查 stdout JSON 的 status、pdf 和 manifest 路径。日常导出必须用 --title 填写从谱面实际核对的标题。PDF 是核心交付文件，位于结果目录顶层；manifest、决定、原帧和裁剪均在材料文件夹。标题中的文件名非法字符替换为下划线，文件名不会修改谱面像素。标题无法确认时继续核查，不虚构谱名。未传 title 的旧接口保留原目录布局。
+
+```text
+结果目录/
+├── 谱名.pdf
+└── 材料/
+    ├── manifest.json
+    ├── decision.json
+    └── 原帧与裁剪文件
+```
 
 - `success`：检查 complete 为 true，逐页查看 score.pdf，完成下文实际交付确认后交付 PDF 和 manifest。核对标题、速度、拍号、细小记号与首尾。每条 row 的 original_image 必须与 source_frame 的 bbox 精确一致；image 仅转灰度。timestamp 是实际源 PTS，global_y 与 index 给出空间顺序。
 - `waiting`：展示 issues 的 reason、timestamp 与 screenshot。没有完整干净观察或可靠空间接续时不得称为完整。可用 resume 查看已保存进度，再补采或按协议修订；证据不足时说明所需更好的视频。

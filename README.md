@@ -17,8 +17,8 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 ```sh
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation submit --task /absolute/new-task --decision /absolute/agent-decision.json
-uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation export --task /absolute/new-task --output /absolute/new-result
-uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation replay --task /absolute/new-task --output /absolute/new-replay
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation export --task /absolute/new-task --output /absolute/new-result --title '实际核对的谱名'
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation replay --task /absolute/new-task --output /absolute/new-replay --title '实际核对的谱名'
 ```
 
 任务与结果使用不同的新空目录。检查 stdout JSON 和 manifest.json。只有 `success`、`complete=true` 且没有未决区间时才交付完整曲谱。`waiting` 保留证据与疑点，可 resume 或按协议补采；`failed` 给出脱敏诊断。匿名获取失败且目录仅含失败 manifest 时，可用原命令重试。
@@ -61,3 +61,5 @@ lazy 提交使用 v4 原生图块，并附绑定决定文件的 `audit.json`。�
 实验能力仍要求实际原图和原生细节审阅。合成验证不代表真实视频质量或端到端性能放行；完整真实成本未知时保持 null。默认快路径保持关闭；显式混合接受尚未获真实放行。使用新任务、草稿与结果目录，保留来源和接受历史；回退到冻结的 `d09fa9d` 使用另一独立目录。
 
 需要先复用成功 full 的实际 PTS、搜索完整候选，再对缺口局部补采时，使用新任务的 `--reuse-task` 和 `--evidence-recovery`。恢复策略保留污染比较及明确冲突，只由覆盖整个区间的两个有序可信对应承担接续。命令、来源绑定与限制见[原帧与接续恢复](docs/agents/evidence-recovery.md)。
+
+日常交付用 `export --title` 指定实际核对的谱名。结果顶层只有 `谱名.pdf` 和 `材料/`，来源、决定及 `manifest.json` 都在材料内。stdout 的 `pdf`、`manifest` 是相对结果目录的路径。重放使用相同 title，交付确认自动从登记的导出路径核对文件。未指定 title 的旧接口保留原布局。

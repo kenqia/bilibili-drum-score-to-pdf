@@ -76,6 +76,7 @@ def main():
     parser.add_argument('--output', help='Output directory')
     parser.add_argument('--operation', choices=['convert', 'prepare', 'submit', 'resume', 'supplement', 'materialize', 'export', 'replay', 'report', 'confirm-delivery', 'build-decision', 'review-plan', 'candidate-plan', 'strengthen-review'], default='prepare',
                         help='Operation (default: prepare; convert runs the legacy moving viewport path)')
+    parser.add_argument('--title', help='Reviewed score title for export/replay; publish title.pdf beside 材料/')
     parser.add_argument('--task', help='Existing Agent observation task')
     parser.add_argument('--mode', choices=['auto', 'fast', 'full'], help='Workflow preset for new prepare tasks; default remains full until auto release validation')
     parser.add_argument('--performance-events', help='Controlled host timing events JSON, bound to the task lifecycle')
@@ -93,11 +94,13 @@ def main():
     if (args.mode or args.script_acceptance or args.minimum_evidence_chain or args.reuse_task or args.evidence_recovery) and args.operation == 'convert':
         print(json.dumps(dict(status='failed',complete=False,error=dict(code='invalid_input',message='脚本接受仅支持新 lazy prepare 任务。')),ensure_ascii=False))
         return 2
+    if args.title is not None and args.operation not in ('export', 'replay'):
+        parser.error('--title is only supported for export/replay')
     if args.operation != 'convert':
         from agent_workflow import run
         previous = signal.signal(signal.SIGTERM, interrupt_conversion)
         try:
-            result = run(args.operation, args.input, args.task, args.decision, args.output, acquisition_timeout=args.acquisition_timeout, performance_events=args.performance_events, evidence_mode=args.evidence_mode, script_acceptance=args.script_acceptance, minimum_evidence_chain=args.minimum_evidence_chain, reuse_task=args.reuse_task, evidence_recovery=args.evidence_recovery, mode=args.mode)
+            result = run(args.operation, args.input, args.task, args.decision, args.output, acquisition_timeout=args.acquisition_timeout, performance_events=args.performance_events, evidence_mode=args.evidence_mode, script_acceptance=args.script_acceptance, minimum_evidence_chain=args.minimum_evidence_chain, reuse_task=args.reuse_task, evidence_recovery=args.evidence_recovery, mode=args.mode, title=args.title)
         finally:
             signal.signal(signal.SIGTERM, previous)
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))

@@ -106,3 +106,5 @@ Agent-first 入口用 `agent_performance.py` 保存独立性能账本。它不�
 新任务的 `--mode auto|fast|full` 在 prepare 固定策略，后续操作继承。默认仍为 full；auto/fast 使用现有 lazy、最小链、恢复与逐项混合接受门禁。首次 review-plan 提供绑定的候选请求，candidate-plan 可从当前几何建议冷启动。复用任务持有独立视频副本，hash 校验和采样历史保留。
 
 strengthen-review 只物化同一任务缺失的原生整帧区域，最多96帧、一个轮次；既有 ROI 复用，没有重新下载、导航或解码。显式确认结构后的内容或几何硬冲突摘要保存在任务，禁止整包回退，完整比较仍在构建结果。新增图像没有新视觉权限，原 lazy 校验和逐页交付保持。契约、Agent 顺序及默认放行门槛见[工作流模式](agents/workflow-modes.md)。
+
+标题交付由 `delivery_layout.py` 在 PDF 渲染后整理。`export/replay --title` 将未修改的 PDF 命名为谱名，将来源、裁剪、决定和 manifest 移入材料目录，并更新相对来源路径。性能账本记录 PDF 与 manifest 的相对路径及 hash，交付确认只接受登记路径。未指定 title 保留旧布局，不更改接受策略或音乐内容校验。
