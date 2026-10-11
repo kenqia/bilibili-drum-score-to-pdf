@@ -21,6 +21,35 @@ def number(value):
 
 
 def continuous_rows(decision, packet, presented, script_rows=None):
+    by_id, by_frame, offsets, relations, instances = continuous_geometry(decision, packet)
+    ordered = list(by_frame)
+    frames = {f['id']: f for f in packet['frames']}
+    rows=decision['rows']
+    if not isinstance(rows,list) or any(not isinstance(r,dict) or 'instance_id' not in r or 'observation_id' not in r for r in rows):
+        invalid('所选谱行缺少空间实例与观察引用。')
+    if [r['instance_id'] for r in rows]!=list(instances):
+        waiting('空间实例漏行、重复或打印顺序非法。')
+    native=[]
+    for r in rows:
+        if not isinstance(r['observation_id'], str) or r['observation_id'] not in by_id:
+            invalid('所选谱行观察引用非法。')
+        s=by_id[r['observation_id']]
+        if s['instance_id']!=r['instance_id'] or s['frame_id']!=r.get('frame_id') or s['bbox']!=r.get('bbox'):
+            waiting('所选原裁剪与身份观察不一致。')
+        if not s['complete']:
+            waiting('半行必须等到完整出现才能打印。')
+        native.append({k:v for k,v in r.items() if k not in ('instance_id','observation_id')})
+    chosen=native_rows({**decision,'rows':native},packet,presented,script_rows)
+    for c,r in zip(chosen,rows):
+        c.update(instance_id=r['instance_id'],observation_id=r['observation_id'],global_y=instances[r['instance_id']],scroll_offset=offsets[r['frame_id']])
+    audit=dict(first_frame=ordered[0],last_frame=ordered[-1],first_timestamp=frames[ordered[0]]['timestamp'],last_timestamp=frames[ordered[-1]]['timestamp'],
+               transitions=relations,accepted_instances=list(instances),unresolved=[],hidden_content_proven_absent=False,
+               scope='observed_continuous_score')
+    return chosen,audit
+
+
+def continuous_geometry(decision, packet):
+    """Validate supplied spatial identities separately from print authority."""
     frames = {f['id']: f for f in packet['frames']}
     ordered = list(frames)
     sightings = decision['observations']
@@ -100,25 +129,4 @@ def continuous_rows(decision, packet, presented, script_rows=None):
                     waiting('新空间实例插入已接受行之前，可能漏行或重复。')
                 instances[s['instance_id']]=y
                 previous_max=y
-    rows=decision['rows']
-    if not isinstance(rows,list) or any(not isinstance(r,dict) or 'instance_id' not in r or 'observation_id' not in r for r in rows):
-        invalid('所选谱行缺少空间实例与观察引用。')
-    if [r['instance_id'] for r in rows]!=list(instances):
-        waiting('空间实例漏行、重复或打印顺序非法。')
-    native=[]
-    for r in rows:
-        if not isinstance(r['observation_id'], str) or r['observation_id'] not in by_id:
-            invalid('所选谱行观察引用非法。')
-        s=by_id[r['observation_id']]
-        if s['instance_id']!=r['instance_id'] or s['frame_id']!=r.get('frame_id') or s['bbox']!=r.get('bbox'):
-            waiting('所选原裁剪与身份观察不一致。')
-        if not s['complete']:
-            waiting('半行必须等到完整出现才能打印。')
-        native.append({k:v for k,v in r.items() if k not in ('instance_id','observation_id')})
-    chosen=native_rows({**decision,'rows':native},packet,presented,script_rows)
-    for c,r in zip(chosen,rows):
-        c.update(instance_id=r['instance_id'],observation_id=r['observation_id'],global_y=instances[r['instance_id']],scroll_offset=offsets[r['frame_id']])
-    audit=dict(first_frame=ordered[0],last_frame=ordered[-1],first_timestamp=frames[ordered[0]]['timestamp'],last_timestamp=frames[ordered[-1]]['timestamp'],
-               transitions=relations,accepted_instances=list(instances),unresolved=[],hidden_content_proven_absent=False,
-               scope='observed_continuous_score')
-    return chosen,audit
+    return by_id, by_frame, offsets, relations, instances

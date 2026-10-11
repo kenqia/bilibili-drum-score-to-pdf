@@ -138,6 +138,14 @@ def inspect(decision, packet, review, acceptance=None):
             require(interval['regions'] == [], '普通 gap 脚本依据不能冒充呈交图像。')
             if authority is None:
                 pending('unresolved_script_interval',start=a['timestamp'],end=b['timestamp'])
+            elif packet.get('evidence_recovery_policy'):
+                # These sources are actual clean bridge endpoints, which may be
+                # outside the dirty adjacent pair. Keep every covered gap and PTS.
+                for source in authority['source_regions']:
+                    refs=[i['id'] for i in images.values() if i.get('frame_id')==source['frame_id']
+                        and i['kind'] in ('detail','native_detail') and i['id'] in presented
+                        and contains(i['bbox'],source['bbox'])]
+                    regions([dict(frame_id=source['frame_id'],bbox=source['bbox'],evidence_images=refs[:1])],True)
             continue
         native = regions(interval['regions'], interval['status'] == 'checked')
         require(all(r['frame_id'] in (a['id'],b['id']) for r in native))
@@ -162,7 +170,9 @@ def inspect(decision, packet, review, acceptance=None):
                             and (f['pts'],tuple(f['time_base'])) not in initial_pts}
             expected_pairs = [[a['id'],b['id']] for a,b in pairs]
             proof_frames = {s['frame_id'] for s in sources}
-            checked_pairs = all(i['status'] == 'checked' for i in review['intervals']) and len(review['intervals']) == len(pairs)
+            checked_pairs = all(i['status'] == 'checked' or (packet.get('evidence_recovery_policy') and
+                i['status']=='script' and ('segments',0,'transitions',n) in (acceptance or {}))
+                for n,i in enumerate(review['intervals'])) and len(review['intervals']) == len(pairs)
             resolved_navigation = (bool(navigation) and all(n == NAVIGATION_LIMIT for n in navigation)
                                    and bool(requested) and set(requested) <= supplemented and set(requested) <= proof_frames
                                    and resolution['intervals'] == expected_pairs and checked_pairs)

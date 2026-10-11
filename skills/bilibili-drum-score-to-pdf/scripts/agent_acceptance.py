@@ -29,7 +29,7 @@ def region(frame, bbox):
 
 
 def clean_review(decision, packet, records):
-    if not isinstance(records, list) or len(records) > 128:
+    if not isinstance(records, list) or len(records) > (2000 if packet.get('evidence_recovery_policy') == 'clean_sources_v1' else 128):
         invalid('原生干净区域核查清单非法。')
     frames = {f['id']: f for f in packet['frames']}
     images = {i['id']: i for i in packet['images']}
@@ -99,7 +99,7 @@ def native_check(frame, image, actual, sighting, clean):
     return checks, source_regions
 
 
-def compute(task, state, packet, decision, paths, clean):
+def compute(task, state, packet, decision, paths, clean, geometry_reviewed=False):
     """Return authority only for explicitly requested, independently passing items."""
     if not enabled(state, packet):
         invalid('任务未启用脚本接受，不能迁移既有任务。')
@@ -109,6 +109,13 @@ def compute(task, state, packet, decision, paths, clean):
         invalid('脚本接受项路径非法或重复。')
     clean = clean_review(decision,packet,clean)
     segment = decision['segments'][0]
+    from agent_recovery import enabled as recovery_enabled
+    recovery = recovery_enabled(state, packet)
+    bound_geometry = False
+    if recovery and geometry_reviewed:
+        from agent_continuity import continuous_geometry
+        continuous_geometry({**segment,'coverage':decision['coverage']}, packet)
+        bound_geometry = True
     from agent_proposals import suggest
     from score_detect import analyze_frame, staff_groups
     native = {}; rawpacket = {**packet,'frames':[],'candidates':[]}
@@ -162,8 +169,14 @@ def compute(task, state, packet, decision, paths, clean):
         if len(path) != 4 or path[:2] != ['segments',0] or path[2] not in ('rows','observations','transitions'):
             invalid('脚本接受路径类型不受支持。')
         kind=path[2]
-        checks = dict(single_displacement='pass' if unique else 'uncertain')
+        checks = dict(bound_geometry='pass' if bound_geometry else 'uncertain') if recovery else dict(single_displacement='pass' if unique else 'uncertain')
         sources=[]
+        if recovery and kind == 'transitions':
+            checks['content_chain'] = 'uncertain'
+            items.append(dict(path=path, authority='script', kind=kind, source_regions=[], checks=checks,
+                evidence='Bound Agent spatial identities; independently clean ordered witnesses must cover this full interval.',
+                unresolved=[k for k,v in checks.items() if v!='pass']))
+            continue
         if kind in ('rows','observations'):
             sid=node.get('observation_id') if kind == 'rows' else node['id']
             if sid not in raw:
@@ -221,12 +234,31 @@ def compute(task, state, packet, decision, paths, clean):
     from agent_content import check_pairs
     provisional=copy.deepcopy(decision)
     fill(provisional,context)
+    content_checks = []
     try:
-        check_pairs(task,provisional,packet)
+        check_pairs(task,provisional,packet,content_checks,native_review=clean)
         content_status='pass'
     except ConversionError:
         content_status='uncertain'
     for item in items:
+        if recovery and item['kind'] == 'transitions':
+            node = segment['transitions'][item['path'][3]]
+            chain = next((c['evidence_chain'] for c in content_checks if 'evidence_chain' in c and
+                (c['from_frame'],c['to_frame']) == (node['from_frame'],node['to_frame'])), None)
+            item['checks']['content_chain'] = 'pass' if content_status == 'pass' and chain and chain['sufficient'] else 'uncertain'
+            item['unresolved'] = [k for k,v in item['checks'].items() if v!='pass']
+            item['witnesses'] = copy.deepcopy(chain['witnesses']) if chain else []
+            if not item['unresolved']:
+                sightings = {s['id']:s for s in segment['observations']}
+                for witness in chain['witnesses']:
+                    for sid in witness['matches']:
+                        s=sightings[sid];f=next(f for f in packet['frames'] if f['id']==s['frame_id'])
+                        item['source_regions'].append(region(f,s['bbox']))
+                context[tuple(item['path'])] = item
+            continue
+        if recovery and item['kind'] in ('rows','observations'):
+            item['checks']['content_validation'] = 'shared_gate'
+            continue
         item['checks']['content_not_contradicted']=content_status
         if content_status!='pass':
             item['unresolved'].append('content_not_contradicted')
@@ -247,21 +279,24 @@ def fill(decision, context):
             node['evidence']=item['evidence']
 
 
-def bind(value, state, packet, items, clean):
+def bind(value, state, packet, items, clean, geometry_reviewed=False):
     from agent_audit import decision_hash
-    return dict(schema_version=1,task_id=state['task_id'],observation_sha256=state['observation_sha256'],
+    result = dict(schema_version=1,task_id=state['task_id'],observation_sha256=state['observation_sha256'],
                 observation_version=state['observation_version'],source_sha256=packet['source']['sha256'],
                 decision_sha256=decision_hash(value),policy=POLICY,items=items,native_clean_regions=copy.deepcopy(clean))
+    if packet.get('evidence_recovery_policy'):
+        result.update(evidence_recovery_policy=packet['evidence_recovery_policy'],geometry_reviewed=geometry_reviewed)
+    return result
 
 
 def check(record, value, state, packet, task):
-    if not isinstance(record,dict) or set(record)!={'schema_version','task_id','observation_sha256','observation_version','source_sha256','decision_sha256','policy','items','native_clean_regions'} or type(record['schema_version']) is not int or record['schema_version']!=1 or record['policy']!=POLICY or type(record['observation_version']) is not int:
+    if not isinstance(record,dict) or set(record)!=set(bind(value,state,packet,[],[])) or type(record['schema_version']) is not int or record['schema_version']!=1 or record['policy']!=POLICY or type(record['observation_version']) is not int or ('geometry_reviewed' in record and type(record['geometry_reviewed']) is not bool):
         invalid('脚本接受旁记录字段或版本非法。')
     decision=value.get('decision',value)
     if not isinstance(record['items'],list) or any(not isinstance(i,dict) or 'path' not in i for i in record['items']):
         invalid('脚本接受项清单非法。')
-    context,items=compute(task,state,packet,decision,[i['path'] for i in record['items']],record['native_clean_regions'])
-    if record != bind(value,state,packet,items,record['native_clean_regions']):
+    context,items=compute(task,state,packet,decision,[i['path'] for i in record['items']],record['native_clean_regions'],record.get('geometry_reviewed',False))
+    if record != bind(value,state,packet,items,record['native_clean_regions'],record.get('geometry_reviewed',False)):
         invalid('脚本接受绑定、来源或重算结果已改变。')
     if len(context)!=len(items) or not items:
         raise ConversionError('review_required','脚本接受依据仍有未决事项。')

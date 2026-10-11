@@ -384,3 +384,17 @@ python ci/run_unittest_shard.py --index 1 --count 2
 最终40e2cf5...3641caf的Standards与Spec复审各0 finding。分片108/107，交集为空、并集为全部215项，每个job仍限时15分钟；远端CI未运行，安装与托管执行预算未知。完整记录为同目录 `frozen-verification-3641caf.json`。真实标准样本的污染声明、内容及交付结果另行验收，软件通过不表示新版12行2页PDF或完整成本达标。
 
 同提交的真实标准任务在实际原生范围复核及三组独立五线修订后，公开build仍waiting，22.795341秒、退出2。关键区间33、已有替代17，保留10个存在遮挡和3个未知遮挡范围。frame-030/031的右上水印真实跨记谱，补锚点不能解除当前必需旧对应的硬阻塞。没有补采、接受或新版PDF；详细前后变化、实际比较计量和原裁剪来源在 `/home/kenqia/issue-43-resume-notes/standard-ab-20261010/lazy-1/quality-recovery-3641caf/handoff.md`。旧full的12行2页交付保留，完整A/B成本配对仍无资格，完整Token=null，#52不展开。
+
+## BV1bD421u7vu 原帧恢复闭环，2026-10-11
+
+本次按用户要求只验证 BV1bD421u7vu。工作分支 `fix/existing-frame-recovery`，源码未冻结提交。新 lazy 任务显式启用 `--minimum-evidence-chain --evidence-recovery --script-acceptance`，复用 full 成功任务的 52 张真实原帧及实际 PTS，再对缺口局部补采 10 张，没有重新扫描整首视频。旧正面视觉判断、呈交记录与接受历史没有迁移。候选搜索、候选替换及原生审阅完成后才构建最终决定。
+
+最终 37 行、4 页 A4 PDF，`complete=true`，无未决项。61 个 gap 均有两个独立、有序且分别覆盖整个区间的可信对应。362 次比较全部保留，145 次 uncertain 记录替代依据并成为非阻断诊断，阻断项为零。未知遮挡、明确内容冲突和对齐硬失败仍否决。37 行由 Agent 根据实际原图确认，61 个 gap 由脚本重算接受，混合决定保持 `visual_review=false`。
+
+全部 62 张原帧和源视频 hash 核验通过。每行及标题的 RGB 原裁剪与真实来源 bbox 逐像素一致，打印图仅转灰度，PTS/time_base 与观察包一致，最低 effective DPI 为 264.182。实际逐页查看四页 150 DPI 渲染，核对标题、186速度、4/4、括号 ghost note、开放镲、附点、短行及首尾终止线。静态蓝色六小节休止记号保留并转灰度，不宣称还原。保存决定 replay 重算成功，PDF、原裁剪、灰度图与所选原帧字节一致。
+
+交付确认暴露生成 manifest 的 2,279,137 字节超过默认 1 MiB 读取上限。仅已核对 hash、且在成功 export 中登记的 manifest 改用 16 MiB 上限，外部决定及回执等默认读取限制保留。两次失败确认均留在账本。修复后 `confirm-delivery` 成功，`performance.delivery_confirmed=true`。PDF SHA256 为 `4ad57d3ab8be22a59cb2c1d7cbad586739099349a594a0bcfdc70f671939cfc3`。
+
+开发期间统一 unittest 215 项、1001.374 秒通过，不能把它当成最终冻结源码的全量回归。最后恢复入口 guard 修改后的恢复专项 4 项、30.493 秒通过。另新增交付 manifest 上限反例，验证超过 1 MiB 的已登记导出可确认、超过 16 MiB 仍拒绝、外部回执保持 1 MiB 限制。交付上限反例 1 项、0.145 秒通过；交付生命周期与篡改拒绝专项 2 项、11.680 秒通过。日志分别为 `work/recovery/delivery-limit-test.log` 和 `delivery-regression.log`。未运行远端 CI，未提交或推送。
+
+本轮证据根目录为 `/mnt/c/Users/26960/Documents/Codex/2026-10-11/bilibili-drum-score-to-pdf-mnt/`，测试、构建、接受、重放与失败账本在 `work/recovery/`，交付在 `outputs/BV1bD421u7vu-recovered/`。交付目录的 `verification.json`、`delivery-review.json` 与 `验收说明.md` 记录最终核验，未修改导出 manifest。原生必要审阅范围为36张同帧 ROI，开发另看过调试图片。宿主用量和实际呈交事件不可见，完整 Token 为 null；早期 seed 的 thumbnail 指标继承问题与一次直接 Python 调试补采未完整进入 CLI 成本账本，时钟也已有 discontinuity。这次是单曲质量恢复，不能作为完整端到端性能基线或声称总 Token 降低。

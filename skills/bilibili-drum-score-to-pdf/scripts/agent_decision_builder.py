@@ -272,10 +272,12 @@ def build(task, request_path, output):
                 for collection in ('rows','observations','transitions'):
                     for ri,node in enumerate(part[collection]):
                         unconfirmed = not node.get('complete',False) if collection != 'transitions' else node['evidence'].startswith('Script suggestion;')
-                        if unconfirmed and ['segments',si,collection,ri] not in script_paths:
+                        geometry_only = (partial.get('evidence_recovery_policy') == 'clean_sources_v1' and collection == 'observations'
+                            and any(c['path'] == ['segments',si,collection,ri,'complete'] and c['value'] is False for c in review.get('confirmations',[])))
+                        if unconfirmed and not geometry_only and ['segments',si,collection,ri] not in script_paths:
                             script_paths.append(['segments',si,collection,ri])
             if script_paths:
-                acceptance_context, acceptance_items = compute(task,state,partial,decision,script_paths,native_clean)
+                acceptance_context, acceptance_items = compute(task,state,partial,decision,script_paths,native_clean,review.get('identity_verified',False))
                 fill(decision,acceptance_context)
                 decision['visual_review']=False
                 decision['complete']=review.get('complete',prior.get('complete',False))
@@ -344,7 +346,7 @@ def build(task, request_path, output):
                      selected_frames=[dict(id=f['id'],sha256=f['sha256'],pts=f['pts'],time_base=f['time_base']) for f in partial['frames']])
         if acceptance_items:
             from agent_acceptance import bind as bind_acceptance
-            write_json(output/'acceptance.json',bind_acceptance(value,state,partial,acceptance_items,native_clean))
+            write_json(output/'acceptance.json',bind_acceptance(value,state,partial,acceptance_items,native_clean,review.get('identity_verified',False)))
             sources['script_acceptance_items']=acceptance_items
         for name,data in [('decision.json',value),('diff.json',diff),('sources.json',sources),('unresolved.json',issues)]:
             write_json(output/name,data)

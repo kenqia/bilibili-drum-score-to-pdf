@@ -56,9 +56,9 @@ def unique_object(pairs):
     return result
 
 
-def load_json(path):
+def load_json(path, *, max_bytes=MAX_JSON):
     path = Path(path)
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_JSON:
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > max_bytes:
         raise ConversionError('invalid_decision', '缺少或过大的 JSON 记录。')
     try:
         return json.loads(path.read_text(), parse_constant=lambda _: (_ for _ in ()).throw(ValueError()), object_pairs_hook=unique_object, parse_float=finite_float)
@@ -84,7 +84,7 @@ def image_pixels(output, images):
     return total
 
 
-def prepare(source, output, origin=None, timestamps=None, sampling=None, version=1, prior=None, evidence_mode='full', script_acceptance=False, minimum_evidence_chain=False):
+def prepare(source, output, origin=None, timestamps=None, sampling=None, version=1, prior=None, evidence_mode='full', script_acceptance=False, minimum_evidence_chain=False, evidence_recovery=False):
     total_began = time.monotonic()
     source = Path(source).resolve()
     with stage('source_verification'):
@@ -102,6 +102,11 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
     chain = prior.get('minimum_evidence_chain_policy') if prior else ('ordered_anchors_v1' if minimum_evidence_chain else None)
     if chain:
         observation['minimum_evidence_chain_policy'] = chain
+    recovery = prior.get('evidence_recovery_policy') if prior else ('clean_sources_v1' if evidence_recovery else None)
+    if recovery:
+        observation['evidence_recovery_policy'] = recovery
+    if prior and prior.get('recovery_seed'):
+        observation['recovery_seed'] = copy.deepcopy(prior['recovery_seed'])
     if origin:
         observation['source']['origin'] = origin
     if timestamps is None:
@@ -232,6 +237,8 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
                       next_action='Read comparison and native detail images, then submit a visual decision.', metrics=observation['metrics'])
         if chain:
             result['minimum_evidence_chain_policy'] = chain
+        if recovery:
+            result['evidence_recovery_policy'] = recovery
         if policy:
             result['script_acceptance_policy'] = policy
             result['next_action']='Run review-plan, actually review native source clean scope and score edges, then build a mixed decision.'
@@ -314,6 +321,8 @@ def checked_task(task, recover=True):
         raise ConversionError('source_mismatch', '原视频已改变。')
     from agent_evidence_chain import enabled as chain_enabled
     chain_enabled(state,observation)
+    from agent_recovery import enabled as recovery_enabled
+    recovery_enabled(state,observation)
     return state, observation
 
 
@@ -686,11 +695,15 @@ def supplement(task, path):
     return result
 
 
-def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None, evidence_mode='full', script_acceptance=False, minimum_evidence_chain=False):
-    target = Path(output) if output and operation in ('prepare', 'export', 'replay', 'build-decision', 'review-plan') else None
+def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None, evidence_mode='full', script_acceptance=False, minimum_evidence_chain=False, reuse_task=None, evidence_recovery=False):
+    target = Path(output) if output and operation in ('prepare', 'export', 'replay', 'build-decision', 'review-plan', 'candidate-plan') else None
     performance = None
     token = None
     try:
+        if reuse_task and (operation != 'prepare' or evidence_mode != 'lazy' or source is not None):
+            raise ConversionError('invalid_input', '原帧复用只允许没有新输入的新 lazy prepare 任务。')
+        if evidence_recovery and (operation != 'prepare' or evidence_mode != 'lazy' or not minimum_evidence_chain):
+            raise ConversionError('invalid_input', '证据恢复只允许新 lazy 最小证据链任务。')
         if minimum_evidence_chain and (operation != 'prepare' or evidence_mode != 'lazy'):
             raise ConversionError('invalid_input', '最小证据链只允许新 lazy prepare 任务。')
         if script_acceptance and (operation != 'prepare' or evidence_mode != 'lazy'):
@@ -711,7 +724,7 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
             report = recorder.report()
             status = report['task_status']
             return dict(status=status, complete=status == 'success', phase='report', performance=report)
-        if operation in ('prepare', 'export', 'replay', 'build-decision', 'review-plan'):
+        if operation in ('prepare', 'export', 'replay', 'build-decision', 'review-plan', 'candidate-plan'):
             if not target:
                 raise ConversionError('invalid_input', '需要新的结果目录。')
             retry = operation == 'prepare' and retryable_acquisition(target)
@@ -735,13 +748,20 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
                     source, origin = acquire(source, target, timeout=acquisition_timeout)
             performance.embedded = False
             performance.save()
-            result = prepare(source, target, origin=origin, evidence_mode=evidence_mode, script_acceptance=script_acceptance, minimum_evidence_chain=minimum_evidence_chain)
+            if reuse_task:
+                from agent_recovery import seed
+                result = seed(reuse_task, target, script_acceptance, minimum_evidence_chain, evidence_recovery)
+            else:
+                result = prepare(source, target, origin=origin, evidence_mode=evidence_mode, script_acceptance=script_acceptance, minimum_evidence_chain=minimum_evidence_chain, evidence_recovery=evidence_recovery)
         elif operation == 'materialize':
             from agent_evidence import materialize
             result = materialize(Path(task), decision)
         elif operation == 'review-plan':
             from agent_review import review_plan
             result = review_plan(Path(task), target, decision)
+        elif operation == 'candidate-plan':
+            from agent_recovery import candidate_plan
+            result = candidate_plan(Path(task), target, decision)
         elif operation == 'build-decision':
             from agent_decision_builder import build
             result = build(Path(task), decision, target)

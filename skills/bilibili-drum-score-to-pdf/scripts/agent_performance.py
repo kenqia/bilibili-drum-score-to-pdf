@@ -48,7 +48,7 @@ def validate_events(data, number):
         required = {'event_id','operation','started_at','elapsed_seconds','ended_at','status'}
         optional = {'phase','error_code','metrics','state_changed','artifact'}
         require(isinstance(event, dict) and required <= set(event) <= required | optional)
-        require(event['operation'] in ('prepare','resume','submit','supplement','materialize','export','replay','confirm-delivery','build-decision','review-plan'))
+        require(event['operation'] in ('prepare','resume','submit','supplement','materialize','export','replay','confirm-delivery','build-decision','review-plan','candidate-plan'))
         require(event['status'] in ('running','interrupted','waiting','failed','success'))
         require(number(event['started_at']) and (event['ended_at'] is None or number(event['ended_at'])))
         require(event['elapsed_seconds'] is None or number(event['elapsed_seconds']) and event['elapsed_seconds'] >= 0)
@@ -75,7 +75,7 @@ def validate_events(data, number):
             require(required <= set(event) <= required | {'ended_at'})
             require(event['operation_id'] in operations and number(event['offset_seconds']) and event['offset_seconds'] >= 0)
             require(event['name'] in ('source_verification','navigation','anonymous_acquisition','native_decode','native_analysis','native_staff_recheck',
-                                    'image_generation','decision_building','review_planning','decision_validation','content_validation','script_acceptance','source_redecode','pdf_export','delivery_publication','coverage_audit'))
+                                    'image_generation','candidate_search','decision_building','review_planning','decision_validation','content_validation','script_acceptance','source_redecode','pdf_export','delivery_publication','coverage_audit'))
             require(event['status'] in ('running','interrupted','complete','failed'))
         else:
             require(set(event) == common | {'ended_at','source_id','measurement'})

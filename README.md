@@ -57,3 +57,5 @@ lazy 提交使用 v4 原生图块，并附绑定决定文件的 `audit.json`。�
 显式新任务可加 `--script-acceptance`，由脚本重算普通内部行和可靠 gap，Agent 保留原生源 ROI clean、首尾、标题和行外核查。字段、命令、严格白色切带与恢复限制见[混合接受实验](docs/agents/script-acceptance.md)。全局 visual_review 保持 false，实际来源分开记录。
 
 实验能力仍要求实际原图和原生细节审阅。合成验证不代表真实视频质量或端到端性能放行；完整真实成本未知时保持 null。默认快路径保持关闭；显式混合接受尚未获真实放行。使用新任务、草稿与结果目录，保留来源和接受历史；回退到冻结的 `d09fa9d` 使用另一独立目录。
+
+需要先复用成功 full 的实际 PTS、搜索完整候选，再对缺口局部补采时，使用新任务的 `--reuse-task` 和 `--evidence-recovery`。恢复策略保留污染比较及明确冲突，只由覆盖整个区间的两个有序可信对应承担接续。命令、来源绑定与限制见[原帧与接续恢复](docs/agents/evidence-recovery.md)。

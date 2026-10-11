@@ -5,6 +5,7 @@ from video_seek import ConversionError
 
 REVIEW_FIELDS = {'schema_version','review_id','task_id','lifecycle_id','observation_sha256','decision_sha256',
                  'pdf_sha256','manifest_sha256','reviewer','source_manifest_verified','complete_score_verified','pages'}
+MAX_EXPORTED_MANIFEST = 16 * 1024 * 1024
 
 
 def review_shape(value):
@@ -45,7 +46,9 @@ def confirm(output, path, recorder, state, observation, load, digest):
                         observation_sha256=value['observation_sha256'], decision_sha256=value['decision_sha256'])
         if not any(e['operation'] == 'export' and e['status'] == 'success' and e.get('artifact') == expected for e in recorder.data['operations']):
             raise ValueError
-        manifest = load(manifest_path)
+        # Generated provenance can exceed the external decision limit. Only
+        # this hash-verified, registered export receives a larger bounded read.
+        manifest = load(manifest_path, max_bytes=MAX_EXPORTED_MANIFEST)
         saved = load(recorder.directory / latest['path'])
         decision = saved.get('decision', saved)
         if manifest.get('status') != 'success' or manifest.get('complete') is not True or manifest.get('task_id') != state['task_id'] or manifest.get('observation_sha256') != state['observation_sha256'] or manifest.get('decision') != decision or manifest.get('source') != observation['source'] or manifest.get('page_count') != len(value['pages']):
