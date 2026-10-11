@@ -21,6 +21,9 @@ def review_plan(task, output, request_path=None):
             from agent_decision_builder import build
             (output/'bound-build').mkdir()
             bound_draft=build(task,request_path,output/'bound-build')
+            from agent_modes import remember_findings
+            remember_findings(task,bound_draft)
+            state, packet = checked_task(task)
             image_access='available' if request.get('review',{}).get('presented_images') else 'unknown'
         else:
             fields = {'schema_version','task_id','observation_sha256','observation_version','image_access'}
@@ -202,16 +205,35 @@ def review_plan(task, output, request_path=None):
             result['script_acceptance']=dict(policy=packet['script_acceptance_policy'],enabled=True,
                 requires_actual_native_clean_review=True,first_last_and_outside_agent_review=True,
                 real_validated_support=[],script_reads_are_presentations=False)
+        candidate_request = dict(schema_version=1, task_id=state['task_id'],
+            observation_sha256=state['observation_sha256'], observation_version=state['observation_version'],
+            proposal=copy.deepcopy(proposal['structure']))
+        result['candidate_request'] = 'candidate-request.json'
+        if packet.get('workflow_mode'):
+            from agent_modes import routing
+            result['workflow_routing'] = routing(state, packet)
+            if result['workflow_routing']['automatic_full_review_available']:
+                strengthen_request = dict(schema_version=1, task_id=state['task_id'],
+                    observation_sha256=state['observation_sha256'], observation_version=state['observation_version'],
+                    reason='native_review_pending')
+                write_json(output/'strengthen-review-request.json',strengthen_request)
+                result['workflow_routing']['request'] = 'strengthen-review-request.json'
         serialized=json.dumps(result,ensure_ascii=False,separators=(',',':'),allow_nan=False)+'\n'
         if len(serialized.encode('utf-8'))>MAX_JSON:
             raise ConversionError('sampling_budget','审阅计划超过 JSON 上限，保留任务与疑点。')
         write_json(output/'review-plan.json',result,compact=True)
         write_json(output/'build-template.json',template)
+        write_json(output/'candidate-request.json',candidate_request)
     if summary is not None:
+        # Compact responses resolve paths; full responses match the saved plan.
+        result['candidate_request'] = str((output/result['candidate_request']).resolve())
+        if result.get('workflow_routing', {}).get('request'):
+            result['workflow_routing']['request'] = str((output/result['workflow_routing']['request']).resolve())
         return dict(status='waiting',complete=False,phase='review_plan',summary=summary,
             details_path=str((output/'review-plan.json').resolve()),
             materialize_requests=[dict(path=str((output/r['path']).resolve()),region_count=len(r['request']['regions'])) for r in requests],
-            supplement_requests=supplements,build_template='build-template.json')
+            supplement_requests=supplements,build_template='build-template.json',candidate_request=result['candidate_request'],
+            **({'workflow_routing':result['workflow_routing']} if 'workflow_routing' in result else {}))
     return result
 
 

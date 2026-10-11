@@ -9,6 +9,10 @@ description: 将 B站链接或本地视频中已有的白底多行鼓谱整理�
 
 ## 准备观察包
 
+新任务支持 `--mode auto|fast|full`。当前默认 full，auto 的目标默认地位仍待真实冷启动验收。需要按需恢复或省操作时读取 `docs/agents/workflow-modes.md`，显式选择 auto 或 fast，无需重复组合四个实验开关。已存在任务按原策略继续，后续操作不重复指定 mode。
+
+auto/fast 先 review-plan，再用其 candidate-request 搜索已有完整来源；首次视频无需旧 full。实际审阅并替换候选，缺口才局部补采。auto 必要时可按计划加强同任务原生审阅，预算一轮；fast 不自动扩充整包。明确内容冲突、来源篡改与几何矛盾先核查，完整验证标准保留。证据充分后构建、提交、导出并逐页确认；replay 按验证需要运行。
+
 ```sh
 uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/requirements.txt /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py 'https://www.bilibili.com/video/BV1rH4y1R7Rk' --output /absolute/path/to/new-task
 uv run --with-requirements /absolute/path/to/bilibili-drum-score-to-pdf/scripts/requirements.txt /absolute/path/to/bilibili-drum-score-to-pdf/scripts/convert.py /absolute/path/to/video.mp4 --output /absolute/path/to/new-task

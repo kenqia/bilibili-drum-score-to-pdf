@@ -398,3 +398,19 @@ python ci/run_unittest_shard.py --index 1 --count 2
 开发期间统一 unittest 215 项、1001.374 秒通过，不能把它当成最终冻结源码的全量回归。最后恢复入口 guard 修改后的恢复专项 4 项、30.493 秒通过。另新增交付 manifest 上限反例，验证超过 1 MiB 的已登记导出可确认、超过 16 MiB 仍拒绝、外部回执保持 1 MiB 限制。交付上限反例 1 项、0.145 秒通过；交付生命周期与篡改拒绝专项 2 项、11.680 秒通过。日志分别为 `work/recovery/delivery-limit-test.log` 和 `delivery-regression.log`。未运行远端 CI，未提交或推送。
 
 本轮证据根目录为 `/mnt/c/Users/26960/Documents/Codex/2026-10-11/bilibili-drum-score-to-pdf-mnt/`，测试、构建、接受、重放与失败账本在 `work/recovery/`，交付在 `outputs/BV1bD421u7vu-recovered/`。交付目录的 `verification.json`、`delivery-review.json` 与 `验收说明.md` 记录最终核验，未修改导出 manifest。原生必要审阅范围为36张同帧 ROI，开发另看过调试图片。宿主用量和实际呈交事件不可见，完整 Token 为 null；早期 seed 的 thumbnail 指标继承问题与一次直接 Python 调试补采未完整进入 CLI 成本账本，时钟也已有 discontinuity。这次是单曲质量恢复，不能作为完整端到端性能基线或声称总 Token 降低。
+
+## auto/fast 模式与冷启动候选，2026-10-11
+
+本次实现基于 `079e51075d35c7ae9570bc9750c2cd77ba9466fc`。用户接受以公开 CLI 验证模式选择、冷启动候选、受控加强审阅、旧目录移走后的恢复/导出/重放，以及保存的来源证据。新任务可显式选择 auto、fast、full；省略 mode 继续使用既有 full 默认。已安装 skill 未同步。
+
+冷启动 review-plan 生成绑定当前观察的 candidate-request，不依赖旧 full 的 seed。复用任务复制并校验独立源视频；专项把旧源目录移走后，恢复、物化、接受、导出和重放仍通过，PDF 字节一致。auto 加强审阅最多一轮、96 张已有原帧，失败也消耗轮次；缓存复用不增加 seek，既有补采预算与 lazy 校验不重置。直接 submit、build 和实际几何检查发现的硬冲突跨观察版本保留，不能通过模式切换解除。
+
+最后模式专项 8 项、43.930 秒通过，审阅计划专项 9 项、115.390 秒通过。全量检查曾发现两条路径兼容问题：相同计划在不同输出目录须字节一致，完整 CLI 响应须与保存计划一致。最终文件内保存相对路径，完整响应遵循相同约定，紧凑响应返回绝对路径。失败和中止日志保留，不计作通过。最终 Standards 与 Spec 复审各 0 项剩余发现，路径修正的 Standards 补充复审也为 0。编译检查通过；项目没有配置静态类型检查器。
+
+真实 smoke 使用 BV1bD421u7vu 已保留的本地视频，在新任务从零采样，未复用旧审阅或 seed。47 张原帧、0 张原生细节图；冷候选生成 45 条未确认结构，42 条有像素候选。源视频及原帧 hash 核对通过。此任务仍 waiting，没有实际原生视觉审阅、正确 37 行决定或 PDF 交付，也没有验证新 URL 下载和其他歌曲。auto 默认发布门槛未满足，full 默认保留。完整模型 Token 为 null，不能据此宣称节省总成本。
+
+证据根目录为 `/mnt/c/Users/26960/Documents/Codex/2026-10-11/bilibili-drum-score-to-pdf-mnt/work/recovery/`。专项日志为 `modes-location-final.log` 与 `review-location-final.log`，真实 smoke 摘要为 `modes-real-cold-smoke-summary.json`。CI 清单两分片各 114 项，交集为空、共 228 项；最终运行结果另见本节末尾。
+
+冻结改动后，两分片完整执行 228 项，227 项通过。分片 0 为 114 项、566.175 秒，1 项失败；分片 1 为 114 项、536.635 秒，全部通过。失败为既有 `test_real_baseline_gate_preserves_explicit_fixture_delivery_provenance`。单独诊断失败时，聚合结果的有效耗时为 null；再次执行完整宿主用量专项 16 项、52.019 秒全部通过，基线 079e510 的同项测试 1 项、4.799 秒通过。表现为宿主时钟相关的不稳定性，没有修改计量门禁或把失败结果改成成功。不能宣称最终全量一次通过。
+
+最终日志为 `modes-final-all-shard-0.log`、`modes-final-all-shard-1.log`、`modes-host-regression.log` 与 `modes-host-baseline-test.log`。`modes-verification-final.json` 保存结果、日志 SHA256 与源码未变核对。完整回归期间代码及测试 hash 不变，之后只追加本节文档。远端 CI 尚未运行。

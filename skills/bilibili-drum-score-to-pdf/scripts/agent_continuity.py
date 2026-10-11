@@ -4,8 +4,10 @@ from agent_regions import box, native_rows, invalid
 from video_seek import ConversionError
 
 
-def waiting(message):
-    raise ConversionError('review_required', message)
+def waiting(message, *, hard=False):
+    error = ConversionError('review_required', message)
+    error.hard_geometry = hard
+    raise error
 
 
 def text(value):
@@ -72,7 +74,7 @@ def continuous_geometry(decision, packet):
             waiting('每帧必须有不重复的空间观察。')
         if any(a['staff_y'] >= b['staff_y'] or a['bbox'][3] > b['bbox'][1]
                for a, b in zip(observations, observations[1:])):
-            waiting('帧内行顺序矛盾。')
+            waiting('帧内行顺序矛盾。', hard=True)
     coverage = decision['coverage']
     if not isinstance(coverage, dict) or set(coverage) != {'first_frame','last_frame','unresolved'}:
         invalid('覆盖声明字段非法。')
@@ -96,19 +98,19 @@ def continuous_geometry(decision, packet):
                 invalid('对应谱行引用非法。')
             a,b = (by_id[i] for i in pair)
             if a['frame_id']!=before or b['frame_id']!=after or a['instance_id']!=b['instance_id']:
-                waiting('视觉对应与空间实例冲突。')
+                waiting('视觉对应与空间实例冲突。', hard=True)
             if abs(a['spacing']/b['spacing']-1)>0.03 or abs((a['bbox'][2]-a['bbox'][0])/(b['bbox'][2]-b['bbox'][0])-1)>0.03 or abs(a['bbox'][0]-b['bbox'][0])>max(2,a['spacing']/2):
-                waiting('比例或横向布局变化，不能套用连续长谱坐标。')
+                waiting('比例或横向布局变化，不能套用连续长谱坐标。', hard=True)
             pairs.append((a,b))
         if len({a['id'] for a,b in pairs})!=len(pairs) or len({b['id'] for a,b in pairs})!=len(pairs):
-            waiting('一条观察被对应多次。')
+            waiting('一条观察被对应多次。', hard=True)
         if [a['staff_y'] for a,b in pairs]!=sorted(a['staff_y'] for a,b in pairs) or [b['staff_y'] for a,b in pairs]!=sorted(b['staff_y'] for a,b in pairs):
-            waiting('对应顺序相交。')
+            waiting('对应顺序相交。', hard=True)
         deltas=[a['staff_y']-b['staff_y'] for a,b in pairs]
         tolerance=min(s['spacing'] for pair in pairs for s in pair)/2
         delta=sum(deltas)/len(deltas)
         if delta < -tolerance or any(abs(d-delta)>tolerance for d in deltas):
-            waiting('共同位移冲突，置信度不能代替几何。')
+            waiting('共同位移冲突，置信度不能代替几何。', hard=True)
         offsets[after]=offsets[before]+max(0,delta)
         common={s['instance_id'] for s in by_frame[before]} & {s['instance_id'] for s in by_frame[after]}
         if common!={a['instance_id'] for a,b in pairs}:
@@ -123,10 +125,10 @@ def continuous_geometry(decision, packet):
             y=s['staff_y']+offsets[frame_id]
             if s['instance_id'] in instances:
                 if abs(y-instances[s['instance_id']])>s['spacing']/2:
-                    waiting('同一空间实例的 global_y 矛盾。')
+                    waiting('同一空间实例的 global_y 矛盾。', hard=True)
             else:
                 if y<=previous_max:
-                    waiting('新空间实例插入已接受行之前，可能漏行或重复。')
+                    waiting('新空间实例插入已接受行之前，可能漏行或重复。', hard=True)
                 instances[s['instance_id']]=y
                 previous_max=y
     return by_id, by_frame, offsets, relations, instances

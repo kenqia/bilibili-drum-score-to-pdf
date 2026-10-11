@@ -1,6 +1,6 @@
 # 按疑点组织审阅
 
-`review-plan` 提出五线几何、空间对应、候选裁剪和待检查区间，并给出原生 ROI 与局部补采请求。它始终返回 waiting，不接受决定，不生成 PDF，不改写观察包、接受历史或采样预算。默认 prepare/full 和所有既有视觉门禁保持原样。
+`review-plan` 提出五线几何、空间对应、候选裁剪和待检查区间，并给出原生 ROI 与局部补采请求。它始终返回 waiting，不接受决定，不生成 PDF，不改写观察包、接受历史或采样预算。auto/fast 的绑定构建若发现已确认内容或几何硬冲突，会将首个硬理由摘要持久化到任务，阻止后续整包回退，详见[工作流模式](workflow-modes.md)。默认 prepare/full 和所有既有视觉门禁保持原样。
 
 ```sh
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation review-plan --task /absolute/task --output /absolute/new-plan

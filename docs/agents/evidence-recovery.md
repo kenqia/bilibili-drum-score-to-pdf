@@ -9,7 +9,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation candidate-plan --task /absolute/new-lazy-task --output /absolute/candidates
 ```
 
-复用入口核对源视频、观察包、原帧和接受历史。它不重跑导航，不 seek，只复制原生帧并重新生成任务观察包。保留原采样预算与实际 PTS，历史采样写入 `recovery_seed`。有接受决定时，清空全部正面判断和旧原生细节引用，生成 `seed-proposal.json` 作为空间结构建议。没有接受决定时，需要调用方提供结构。
+复用入口核对源视频、观察包、原帧和接受历史。它不重跑导航，不 seek，复制原生帧和受校验的独立源视频，并重新生成任务观察包。保留原采样预算与实际 PTS，历史采样写入 `recovery_seed`。有接受决定时，清空全部正面判断和旧原生细节引用，生成 `seed-proposal.json` 作为空间结构建议。没有接受决定时，需要调用方提供结构。
 
 `candidate-plan` 输出每个实例的既有候选、原帧 hash、实际 PTS、bbox、像素预检查及下一步。可提供严格绑定请求，字段仅为 `schema_version=1`、`task_id`、`observation_sha256`、`observation_version`、`proposal`。候选及旧身份没有自动视觉权限。先实际检查候选的完整原生区域；边界缺一两个像素时明确修订框并同步身份观察，不静默缩窄。只有仍缺干净来源或可靠接续时，才申请原有 30 秒以内局部补采。禁止重新扫完整首视频来替代局部定位。
 

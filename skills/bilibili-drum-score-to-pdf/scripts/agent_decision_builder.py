@@ -307,14 +307,14 @@ def build(task, request_path, output):
             except ConversionError as error:
                 if error.code not in ('review_required','missing_evidence'):
                     raise
-                issues.append(dict(reason=error.code,message=str(error)))
+                issues.append(dict(reason=error.code,message=str(error), **({'hard_geometry':True} if getattr(error,'hard_geometry',False) else {})))
             try:
                 if not no_geometry:
                     validate(decision,state,partial,task,content_checks,acceptance_context,native_clean)
             except ConversionError as error:
                 if error.code not in ('review_required','missing_evidence'):
                     raise
-                issues.append(dict(reason=error.code,message=str(error)))
+                issues.append(dict(reason=error.code,message=str(error), **({'hard_geometry':True} if getattr(error,'hard_geometry',False) else {})))
         score_audit = None
         if packet.get('evidence_mode') == 'lazy':
             from agent_audit import inspect

@@ -13,6 +13,8 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 默认操作是 prepare，返回 `waiting` 并保存观察包，不直接生成 PDF。Agent 实际阅读原帧、相邻对照图和所选原生细节，记录身份、完整性、遮挡与首尾；必要时补采样。Agent 写决定并提交，用户无需填写 JSON。字段和补采、分批审阅、恢复操作见 [Agent workflow](docs/agents/agent-workflow.md)。
 
+新任务可使用 `--mode auto|fast|full`，详见[模式与同任务加强审阅](docs/agents/workflow-modes.md)。auto/fast 从 lazy 冷启动并按需恢复干净来源，full 保留全量视觉观察包。当前默认仍为 full，真实冷启动交付验收后才考虑默认 auto。候选规划无需旧 full；加强审阅复用原视频及原帧，硬冲突不能通过回退解除。
+
 ```sh
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation submit --task /absolute/new-task --decision /absolute/agent-decision.json
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation export --task /absolute/new-task --output /absolute/new-result

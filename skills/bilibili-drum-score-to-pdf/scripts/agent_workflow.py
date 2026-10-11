@@ -84,7 +84,7 @@ def image_pixels(output, images):
     return total
 
 
-def prepare(source, output, origin=None, timestamps=None, sampling=None, version=1, prior=None, evidence_mode='full', script_acceptance=False, minimum_evidence_chain=False, evidence_recovery=False):
+def prepare(source, output, origin=None, timestamps=None, sampling=None, version=1, prior=None, evidence_mode='full', script_acceptance=False, minimum_evidence_chain=False, evidence_recovery=False, mode=None):
     total_began = time.monotonic()
     source = Path(source).resolve()
     with stage('source_verification'):
@@ -96,6 +96,9 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
     observation = dict(schema_version=VERSION, task_id=task_id, source=dict(path=str(source), sha256=source_hash, **metadata),
                        frames=[], images=[], candidates=[], intervals=[], coordinate_space='native_pixels',
                        fixed_layout_only=False, evidence_mode=evidence_mode)
+    workflow_mode = prior.get('workflow_mode') if prior else mode
+    if workflow_mode:
+        observation['workflow_mode'] = workflow_mode
     policy = prior.get('script_acceptance_policy') if prior else ('continuous_clean_v1' if script_acceptance else None)
     if policy:
         observation['script_acceptance_policy'] = policy
@@ -243,6 +246,11 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
             result['script_acceptance_policy'] = policy
             result['next_action']='Run review-plan, actually review native source clean scope and score edges, then build a mixed decision.'
         result['decision_history'] = previous.get('decision_history', [])
+        if workflow_mode:
+            result['workflow_mode'] = workflow_mode
+        for key in ('workflow_findings', 'full_review_attempts'):
+            if previous.get(key):
+                result[key] = copy.deepcopy(previous[key])
         if previous.get('reviewed_frames'):
             result['reviewed_frames'] = previous['reviewed_frames']
         write_json(output / 'sampling.next.json', sampling)
@@ -695,11 +703,19 @@ def supplement(task, path):
     return result
 
 
-def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None, evidence_mode='full', script_acceptance=False, minimum_evidence_chain=False, reuse_task=None, evidence_recovery=False):
+def run(operation, source=None, task=None, decision=None, output=None, acquisition_timeout=ACQUISITION_SECONDS, performance_events=None, evidence_mode='full', script_acceptance=False, minimum_evidence_chain=False, reuse_task=None, evidence_recovery=False, mode=None):
     target = Path(output) if output and operation in ('prepare', 'export', 'replay', 'build-decision', 'review-plan', 'candidate-plan') else None
     performance = None
     token = None
     try:
+        if mode is not None:
+            if operation != 'prepare' or mode not in ('auto', 'fast', 'full'):
+                raise ConversionError('invalid_input', '模式只在新 prepare 任务选择，后续操作继承任务策略。')
+            if mode == 'full' and (evidence_mode != 'full' or script_acceptance or minimum_evidence_chain or evidence_recovery or reuse_task):
+                raise ConversionError('invalid_input', 'full 模式不能混用 lazy 实验参数。')
+            if mode in ('auto', 'fast'):
+                evidence_mode = 'lazy'
+                script_acceptance = minimum_evidence_chain = evidence_recovery = True
         if reuse_task and (operation != 'prepare' or evidence_mode != 'lazy' or source is not None):
             raise ConversionError('invalid_input', '原帧复用只允许没有新输入的新 lazy prepare 任务。')
         if evidence_recovery and (operation != 'prepare' or evidence_mode != 'lazy' or not minimum_evidence_chain):
@@ -750,9 +766,9 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
             performance.save()
             if reuse_task:
                 from agent_recovery import seed
-                result = seed(reuse_task, target, script_acceptance, minimum_evidence_chain, evidence_recovery)
+                result = seed(reuse_task, target, script_acceptance, minimum_evidence_chain, evidence_recovery, mode=mode)
             else:
-                result = prepare(source, target, origin=origin, evidence_mode=evidence_mode, script_acceptance=script_acceptance, minimum_evidence_chain=minimum_evidence_chain, evidence_recovery=evidence_recovery)
+                result = prepare(source, target, origin=origin, evidence_mode=evidence_mode, script_acceptance=script_acceptance, minimum_evidence_chain=minimum_evidence_chain, evidence_recovery=evidence_recovery, mode=mode)
         elif operation == 'materialize':
             from agent_evidence import materialize
             result = materialize(Path(task), decision)
@@ -765,6 +781,11 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
         elif operation == 'build-decision':
             from agent_decision_builder import build
             result = build(Path(task), decision, target)
+            from agent_modes import remember_findings
+            remember_findings(Path(task), result)
+        elif operation == 'strengthen-review':
+            from agent_modes import strengthen
+            result = strengthen(Path(task), decision)
         elif operation == 'supplement':
             result = supplement(Path(task), decision)
         elif operation == 'resume':
@@ -790,9 +811,17 @@ def run(operation, source=None, task=None, decision=None, output=None, acquisiti
         result = dict(status='failed', complete=False, phase=operation, error={'code': 'interrupted', 'message': '任务已中断，请保留观察包并使用新的结果目录。'})
     except (ConversionError, OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError) as error:
         code = error.code if isinstance(error, ConversionError) else 'invalid_input'
-        result = dict(status='waiting' if code in ('unsupported_layout', 'review_required', 'missing_evidence', 'sampling_budget') else 'failed',
+        result = dict(status='waiting' if code in ('unsupported_layout', 'review_required', 'missing_evidence', 'sampling_budget', 'hard_evidence_conflict') else 'failed',
                       complete=False, phase=operation, rows=[], issues=[], error={'code': code, 'message': str(error) if isinstance(error, ConversionError) else '记录或输入不可用。'})
         result['issues'] = getattr(error, 'issues', [])
+        if operation in ('build-decision', 'review-plan', 'submit'):
+            from agent_modes import remember_hard, hard_checks
+            hard = hard_checks(result['issues'])
+            if getattr(error, 'hard_geometry', False):
+                hard.append(dict(reason='geometry_conflict'))
+            if hard:
+                saved, _ = checked_task(Path(task))
+                remember_hard(Path(task), saved, hard)
         if operation in ('submit', 'supplement') and result['status'] == 'waiting':
             try:
                 saved, _ = checked_task(Path(task))

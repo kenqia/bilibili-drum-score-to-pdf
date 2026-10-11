@@ -21,12 +21,20 @@ def enabled(state, packet):
     return True
 
 
-def seed(reference, output, script_acceptance, minimum_evidence_chain, evidence_recovery):
+def seed(reference, output, script_acceptance, minimum_evidence_chain, evidence_recovery, mode=None):
     from agent_workflow import checked_task, digest, load_json, write_json, prepare
     reference = Path(reference)
     with stage('source_verification'):
         state, packet = checked_task(reference, recover=False)
+    source = Path(packet['source']['path'])
+    destination = output / ('source' + source.suffix)
+    shutil.copyfile(source, destination)
+    if digest(destination) != packet['source']['sha256']:
+        raise ConversionError('source_mismatch', '独立视频副本与可信来源不一致。')
     prior = copy.deepcopy(packet)
+    prior.pop('workflow_mode', None)
+    if mode:
+        prior['workflow_mode'] = mode
     prior['images'] = [i for i in prior['images'] if i['kind'] == 'native']
     for frame in prior['frames']:
         source = reference / frame['path']
@@ -56,13 +64,13 @@ def seed(reference, output, script_acceptance, minimum_evidence_chain, evidence_
     prior['recovery_seed'] = dict(task_id=state['task_id'], observation_sha256=state['observation_sha256'],
         decision_sha256=state.get('decision_history', [{}])[-1].get('sha256') if state.get('decision_history') else None,
         reused_frames=len(prior['frames']), historical_sampling=copy.deepcopy(packet['sampling']),
-        reviews_reused=False)
+        reviews_reused=False, independent_source=True)
     sampling = copy.deepcopy(packet['sampling'])
     sampling['thumbnail_checks'] = 0
     sampling['thumbnail_elapsed'] = 0
     # Limits count retained evidence as well as new work. Historical decode costs
     # remain in provenance; current prepare performs no seeks or navigation.
-    result = prepare(packet['source']['path'], output, origin=packet['source'].get('origin'),
+    result = prepare(destination, output, origin=packet['source'].get('origin'),
         timestamps=[], sampling=sampling, prior=prior, version=packet.get('observation_version', 1), evidence_mode='lazy')
     return result
 
@@ -78,7 +86,11 @@ def candidate_plan(task, output, request_path=None):
             raise ConversionError('invalid_request', '候选搜索须绑定当前观察包。')
         proposal = request['proposal']
     else:
-        proposal = load_json(task / 'seed-proposal.json')
+        if (task / 'seed-proposal.json').exists():
+            proposal = load_json(task / 'seed-proposal.json')
+        else:
+            from agent_proposals import suggest
+            proposal = suggest(packet)['structure']
     if not isinstance(proposal, dict) or proposal.get('schema_version') not in (3, 4):
         raise ConversionError('invalid_request', '候选搜索需要 v3/v4 连续谱面的观察身份建议。')
     from agent_decision_builder import check_structure

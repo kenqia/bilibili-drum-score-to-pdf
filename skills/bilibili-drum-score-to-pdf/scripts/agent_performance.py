@@ -48,7 +48,7 @@ def validate_events(data, number):
         required = {'event_id','operation','started_at','elapsed_seconds','ended_at','status'}
         optional = {'phase','error_code','metrics','state_changed','artifact'}
         require(isinstance(event, dict) and required <= set(event) <= required | optional)
-        require(event['operation'] in ('prepare','resume','submit','supplement','materialize','export','replay','confirm-delivery','build-decision','review-plan','candidate-plan'))
+        require(event['operation'] in ('prepare','resume','submit','supplement','materialize','export','replay','confirm-delivery','build-decision','review-plan','candidate-plan','strengthen-review'))
         require(event['status'] in ('running','interrupted','waiting','failed','success'))
         require(number(event['started_at']) and (event['ended_at'] is None or number(event['ended_at'])))
         require(event['elapsed_seconds'] is None or number(event['elapsed_seconds']) and event['elapsed_seconds'] >= 0)
@@ -275,7 +275,7 @@ class Performance:
             script_acceptance={key:sum(((e.get('metrics') or {}).get('script_acceptance') or {}).get(key,0) for e in self.data['operations'])
                                for key in ('native_reads','read_pixels','items_checked')},
             materialization=dict(
-                generated_images=sum((e.get('metrics') or {}).get('generated_images', 0) for e in self.data['operations'] if e['operation'] == 'materialize'),
-                generated_in_failed_operations=sum((e.get('metrics') or {}).get('generated_images', 0) for e in self.data['operations'] if e['operation'] == 'materialize' and e['status'] in ('failed', 'interrupted')),
-                cache_hits=sum((e.get('metrics') or {}).get('cache_hits', 0) for e in self.data['operations'] if e['operation'] == 'materialize')),
+                generated_images=sum((e.get('metrics') or {}).get('generated_images', 0) for e in self.data['operations'] if e['operation'] in ('materialize','strengthen-review')),
+                generated_in_failed_operations=sum((e.get('metrics') or {}).get('generated_images', 0) for e in self.data['operations'] if e['operation'] in ('materialize','strengthen-review') and e['status'] in ('failed', 'interrupted')),
+                cache_hits=sum((e.get('metrics') or {}).get('cache_hits', 0) for e in self.data['operations'] if e['operation'] in ('materialize','strengthen-review'))),
             generated_images=(self.data['metrics'].get('native_images',0)+self.data['metrics'].get('detail_images',0)+self.data['metrics'].get('comparison_images',0)) if self.data['metrics'] else None)

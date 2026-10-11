@@ -100,3 +100,9 @@ Agent-first 入口用 `agent_performance.py` 保存独立性能账本。它不�
 显式新 lazy 任务的 `ordered_anchors_v1` 最小内容证据链保留全部空间与覆盖契约，将充分接续证据与冗余诊断分开。`agent_evidence_chain.py` 只在完整几何验证之后检查既有原生对应与桥，所有共同实例冲突仍否决。有限 continuity 旁记录保存实际 Agent 原生区域声明，绑定精确决定并在提交、导出、重放重算。`agent_review_summary.py` 给出关键缺口及去重的局部补采，不用检测 proposal 冒充实际漏行。实验软件通过不表示标准真实样本或性能放行。详见[内容门禁](agents/content-checks.md)与[疑点摘要](agents/review-plan.md)。
 
 显式 `clean_sources_v1` 恢复由 `agent_recovery` 负责原生帧复用与候选预检查，接续选择仍在 `agent_evidence_chain`。它复用 `continuous_geometry` 校验 Agent 提出的全部空间身份，区间脚本接受与打印权限分开。失败比较保持原结果及替代依据，两个可信对应必须分别覆盖整个 gap。完整性、未知遮挡、明确冲突、来源和单帧打印门禁保留。策略在新 lazy 最小链任务固定，旧策略不迁移。操作与预算见[原帧恢复](agents/evidence-recovery.md)。
+
+## 工作流模式与证据加强
+
+新任务的 `--mode auto|fast|full` 在 prepare 固定策略，后续操作继承。默认仍为 full；auto/fast 使用现有 lazy、最小链、恢复与逐项混合接受门禁。首次 review-plan 提供绑定的候选请求，candidate-plan 可从当前几何建议冷启动。复用任务持有独立视频副本，hash 校验和采样历史保留。
+
+strengthen-review 只物化同一任务缺失的原生整帧区域，最多96帧、一个轮次；既有 ROI 复用，没有重新下载、导航或解码。显式确认结构后的内容或几何硬冲突摘要保存在任务，禁止整包回退，完整比较仍在构建结果。新增图像没有新视觉权限，原 lazy 校验和逐页交付保持。契约、Agent 顺序及默认放行门槛见[工作流模式](agents/workflow-modes.md)。
