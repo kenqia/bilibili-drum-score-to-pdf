@@ -1891,7 +1891,7 @@
       "mode": "auto",
       "entry": "url",
       "outcome": "waiting",
-      "reason": "顺序翻页已辨认；后续页首行固定水印跨符杆，候选搜索与31/73/110秒补采仍无干净完整单帧，第一页下缘有残行。构建保留waiting，无PDF。",
+      "reason": "第13、45小节所在行仍有水印跨符杆，干净完整来源未确认；第29小节所在行的补采水印在空白处。第一页下缘裁剪未确认。operation008实际failed/invalid_input，最终试次由审阅者归类waiting；未提交决定、无PDF。",
       "started_at": 1791817275.1367342,
       "ended_at": 1791817564.8735547,
       "recorded_elapsed_seconds": 289.73681688308716,
@@ -2419,7 +2419,18 @@
           }
         ]
       },
-      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-04"
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-04",
+      "original_recorded_reason": "顺序翻页已辨认；后续页首行固定水印跨符杆，候选搜索与31/73/110秒补采仍无干净完整单帧，第一页下缘有残行。构建保留waiting，无PDF。",
+      "review_correction": {
+        "correction": "补采73秒页3水印落在上方空白，未跨第29小节行；31秒页2第13小节行、110秒页4第45小节行仍跨符杆。此前笼统pages2-4表述过宽，修正实际阻塞为第13与45小节所在行。",
+        "affected_records": [
+          "review-incomplete.json",
+          "invocation.json"
+        ],
+        "outcome_unchanged": "waiting: no complete clean original source established for rows13 and45",
+        "build_status_correction": "operation008 returned failed/invalid_input, not waiting. Final trial waiting is reviewer non-delivery classification; no accepted decision or PDF."
+      },
+      "review_correction_source": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-04/watermark-review-correction.json"
     },
     {
       "run_id": "product-05",
@@ -2432,7 +2443,7 @@
       "mode": "auto",
       "entry": "url",
       "outcome": "waiting",
-      "reason": "794×678源，即便取全宽也只有约109.25 effective DPI，低于150；另有无谱面软件片尾。候选及不完整build不能交付，无PDF。",
+      "reason": "794×678源，全宽铺满A4可用宽也仅约109.25DPI；另有无谱面软件片尾。operation004实际exit1、failed/unparsed_cli_output且stdout为空，未提交决定、无PDF；最终审阅归类waiting。",
       "started_at": 1791817553.3018534,
       "ended_at": 1791817683.0811203,
       "recorded_elapsed_seconds": 129.77926182746887,
@@ -2912,7 +2923,8 @@
           }
         ]
       },
-      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-05"
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-05",
+      "original_recorded_reason": "794×678源，即便取全宽也只有约109.25 effective DPI，低于150；另有无谱面软件片尾。候选及不完整build不能交付，无PDF。"
     },
     {
       "run_id": "product-06",
