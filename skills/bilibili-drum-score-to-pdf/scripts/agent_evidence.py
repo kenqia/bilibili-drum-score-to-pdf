@@ -6,6 +6,7 @@ import os
 from PIL import Image
 from agent_performance import ACTIVE, stage
 from agent_regions import box
+from agent_publication import publish
 from video_seek import ConversionError
 
 MAX_REGIONS = 128
@@ -17,7 +18,7 @@ def invalid(message):
 
 def materialize(task, path):
     # Imported at the public operation boundary to keep workflow wiring small.
-    from agent_workflow import checked_task, load_json, write_json, digest, recover_publication, image_pixels, MAX_JSON
+    from agent_workflow import checked_task, load_json, write_json, digest, image_pixels, MAX_JSON
     with stage('source_verification'):
         state, observation = checked_task(task)
     request = load_json(path)
@@ -127,16 +128,10 @@ def materialize(task, path):
     if not archive.exists():
         archive.write_bytes((task / 'observation.json').read_bytes())
     write_json(task / f'evidence-request-{version+1}.json', request)
-    write_json(task / 'observation.next.json', new)
     # Preserve the charged supplement budget, including earlier failed requests.
     sampling = load_json(task / 'sampling.json')
-    write_json(task / 'sampling.next.json', sampling)
     updated = copy.deepcopy(state)
-    updated.update(observation_sha256=digest(task / 'observation.next.json'), observation_version=version+1,
-                   sampling_sha256=digest(task / 'sampling.next.json'), complete=False, phase='review', status='waiting',
+    updated.update(observation_version=version+1, complete=False, phase='review', status='waiting',
                    issues=[], metrics=new['metrics'], next_action='Review requested evidence; retain unchanged accepted judgments and explicitly revise the latest decision binding.')
-    write_json(task / 'task.next.json', updated)
-    write_json(task / 'publication.json', dict(observation_sha256=updated['observation_sha256'],
-        state_sha256=digest(task / 'task.next.json'), sampling_sha256=updated['sampling_sha256']))
-    recover_publication(task)
+    updated = publish(task, new, sampling, updated)
     return updated | dict(materialized_images=ids, metrics=costs)

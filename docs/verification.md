@@ -424,3 +424,13 @@ python ci/run_unittest_shard.py --index 1 --count 2
 BV1bD421u7vu 在新目录重新导出成功，37 行、4 页。`空白とカタルシス（空白与宣泄）.pdf` 与此前逐页实际审核版本字节相等，SHA256 为 `4ad57d3ab8be22a59cb2c1d7cbad586739099349a594a0bcfdc70f671939cfc3`。全部行与标题区域原裁剪及灰度图再次逐像素核对通过。沿用原实际逐页审核依据，明确记录 PDF 字节相同与新来源路径核验，未宣称新增视觉审阅或不同歌验收。交付目录为本聊天 `outputs/BV1bD421u7vu-title-delivery/`，核验和回执在材料内。
 
 最后兼容回归为计量 12 项、43.249 秒，恢复 4 项、24.638 秒，旧交付 manifest 1 项、0.159 秒，均通过。日志为 `work/recovery/title-final-test_agent_performance.py.log`、`title-final-test_agent_resume.py.log` 和 `title-final-test_agent_delivery.py.log`。新布局实际 confirm-delivery 成功，当前 `delivery_confirmed=true`。自审核对目录整理、文件名安全、登记路径、hash 门禁和旧布局兼容，无剩余问题。
+
+## 内部编排重构验证，2026-10-12
+
+观察包发布集中到 `agent_publication.py`，接受决定重验集中到 `agent_decision_review.py`。命令、决定格式、预算、任务文件和审阅权限保持原行为。新增恢复测试覆盖零至三份文件已替换的中断状态，以及后部损坏时保留 journal、修复后向前完成的路径。
+
+统一完整回归运行 232 项，1082.777 秒全部通过，退出码 0。运行起止 HEAD 均为 `8d86471b99b0f56f72afae02f46a06b227fb3115`，源码、测试、依赖与 Skill 文件 hash 未变化。此处测试对象是该提交上的本次工作区改动，最终提交另绑定冻结记录。日志为 `/home/kenqia/bilibili-release-evidence/20261012/architecture-verification/full-unittest.log`，SHA256 为 `9aab4e9d81d601d19246752505d524cee001ea50083ad4ccdc1a12f0af02117d`。同目录 `full-unittest-summary.json` 保存退出结果和逐文件 hash。
+
+相关 resume、evidence、audit、fast_path、minimum_evidence_chain 和 decision_builder 专项已通过。架构 Standards 与 Spec 两路审查均无发现。Python 编译检查和 `git diff --check` 通过；仓库没有配置静态类型检查入口。软件回归不代替后续真实 URL 双跑、独立视觉审核和保存决定重放。
+
+完整包安装隔离检查通过：沙盒 Skill 链接解析到完整仓库，九份协议均存在，非仓库工作目录下运行 `convert.py --help` 成功。记录为 `/home/kenqia/bilibili-release-evidence/20261012/installation-smoke-bv5ns63_/summary.json`。本次没有改真实宿主设置，只验证包路径与脚本入口，未验证其他宿主的整曲交付。

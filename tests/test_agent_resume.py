@@ -105,6 +105,64 @@ class ResumeTests(test_agent_continuity.ContinuityTests):
             result=self.cli('--operation','resume','--task',task)
             self.assertEqual(result['error']['code'],'invalid_task',result)
 
+    def test_resume_completes_every_publication_replacement_without_losing_history(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task, decision = self.prepare(base)
+            path = base / 'decision.json'
+            path.write_text(json.dumps(decision))
+            accepted = self.cli('--operation', 'submit', '--task', task, '--decision', path)
+            self.assertEqual(accepted['phase'], 'accepted', accepted)
+            stems = [('observation', 'observation_sha256'), ('sampling', 'sampling_sha256'), ('task', 'state_sha256')]
+            original = {stem: (task / f'{stem}.json').read_bytes() for stem, _ in stems}
+            journal = {key: hashlib.sha256(original[stem]).hexdigest() for stem, key in stems}
+            for replaced in range(4):
+                with self.subTest(replaced=replaced):
+                    for index, (stem, _) in enumerate(stems):
+                        current = task / f'{stem}.json'
+                        if index < replaced:
+                            current.write_bytes(original[stem])
+                        else:
+                            current.write_text('{}')
+                            (task / f'{stem}.next.json').write_bytes(original[stem])
+                    (task / 'publication.json').write_text(json.dumps(journal))
+                    report = self.cli('--operation', 'report', '--task', task)
+                    self.assertEqual(report['error']['code'], 'invalid_task', report)
+                    self.assertTrue((task / 'publication.json').exists())
+                    resumed = self.cli('--operation', 'resume', '--task', task)
+                    self.assertEqual(resumed['decision_history'], accepted['decision_history'])
+                    self.assertEqual(resumed['phase'], 'accepted', resumed)
+                    for stem, _ in stems:
+                        self.assertEqual((task / f'{stem}.json').read_bytes(), original[stem])
+                        self.assertFalse((task / f'{stem}.next.json').exists())
+                    self.assertFalse((task / 'publication.json').exists())
+
+    def test_damaged_later_publication_keeps_journal_and_resumes_forward(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            task, _ = self.prepare(base)
+            stems = [('observation', 'observation_sha256'), ('sampling', 'sampling_sha256'), ('task', 'state_sha256')]
+            original = {stem: (task / f'{stem}.json').read_bytes() for stem, _ in stems}
+            journal = {key: hashlib.sha256(original[stem]).hexdigest() for stem, key in stems}
+            for stem, _ in stems:
+                (task / f'{stem}.next.json').write_bytes(original[stem])
+                (task / f'{stem}.json').write_text('{}')
+            (task / 'sampling.next.json').write_text('{}')
+            (task / 'publication.json').write_text(json.dumps(journal))
+            failed = self.cli('--operation', 'resume', '--task', task)
+            self.assertEqual(failed['error']['code'], 'source_mismatch', failed)
+            self.assertEqual((task / 'observation.json').read_bytes(), original['observation'])
+            self.assertFalse((task / 'observation.next.json').exists())
+            self.assertTrue((task / 'publication.json').exists())
+            self.assertEqual((task / 'task.json').read_text(), '{}')
+            (task / 'sampling.next.json').write_bytes(original['sampling'])
+            resumed = self.cli('--operation', 'resume', '--task', task)
+            self.assertEqual(resumed['phase'], 'review', resumed)
+            self.assertEqual((task / 'sampling.json').read_bytes(), original['sampling'])
+            self.assertFalse((task / 'publication.json').exists())
+
     def test_sigterm_preserves_prepare_sampling_and_export_evidence(self):
         import subprocess
         import sys

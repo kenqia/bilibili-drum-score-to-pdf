@@ -2,6 +2,23 @@
 
 `host_usage.py` 从授权宿主记录提取计量，或接收调用方提供的受控事件。它不调用模型，也不改变 prepare、身份检查、视觉决定或 PDF 导出。实际 Token 和已观察 Token 分开保存。找到 usage 文件只说明计量来源可用，不能证明完整视频基线已经完成。
 
+## 先判断报告里的 null
+
+运行 `convert.py --operation report --task /absolute/task`，读取返回的 `performance`。按下表判断用量状态，不要只检查顶层 `model_tokens`。
+
+| 报告字段 | 含义 | 使用方式 |
+| --- | --- | --- |
+| `host_usage=null` | 任务尚未导入宿主计量 | 执行 collect，再执行 import；脚本阶段和解码计数仍可读取 |
+| `host_usage.observed_actual_tokens.total_tokens` 有值，`model_tokens=null` | 已读取真实响应用量，完整生命周期覆盖尚未确认 | 展示为“已记录响应 Token”，附采集窗口、线程范围和缺失原因 |
+| `host_usage.token_complete=true`，`model_tokens` 有值 | 调用方提供的完整模型调用账本覆盖当前已关闭任务范围 | 展示完整 Token；工具、图像和质量验收仍单独核对 |
+| `real_baseline_eligible=false` | 严格性能基线条件未全部满足 | 保留状态、已知耗时和已记录 Token，不据此丢弃整次运行 |
+
+首发测试可以报告自主正确交付数、所有失败与超时、有效墙钟耗时、脚本工作量和已记录响应 Token。比较已记录 Token 时，固定输入、源码、模型、宿主和采集范围，并单列缓存输入。部分记录的降幅不能证明完整总成本降低；输入 Token 包含每次请求再次发送的上下文，缓存输入是其中的拆分，不能另加到 total。
+
+Desktop 采集的模型调用 status 为 `unknown`。这时 `failed_model_calls=0` 只说明没有识别出带失败状态的事件，不能证明没有失败。没有图像呈交事件时，`observed_image_presentations=0` 也不能解释为 Agent 没有看图。生成图像数、决定声明的图像和宿主实际呈交事件各自报告。
+
+`codex_usage_source.collect` 当前直接把四项 coverage 设为 false。这是采集器的能力声明，不是某次采集失败。因此仅靠这个采集器，`model_tokens` 会保持 null，`real_baseline_eligible` 不会变为 true。重复测试不能补齐该条件。完整性能放行需要能记录全部响应开始、终止及失败用量的宿主来源；不得手工把 false 改成 true。首发产品测试和严格总成本放行应分别报告。
+
 ## 从当前 Codex Desktop 采集
 
 Agent 为每次视频任务记录 invocation ID、开始与结束时间，以及实际参与的 thread ID。默认读取 `CODEX_HOME` 和 `CODEX_THREAD_ID`；必要时按顺序检查 WSL home 与自动发现的 Windows 用户目录。先读取会话首行元数据，核对 ID、cwd、`Codex Desktop` 来源及父子关系。相同 inode 只读一次，找到优先来源后不合并其他目录。同一优先目录内，同线程可有多个续跑文件；采集器核对每个文件的首行归属元数据，冲突时拒绝采集。文件中后来出现的 session_meta 不改变首行归属。相同响应或工具调用的稳定 ID 与计量字段完全一致时只计一次，字段冲突时拒绝，不同 ID 的实际重试分别累计。
@@ -21,6 +38,8 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 采集器只输出稳定计量 ID、时间、Token 字段和工具名称，不输出会话正文、推理、工具参数或结果。它不读认证、配置或 SQLite，不下载或安装 SDK。`token_usage_record.usage` 是逐响应实际量，`token_count` 镜像及累计计数不进入总量。模型可见标识以任务决定或受控基准元数据保存，未知精确模型版本保留 `unknown`。
 
 当前 Desktop JSONL 不提供完整响应开始和失败调用账本，也不能可靠还原 exec 内部所有 MCP 调用与实际图像呈交。采集结果的四项 coverage 均为 false。不存在记录不能解释为零消耗。采集窗口结束时还在运行的响应可能尚未落盘，结束后可重复采集更长窗口并幂等导入。最终报告仍保留缺失原因。
+
+OpenAI 官方 [App Server 文档](https://learn.chatgpt.com/docs/app-server)提供活动线程的 `thread/tokenUsage/updated` 通知，以及账户汇总接口 `account/usage/read`。账户累计或每日用量不能直接归属于某个视频；线程通知也不能单独证明失败调用、嵌套工具和图像呈交的完整性。当前 Skill 复用本地采集器，不需要为读取用量改认证、配置或接入新的宿主。
 
 ## 导入受控事件
 

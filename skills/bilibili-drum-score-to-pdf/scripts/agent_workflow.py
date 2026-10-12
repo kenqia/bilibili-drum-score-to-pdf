@@ -8,6 +8,8 @@ import copy
 import os
 from agent_sampling import plan, check_request, LIMITS
 from agent_performance import ACTIVE, Performance, stage
+from agent_publication import publish, recover as recover_publication
+from agent_decision_review import review as review_decision
 from pathlib import Path
 import subprocess
 from PIL import Image, ImageDraw, __version__ as pillow_version
@@ -234,8 +236,7 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
         if len(json.dumps(observation, ensure_ascii=False, indent=2, allow_nan=False).encode()) > MAX_JSON - 4096:
             raise ConversionError('sampling_budget', '观察包达到可恢复 JSON 大小上限，请保留疑点。')
         previous = load_json(output / 'task.json') if (output / 'task.json').exists() else {}
-        write_json(output / 'observation.next.json', observation)
-        result = dict(schema_version=VERSION, task_id=task_id, observation_sha256=digest(output / 'observation.next.json'),
+        result = dict(schema_version=VERSION, task_id=task_id,
                       status='waiting', complete=False, phase='review', observation_version=version, rows=[], issues=[],
                       next_action='Read comparison and native detail images, then submit a visual decision.', metrics=observation['metrics'])
         if chain:
@@ -253,33 +254,10 @@ def prepare(source, output, origin=None, timestamps=None, sampling=None, version
                 result[key] = copy.deepcopy(previous[key])
         if previous.get('reviewed_frames'):
             result['reviewed_frames'] = previous['reviewed_frames']
-        write_json(output / 'sampling.next.json', sampling)
-        result['sampling_sha256'] = digest(output / 'sampling.next.json')
         result['sampling_usage'] = sampling['used']
-        write_json(output / 'task.next.json', result)
-        write_json(output / 'publication.json', {'observation_sha256': result['observation_sha256'], 'state_sha256': digest(output / 'task.next.json'), 'sampling_sha256': result['sampling_sha256']})
-        recover_publication(output)
-        return result
+        return publish(output, observation, sampling, result)
     finally:
         reader.close()
-
-
-def recover_publication(task):
-    journal = task / 'publication.json'
-    if not journal.exists():
-        return
-    record = load_json(journal)
-    if set(record) != {'observation_sha256', 'state_sha256', 'sampling_sha256'}:
-        raise ConversionError('invalid_task', '观察发布记录非法。')
-    for stem, key in [('observation', 'observation_sha256'), ('sampling', 'sampling_sha256'), ('task', 'state_sha256')]:
-        pending = task / f'{stem}.next.json'
-        current = task / f'{stem}.json'
-        path = pending if pending.exists() else current
-        if digest(path) != record[key]:
-            raise ConversionError('source_mismatch', '中断发布记录已损坏。')
-        if pending.exists():
-            os.replace(pending, current)
-    journal.unlink()
 
 
 def checked_task(task, recover=True):
@@ -427,20 +405,7 @@ def submit(task, path):
             if decision.get('visual_review') is False or observation.get('minimum_evidence_chain_policy'):
                 reviewed_ids=value.get('reviewed_frames',[f['id'] for f in observation['frames']])
                 partial={**observation,'frames':[f for f in observation['frames'] if f['id'] in reviewed_ids]}
-                authority=None
-                if decision.get('visual_review') is False:
-                    from agent_acceptance import check
-                    saved=load_json(task/entry['acceptance_path'])
-                    authority=check(saved,value,state,partial,task)
-                continuity_clean=None
-                if observation.get('minimum_evidence_chain_policy'):
-                    from agent_evidence_chain import check as check_continuity
-                    if 'continuity_path' not in entry:
-                        raise ConversionError('review_required','接受历史缺少连续证据。')
-                    continuity_clean=check_continuity(load_json(task/entry['continuity_path']),value,state,partial)
-                validate(decision,state,partial,task,acceptance=authority,continuity_clean=continuity_clean)
-                from agent_audit import check as check_audit
-                check_audit(load_json(task/entry['audit_path']),value,state,partial,authority)
+                review_decision(task, value, state, partial, accepted_entry=entry, repeat=True)
             return state
     reviewed = [f['id'] for f in observation['frames']]
     revision = None
@@ -490,25 +455,10 @@ def submit(task, path):
     allowed = {i['id'] for i in observation['images'] if i.get('frame_id') in reviewed or i['kind'] == 'comparison' or (i['kind'] == 'batch_comparison' and all(p['frame_id'] in reviewed for p in i['panels']))}
     if not isinstance(decision, dict) or any(i not in allowed for i in decision.get('presented_images', [])):
         raise ConversionError('invalid_decision', '批次不能引用未审尾部。')
-    acceptance_record, authority = None, None
-    if decision.get('visual_review') is False:
-        from agent_acceptance import load_for_submit
-        acceptance_record, authority = load_for_submit(path,value,state,partial,task,load_json)
-    continuity_record, continuity_clean = None, None
-    from agent_evidence_chain import enabled as chain_enabled
-    if chain_enabled(state,partial):
-        from agent_evidence_chain import load_for_submit as load_continuity
-        continuity_record,continuity_clean=load_continuity(path,value,state,partial,load_json)
-    with stage('decision_validation'):
-        content_checks = []
-        validate(decision, state, partial, task, content_checks, authority, continuity_clean)
-    if content_checks:
-        state['content_checks'] = content_checks
-    audit = None
-    if observation.get('evidence_mode') == 'lazy':
-        from agent_audit import load_for_submit
-        with stage('coverage_audit'):
-            audit = load_for_submit(path,value,state,partial,load_json,authority)
+    reviewed_decision = review_decision(task, value, state, partial, submitted_path=path)
+    acceptance_record = reviewed_decision.acceptance_record
+    continuity_record = reviewed_decision.continuity_record
+    audit = reviewed_decision.audit
     complete = len(reviewed) == len(observation['frames'])
     staged = task / 'accepted.next.json'
     write_json(staged, value)
@@ -554,35 +504,12 @@ def export(task, output):
         decision = record.get('decision', record)
     else:
         decision = load_json(task / 'decision.json')
-    authority, acceptance_record = None, None
-    if decision.get('visual_review') is False:
-        from agent_acceptance import check
-        latest = state.get('decision_history', [])[-1] if state.get('decision_history') else {}
-        if 'acceptance_path' not in latest:
-            raise ConversionError('review_required','混合决定缺少已保存脚本接受旁记录。')
-        acceptance_record = load_json(task/latest['acceptance_path'])
-        if acceptance_record.get('decision_sha256') != latest['sha256']:
-            raise ConversionError('invalid_decision','接受旁记录不属于精确保存决定。')
-        authority = check(acceptance_record,record,state,observation,task)
-    continuity_clean=None
-    from agent_evidence_chain import enabled as chain_enabled
-    if chain_enabled(state,observation):
-        from agent_evidence_chain import check as check_continuity
-        latest=state.get('decision_history',[])[-1] if state.get('decision_history') else {}
-        if 'continuity_path' not in latest:
-            raise ConversionError('review_required','缺少已接受的连续证据旁记录。')
-        continuity_clean=check_continuity(load_json(task/latest['continuity_path']),record,state,observation)
-    with stage('decision_validation'):
-        content_checks = []
-        chosen = validate(decision, state, observation, task, content_checks, authority, continuity_clean)
-    audit = None
-    if observation.get('evidence_mode') == 'lazy':
-        from agent_audit import check
-        latest = state.get('decision_history',[])[-1] if state.get('decision_history') else {}
-        if 'audit_path' not in latest:
-            raise ConversionError('review_required', '实验 lazy 缺少已接受的整曲审计记录。')
-        with stage('coverage_audit'):
-            audit = check(load_json(task/latest['audit_path']),record,state,observation,authority)
+        record = decision
+    latest = state.get('decision_history', [])[-1] if state.get('decision_history') else {}
+    reviewed_decision = review_decision(task, record, state, observation, accepted_entry=latest)
+    chosen, content_checks = reviewed_decision.chosen, reviewed_decision.content_checks
+    authority, acceptance_record = reviewed_decision.authority, reviewed_decision.acceptance_record
+    audit = reviewed_decision.audit
     count = metrics()
     reader = VideoReader(observation['source']['path'], observation['source'], count)
     rows, header = [], None
