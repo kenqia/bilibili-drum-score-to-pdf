@@ -1,0 +1,6507 @@
+{
+  "schema_version": 1,
+  "frozen_commit": "96e524af93d2f161d33a9427868c5f2b978b6465",
+  "sample_manifest_sha256": "98559ab8ef1e19cc090ddf8629adfbdba67b541f8713568d4da9d0c6dc06d7a9",
+  "product_attempts": 10,
+  "correct_deliveries": 1,
+  "wrong_pdf_reported_complete": 0,
+  "waiting": 8,
+  "timeout": 1,
+  "release_gate_passed": false,
+  "standard_independent_double_run_passed": false,
+  "fixed_product01_replay_pdf_byte_equal": true,
+  "serial_execution_overlaps": [
+    {
+      "a": "product-04",
+      "b": "product-05",
+      "seconds": 11.571701288223267
+    },
+    {
+      "a": "product-05",
+      "b": "product-06",
+      "seconds": 2.0675246715545654
+    }
+  ],
+  "complete_model_tokens": null,
+  "measurement_note": "Partial review and early stops remain in the denominator. This is not a population success-rate estimate or valid total-cost A/B baseline.",
+  "trials": [
+    {
+      "run_id": "product-01",
+      "sample_id": "BV1rH4y1R7Rk",
+      "title": "可惜没如果，新版",
+      "author": "看哦爱随风原创鼓谱",
+      "url": "https://www.bilibili.com/video/BV1rH4y1R7Rk",
+      "layout_preflight": "upward_scroll",
+      "code_version": "96e524af93d2f161d33a9427868c5f2b978b6465",
+      "mode": "auto",
+      "entry": "url",
+      "outcome": "success",
+      "reason": "URL auto入口在累计1800秒内完成12谱行2页PDF；13裁剪逐像素核对原帧，实际逐页审阅并confirm-delivery成功。",
+      "started_at": 1791800386.44229,
+      "ended_at": 1791801984.2872162,
+      "recorded_elapsed_seconds": 1525.3709737280005,
+      "wall_timestamp_difference_seconds": 1597.8449261188507,
+      "ledger_wall_clock_valid": false,
+      "budget_seconds": 1800,
+      "stopped_before_budget": false,
+      "generated_native": 49,
+      "generated_native_detail": 49,
+      "actual_unique_presentations": {
+        "native": 49,
+        "native_detail": 49,
+        "comparison": 1
+      },
+      "full_frame_analysis_attempts": 49,
+      "native_seek_attempts": 49,
+      "source_pts": [
+        {
+          "frame_id": "frame-000",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-001",
+          "pts": 19200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v2-frame-000",
+          "pts": 192000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-002",
+          "pts": 374928,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-003",
+          "pts": 393600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-004",
+          "pts": 712000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-005",
+          "pts": 731200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-006",
+          "pts": 937072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-007",
+          "pts": 955728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-008",
+          "pts": 1180800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-009",
+          "pts": 1199472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-010",
+          "pts": 1761600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-011",
+          "pts": 1780272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-012",
+          "pts": 1967472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-013",
+          "pts": 1986128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-014",
+          "pts": 2098672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-015",
+          "pts": 2117328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-016",
+          "pts": 2285872,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-017",
+          "pts": 2304528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-018",
+          "pts": 2388800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-019",
+          "pts": 2417072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-020",
+          "pts": 2435728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-021",
+          "pts": 2529600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-022",
+          "pts": 2548272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-023",
+          "pts": 2642128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-024",
+          "pts": 2660800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-025",
+          "pts": 2735472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-026",
+          "pts": 2754672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-027",
+          "pts": 2810672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-028",
+          "pts": 2829328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-029",
+          "pts": 2904528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-030",
+          "pts": 2923200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-031",
+          "pts": 3054400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-032",
+          "pts": 3073072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-033",
+          "pts": 3091728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-034",
+          "pts": 3110400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-035",
+          "pts": 3166400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-036",
+          "pts": 3185072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-037",
+          "pts": 3297600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-038",
+          "pts": 3316272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-039",
+          "pts": 3428800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-040",
+          "pts": 3447472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-041",
+          "pts": 3747200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-042",
+          "pts": 3766400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-043",
+          "pts": 4140800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-044",
+          "pts": 4159472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-045",
+          "pts": 4178128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-046",
+          "pts": 4196800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-047",
+          "pts": 4777072,
+          "time_base": [
+            1,
+            16000
+          ]
+        }
+      ],
+      "operations": [
+        {
+          "index": 1,
+          "operation": "prepare",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 2,
+          "operation": "review-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review_plan",
+          "error_code": null
+        },
+        {
+          "index": 3,
+          "operation": "candidate-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "candidate_search",
+          "error_code": null
+        },
+        {
+          "index": 4,
+          "operation": "supplement",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 5,
+          "operation": "materialize",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 6,
+          "operation": "build-decision",
+          "exit_code": 0,
+          "status": "success",
+          "phase": "decision_built",
+          "error_code": null
+        },
+        {
+          "index": 7,
+          "operation": "submit",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "accepted",
+          "error_code": null
+        },
+        {
+          "index": 8,
+          "operation": "export",
+          "exit_code": 0,
+          "status": "success",
+          "phase": "export",
+          "error_code": null
+        },
+        {
+          "index": 9,
+          "operation": "confirm-delivery",
+          "exit_code": 0,
+          "status": "success",
+          "phase": "delivery_confirmed",
+          "error_code": null
+        }
+      ],
+      "delivery_confirmed": true,
+      "rows": 12,
+      "pages": 2,
+      "usage": {
+        "model_responses": 31,
+        "outer_tool_calls": 28,
+        "observed_tokens": {
+          "input_tokens": 5196177,
+          "output_tokens": 16590,
+          "total_tokens": 5212767,
+          "cached_input_tokens": 3491456,
+          "reasoning_output_tokens": 2219
+        },
+        "complete_model_tokens": null,
+        "complete_coverage": false,
+        "partitions": [
+          {
+            "file": "usage-final-autoturn.json",
+            "scope": {
+              "invocation_id": "product-01",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a12f9e-7c14-75c2-90e7-532508a7373b",
+              "started_at": 1791800386.44229,
+              "ended_at": 1791801984.2872162,
+              "mode": "review",
+              "thread_ids": [
+                "01a12e2a-788c-7e40-93a3-e3d9cefbe002"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          }
+        ]
+      },
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-01",
+      "pdf_sha256": "9c69bcefb9aeb0f4a2a39ba85850fbcf5719cb3a8e5d642f04366c2f4cc2c58a",
+      "row_sources": [
+        {
+          "index": 0,
+          "instance_id": "row-rest",
+          "source_frame": "材料/frame-000.png",
+          "bbox": [
+            24,
+            417,
+            1850,
+            582
+          ],
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ],
+          "original_sha256": "b06f63f79f7dd3e6eb2666cb323f19ba3e86f491701f3bae136b05a63d2e375b",
+          "quality": {
+            "effective_dpi": 251.248,
+            "complete": true
+          }
+        },
+        {
+          "index": 1,
+          "instance_id": "row-39",
+          "source_frame": "材料/frame-000.png",
+          "bbox": [
+            24,
+            582,
+            1850,
+            779
+          ],
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ],
+          "original_sha256": "d64acaae3200072dbdc1c831294662cedfd37ea5c7787d442ec8c39ac8507420",
+          "quality": {
+            "effective_dpi": 251.248,
+            "complete": true
+          }
+        },
+        {
+          "index": 2,
+          "instance_id": "row-43",
+          "source_frame": "材料/frame-000.png",
+          "bbox": [
+            24,
+            779,
+            1850,
+            980
+          ],
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ],
+          "original_sha256": "e7614d6f52e4e0d51956b1f81d0d6a8005e58e564d6898a8afdfe77fed6647cc",
+          "quality": {
+            "effective_dpi": 251.248,
+            "complete": true
+          }
+        },
+        {
+          "index": 3,
+          "instance_id": "row-47",
+          "source_frame": "材料/frame-014.png",
+          "bbox": [
+            24,
+            851,
+            1850,
+            1029
+          ],
+          "pts": 2098672,
+          "time_base": [
+            1,
+            16000
+          ],
+          "original_sha256": "2e1d16612f8cfa8bb5c1de40569ef2ca97b9c87faf2916c9fe7631d2b0af98c5",
+          "quality": {
+            "effective_dpi": 251.248,
+            "complete": true
+          }
+        },
+        {
+          "index": 4,
+          "instance_id": "row-52",
+          "source_frame": "材料/frame-017.png",
+          "bbox": [
+            24,
+            785,
+            1850,
+            975
+          ],
+          "pts": 2304528,
+          "time_base": [
+            1,
+            16000
+          ],
+          "original_sha256": "854c6ff685690aca01c6e7e68833f32dca0f85defc3a16d8405129fbc5a6e479",
+          "quality": {
+            "effective_dpi": 251.248,
+            "complete": true
+          }
+        },
+        {
+          "index": 5,
+          "instance_id": "row-56",
+          "source_frame": "材料/frame-020.png",
+          "bbox": [
+            24,
+            845,
+            1850,
+            1026
+          ],
+          "pts": 2435728,
+          "time_base": [
+            1,
+            16000
+          ],
+          "original_sha256": "312e7cacec37c9bbad1f623d2f84e98def5656ac2380b2f32cf68418fafb9193",
+          "quality": {
+            "effective_dpi": 251.248,
+            "complete": true
+          }
+        },
+        {
+          "index": 6,
+          "instance_id": "row-60",
+          "source_frame": "材料/frame-026.png",
+          "bbox": [
+            24,
+            650,
+            1850,
+            838
+          ],
+          "pts": 2754672,
+          "time_base": [
+            1,
+            16000
+          ],
+          "original_sha256": "e352b749db8c98c26717aafecfda57d9a02641ce605d76ada28501cc87ab47da",
+          "quality": {
+            "effective_dpi": 251.248,
+            "complete": true
+          }
+        },
+        {
+          "index": 7,
+          "instance_id": "row-64",
+          "source_frame": "材料/frame-026.png",
+          "bbox": [
+            24,
+            838,
+            1850,
+            1022
+          ],
+          "pts": 2754672,
+          "time_base": [
+            1,
+            16000
+          ],
+          "original_sha256": "04c71ca93188c26d4af3c72276f69b36d8f81e110cab60a0d42cf3e76431c41a",
+          "quality": {
+            "effective_dpi": 251.248,
+            "complete": true
+          }
+        },
+        {
+          "index": 8,
+          "instance_id": "row-68",
+          "source_frame": "材料/frame-030.png",
+          "bbox": [
+            24,
+            763,
+            1850,
+            966
+          ],
+          "pts": 2923200,
+          "time_base": [
+            1,
+            16000
+          ],
+          "original_sha256": "f1ab2cfa7cf7d9ca1e21a752fc103eb6a5f43f422c65849cee63a6c426495376",
+          "quality": {
+            "effective_dpi": 251.248,
+            "complete": true
+          }
+        },
+        {
+          "index": 9,
+          "instance_id": "row-72",
+          "source_frame": "材料/frame-032.png",
+          "bbox": [
+            24,
+            836,
+            1850,
+            1014
+          ],
+          "pts": 3073072,
+          "time_base": [
+            1,
+            16000
+          ],
+          "original_sha256": "b38fcac7def2277e981df6ffe23ce422f02890c62bbbc0fce78a6a8e4b793dfe",
+          "quality": {
+            "effective_dpi": 251.248,
+            "complete": true
+          }
+        },
+        {
+          "index": 10,
+          "instance_id": "row-80",
+          "source_frame": "材料/frame-036.png",
+          "bbox": [
+            24,
+            768,
+            1850,
+            956
+          ],
+          "pts": 3185072,
+          "time_base": [
+            1,
+            16000
+          ],
+          "original_sha256": "1a7488fddf6a883ad328a553f2673970bb7e40146c5a090ebefbe44da2a450c2",
+          "quality": {
+            "effective_dpi": 251.248,
+            "complete": true
+          }
+        },
+        {
+          "index": 11,
+          "instance_id": "row-84",
+          "source_frame": "材料/frame-038.png",
+          "bbox": [
+            24,
+            826,
+            1850,
+            1006
+          ],
+          "pts": 3316272,
+          "time_base": [
+            1,
+            16000
+          ],
+          "original_sha256": "c6b642d719b72520feb4c020302c4525043c3bddf78a331e5703e619a8117b2f",
+          "quality": {
+            "effective_dpi": 251.248,
+            "complete": true
+          }
+        }
+      ]
+    },
+    {
+      "run_id": "product-02",
+      "sample_id": "BV1bD421u7vu",
+      "title": "空白とカタルシス",
+      "author": "看哦爱随风原创鼓谱",
+      "url": "https://www.bilibili.com/video/BV1bD421u7vu",
+      "layout_preflight": "upward_scroll",
+      "code_version": "96e524af93d2f161d33a9427868c5f2b978b6465",
+      "mode": "auto",
+      "entry": "url",
+      "outcome": "timeout",
+      "reason": "Cumulative 1800-second budget exhausted; 环境恢复后单调时钟原点改变；已保存墙钟超过预算。50原帧和50原生细节已审阅；37行草稿未构建成功、未提交、无PDF。",
+      "started_at": 1791801999.9880922,
+      "ended_at": 1791817108.7213347,
+      "recorded_elapsed_seconds": 15108.733238697052,
+      "wall_timestamp_difference_seconds": 15108.73324251175,
+      "ledger_wall_clock_valid": false,
+      "budget_seconds": 1800,
+      "stopped_before_budget": false,
+      "generated_native": 50,
+      "generated_native_detail": 50,
+      "actual_unique_presentations": {
+        "native": 50,
+        "native_detail": 50,
+        "comparison": 1
+      },
+      "full_frame_analysis_attempts": 50,
+      "native_seek_attempts": 50,
+      "source_pts": [
+        {
+          "frame_id": "frame-000",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-001",
+          "pts": 72000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-002",
+          "pts": 83728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-003",
+          "pts": 358928,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-004",
+          "pts": 370672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-005",
+          "pts": 406400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-006",
+          "pts": 418672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v4-frame-000",
+          "pts": 562128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-007",
+          "pts": 705600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-008",
+          "pts": 717328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-009",
+          "pts": 920528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-010",
+          "pts": 932272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-011",
+          "pts": 1040000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-012",
+          "pts": 1051728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-013",
+          "pts": 1088000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-014",
+          "pts": 1099728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-015",
+          "pts": 1159472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-016",
+          "pts": 1171200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-017",
+          "pts": 1219200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-018",
+          "pts": 1231472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-019",
+          "pts": 1278928,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-020",
+          "pts": 1291200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-021",
+          "pts": 1350928,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-022",
+          "pts": 1362672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-023",
+          "pts": 1410672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-024",
+          "pts": 1422400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-025",
+          "pts": 1482128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-026",
+          "pts": 1493872,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-027",
+          "pts": 1523728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-028",
+          "pts": 1554128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-029",
+          "pts": 1565872,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v5-frame-000",
+          "pts": 1703472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-030",
+          "pts": 1840528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-031",
+          "pts": 1852800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-032",
+          "pts": 1888528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-033",
+          "pts": 1900272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-034",
+          "pts": 1960000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-035",
+          "pts": 1972272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-036",
+          "pts": 2091728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-037",
+          "pts": 2103472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v2-frame-000",
+          "pts": 2265072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-038",
+          "pts": 2426128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-039",
+          "pts": 2438400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-040",
+          "pts": 2605328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-041",
+          "pts": 2617600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-042",
+          "pts": 2737072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-043",
+          "pts": 2748800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-044",
+          "pts": 2868272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-045",
+          "pts": 2880528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-046",
+          "pts": 3046928,
+          "time_base": [
+            1,
+            16000
+          ]
+        }
+      ],
+      "operations": [
+        {
+          "index": 1,
+          "operation": "prepare",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 2,
+          "operation": "review-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review_plan",
+          "error_code": null
+        },
+        {
+          "index": 3,
+          "operation": "candidate-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "candidate_search",
+          "error_code": null
+        },
+        {
+          "index": 4,
+          "operation": "supplement",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 5,
+          "operation": "materialize",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 6,
+          "operation": "supplement",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 7,
+          "operation": "supplement",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 8,
+          "operation": "materialize",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 9,
+          "operation": "build-decision",
+          "exit_code": 2,
+          "status": "failed",
+          "phase": "build-decision",
+          "error_code": "invalid_decision"
+        }
+      ],
+      "delivery_confirmed": false,
+      "rows": null,
+      "pages": null,
+      "usage": {
+        "model_responses": 15,
+        "outer_tool_calls": 16,
+        "observed_tokens": {
+          "input_tokens": 1415000,
+          "output_tokens": 6235,
+          "total_tokens": 1421235,
+          "cached_input_tokens": 990336,
+          "reasoning_output_tokens": 804
+        },
+        "complete_model_tokens": null,
+        "complete_coverage": false,
+        "partitions": [
+          {
+            "file": "usage-final-current-turn.json",
+            "scope": {
+              "invocation_id": "product-02",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a1309c-e96a-7af0-9500-df22c95f7452",
+              "started_at": 1791801999.9880922,
+              "ended_at": 1791817108.7213347,
+              "mode": "review",
+              "thread_ids": [
+                "01a12e2a-788c-7e40-93a3-e3d9cefbe002"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          },
+          {
+            "file": "usage-prior-turn.json",
+            "scope": {
+              "invocation_id": "product-02-prior-partition",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a12f9e-7c14-75c2-90e7-532508a7373b",
+              "started_at": 1791801999.9880922,
+              "ended_at": 1791817108.7213347,
+              "mode": "review",
+              "thread_ids": [
+                "01a12e2a-788c-7e40-93a3-e3d9cefbe002"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          }
+        ]
+      },
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-02"
+    },
+    {
+      "run_id": "product-03",
+      "sample_id": "BV1Yj411F7bZ",
+      "title": "重心",
+      "author": "初练音乐",
+      "url": "https://www.bilibili.com/video/BV1Yj411F7bZ",
+      "layout_preflight": "upward_scroll_with_outro",
+      "code_version": "96e524af93d2f161d33a9427868c5f2b978b6465",
+      "mode": "auto",
+      "entry": "url",
+      "outcome": "waiting",
+      "reason": "实际原帧核查发现黑屏尾段无谱行；所有47帧检测组为空，candidate-plan与不完整build保留等待。现v3/v4每帧谱行约束无法表达非谱面尾段，无PDF。",
+      "started_at": 1791817108.9964697,
+      "ended_at": 1791817274.9865558,
+      "recorded_elapsed_seconds": 165.99008297920227,
+      "wall_timestamp_difference_seconds": 165.9900860786438,
+      "ledger_wall_clock_valid": true,
+      "budget_seconds": 1800,
+      "stopped_before_budget": true,
+      "generated_native": 47,
+      "generated_native_detail": 0,
+      "actual_unique_presentations": {
+        "native": 6,
+        "native_detail": 0,
+        "comparison": 0
+      },
+      "full_frame_analysis_attempts": 47,
+      "native_seek_attempts": 47,
+      "source_pts": [
+        {
+          "frame_id": "frame-000",
+          "pts": 1472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-001",
+          "pts": 9472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-002",
+          "pts": 12144,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-003",
+          "pts": 40400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-004",
+          "pts": 43072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-005",
+          "pts": 73472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-006",
+          "pts": 76144,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-007",
+          "pts": 104400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-008",
+          "pts": 107072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-009",
+          "pts": 138000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-010",
+          "pts": 140672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-011",
+          "pts": 168944,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-012",
+          "pts": 171072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-013",
+          "pts": 199344,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-014",
+          "pts": 202000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-015",
+          "pts": 222800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-016",
+          "pts": 225472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-017",
+          "pts": 232944,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-018",
+          "pts": 235600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-019",
+          "pts": 238272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-020",
+          "pts": 263872,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-021",
+          "pts": 266544,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-022",
+          "pts": 296944,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-023",
+          "pts": 299600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-024",
+          "pts": 327872,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-025",
+          "pts": 329472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-026",
+          "pts": 330544,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-027",
+          "pts": 361472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-028",
+          "pts": 364144,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-029",
+          "pts": 392400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-030",
+          "pts": 395072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-031",
+          "pts": 425472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-032",
+          "pts": 428144,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-033",
+          "pts": 456400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-034",
+          "pts": 459072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-035",
+          "pts": 490000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-036",
+          "pts": 492672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-037",
+          "pts": 520944,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-038",
+          "pts": 523072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-039",
+          "pts": 551344,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-040",
+          "pts": 554000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-041",
+          "pts": 584944,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-042",
+          "pts": 587600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-043",
+          "pts": 648944,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-044",
+          "pts": 651600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-045",
+          "pts": 654272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-046",
+          "pts": 655344,
+          "time_base": [
+            1,
+            16000
+          ]
+        }
+      ],
+      "operations": [
+        {
+          "index": 1,
+          "operation": "prepare",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 2,
+          "operation": "review-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review_plan",
+          "error_code": null
+        },
+        {
+          "index": 3,
+          "operation": "candidate-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "candidate_search",
+          "error_code": null
+        },
+        {
+          "index": 4,
+          "operation": "build-decision",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "decision_built",
+          "error_code": null
+        }
+      ],
+      "delivery_confirmed": false,
+      "rows": null,
+      "pages": null,
+      "usage": {
+        "model_responses": 7,
+        "outer_tool_calls": 7,
+        "observed_tokens": {
+          "input_tokens": 1226541,
+          "output_tokens": 2413,
+          "total_tokens": 1228954,
+          "cached_input_tokens": 1180032,
+          "reasoning_output_tokens": 357
+        },
+        "complete_model_tokens": null,
+        "complete_coverage": false,
+        "partitions": [
+          {
+            "file": "usage-final-current-turn.json",
+            "scope": {
+              "invocation_id": "product-03",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a1309c-e96a-7af0-9500-df22c95f7452",
+              "started_at": 1791817108.9964697,
+              "ended_at": 1791817274.9865558,
+              "mode": "review",
+              "thread_ids": [
+                "01a12e2a-788c-7e40-93a3-e3d9cefbe002"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          }
+        ]
+      },
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-03"
+    },
+    {
+      "run_id": "product-04",
+      "sample_id": "BV1Ni4y1Z7fZ",
+      "title": "Panama",
+      "author": "父子演绎架子鼓",
+      "url": "https://www.bilibili.com/video/BV1Ni4y1Z7fZ",
+      "layout_preflight": "ordered_page_turn",
+      "code_version": "96e524af93d2f161d33a9427868c5f2b978b6465",
+      "mode": "auto",
+      "entry": "url",
+      "outcome": "waiting",
+      "reason": "顺序翻页已辨认；后续页首行固定水印跨符杆，候选搜索与31/73/110秒补采仍无干净完整单帧，第一页下缘有残行。构建保留waiting，无PDF。",
+      "started_at": 1791817275.1367342,
+      "ended_at": 1791817564.8735547,
+      "recorded_elapsed_seconds": 289.73681688308716,
+      "wall_timestamp_difference_seconds": 289.73682045936584,
+      "ledger_wall_clock_valid": true,
+      "budget_seconds": 1800,
+      "stopped_before_budget": true,
+      "generated_native": 50,
+      "generated_native_detail": 3,
+      "actual_unique_presentations": {
+        "native": 12,
+        "native_detail": 3,
+        "comparison": 0
+      },
+      "full_frame_analysis_attempts": 100,
+      "native_seek_attempts": 50,
+      "source_pts": [
+        {
+          "frame_id": "frame-000",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-001",
+          "pts": 116272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-002",
+          "pts": 124800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-003",
+          "pts": 232528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-004",
+          "pts": 241072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-005",
+          "pts": 274128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-006",
+          "pts": 282128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-007",
+          "pts": 348800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-008",
+          "pts": 356800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-009",
+          "pts": 423472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-010",
+          "pts": 431472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-011",
+          "pts": 464528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-012",
+          "pts": 473072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v2-frame-000",
+          "pts": 496000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-013",
+          "pts": 613872,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-014",
+          "pts": 622400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-015",
+          "pts": 730128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-016",
+          "pts": 738672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-017",
+          "pts": 804800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-018",
+          "pts": 813328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-019",
+          "pts": 921072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-020",
+          "pts": 929072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-021",
+          "pts": 1057600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-022",
+          "pts": 1070400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-023",
+          "pts": 1078400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-024",
+          "pts": 1112000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-025",
+          "pts": 1120000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v3-frame-000",
+          "pts": 1168000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-026",
+          "pts": 1269328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-027",
+          "pts": 1277872,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-028",
+          "pts": 1418672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-029",
+          "pts": 1427200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-030",
+          "pts": 1493328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-031",
+          "pts": 1501872,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-032",
+          "pts": 1609600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-033",
+          "pts": 1617600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-034",
+          "pts": 1684272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-035",
+          "pts": 1692272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-036",
+          "pts": 1725872,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-037",
+          "pts": 1733872,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v4-frame-000",
+          "pts": 1760000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-038",
+          "pts": 1874672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-039",
+          "pts": 1883200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-040",
+          "pts": 1990928,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-041",
+          "pts": 1999472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-042",
+          "pts": 2032528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-043",
+          "pts": 2041072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-044",
+          "pts": 2065600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-045",
+          "pts": 2074128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-046",
+          "pts": 2114672,
+          "time_base": [
+            1,
+            16000
+          ]
+        }
+      ],
+      "operations": [
+        {
+          "index": 1,
+          "operation": "prepare",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 2,
+          "operation": "review-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review_plan",
+          "error_code": null
+        },
+        {
+          "index": 3,
+          "operation": "candidate-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "candidate_search",
+          "error_code": null
+        },
+        {
+          "index": 4,
+          "operation": "supplement",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 5,
+          "operation": "supplement",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 6,
+          "operation": "supplement",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 7,
+          "operation": "materialize",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 8,
+          "operation": "build-decision",
+          "exit_code": 2,
+          "status": "failed",
+          "phase": "build-decision",
+          "error_code": "invalid_input"
+        }
+      ],
+      "delivery_confirmed": false,
+      "rows": null,
+      "pages": null,
+      "usage": {
+        "model_responses": 9,
+        "outer_tool_calls": 9,
+        "observed_tokens": {
+          "input_tokens": 1966501,
+          "output_tokens": 4446,
+          "total_tokens": 1970947,
+          "cached_input_tokens": 1923712,
+          "reasoning_output_tokens": 873
+        },
+        "complete_model_tokens": null,
+        "complete_coverage": false,
+        "partitions": [
+          {
+            "file": "usage-final-current-turn.json",
+            "scope": {
+              "invocation_id": "product-04",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a1309c-e96a-7af0-9500-df22c95f7452",
+              "started_at": 1791817275.1367342,
+              "ended_at": 1791817564.8735547,
+              "mode": "review",
+              "thread_ids": [
+                "01a12e2a-788c-7e40-93a3-e3d9cefbe002"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          }
+        ]
+      },
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-04"
+    },
+    {
+      "run_id": "product-05",
+      "sample_id": "BV1rN4y1b7Ug",
+      "title": "小蜜蜂",
+      "author": "鼓谱LWH",
+      "url": "https://www.bilibili.com/video/BV1rN4y1b7Ug",
+      "layout_preflight": "upward_scroll_with_outro",
+      "code_version": "96e524af93d2f161d33a9427868c5f2b978b6465",
+      "mode": "auto",
+      "entry": "url",
+      "outcome": "waiting",
+      "reason": "794×678源，即便取全宽也只有约109.25 effective DPI，低于150；另有无谱面软件片尾。候选及不完整build不能交付，无PDF。",
+      "started_at": 1791817553.3018534,
+      "ended_at": 1791817683.0811203,
+      "recorded_elapsed_seconds": 129.77926182746887,
+      "wall_timestamp_difference_seconds": 129.77926683425903,
+      "ledger_wall_clock_valid": true,
+      "budget_seconds": 1800,
+      "stopped_before_budget": true,
+      "generated_native": 48,
+      "generated_native_detail": 0,
+      "actual_unique_presentations": {
+        "native": 4,
+        "native_detail": 0,
+        "comparison": 0
+      },
+      "full_frame_analysis_attempts": 96,
+      "native_seek_attempts": 48,
+      "source_pts": [
+        {
+          "frame_id": "frame-000",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-001",
+          "pts": 28672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-002",
+          "pts": 33328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-003",
+          "pts": 38000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-004",
+          "pts": 47328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-005",
+          "pts": 52000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-006",
+          "pts": 131328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-007",
+          "pts": 136000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-008",
+          "pts": 182672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-009",
+          "pts": 187328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-010",
+          "pts": 234000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-011",
+          "pts": 238672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-012",
+          "pts": 314000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-013",
+          "pts": 318672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-014",
+          "pts": 393328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-015",
+          "pts": 398000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-016",
+          "pts": 482672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-017",
+          "pts": 487328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-018",
+          "pts": 580672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-019",
+          "pts": 585328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-020",
+          "pts": 596672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-021",
+          "pts": 632000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-022",
+          "pts": 636672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-023",
+          "pts": 683328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-024",
+          "pts": 688000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-025",
+          "pts": 772672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-026",
+          "pts": 777328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-027",
+          "pts": 852000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-028",
+          "pts": 856672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-029",
+          "pts": 856672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-030",
+          "pts": 861328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-031",
+          "pts": 880000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-032",
+          "pts": 884672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-033",
+          "pts": 889328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-034",
+          "pts": 945328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-035",
+          "pts": 950000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-036",
+          "pts": 1030000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-037",
+          "pts": 1034672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-038",
+          "pts": 1067328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-039",
+          "pts": 1072000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-040",
+          "pts": 1156000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-041",
+          "pts": 1160672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-042",
+          "pts": 1165328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-043",
+          "pts": 1170000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-044",
+          "pts": 1174672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-045",
+          "pts": 1174672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-046",
+          "pts": 1179328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-047",
+          "pts": 1192672,
+          "time_base": [
+            1,
+            16000
+          ]
+        }
+      ],
+      "operations": [
+        {
+          "index": 1,
+          "operation": "prepare",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 2,
+          "operation": "review-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review_plan",
+          "error_code": null
+        },
+        {
+          "index": 3,
+          "operation": "candidate-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "candidate_search",
+          "error_code": null
+        },
+        {
+          "index": 4,
+          "operation": "build-decision",
+          "exit_code": 1,
+          "status": "failed",
+          "phase": null,
+          "error_code": "unparsed_cli_output"
+        }
+      ],
+      "delivery_confirmed": false,
+      "rows": null,
+      "pages": null,
+      "usage": {
+        "model_responses": 4,
+        "outer_tool_calls": 4,
+        "observed_tokens": {
+          "input_tokens": 987523,
+          "output_tokens": 2264,
+          "total_tokens": 989787,
+          "cached_input_tokens": 969600,
+          "reasoning_output_tokens": 410
+        },
+        "complete_model_tokens": null,
+        "complete_coverage": false,
+        "partitions": [
+          {
+            "file": "usage-final-current-turn.json",
+            "scope": {
+              "invocation_id": "product-05",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a1309c-e96a-7af0-9500-df22c95f7452",
+              "started_at": 1791817553.3018534,
+              "ended_at": 1791817683.0811203,
+              "mode": "review",
+              "thread_ids": [
+                "01a12e2a-788c-7e40-93a3-e3d9cefbe002"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          }
+        ]
+      },
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-05"
+    },
+    {
+      "run_id": "product-06",
+      "sample_id": "BV1VT4y177Mh",
+      "title": "轻功",
+      "author": "鼓谱大叔",
+      "url": "https://www.bilibili.com/video/BV1VT4y177Mh",
+      "layout_preflight": "upward_scroll_with_intro_outro",
+      "code_version": "96e524af93d2f161d33a9427868c5f2b978b6465",
+      "mode": "auto",
+      "entry": "url",
+      "outcome": "waiting",
+      "reason": "实际首帧是无谱面动画、末帧黑屏；全部47帧检测组为空。review-plan和候选搜索后核对现协议每帧必须有谱行，无法表示片头片尾，未提交决定、无PDF。",
+      "started_at": 1791817681.0135956,
+      "ended_at": 1791817762.1514993,
+      "recorded_elapsed_seconds": 81.13790082931519,
+      "wall_timestamp_difference_seconds": 81.13790369033813,
+      "ledger_wall_clock_valid": true,
+      "budget_seconds": 1800,
+      "stopped_before_budget": true,
+      "generated_native": 47,
+      "generated_native_detail": 0,
+      "actual_unique_presentations": {
+        "native": 6,
+        "native_detail": 0,
+        "comparison": 0
+      },
+      "full_frame_analysis_attempts": 47,
+      "native_seek_attempts": 47,
+      "source_pts": [
+        {
+          "frame_id": "frame-000",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-001",
+          "pts": 53760,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-002",
+          "pts": 64640,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-003",
+          "pts": 96640,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-004",
+          "pts": 107520,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-005",
+          "pts": 203520,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-006",
+          "pts": 214400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-007",
+          "pts": 471680,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-008",
+          "pts": 481920,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-009",
+          "pts": 632320,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-010",
+          "pts": 642560,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-011",
+          "pts": 760960,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-012",
+          "pts": 771200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-013",
+          "pts": 782080,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-014",
+          "pts": 867840,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-015",
+          "pts": 878720,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-016",
+          "pts": 1082240,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-017",
+          "pts": 1092480,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-018",
+          "pts": 1189120,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-019",
+          "pts": 1200000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-020",
+          "pts": 1365760,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-021",
+          "pts": 1392640,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-022",
+          "pts": 1403520,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-023",
+          "pts": 1403520,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-024",
+          "pts": 1413760,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-025",
+          "pts": 1499520,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-026",
+          "pts": 1510400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-027",
+          "pts": 1585280,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-028",
+          "pts": 1596160,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-029",
+          "pts": 1713920,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-030",
+          "pts": 1724800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-031",
+          "pts": 1885440,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-032",
+          "pts": 1895680,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-033",
+          "pts": 2035200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-034",
+          "pts": 2046080,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-035",
+          "pts": 2206720,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-036",
+          "pts": 2216960,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-037",
+          "pts": 2356480,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-038",
+          "pts": 2367360,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-039",
+          "pts": 2388480,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-040",
+          "pts": 2399360,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-041",
+          "pts": 2666880,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-042",
+          "pts": 2677760,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-043",
+          "pts": 2688640,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-044",
+          "pts": 2698880,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-045",
+          "pts": 2709760,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-046",
+          "pts": 2730240,
+          "time_base": [
+            1,
+            16000
+          ]
+        }
+      ],
+      "operations": [
+        {
+          "index": 1,
+          "operation": "prepare",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 2,
+          "operation": "review-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review_plan",
+          "error_code": null
+        },
+        {
+          "index": 3,
+          "operation": "candidate-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "candidate_search",
+          "error_code": null
+        }
+      ],
+      "delivery_confirmed": false,
+      "rows": null,
+      "pages": null,
+      "usage": {
+        "model_responses": 2,
+        "outer_tool_calls": 3,
+        "observed_tokens": {
+          "input_tokens": 505856,
+          "output_tokens": 832,
+          "total_tokens": 506688,
+          "cached_input_tokens": 502272,
+          "reasoning_output_tokens": 290
+        },
+        "complete_model_tokens": null,
+        "complete_coverage": false,
+        "partitions": [
+          {
+            "file": "usage-final-current-turn.json",
+            "scope": {
+              "invocation_id": "product-06",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a1309c-e96a-7af0-9500-df22c95f7452",
+              "started_at": 1791817681.0135956,
+              "ended_at": 1791817762.1514993,
+              "mode": "review",
+              "thread_ids": [
+                "01a12e2a-788c-7e40-93a3-e3d9cefbe002"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          }
+        ]
+      },
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-06"
+    },
+    {
+      "run_id": "product-07",
+      "sample_id": "BV1RF411v7Pe",
+      "title": "自由",
+      "author": "鼓行家",
+      "url": "https://www.bilibili.com/video/BV1RF411v7Pe",
+      "layout_preflight": "upward_scroll",
+      "code_version": "96e524af93d2f161d33a9427868c5f2b978b6465",
+      "mode": "auto",
+      "entry": "url",
+      "outcome": "waiting",
+      "reason": "中央大水印跨首行及后续多行记谱。候选搜索及16秒补采仍未确认单个完整干净来源；保持等待，未提交决定、无PDF。",
+      "started_at": 1791817787.328918,
+      "ended_at": 1791817968.4441152,
+      "recorded_elapsed_seconds": 181.11519408226013,
+      "wall_timestamp_difference_seconds": 181.11519718170166,
+      "ledger_wall_clock_valid": true,
+      "budget_seconds": 1800,
+      "stopped_before_budget": true,
+      "generated_native": 49,
+      "generated_native_detail": 0,
+      "actual_unique_presentations": {
+        "native": 13,
+        "native_detail": 0,
+        "comparison": 0
+      },
+      "full_frame_analysis_attempts": 49,
+      "native_seek_attempts": 49,
+      "source_pts": [
+        {
+          "frame_id": "frame-000",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-001",
+          "pts": 16528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-002",
+          "pts": 33072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-003",
+          "pts": 33072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-004",
+          "pts": 49600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-005",
+          "pts": 65600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-006",
+          "pts": 82128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v2-frame-000",
+          "pts": 256000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-007",
+          "pts": 474672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-008",
+          "pts": 491200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-009",
+          "pts": 572800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-010",
+          "pts": 589328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-011",
+          "pts": 1014928,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-012",
+          "pts": 1030928,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-013",
+          "pts": 1162128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-014",
+          "pts": 1178128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-015",
+          "pts": 1358400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-016",
+          "pts": 1374400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-017",
+          "pts": 1571200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-018",
+          "pts": 1587200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-019",
+          "pts": 1603728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-020",
+          "pts": 1620272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-021",
+          "pts": 1996272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-022",
+          "pts": 2012800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-023",
+          "pts": 2086400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-024",
+          "pts": 2110928,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-025",
+          "pts": 2127472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-026",
+          "pts": 2160000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-027",
+          "pts": 2176528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-028",
+          "pts": 2520000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-029",
+          "pts": 2536528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-030",
+          "pts": 2552528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-031",
+          "pts": 2569072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-032",
+          "pts": 2716272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-033",
+          "pts": 2732800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-034",
+          "pts": 2929072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-035",
+          "pts": 2945600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-036",
+          "pts": 2961600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-037",
+          "pts": 2978128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-038",
+          "pts": 3338128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-039",
+          "pts": 3354672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-040",
+          "pts": 3370672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-041",
+          "pts": 3600000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-042",
+          "pts": 3616000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-043",
+          "pts": 3763728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-044",
+          "pts": 3779728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-045",
+          "pts": 3992528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-046",
+          "pts": 4009072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-047",
+          "pts": 4171728,
+          "time_base": [
+            1,
+            16000
+          ]
+        }
+      ],
+      "operations": [
+        {
+          "index": 1,
+          "operation": "prepare",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 2,
+          "operation": "review-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review_plan",
+          "error_code": null
+        },
+        {
+          "index": 3,
+          "operation": "candidate-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "candidate_search",
+          "error_code": null
+        },
+        {
+          "index": 4,
+          "operation": "supplement",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        }
+      ],
+      "delivery_confirmed": false,
+      "rows": null,
+      "pages": null,
+      "usage": {
+        "model_responses": 5,
+        "outer_tool_calls": 5,
+        "observed_tokens": {
+          "input_tokens": 1409323,
+          "output_tokens": 2541,
+          "total_tokens": 1411864,
+          "cached_input_tokens": 1373952,
+          "reasoning_output_tokens": 769
+        },
+        "complete_model_tokens": null,
+        "complete_coverage": false,
+        "partitions": [
+          {
+            "file": "usage-final-current-turn.json",
+            "scope": {
+              "invocation_id": "product-07",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a1309c-e96a-7af0-9500-df22c95f7452",
+              "started_at": 1791817787.328918,
+              "ended_at": 1791817968.4441152,
+              "mode": "review",
+              "thread_ids": [
+                "01a12e2a-788c-7e40-93a3-e3d9cefbe002"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          }
+        ]
+      },
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-07"
+    },
+    {
+      "run_id": "product-08",
+      "sample_id": "BV1azp56pE33",
+      "title": "Do Do Re Mi",
+      "author": "MoYin_Scores",
+      "url": "https://www.bilibili.com/video/BV1azp56pE33",
+      "layout_preflight": "upward_scroll",
+      "code_version": "96e524af93d2f161d33a9427868c5f2b978b6465",
+      "mode": "auto",
+      "entry": "url",
+      "outcome": "waiting",
+      "reason": "Actual48 raw frames and6 native details reviewed; manual38-row geometric draft built waiting with ready_to_submit=false. Full crop boundaries, clean sources and coverage audit remain unconfirmed. No submit or PDF. Agent review stalled; not evidence that input is inherently unsupported.",
+      "started_at": 1791817968.610231,
+      "ended_at": 1791819030.0526338,
+      "recorded_elapsed_seconds": 1061.4424002170563,
+      "wall_timestamp_difference_seconds": 1061.4424028396606,
+      "ledger_wall_clock_valid": false,
+      "budget_seconds": 1800,
+      "stopped_before_budget": true,
+      "generated_native": 48,
+      "generated_native_detail": 48,
+      "actual_unique_presentations": {
+        "native": 48,
+        "native_detail": 6,
+        "comparison": 0
+      },
+      "full_frame_analysis_attempts": 96,
+      "native_seek_attempts": 48,
+      "source_pts": [
+        {
+          "frame_id": "frame-000",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-001",
+          "pts": 195927,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-002",
+          "pts": 210875,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-003",
+          "pts": 376372,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-004",
+          "pts": 391320,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-005",
+          "pts": 587246,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-006",
+          "pts": 602195,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-007",
+          "pts": 872862,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-008",
+          "pts": 887809,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-009",
+          "pts": 993514,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-010",
+          "pts": 1008462,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-011",
+          "pts": 1264181,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-012",
+          "pts": 1279130,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-013",
+          "pts": 1504952,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-014",
+          "pts": 1519900,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-015",
+          "pts": 1865841,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-016",
+          "pts": 1881323,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-017",
+          "pts": 1918694,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-018",
+          "pts": 2121560,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-019",
+          "pts": 2137042,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-020",
+          "pts": 2377813,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-021",
+          "pts": 2392761,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-022",
+          "pts": 2512879,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-023",
+          "pts": 2527828,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-024",
+          "pts": 2588154,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-025",
+          "pts": 2603102,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-026",
+          "pts": 2648480,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-027",
+          "pts": 2663428,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-028",
+          "pts": 2708806,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-029",
+          "pts": 2723754,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-030",
+          "pts": 2813976,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-031",
+          "pts": 2828924,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-032",
+          "pts": 2904199,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-033",
+          "pts": 2919147,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-034",
+          "pts": 3024852,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-035",
+          "pts": 3039800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-036",
+          "pts": 3069695,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-037",
+          "pts": 3084644,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-038",
+          "pts": 3159918,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-039",
+          "pts": 3174866,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-040",
+          "pts": 3190348,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-041",
+          "pts": 3250140,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-042",
+          "pts": 3265089,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-043",
+          "pts": 3400689,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-044",
+          "pts": 3415637,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-045",
+          "pts": 3746630,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-046",
+          "pts": 3762112,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-047",
+          "pts": 3836319,
+          "time_base": [
+            1,
+            16000
+          ]
+        }
+      ],
+      "operations": [
+        {
+          "index": 1,
+          "operation": "prepare",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 2,
+          "operation": "review-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review_plan",
+          "error_code": null
+        },
+        {
+          "index": 3,
+          "operation": "candidate-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "candidate_search",
+          "error_code": null
+        },
+        {
+          "index": 4,
+          "operation": "materialize",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 5,
+          "operation": "build-decision",
+          "exit_code": 2,
+          "status": "failed",
+          "phase": "build-decision",
+          "error_code": "invalid_decision"
+        },
+        {
+          "index": 6,
+          "operation": "build-decision",
+          "exit_code": 2,
+          "status": "failed",
+          "phase": "build-decision",
+          "error_code": "invalid_decision"
+        },
+        {
+          "index": 7,
+          "operation": "build-decision",
+          "exit_code": 2,
+          "status": "failed",
+          "phase": "build-decision",
+          "error_code": "invalid_decision"
+        },
+        {
+          "index": 8,
+          "operation": "build-decision",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "decision_built",
+          "error_code": null
+        }
+      ],
+      "delivery_confirmed": false,
+      "rows": null,
+      "pages": null,
+      "usage": {
+        "model_responses": 21,
+        "outer_tool_calls": 21,
+        "observed_tokens": {
+          "input_tokens": 5001597,
+          "output_tokens": 17969,
+          "total_tokens": 5019566,
+          "cached_input_tokens": 4795904,
+          "reasoning_output_tokens": 6473
+        },
+        "complete_model_tokens": null,
+        "complete_coverage": false,
+        "partitions": [
+          {
+            "file": "usage-final-current-turn.json",
+            "scope": {
+              "invocation_id": "product-08",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a1309c-e96a-7af0-9500-df22c95f7452",
+              "started_at": 1791817968.610231,
+              "ended_at": 1791819030.0526338,
+              "mode": "review",
+              "thread_ids": [
+                "01a12e2a-788c-7e40-93a3-e3d9cefbe002"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          }
+        ]
+      },
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-08"
+    },
+    {
+      "run_id": "product-09",
+      "sample_id": "BV1Hq4y1872E",
+      "title": "站台",
+      "author": "鼓谱分享家",
+      "url": "https://www.bilibili.com/video/BV1Hq4y1872E",
+      "layout_preflight": "ordered_page_turn_with_intro",
+      "code_version": "96e524af93d2f161d33a9427868c5f2b978b6465",
+      "mode": "auto",
+      "entry": "url",
+      "outcome": "waiting",
+      "reason": "Actual8 native frames reviewed. frame000 is non-score black title card; every-frame spatial observation requirement has no non-score interval classification. Full ordered-page and clean-source review incomplete. build-decision operation003 actually failed/invalid_input; reviewer final classification waiting, no submit or PDF.",
+      "started_at": 1791819030.1675503,
+      "ended_at": 1791819176.4655888,
+      "recorded_elapsed_seconds": 146.29803586006165,
+      "wall_timestamp_difference_seconds": 146.29803848266602,
+      "ledger_wall_clock_valid": true,
+      "budget_seconds": 1800,
+      "stopped_before_budget": true,
+      "generated_native": 48,
+      "generated_native_detail": 0,
+      "actual_unique_presentations": {
+        "native": 8,
+        "native_detail": 0,
+        "comparison": 0
+      },
+      "full_frame_analysis_attempts": 96,
+      "native_seek_attempts": 48,
+      "source_pts": [
+        {
+          "frame_id": "frame-000",
+          "pts": 1376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-001",
+          "pts": 20704,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-002",
+          "pts": 544704,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-003",
+          "pts": 563376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-004",
+          "pts": 676048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-005",
+          "pts": 694704,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-006",
+          "pts": 713376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-007",
+          "pts": 863376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-008",
+          "pts": 882048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-009",
+          "pts": 1031376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-010",
+          "pts": 1050704,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-011",
+          "pts": 1424704,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-012",
+          "pts": 1443376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-013",
+          "pts": 1687376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-014",
+          "pts": 1706048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-015",
+          "pts": 1743376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-016",
+          "pts": 1762048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-017",
+          "pts": 1818048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-018",
+          "pts": 1836704,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-019",
+          "pts": 2136704,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-020",
+          "pts": 2155376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-021",
+          "pts": 2305376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-022",
+          "pts": 2324048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-023",
+          "pts": 2389376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-024",
+          "pts": 2623376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-025",
+          "pts": 2642048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-026",
+          "pts": 2792048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-027",
+          "pts": 2810704,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-028",
+          "pts": 3110048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-029",
+          "pts": 3129376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-030",
+          "pts": 3185376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-031",
+          "pts": 3204048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-032",
+          "pts": 3316048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-033",
+          "pts": 3335376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-034",
+          "pts": 3354048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-035",
+          "pts": 3372704,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-036",
+          "pts": 3391376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-037",
+          "pts": 3859376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-038",
+          "pts": 3878048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-039",
+          "pts": 3896704,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-040",
+          "pts": 3915376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-041",
+          "pts": 3990704,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-042",
+          "pts": 4009376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-043",
+          "pts": 4458704,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-044",
+          "pts": 4477376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-045",
+          "pts": 4552048,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-046",
+          "pts": 4571376,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-047",
+          "pts": 4775376,
+          "time_base": [
+            1,
+            16000
+          ]
+        }
+      ],
+      "operations": [
+        {
+          "index": 1,
+          "operation": "prepare",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 2,
+          "operation": "review-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review_plan",
+          "error_code": null
+        },
+        {
+          "index": 3,
+          "operation": "build-decision",
+          "exit_code": 2,
+          "status": "failed",
+          "phase": "build-decision",
+          "error_code": "invalid_input"
+        }
+      ],
+      "delivery_confirmed": false,
+      "rows": null,
+      "pages": null,
+      "usage": {
+        "model_responses": 9,
+        "outer_tool_calls": 8,
+        "observed_tokens": {
+          "input_tokens": 746402,
+          "output_tokens": 3922,
+          "total_tokens": 750324,
+          "cached_input_tokens": 704512,
+          "reasoning_output_tokens": 969
+        },
+        "complete_model_tokens": null,
+        "complete_coverage": false,
+        "partitions": [
+          {
+            "file": "usage-final-current-turn.json",
+            "scope": {
+              "invocation_id": "product-09",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a1309c-e96a-7af0-9500-df22c95f7452",
+              "started_at": 1791819030.1675503,
+              "ended_at": 1791819176.4655888,
+              "mode": "review",
+              "thread_ids": [
+                "01a12e2a-788c-7e40-93a3-e3d9cefbe002"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          }
+        ]
+      },
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-09"
+    },
+    {
+      "run_id": "product-10",
+      "sample_id": "BV1oS4y1a7Tr",
+      "title": "Lead Sheet",
+      "author": "鼓谱_wuye",
+      "url": "https://www.bilibili.com/video/BV1oS4y1a7Tr",
+      "layout_preflight": "upward_scroll",
+      "code_version": "96e524af93d2f161d33a9427868c5f2b978b6465",
+      "mode": "auto",
+      "entry": "url",
+      "outcome": "waiting",
+      "reason": "Actual25 raw sources reviewed including7 supplements. Abrupt viewport jump between consecutive PTS738672 and739200 at46.167/46.2seconds has no two common five-line systems in reviewed endpoints; no bridge from seven supplemental frames. v4 complete page boundary not established. No submit/PDF. Stopped before budget with unresolved continuity, not timeout or proof of universal unsupported input.",
+      "started_at": 1791819176.5744562,
+      "ended_at": 1791819513.664158,
+      "recorded_elapsed_seconds": 337.08969950675964,
+      "wall_timestamp_difference_seconds": 337.08970189094543,
+      "ledger_wall_clock_valid": true,
+      "budget_seconds": 1800,
+      "stopped_before_budget": true,
+      "generated_native": 55,
+      "generated_native_detail": 0,
+      "actual_unique_presentations": {
+        "native": 25,
+        "native_detail": 0,
+        "comparison": 0
+      },
+      "full_frame_analysis_attempts": 55,
+      "native_seek_attempts": 55,
+      "source_pts": [
+        {
+          "frame_id": "frame-000",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-001",
+          "pts": 148800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-002",
+          "pts": 160000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-003",
+          "pts": 308800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-004",
+          "pts": 320000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-005",
+          "pts": 491728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-006",
+          "pts": 502928,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-007",
+          "pts": 605872,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-008",
+          "pts": 617072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-009",
+          "pts": 628800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-010",
+          "pts": 640000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-011",
+          "pts": 731728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v2-frame-000",
+          "pts": 734400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v2-frame-001",
+          "pts": 737600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v3-frame-000",
+          "pts": 738128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v3-frame-001",
+          "pts": 738672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v3-frame-002",
+          "pts": 739200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v3-frame-003",
+          "pts": 739728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v2-frame-002",
+          "pts": 740272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-012",
+          "pts": 742928,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-013",
+          "pts": 788800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-014",
+          "pts": 800000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-015",
+          "pts": 948800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-016",
+          "pts": 960000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-017",
+          "pts": 1177072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-018",
+          "pts": 1188800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-019",
+          "pts": 1200000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-020",
+          "pts": 1268800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-021",
+          "pts": 1280000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-022",
+          "pts": 1348272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-023",
+          "pts": 1360000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-024",
+          "pts": 1457072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-025",
+          "pts": 1588272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-026",
+          "pts": 1600000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-027",
+          "pts": 1645328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-028",
+          "pts": 1657072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-029",
+          "pts": 1668272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-030",
+          "pts": 1680000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-031",
+          "pts": 1988272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-032",
+          "pts": 2000000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-033",
+          "pts": 2114128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-034",
+          "pts": 2125328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-035",
+          "pts": 2148272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-036",
+          "pts": 2160000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-037",
+          "pts": 2228272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-038",
+          "pts": 2240000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-039",
+          "pts": 2434128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-040",
+          "pts": 2445328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-041",
+          "pts": 2468272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-042",
+          "pts": 2479472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-043",
+          "pts": 2548272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-044",
+          "pts": 2559472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-045",
+          "pts": 2788272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-046",
+          "pts": 2799472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-047",
+          "pts": 2913072,
+          "time_base": [
+            1,
+            16000
+          ]
+        }
+      ],
+      "operations": [
+        {
+          "index": 1,
+          "operation": "prepare",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 2,
+          "operation": "review-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review_plan",
+          "error_code": null
+        },
+        {
+          "index": 3,
+          "operation": "supplement",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 4,
+          "operation": "supplement",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        }
+      ],
+      "delivery_confirmed": false,
+      "rows": null,
+      "pages": null,
+      "usage": {
+        "model_responses": 12,
+        "outer_tool_calls": 13,
+        "observed_tokens": {
+          "input_tokens": 1719249,
+          "output_tokens": 5439,
+          "total_tokens": 1724688,
+          "cached_input_tokens": 1646848,
+          "reasoning_output_tokens": 2184
+        },
+        "complete_model_tokens": null,
+        "complete_coverage": false,
+        "partitions": [
+          {
+            "file": "usage-final-current-turn.json",
+            "scope": {
+              "invocation_id": "product-10",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a1309c-e96a-7af0-9500-df22c95f7452",
+              "started_at": 1791819176.5744562,
+              "ended_at": 1791819513.664158,
+              "mode": "review",
+              "thread_ids": [
+                "01a12e2a-788c-7e40-93a3-e3d9cefbe002"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          }
+        ]
+      },
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/product-10"
+    },
+    {
+      "run_id": "standard-review-1",
+      "sample_id": "BV1rH4y1R7Rk",
+      "title": "可惜没如果，新版",
+      "author": "看哦爱随风原创鼓谱",
+      "url": "https://www.bilibili.com/video/BV1rH4y1R7Rk",
+      "layout_preflight": "upward_scroll",
+      "code_version": "96e524af93d2f161d33a9427868c5f2b978b6465",
+      "mode": "auto",
+      "entry": "url",
+      "outcome": "timeout",
+      "reason": "Cumulative 1800-second budget exhausted; Native content evidence passed after scope correction; navigation cap required supplement, which was acquired at PTS 192000 but final rebinding, export and delivery were not completed within the cumulative budget.",
+      "started_at": 1791794696.5059776,
+      "ended_at": 1791796541.175704,
+      "recorded_elapsed_seconds": 1815.0054869659998,
+      "wall_timestamp_difference_seconds": 1844.6697263717651,
+      "ledger_wall_clock_valid": false,
+      "budget_seconds": 1800,
+      "stopped_before_budget": false,
+      "generated_native": 49,
+      "generated_native_detail": 49,
+      "actual_unique_presentations": {
+        "native": 49,
+        "native_detail": 48,
+        "comparison": 1
+      },
+      "full_frame_analysis_attempts": 49,
+      "native_seek_attempts": 49,
+      "source_pts": [
+        {
+          "frame_id": "frame-000",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-001",
+          "pts": 19200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "v3-frame-000",
+          "pts": 192000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-002",
+          "pts": 374928,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-003",
+          "pts": 393600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-004",
+          "pts": 712000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-005",
+          "pts": 731200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-006",
+          "pts": 937072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-007",
+          "pts": 955728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-008",
+          "pts": 1180800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-009",
+          "pts": 1199472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-010",
+          "pts": 1761600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-011",
+          "pts": 1780272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-012",
+          "pts": 1967472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-013",
+          "pts": 1986128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-014",
+          "pts": 2098672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-015",
+          "pts": 2117328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-016",
+          "pts": 2285872,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-017",
+          "pts": 2304528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-018",
+          "pts": 2388800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-019",
+          "pts": 2417072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-020",
+          "pts": 2435728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-021",
+          "pts": 2529600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-022",
+          "pts": 2548272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-023",
+          "pts": 2642128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-024",
+          "pts": 2660800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-025",
+          "pts": 2735472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-026",
+          "pts": 2754672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-027",
+          "pts": 2810672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-028",
+          "pts": 2829328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-029",
+          "pts": 2904528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-030",
+          "pts": 2923200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-031",
+          "pts": 3054400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-032",
+          "pts": 3073072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-033",
+          "pts": 3091728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-034",
+          "pts": 3110400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-035",
+          "pts": 3166400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-036",
+          "pts": 3185072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-037",
+          "pts": 3297600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-038",
+          "pts": 3316272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-039",
+          "pts": 3428800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-040",
+          "pts": 3447472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-041",
+          "pts": 3747200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-042",
+          "pts": 3766400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-043",
+          "pts": 4140800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-044",
+          "pts": 4159472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-045",
+          "pts": 4178128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-046",
+          "pts": 4196800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-047",
+          "pts": 4777072,
+          "time_base": [
+            1,
+            16000
+          ]
+        }
+      ],
+      "operations": [
+        {
+          "index": 1,
+          "operation": "prepare",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 2,
+          "operation": "review-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review_plan",
+          "error_code": null
+        },
+        {
+          "index": 3,
+          "operation": "candidate-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "candidate_search",
+          "error_code": null
+        },
+        {
+          "index": 4,
+          "operation": "materialize",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 5,
+          "operation": "build-decision",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "decision_built",
+          "error_code": null
+        },
+        {
+          "index": 6,
+          "operation": "build-decision",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "decision_built",
+          "error_code": null
+        },
+        {
+          "index": 7,
+          "operation": "supplement",
+          "exit_code": 2,
+          "status": "failed",
+          "phase": "supplement",
+          "error_code": "invalid_decision"
+        },
+        {
+          "index": 8,
+          "operation": "supplement",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 9,
+          "operation": "materialize",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        }
+      ],
+      "delivery_confirmed": false,
+      "rows": null,
+      "pages": null,
+      "usage": {
+        "model_responses": 44,
+        "outer_tool_calls": 44,
+        "observed_tokens": {
+          "input_tokens": 5532748,
+          "output_tokens": 19561,
+          "total_tokens": 5552309,
+          "cached_input_tokens": 4016640,
+          "reasoning_output_tokens": 4475
+        },
+        "complete_model_tokens": null,
+        "complete_coverage": false,
+        "partitions": [
+          {
+            "file": "usage-final.json",
+            "scope": {
+              "invocation_id": "standard-review-1",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a12f29-d436-75f3-af70-8b107252cc2b",
+              "started_at": 1791794696.505978,
+              "ended_at": 1791796541.175704,
+              "mode": "review",
+              "thread_ids": [
+                "01a12e2a-788c-7e40-93a3-e3d9cefbe002"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          },
+          {
+            "file": "usage-interim-1.json",
+            "scope": {
+              "invocation_id": "standard-review-1",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a12f29-d436-75f3-af70-8b107252cc2b",
+              "started_at": 1791794696.505978,
+              "ended_at": 1791796154.470552,
+              "mode": "review",
+              "thread_ids": [
+                "01a12e2a-788c-7e40-93a3-e3d9cefbe002"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          }
+        ]
+      },
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/standard-review-1"
+    },
+    {
+      "run_id": "standard-review-2",
+      "sample_id": "BV1rH4y1R7Rk",
+      "title": "可惜没如果，新版",
+      "author": "看哦爱随风原创鼓谱",
+      "url": "https://www.bilibili.com/video/BV1rH4y1R7Rk",
+      "layout_preflight": "upward_scroll",
+      "code_version": "96e524af93d2f161d33a9427868c5f2b978b6465",
+      "mode": "auto",
+      "entry": "url",
+      "outcome": "timeout",
+      "reason": "Cumulative 1800-second budget exhausted; 服务容量中断后恢复时累计墙钟已超过1800秒；已取得48原帧并生成候选，实际查看6原图，尚未完成原生细节审阅、决定提交或PDF交付。计时不重置。",
+      "started_at": 1791796705.666877,
+      "ended_at": 1791800380.1722836,
+      "recorded_elapsed_seconds": 3595.0540899450025,
+      "wall_timestamp_difference_seconds": 3674.5054066181183,
+      "ledger_wall_clock_valid": false,
+      "budget_seconds": 1800,
+      "stopped_before_budget": false,
+      "generated_native": 48,
+      "generated_native_detail": 0,
+      "actual_unique_presentations": {
+        "native": 6,
+        "native_detail": 0,
+        "comparison": 0
+      },
+      "full_frame_analysis_attempts": 48,
+      "native_seek_attempts": 48,
+      "source_pts": [
+        {
+          "frame_id": "frame-000",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-001",
+          "pts": 19200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-002",
+          "pts": 374928,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-003",
+          "pts": 393600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-004",
+          "pts": 712000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-005",
+          "pts": 731200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-006",
+          "pts": 937072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-007",
+          "pts": 955728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-008",
+          "pts": 1180800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-009",
+          "pts": 1199472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-010",
+          "pts": 1761600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-011",
+          "pts": 1780272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-012",
+          "pts": 1967472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-013",
+          "pts": 1986128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-014",
+          "pts": 2098672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-015",
+          "pts": 2117328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-016",
+          "pts": 2285872,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-017",
+          "pts": 2304528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-018",
+          "pts": 2388800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-019",
+          "pts": 2417072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-020",
+          "pts": 2435728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-021",
+          "pts": 2529600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-022",
+          "pts": 2548272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-023",
+          "pts": 2642128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-024",
+          "pts": 2660800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-025",
+          "pts": 2735472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-026",
+          "pts": 2754672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-027",
+          "pts": 2810672,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-028",
+          "pts": 2829328,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-029",
+          "pts": 2904528,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-030",
+          "pts": 2923200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-031",
+          "pts": 3054400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-032",
+          "pts": 3073072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-033",
+          "pts": 3091728,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-034",
+          "pts": 3110400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-035",
+          "pts": 3166400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-036",
+          "pts": 3185072,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-037",
+          "pts": 3297600,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-038",
+          "pts": 3316272,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-039",
+          "pts": 3428800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-040",
+          "pts": 3447472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-041",
+          "pts": 3747200,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-042",
+          "pts": 3766400,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-043",
+          "pts": 4140800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-044",
+          "pts": 4159472,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-045",
+          "pts": 4178128,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-046",
+          "pts": 4196800,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "frame_id": "frame-047",
+          "pts": 4777072,
+          "time_base": [
+            1,
+            16000
+          ]
+        }
+      ],
+      "operations": [
+        {
+          "index": 1,
+          "operation": "prepare",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review",
+          "error_code": null
+        },
+        {
+          "index": 2,
+          "operation": "review-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "review_plan",
+          "error_code": null
+        },
+        {
+          "index": 3,
+          "operation": "candidate-plan",
+          "exit_code": 2,
+          "status": "waiting",
+          "phase": "candidate_search",
+          "error_code": null
+        }
+      ],
+      "delivery_confirmed": false,
+      "rows": null,
+      "pages": null,
+      "usage": {
+        "model_responses": 8,
+        "outer_tool_calls": 7,
+        "observed_tokens": {
+          "input_tokens": 1125759,
+          "output_tokens": 1481,
+          "total_tokens": 1127240,
+          "cached_input_tokens": 955392,
+          "reasoning_output_tokens": 275
+        },
+        "complete_model_tokens": null,
+        "complete_coverage": false,
+        "partitions": [
+          {
+            "file": "usage-final.json",
+            "scope": {
+              "invocation_id": "standard-review-2",
+              "root_thread_id": "01a12e2a-788c-7e40-93a3-e3d9cefbe002",
+              "root_turn_id": "01a12f29-d436-75f3-af70-8b107252cc2b",
+              "started_at": 1791796705.666877,
+              "ended_at": 1791800380.172284,
+              "mode": "review",
+              "thread_ids": [
+                "01a12ee0-6b4d-7233-ae4c-d70bbdd93b90"
+              ]
+            },
+            "coverage": {
+              "lifecycle_complete": false,
+              "model_calls_complete": false,
+              "tools_complete": false,
+              "images_complete": false,
+              "expected_response_ids": [],
+              "missing_reasons": [
+                "Desktop source lacks response-start and failed-call coverage",
+                "Nested tool calls and actual image presentations are not fully observable"
+              ]
+            }
+          }
+        ]
+      },
+      "evidence_directory": "/home/kenqia/bilibili-release-evidence/20261012/trials/standard-review-2"
+    }
+  ],
+  "observed_model_tokens_deduplicated_across_all_trials": 26916369
+}
