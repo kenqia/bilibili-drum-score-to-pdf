@@ -16,6 +16,54 @@ class MidiRequestTests(unittest.TestCase):
 
 @unittest.skipUnless(importlib.util.find_spec('mido'),'optional Mido absent')
 class MidiWorkflowTests(unittest.TestCase):
+    def test_measure_local_tempo_changes_survive_actual_readback_and_repeats(self):
+        from midi_workflow import request_conversion, submit_transcription, export_complete
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);pdf=root/'score.pdf';source=root/'original.png'
+            pdf.write_bytes(b'pdf fixture');source.write_bytes(b'source fixture');task=root/'midi'
+            request_conversion(task,pdf,[source],'完整MIDI',requested_midi=True)
+            score={'title':'Reviewed tempo changes','policy':{'default_velocity':96},
+                'measures':[
+                    {'id':'1','beats':'4','meter':[4,4],'tempo_bpm':120,
+                     'tempo_changes':[{'beat':'1/3','bpm':90},{'beat':'2','bpm':150}], 'events':[]},
+                    {'id':'2','beats':'3','meter':[3,4],'tempo_bpm':120,'events':[]}],
+                'play_order':['1','2','1','2'],'unresolved':[],'mapping_unresolved':[]}
+            review={'complete':True,'reviewed_measures':['1','2'],'viewed_sources':[str(source.resolve())],
+                    'viewed_pdf':True,'notes':'Controlled fixture, not real source acceptance'}
+            submit_transcription(task,score,review)
+            actual=export_complete(task)['readback']
+            self.assertEqual(actual['tempos'],[[0,500000],[160,666667],[960,400000],
+                [1920,500000],[3520,666667],[4320,400000],[5280,500000]])
+            self.assertEqual(actual['end_tick'],6720)
+            self.assertEqual(pdf.read_bytes(),b'pdf fixture')
+
+    def test_invalid_measure_tempo_changes_are_rejected_before_accepting_review(self):
+        from midi_workflow import request_conversion, submit_transcription, resume
+        invalid=[None, {}, [{'beat':'0','bpm':90}], [{'beat':'-1','bpm':90}],
+            [{'beat':'4','bpm':90}], [{'beat':'1/7','bpm':90}],
+            [{'beat':'2','bpm':90},{'beat':'1','bpm':100}],
+            [{'beat':'1','bpm':90},{'beat':'1','bpm':100}],
+            [{'beat':'1','bpm':True}], [{'beat':'1','bpm':0}],
+            [{'beat':'1','bpm':1001}], [{'beat':'1','bpm':'90'}],
+            [{'beat':'1','bpm':float('inf')}], [{'beat':'bad','bpm':90}],
+            [{'beat':'1'}], [{'beat':'1','bpm':90,'curve':'rit'}]]
+        for changes in invalid:
+            with self.subTest(changes=changes), tempfile.TemporaryDirectory() as d:
+                root=Path(d);pdf=root/'score.pdf';source=root/'original.png';task=root/'midi'
+                pdf.write_bytes(b'accepted PDF');source.write_bytes(b'original')
+                request_conversion(task,pdf,[source],'完整MIDI',requested_midi=True)
+                score={'title':'Invalid tempo','policy':{'default_velocity':96},
+                    'measures':[{'id':'1','beats':'4','meter':[4,4],'tempo_bpm':120,
+                                 'tempo_changes':changes,'events':[]}],
+                    'play_order':['1'],'unresolved':[],'mapping_unresolved':[]}
+                review={'complete':True,'reviewed_measures':['1'],'viewed_sources':[str(source.resolve())],
+                        'viewed_pdf':True,'notes':'Controlled fixture'}
+                with self.assertRaises(ValueError):
+                    submit_transcription(task,score,review)
+                self.assertEqual(resume(task)['status'],'needs_music_review')
+                self.assertNotIn('transcription',resume(task))
+                self.assertEqual(pdf.read_bytes(),b'accepted PDF')
+
     def test_reviewed_complete_score_exports_repeat_meter_tempo_and_exact_events(self):
         from midi_workflow import request_conversion, submit_transcription, export_complete, resume
         with tempfile.TemporaryDirectory() as d:

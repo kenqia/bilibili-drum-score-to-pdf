@@ -38,6 +38,10 @@ result = export_complete(midi_task)
 
 `title` 是实际谱名。`measures` 保留全曲写下的小节，`play_order` 是已审核的播放顺序。每个小节有唯一字符串 `id`、四分拍单位的 `beats`、`meter=[numerator, denominator]`、本小节生效的 `tempo_bpm`，以及全部声部的 `events`。每个事件含精确分数 `beat` 与 `duration`、GM note 35–81、velocity 1–127、非空 `voice` 和必要的 `notation` 审阅依据。`duration` 是明确政策下的播放释放时长，不会自动解析记谱符号。连音、连击、反复及声部合并都由 Agent 在音乐审核时解释；程序不替 Agent 选择。
 
+小节内有明确速度变化时，增加 `tempo_changes` 列表，例如 `[{"beat": "1/3", "bpm": 90}, {"beat": "2", "bpm": 150}]`。`beat` 是相对于本小节起点的精确四分拍分数。列表只能包含 `beat` 与 `bpm` 两个字段，拍点必须严格递增、大于 0 且小于本小节 `beats`。起点速度写入 `tempo_bpm`；下小节起点变化写入下小节的 `tempo_bpm`。BPM 必须是有限数值，范围为大于 0 且不超过 1000。拍点必须能在 480 PPQ 下精确表示。非法列表、重复或越界拍点、额外曲线字段及顶层 `tempo_changes` 均拒绝提交，不静默省略。
+
+展开 `play_order` 时，每次进入小节先使用该小节的 `tempo_bpm`，再按顺序应用局部变化；后续小节与反复继续对照当前实际速度。同速标记不重复生成 MIDI tempo 事件。实际字节回读核对展开后的全部速度拍点。未数字化的 `rit.` 或其他渐变需要 Agent 明确并审核播放政策；不能用空列表省略未解决的记号，应保留 `unresolved`。
+
 480 PPQ 可精确表示常见二分细分与三连音。不能精确落在该网格的事件拒绝导出，不自动四舍五入。小节拍数须和拍号一致；拾音或自由拍号要明确处理，当前小节结构不支持拍数与拍号不一致的拾音。未知反复、不支持的时值或含糊装饰音保留未决，不声称通用全谱覆盖。
 
 `unresolved` 和 `mapping_unresolved` 均为空才可在完整流程正常导出。底层 `midi_export.export_midi(experimental=True)` 的片段实验通道不能用于这个完整交付流程，`export_complete()` 不提供该参数。
