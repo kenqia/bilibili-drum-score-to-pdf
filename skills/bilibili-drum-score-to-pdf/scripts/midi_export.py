@@ -54,9 +54,35 @@ def export_midi(score, output, *, experimental=False):
         last_end[event['note']] = start + duration
     midi = mido.MidiFile(type=1, ticks_per_beat=480)
     meta = mido.MidiTrack()
-    meta.extend([mido.MetaMessage('set_tempo', tempo=mido.bpm2tempo(score['tempo_bpm'])),
-                 mido.MetaMessage('time_signature', numerator=4, denominator=4),
-                 mido.MetaMessage('end_of_track', time=end)])
+    metadata = []
+    tempos = score.get('tempo_changes', [{'beat': '0', 'bpm': tempo}])
+    meters = score.get('meter_changes', [{'beat': '0', 'numerator': 4, 'denominator': 4}])
+    for kind, changes in [('tempo', tempos), ('meter', meters)]:
+        if not changes or _tick(changes[0]['beat']) != 0:
+            raise ValueError('initial tempo and meter required at beat zero')
+        previous_tick = -1
+        for change in changes:
+            tick = _tick(change['beat'])
+            if tick <= previous_tick or tick >= end:
+                raise ValueError('metadata changes must be ordered within score')
+            previous_tick = tick
+            if kind == 'tempo':
+                bpm = change['bpm']
+                if type(bpm) not in (int, float) or not math.isfinite(bpm) or not 0 < bpm <= 1000:
+                    raise ValueError('invalid tempo change')
+                message = mido.MetaMessage('set_tempo', tempo=mido.bpm2tempo(bpm))
+            else:
+                numerator, denominator = change['numerator'], change['denominator']
+                if type(numerator) is not int or not 1 <= numerator <= 255 or type(denominator) is not int or denominator not in (1, 2, 4, 8, 16, 32, 64, 128):
+                    raise ValueError('invalid time signature')
+                message = mido.MetaMessage('time_signature', numerator=numerator, denominator=denominator)
+            metadata.append((tick, kind, message))
+    previous = 0
+    for tick, _, message in sorted(metadata, key=lambda entry: (entry[0], entry[1])):
+        message.time = tick - previous
+        meta.append(message)
+        previous = tick
+    meta.append(mido.MetaMessage('end_of_track', time=end - previous))
     drums = mido.MidiTrack()
     drums.append(mido.MetaMessage('track_name', name='GM percussion event export'))
     previous = 0
