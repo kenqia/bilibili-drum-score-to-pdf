@@ -11,6 +11,79 @@ class ScoreWorkflow(unittest.TestCase):
     setUp = fixtures.LocalScoreWorkflow.setUp
     tearDown = fixtures.LocalScoreWorkflow.tearDown
     select = fixtures.LocalScoreWorkflow.select
+    def test_late_notation_rejection_invalidates_approved_pdf_and_preserves_one_correction(self):
+        self.select()
+        original = workflow.load(self.task)
+        selections = [{**r, 'position': str(i)} for i, r in enumerate(original['regions'])]
+        review = {**original['source_review'], 'continuity': 'Complete fixture.', 'first_last': 'Start and ending.'}
+        workflow.assemble(self.task, original['title'], selections, review)
+        page = workflow.redraw_inputs(self.task)[0]
+        request = workflow.begin_redraw(self.task, page['id'], 'Fixture viewed.')
+        workflow.finish_redraw(self.task, page['id'], request['request'], self.root / 'score.png', 'host-imagegen', 'fixture')
+        workflow.review_redraw(self.task, page['id'], True, 'Accepted fixture.', [[0,0,640,65], [0,65,640,180]])
+        output = workflow.export(self.task)
+        workflow.review_pdf(self.task, [1], 'Fixture PDF viewed.')
+        old_pdf = (self.task / output['pdf']).read_bytes()
+        before = (self.task / 'record.json').read_bytes()
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.reject_accepted_redraw(self.task, page['id'], '   ')
+        self.assertEqual((self.task / 'record.json').read_bytes(), before)
+        rejected = workflow.reject_accepted_redraw(self.task, page['id'], 'Independent check: crossed hi-hat head replaced with kick oval.')
+        self.assertEqual(rejected['status'], 'needs_correction')
+        self.assertEqual(rejected['corrections_used'], 0)
+        self.assertEqual(len(rejected['attempts']), 1)
+        self.assertEqual(len(rejected['reviews']), 1)
+        self.assertEqual(rejected['rejections'][0]['output'], rejected['output'])
+        self.assertEqual(rejected['rejections'][0]['pdf']['status'], 'reviewed')
+        self.assertNotIn('output', workflow.load(self.task))
+        self.assertEqual((self.task / output['pdf']).read_bytes(), old_pdf)
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.export(self.task)
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.review_pdf(self.task, [1], 'Cannot approve rejected output.')
+        workflow.prepare(self.video, self.task)
+        workflow.assemble(self.task, original['title'], selections, review)
+        correction = workflow.begin_redraw(self.task, page['id'], 'Restore crossed head.', correction=True)
+        workflow.prepare(self.video, self.task)
+        workflow.assemble(self.task, original['title'], selections, review)
+        self.assertEqual(workflow.redraw_inputs(self.task)[0]['corrections_used'], 1)
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.begin_redraw(self.task, page['id'], 'Second correction forbidden.', correction=True)
+        workflow.finish_redraw(self.task, page['id'], correction['request'], self.root / 'score.png', 'host-imagegen', 'corrected-fixture')
+        workflow.review_redraw(self.task, page['id'], True, 'Corrected fixture.', [[0,0,640,65], [0,65,640,180]])
+        corrected = workflow.export(self.task)
+        self.assertNotEqual(corrected['pdf'], output['pdf'])
+        self.assertEqual(corrected['status'], 'needs_pdf_review')
+
+    def test_late_rejection_after_consumed_correction_exports_vector_without_budget_reset(self):
+        self.select()
+        page = workflow.redraw_inputs(self.task)[0]
+        request = workflow.begin_redraw(self.task, page['id'], 'Fixture viewed.')
+        workflow.finish_redraw(self.task, page['id'], request['request'], self.root / 'score.png', 'host-imagegen', 'fixture')
+        workflow.review_redraw(self.task, page['id'], False, 'Crossed head lost.')
+        correction = workflow.begin_redraw(self.task, page['id'], 'Restore crossed head.', correction=True)
+        workflow.finish_redraw(self.task, page['id'], correction['request'], self.root / 'score.png', 'host-imagegen', 'corrected-fixture')
+        workflow.review_redraw(self.task, page['id'], True, 'Corrected fixture accepted.', [[0,0,640,65], [0,65,640,180]])
+        old_output = workflow.export(self.task)
+        workflow.review_pdf(self.task, [1], 'Fixture PDF viewed.')
+        rejected = workflow.reject_accepted_redraw(self.task, page['id'], 'Independent check: dotted crossed head lost its dot.')
+        self.assertEqual(rejected['status'], 'vector')
+        self.assertEqual(rejected['corrections_used'], 1)
+        self.assertEqual(len(rejected['attempts']), 2)
+        self.assertEqual(len(rejected['reviews']), 2)
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.reject_accepted_redraw(self.task, page['id'], 'Duplicate rejection.')
+        workflow.prepare(self.video, self.task)
+        self.assertEqual(workflow.redraw_inputs(self.task)[0]['corrections_used'], 1)
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.begin_redraw(self.task, page['id'], 'Cannot reset budget.', correction=True)
+        output = workflow.export(self.task)
+        self.assertEqual(output['routes'], ['vector'])
+        self.assertNotEqual(output['pdf'], old_output['pdf'])
+        self.assertTrue((self.task / old_output['pdf']).exists())
+        self.assertEqual(output['status'], 'needs_pdf_review')
+        self.assertEqual(workflow.review_pdf(self.task, [1], 'Vector fixture checked.')['status'], 'reviewed')
+
     def test_same_selection_resume_keeps_consumed_correction_and_accepted_output(self):
         self.select()
         original = workflow.load(self.task)
