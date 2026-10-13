@@ -254,6 +254,28 @@ def review_redraw(task, identifier, accepted, notes, boundaries=None):
     return page
 
 
+def reject_accepted_redraw(task, identifier, notes):
+    """Withdraw an accepted image after an actual later notation error review.
+
+    Keep generated attempts, review history and exported files for audit. This
+    explicit action invalidates PDF approval without refunding correction calls.
+    """
+    record = load(task)
+    page = _page(record, identifier)
+    if page['status'] != 'accepted' or not isinstance(notes, str) or not notes.strip():
+        raise ReconstructionError('需要已接受重绘的具体后续错误审阅。')
+    rejection = {'notes': notes, 'output': page['output'],
+                 'corrections_used': page['corrections_used']}
+    if record.get('output'):
+        rejection['pdf'] = record.pop('output')
+    page.setdefault('rejections', []).append(rejection)
+    page['status'] = 'needs_correction' if page['corrections_used'] == 0 else 'vector'
+    page.pop('boundaries', None)
+    record['status'] = 'needs_redraw_review'
+    local._save(task, record)
+    return page
+
+
 def export(task):
     """Reflow complete generated systems and unchanged vector paths together."""
     record = load(task)
