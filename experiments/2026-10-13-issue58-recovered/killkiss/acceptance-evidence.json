@@ -4228,5 +4228,15 @@
   "failure_history": [
     "root independent review found m31 grace covered by watermark in86s capture; reacquired complete row at78s actualPTS1248000",
     "new page1 initial generated two open0 inrow36 into r/C; one real correction restored0"
-  ]
+  ],
+  "music_candidate": {
+    "written_measures": 135,
+    "candidate_events": 1410,
+    "unresolved_items": 55,
+    "status": "needs_music_review",
+    "reliable": false,
+    "gm_mapping": "all note=null with separate notation symbols; author legend unknown",
+    "export_rejection": "midi-export-rejection.json",
+    "pdf_hash_unchanged": true
+  }
 }

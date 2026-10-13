@@ -18,3 +18,6 @@ forced-vector：额外新URL任务，再下载和独立取帧9次，hash与本�
 
 
 独立复核暴露首版第31小节grace被源水印破坏。78秒新取帧实际PTS1248000完整行替换，原失败PDF和初次3真实回执保留在 initial-superseded-evidence.json。选行变更按正式API失效所有重绘，新真实生成3次；新page1开放0畸变，唯一真实定向修正后接受。因此实际总生图7次(旧3、新3、修正1)，不是把失效前3次漏记。新六页和31/67/75/134共12局部已实际查看。更新产物hash和路径以 acceptance-evidence.json 活动记录为准；此前README首版hash仅表示已被替代产物。独立root新复核仍待确认。
+
+
+已继续原来源逐小节音乐工作：whole-music-candidate.json 含135个written measure IDs、1410候选hit事件、分数拍点/时值、各声部tapes、rests/MMrest10–11和源行hash。15小节既有独立notation试验仅作为提示，与本次新原帧实际查看比对；其试验GM映射没有复用。全部GM note=null，区分原符头符号。55条复杂声部、符梁、附点或voice tape时长未决明确保留；并非1410已可靠确认事件。通过midi_workflow完整覆盖审阅提交后实际export_complete拒绝needs_music_review，PDF前后hash相同。该候选不能作为整曲MIDI成功验收，也不要求用户逐小节纠错。

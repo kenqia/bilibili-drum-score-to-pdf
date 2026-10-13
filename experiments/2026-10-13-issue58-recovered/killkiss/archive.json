@@ -2,13 +2,13 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 2484,
-      "sha256": "7b3f2cf8dd57d2594c0537933ceca3decba27e83d75ad34d87f56a8821406dbf"
+      "bytes": 3158,
+      "sha256": "b9358c279ddf721361f8f94ee3a334ac2b9aa05a4a777ba28a89094ceb8e653e"
     },
     {
       "path": "acceptance-evidence.json",
-      "bytes": 129090,
-      "sha256": "496ae1560049ef3928d3219f9b3a951baf649ed06c475459e5457138da7d038c"
+      "bytes": 129438,
+      "sha256": "b77f98172147e2457df6514357035d985a90f0c34035d730dbe2bbc9a1d333c3"
     },
     {
       "path": "assemble_fresh.py",
@@ -594,6 +594,16 @@
       "path": "initial-superseded-evidence.json",
       "bytes": 55675,
       "sha256": "e18d591f096595e3ac348ff8339fb6c3498516b2737bee8a5808008097566610"
+    },
+    {
+      "path": "midi-export-rejection.json",
+      "bytes": 375,
+      "sha256": "60971435ff6474c77f6a5c97fd9fa104c66f0724b1425766a37f56940a1649fc"
+    },
+    {
+      "path": "midi-task/midi-record.json",
+      "bytes": 472252,
+      "sha256": "768411ae3c8bb8083bd5f0176035107cc5e507861d640d44ec613e2cf11f7020"
     },
     {
       "path": "repair31.py",
@@ -1209,7 +1219,17 @@
       "path": "task-source-2d8305d7bff9441d99eb1a4fbc34c537/BV15crrYUEPA-p1.mp4",
       "bytes": 10042372,
       "sha256": "3137c5881ec628872d5424ed42991f9156a1808964616a8d391e376e9132c2eb"
+    },
+    {
+      "path": "transcribe_music.py",
+      "bytes": 12217,
+      "sha256": "c5ce03467df327d30b7cbabc3ac53f1842ea26da38fc2c87dd9dd3fc72a5fd2a"
+    },
+    {
+      "path": "whole-music-candidate.json",
+      "bytes": 427659,
+      "sha256": "f7c6adedd0c7778018b7cd2edc6ba0f5a2f2ea6d22dadcf205b0cd33b07e4605"
     }
   ],
-  "note": "Persistent live tasks and superseded failure outputs; old source hashes preserved;7realhostcalls; no MIDI pass"
+  "note": "Persistent live tasks and superseded failures;7realhostcalls;135measure1410event music candidate55unresolved;MIDIrejected"
 }
