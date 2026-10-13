@@ -32,6 +32,66 @@ class ScoreWorkflow(unittest.TestCase):
         with self.assertRaises(workflow.ReconstructionError):
             workflow.fail_redraw(self.task, page['id'], 'Late failure must not downgrade accepted output.')
 
+    def test_changed_selection_cannot_resume_old_accepted_redraw_after_interruption(self):
+        self.select()
+        original = workflow.load(self.task)
+        selections = [{**r, 'position': str(i)} for i, r in enumerate(original['regions'])]
+        review = {**original['source_review'], 'continuity': 'Complete fixture.', 'first_last': 'Start and ending.'}
+        workflow.assemble(self.task, original['title'], selections, review)
+        page = workflow.redraw_inputs(self.task)[0]
+        request = workflow.begin_redraw(self.task, page['id'], 'Fixture viewed.')
+        workflow.finish_redraw(self.task, page['id'], request['request'], self.root / 'score.png', 'host-imagegen', 'controlled-fixture')
+        workflow.review_redraw(self.task, page['id'], True, 'Accepted fixture.', [[0,0,640,65], [0,65,640,180]])
+        prior = (self.task / 'record.json').read_bytes()
+        invalid = [{**selections[0], 'bbox': [0,0,641,65]}, selections[1]]
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.assemble(self.task, original['title'], invalid, review)
+        self.assertEqual((self.task / 'record.json').read_bytes(), prior)
+        selections[0] = {**selections[0], 'bbox': [0,0,640,60]}
+        with patch.object(workflow.local, '_save', side_effect=RuntimeError('Interrupted first publication')):
+            with self.assertRaises(RuntimeError):
+                workflow.assemble(self.task, original['title'], selections, review)
+        self.assertEqual((self.task / 'record.json').read_bytes(), prior)
+        self.assertEqual(workflow.load(self.task)['redraw_pages'][0]['status'], 'accepted')
+        save = workflow.local._save
+        calls = 0
+        def interrupted_save(task, record):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError('Interrupted publication')
+            return save(task, record)
+        with patch.object(workflow.local, '_save', side_effect=interrupted_save):
+            try:
+                workflow.assemble(self.task, original['title'], selections, review)
+            except RuntimeError:
+                pass
+        resumed = workflow.load(self.task)
+        if resumed['regions'][0]['bbox'] == [0,0,640,60]:
+            self.assertEqual(resumed['redraw_pages'], [])
+        workflow.assemble(self.task, original['title'], selections, review)
+        refreshed = workflow.redraw_inputs(self.task)[0]
+        self.assertEqual(refreshed['status'], 'needs_generation')
+        self.assertNotEqual(refreshed['input']['sha256'], page['input']['sha256'])
+
+    def test_final_pdf_approval_rejects_corrupt_generated_or_navigation_artifacts(self):
+        for corrupt in ('generated', 'navigation'):
+            with self.subTest(artifact=corrupt):
+                self.task = self.root / corrupt
+                self.select()
+                probe = workflow.navigate(self.task, 0)
+                page = workflow.redraw_inputs(self.task)[0]
+                request = workflow.begin_redraw(self.task, page['id'], 'Fixture viewed.')
+                result = workflow.finish_redraw(self.task, page['id'], request['request'], self.root / 'score.png', 'host-imagegen', 'controlled-fixture')
+                workflow.review_redraw(self.task, page['id'], True, 'Accepted fixture.', [[0,0,640,65], [0,65,640,180]])
+                workflow.export(self.task)
+                before = (self.task / 'record.json').read_bytes()
+                reference = result['output'] if corrupt == 'generated' else probe
+                (self.task / reference['path']).write_bytes(b'broken')
+                with self.assertRaises(workflow.ReconstructionError):
+                    workflow.review_pdf(self.task, [1], 'Final PDF fixture viewed.')
+                self.assertEqual((self.task / 'record.json').read_bytes(), before)
+
     def test_mixed_routes_preserve_long_score_order_and_unresolved_sources_block_export(self):
         self.select()
         original = workflow.load(self.task)
