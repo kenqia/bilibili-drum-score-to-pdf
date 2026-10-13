@@ -1,12 +1,23 @@
 {
   "implementation": "d832de467ab836d0e94f3e5c49d33198aed78d02",
   "url": "https://www.bilibili.com/video/BV15crrYUEPA/",
-  "scope": "complete 135-measure PDF, MIDI pending",
   "model_cost": null,
+  "scope": "complete135measure PDF, MIDI pending",
   "whole_ticket_passed": false,
+  "actual_host_calls_total": 7,
+  "initial_host_calls": 3,
+  "reselected_host_calls": 3,
+  "correction_host_calls": 1,
   "routes": {
     "task": {
-      "source_sha256": "3137c5881ec628872d5424ed42991f9156a1808964616a8d391e376e9132c2eb",
+      "schema": "score-reconstruction/1",
+      "source": {
+        "path": "/home/kenqia/issue54-worktrees/killkiss/experiments/2026-10-13-issue58-recovered/killkiss/task-source-2d8305d7bff9441d99eb1a4fbc34c537/BV15crrYUEPA-p1.mp4",
+        "sha256": "3137c5881ec628872d5424ed42991f9156a1808964616a8d391e376e9132c2eb",
+        "width": 1920,
+        "height": 1080,
+        "duration": 208.966
+      },
       "captures": [
         {
           "id": "capture-0001",
@@ -115,12 +126,830 @@
             1,
             16000
           ]
+        },
+        {
+          "id": "capture-0010",
+          "path": "captures/capture-0010.png",
+          "sha256": "322c3143847df557ed45bb47a8c606072b9f8f5b8ef1b9a3fbc70032de028fbc",
+          "requested_seconds": 78,
+          "timestamp": 78.0,
+          "pts": 1248000,
+          "time_base": [
+            1,
+            16000
+          ]
         }
       ],
+      "regions": [
+        {
+          "capture": "capture-0001",
+          "bbox": [
+            35,
+            190,
+            1855,
+            394
+          ],
+          "kind": "header",
+          "position": "header",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0001.png",
+          "source_sha256": "d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 204,
+          "sha256": "da64c07e03dc1904cada4fccd717fdbd279e8a0d777614cabd23867a0ec413db"
+        },
+        {
+          "capture": "capture-0001",
+          "bbox": [
+            35,
+            394,
+            1855,
+            585
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-1",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0002.png",
+          "source_sha256": "d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "9112926cd498aa39897abad39bb1909c6a941507549cf4b67074a9b27bd0a6e9"
+        },
+        {
+          "capture": "capture-0001",
+          "bbox": [
+            35,
+            585,
+            1855,
+            776
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-6",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0003.png",
+          "source_sha256": "d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "a3181ef6db5fdfc4ca4d4c5212aa7474d5a644cf89d6905f997491b7fc7f5a4b"
+        },
+        {
+          "capture": "capture-0001",
+          "bbox": [
+            35,
+            776,
+            1855,
+            967
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-12",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0004.png",
+          "source_sha256": "d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "a22a207a94c68a2c11df14ef0ac5ebde75916ed8e9e8d03186fe6ad2fa5b8d27"
+        },
+        {
+          "capture": "capture-0002",
+          "bbox": [
+            35,
+            450,
+            1855,
+            641
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-16",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0005.png",
+          "source_sha256": "a38b3a0e4c954b244f151074c75baf8a6b882e1f561cfee3b9ad10599aa7306c",
+          "pts": 1056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "ab04c33bd7f191f2b58ef62693bcb9b57f3bdb409c0cb23c8ee3c36037c4df97"
+        },
+        {
+          "capture": "capture-0002",
+          "bbox": [
+            35,
+            642,
+            1855,
+            832
+          ],
+          "kind": "system",
+          "staff_top": 89.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-20",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0006.png",
+          "source_sha256": "a38b3a0e4c954b244f151074c75baf8a6b882e1f561cfee3b9ad10599aa7306c",
+          "pts": 1056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 190,
+          "sha256": "a077959eacd0a70804a0f07294cc5abbbbefc8238196d7b0c6d4bdabb5257958"
+        },
+        {
+          "capture": "capture-0002",
+          "bbox": [
+            35,
+            832,
+            1855,
+            1024
+          ],
+          "kind": "system",
+          "staff_top": 90.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-24",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0007.png",
+          "source_sha256": "a38b3a0e4c954b244f151074c75baf8a6b882e1f561cfee3b9ad10599aa7306c",
+          "pts": 1056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 192,
+          "sha256": "6863c263902850e40db7626268a591ac33ea962fd4ca6ba7881f35003be8a78b"
+        },
+        {
+          "capture": "capture-0010",
+          "bbox": [
+            35,
+            377,
+            1855,
+            568
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.625,
+          "position": "measures-start-28",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0008.png",
+          "source_sha256": "322c3143847df557ed45bb47a8c606072b9f8f5b8ef1b9a3fbc70032de028fbc",
+          "pts": 1248000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "a6b1de2a354f4d045f1036a5791099b25b15f728de7615acb78a972d83e0580c"
+        },
+        {
+          "capture": "capture-0003",
+          "bbox": [
+            35,
+            180,
+            1855,
+            371
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-32",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0009.png",
+          "source_sha256": "f328bf3967d31897f10a7bd914758d12e93e370e2d3e84fc0d05c1f2ae94e6a1",
+          "pts": 1376000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "f1d5adfcd9886b47ded7a684af973e74f5043a8148e97143582d173a480b5428"
+        },
+        {
+          "capture": "capture-0003",
+          "bbox": [
+            35,
+            371,
+            1855,
+            562
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-36",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0010.png",
+          "source_sha256": "f328bf3967d31897f10a7bd914758d12e93e370e2d3e84fc0d05c1f2ae94e6a1",
+          "pts": 1376000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "2d64c034c7f9db36cfa58117967b05678799d726aa62d107de191ab6d41d79cb"
+        },
+        {
+          "capture": "capture-0003",
+          "bbox": [
+            35,
+            562,
+            1855,
+            754
+          ],
+          "kind": "system",
+          "staff_top": 90.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-40",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0011.png",
+          "source_sha256": "f328bf3967d31897f10a7bd914758d12e93e370e2d3e84fc0d05c1f2ae94e6a1",
+          "pts": 1376000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 192,
+          "sha256": "88850322d837ea1204bb9532064c4e18bd9255a649940d0ee6135f6cb6ae0824"
+        },
+        {
+          "capture": "capture-0003",
+          "bbox": [
+            35,
+            754,
+            1855,
+            944
+          ],
+          "kind": "system",
+          "staff_top": 89.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-44",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0012.png",
+          "source_sha256": "f328bf3967d31897f10a7bd914758d12e93e370e2d3e84fc0d05c1f2ae94e6a1",
+          "pts": 1376000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 190,
+          "sha256": "d82667e817aa5f7b0f6e7ea372d91eed89b8a75a04d32a49f06c052736228fc0"
+        },
+        {
+          "capture": "capture-0004",
+          "bbox": [
+            35,
+            169,
+            1855,
+            360
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-48",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0013.png",
+          "source_sha256": "eb532ce2c2eb5c23050ff9161733cddc1350ebcbac28d3bf9587a510e13630ce",
+          "pts": 1712000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "344ea7bcf98618471bcab45a5c18f86372d93941b7ef845acaf563d0fa490426"
+        },
+        {
+          "capture": "capture-0004",
+          "bbox": [
+            35,
+            360,
+            1855,
+            551
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-52",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0014.png",
+          "source_sha256": "eb532ce2c2eb5c23050ff9161733cddc1350ebcbac28d3bf9587a510e13630ce",
+          "pts": 1712000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "5b1cfcee4ec7bf2f99fd146e854a7582595e92e463826c905b005e2d80e6b89b"
+        },
+        {
+          "capture": "capture-0004",
+          "bbox": [
+            35,
+            551,
+            1855,
+            742
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-56",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0015.png",
+          "source_sha256": "eb532ce2c2eb5c23050ff9161733cddc1350ebcbac28d3bf9587a510e13630ce",
+          "pts": 1712000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "742ead317a86a2d1574c72786509fe691be11aca79c7a51c1b84a09bee2abf02"
+        },
+        {
+          "capture": "capture-0004",
+          "bbox": [
+            35,
+            742,
+            1855,
+            933
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-60",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0016.png",
+          "source_sha256": "eb532ce2c2eb5c23050ff9161733cddc1350ebcbac28d3bf9587a510e13630ce",
+          "pts": 1712000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "534de2eb7ce1c3894117295be6a9f363b55a3a9655516169baa85a37e275cb5e"
+        },
+        {
+          "capture": "capture-0005",
+          "bbox": [
+            35,
+            158,
+            1855,
+            348
+          ],
+          "kind": "system",
+          "staff_top": 89.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-64",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0017.png",
+          "source_sha256": "feb4fe003db23a4184df69673066bebabc19ba0eb1af6f705cd6ce3d8d7cce79",
+          "pts": 2064000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 190,
+          "sha256": "11d77386c5cfcdeaf15ab2ec112ba419d660fda9c4c3b0b70c74fc3eda6019c5"
+        },
+        {
+          "capture": "capture-0005",
+          "bbox": [
+            35,
+            348,
+            1855,
+            540
+          ],
+          "kind": "system",
+          "staff_top": 90.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-68",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0018.png",
+          "source_sha256": "feb4fe003db23a4184df69673066bebabc19ba0eb1af6f705cd6ce3d8d7cce79",
+          "pts": 2064000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 192,
+          "sha256": "19dcd0ca4b2f2eedcea9e3506b206bc2b7723af3647b976109f1ff4c3eccfac2"
+        },
+        {
+          "capture": "capture-0005",
+          "bbox": [
+            35,
+            540,
+            1855,
+            731
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-72",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0019.png",
+          "source_sha256": "feb4fe003db23a4184df69673066bebabc19ba0eb1af6f705cd6ce3d8d7cce79",
+          "pts": 2064000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "655f5d7496ddc2f4b7a6782c7c8dba42a7cb49ae6cd6af4a00ae23c34b737601"
+        },
+        {
+          "capture": "capture-0005",
+          "bbox": [
+            35,
+            731,
+            1855,
+            922
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-76",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0020.png",
+          "source_sha256": "feb4fe003db23a4184df69673066bebabc19ba0eb1af6f705cd6ce3d8d7cce79",
+          "pts": 2064000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "0d018d8d22b8eb7348903e2b10582cf9cf4395fae2a585f9062826741e38c31b"
+        },
+        {
+          "capture": "capture-0009",
+          "bbox": [
+            35,
+            275,
+            1855,
+            466
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-80",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0021.png",
+          "source_sha256": "40614a2a3062c7c53aaf616f86beed0e76e30a2ed24e055e8fac7ddc350d10e4",
+          "pts": 2240000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "e397bc74d0f3e56cdeaad9ce441eeab39ea3f791783f7baeb8506537f46f01b5"
+        },
+        {
+          "capture": "capture-0006",
+          "bbox": [
+            35,
+            78,
+            1855,
+            270
+          ],
+          "kind": "system",
+          "staff_top": 90.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-84",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0022.png",
+          "source_sha256": "26389cea9292a21763ed223346d04619614da29edd2b560ae7313eb79d506a65",
+          "pts": 2416000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 192,
+          "sha256": "8c82c02ac6f2dade141f20e659f088f5f22d5740d8e1c51d272352d38be8de39"
+        },
+        {
+          "capture": "capture-0006",
+          "bbox": [
+            35,
+            270,
+            1855,
+            460
+          ],
+          "kind": "system",
+          "staff_top": 89.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-88",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0023.png",
+          "source_sha256": "26389cea9292a21763ed223346d04619614da29edd2b560ae7313eb79d506a65",
+          "pts": 2416000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 190,
+          "sha256": "65193a7cd2a5f7a080cd9ddc70ba5895e14756b5dcb2363269819e2bc224853e"
+        },
+        {
+          "capture": "capture-0006",
+          "bbox": [
+            35,
+            461,
+            1855,
+            652
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-92",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0024.png",
+          "source_sha256": "26389cea9292a21763ed223346d04619614da29edd2b560ae7313eb79d506a65",
+          "pts": 2416000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "b299d5d2e589dcd14a735aa7fb6a32addc32647838ef3461cb9a35a8e31f0e60"
+        },
+        {
+          "capture": "capture-0006",
+          "bbox": [
+            35,
+            652,
+            1855,
+            843
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-96",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0025.png",
+          "source_sha256": "26389cea9292a21763ed223346d04619614da29edd2b560ae7313eb79d506a65",
+          "pts": 2416000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "39e8323ad8d1cef66c6293c69395567499483b9392908b579b9681d831faaf32"
+        },
+        {
+          "capture": "capture-0006",
+          "bbox": [
+            35,
+            843,
+            990,
+            1034
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-100",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0026.png",
+          "source_sha256": "26389cea9292a21763ed223346d04619614da29edd2b560ae7313eb79d506a65",
+          "pts": 2416000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 955,
+          "height": 191,
+          "sha256": "5c658a57e813f11dfacba370eda308f55222b0bacaf8f9e014d83fffd2f2f4c5"
+        },
+        {
+          "capture": "capture-0007",
+          "bbox": [
+            35,
+            129,
+            1855,
+            320
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-102",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0027.png",
+          "source_sha256": "f78367a347fb71d05e42a3e69b3adc362ca66c5e6a9ac71105750d263b38c979",
+          "pts": 2736000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "9554eddc9565fde455ed7d432fdb0e4ec889fa4e595782f238429127dfe89b87"
+        },
+        {
+          "capture": "capture-0007",
+          "bbox": [
+            35,
+            320,
+            1855,
+            511
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-106",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0028.png",
+          "source_sha256": "f78367a347fb71d05e42a3e69b3adc362ca66c5e6a9ac71105750d263b38c979",
+          "pts": 2736000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "834050511f31e38539df0fb3151c89a971663fb42d2794f32cbd80ae749029ee"
+        },
+        {
+          "capture": "capture-0007",
+          "bbox": [
+            35,
+            511,
+            1855,
+            702
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-110",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0029.png",
+          "source_sha256": "f78367a347fb71d05e42a3e69b3adc362ca66c5e6a9ac71105750d263b38c979",
+          "pts": 2736000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "4c159bb0675d5184bd86a569430c1eee107b49ca245f647655f0a47775f4db95"
+        },
+        {
+          "capture": "capture-0007",
+          "bbox": [
+            35,
+            702,
+            1855,
+            894
+          ],
+          "kind": "system",
+          "staff_top": 90.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-114",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0030.png",
+          "source_sha256": "f78367a347fb71d05e42a3e69b3adc362ca66c5e6a9ac71105750d263b38c979",
+          "pts": 2736000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 192,
+          "sha256": "42aa891b0e0bbd0457121877462c8e6e1b787b88447a93589d1616578e73ff60"
+        },
+        {
+          "capture": "capture-0008",
+          "bbox": [
+            35,
+            118,
+            1855,
+            308
+          ],
+          "kind": "system",
+          "staff_top": 89.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-118",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0031.png",
+          "source_sha256": "faf430cfa2e3d299cdd51a7639cc5646b33d816c1174878e8d031dff2d4dadef",
+          "pts": 3056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 190,
+          "sha256": "1044bde88b116a570086d97f25b03d7662c355352c13877c9a33b24f158592d5"
+        },
+        {
+          "capture": "capture-0008",
+          "bbox": [
+            35,
+            309,
+            1855,
+            500
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-122",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0032.png",
+          "source_sha256": "faf430cfa2e3d299cdd51a7639cc5646b33d816c1174878e8d031dff2d4dadef",
+          "pts": 3056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "99971c32055d7f0f8c0abf1d3fc9c7ea4f3d74e6531e0ca10e524ad416b43f41"
+        },
+        {
+          "capture": "capture-0008",
+          "bbox": [
+            35,
+            500,
+            1855,
+            691
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-126",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0033.png",
+          "source_sha256": "faf430cfa2e3d299cdd51a7639cc5646b33d816c1174878e8d031dff2d4dadef",
+          "pts": 3056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "2821f045a159236e98779ac5539ecef1a9bdca6062ee61b3cd68b66b9d9335ca"
+        },
+        {
+          "capture": "capture-0008",
+          "bbox": [
+            35,
+            691,
+            1855,
+            882
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-130",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0034.png",
+          "source_sha256": "faf430cfa2e3d299cdd51a7639cc5646b33d816c1174878e8d031dff2d4dadef",
+          "pts": 3056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "935a46c629b48fd3967a9e88b899f276b53f56bd1e9101a91d571c5d65c8bb1b"
+        },
+        {
+          "capture": "capture-0008",
+          "bbox": [
+            35,
+            882,
+            1010,
+            1073
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-134",
+          "path": "regions/e451fb66df374c31be26251c76e18d64/region-0035.png",
+          "source_sha256": "faf430cfa2e3d299cdd51a7639cc5646b33d816c1174878e8d031dff2d4dadef",
+          "pts": 3056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 975,
+          "height": 191,
+          "sha256": "e8732fe07ffbfa46dcec389f5428d43b5d303b6c3e7aa9534b73087ae287fa8e"
+        }
+      ],
+      "status": "reviewed",
       "metrics": {
-        "seek_count": 19,
-        "decode_elapsed": 5.168674007000163,
-        "decoded_reported_frames": 38,
+        "seek_count": 21,
+        "decode_elapsed": 6.0449286049999955,
+        "decoded_reported_frames": 42,
         "peak_temp_disk": 492576,
         "presented_capture_ids": [
           "capture-0001",
@@ -131,437 +960,208 @@
           "capture-0006",
           "capture-0007",
           "capture-0008",
-          "capture-0009"
+          "capture-0009",
+          "capture-0010"
         ],
         "model_cost": null,
-        "navigation_probes": 10,
-        "native_retained": 9,
-        "presented_images": 19
+        "navigation_probes": 11,
+        "native_retained": 10,
+        "presented_images": 20
       },
-      "pdf": {
-        "pdf": "exports/b0b2197059eb4d608cc79b77b7ecf87f/KiLLKiSS.pdf",
-        "sha256": "6cd32f8022d5d167fb2819729f5ca6f40761413d8b748aa95c9db0725cdd80dc",
-        "page_count": 3,
-        "placements": [
-          {
-            "page": 1,
-            "region": 0,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              755.4554718093394,
-              571.2755905511812,
-              817.8897637795277
-            ]
-          },
-          {
-            "page": 1,
-            "region": 1,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              684.9686915047141,
-              571.2755905511812,
-              745.451911850834
-            ]
-          },
-          {
-            "page": 1,
-            "region": 2,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              617.4085186361914,
-              571.2755905511812,
-              674.9651315462087
-            ]
-          },
-          {
-            "page": 1,
-            "region": 3,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              549.8483457676687,
-              571.2755905511812,
-              607.404958677686
-            ]
-          },
-          {
-            "page": 1,
-            "region": 4,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              482.28817289914593,
-              571.2755905511812,
-              539.8447858091632
-            ]
-          },
-          {
-            "page": 1,
-            "region": 5,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              414.7280000306232,
-              571.2755905511812,
-              472.2846129406405
-            ]
-          },
-          {
-            "page": 1,
-            "region": 6,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              346.6800592560834,
-              571.2755905511812,
-              404.7244400721178
-            ]
-          },
-          {
-            "page": 1,
-            "region": 7,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              289.8507803199368,
-              571.2755905511812,
-              336.67649929757795
-            ]
-          },
-          {
-            "page": 1,
-            "region": 8,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              222.2906074514141,
-              571.2755905511812,
-              279.84722036143137
-            ]
-          },
-          {
-            "page": 1,
-            "region": 9,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              154.24266667687428,
-              571.2755905511812,
-              212.28704749290864
-            ]
-          },
-          {
-            "page": 1,
-            "region": 10,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              87.17026171436865,
-              571.2755905511812,
-              144.23910671836882
-            ]
-          },
-          {
-            "page": 1,
-            "region": 11,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              23.999999999999794,
-              571.2755905511812,
-              77.1667017558632
-            ]
-          },
-          {
-            "page": 2,
-            "region": 12,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              760.6167368613808,
-              571.2755905511812,
-              817.8897637795277
-            ]
-          },
-          {
-            "page": 2,
-            "region": 13,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              686.7103066499515,
-              571.2755905511812,
-              744.4728466186808
-            ]
-          },
-          {
-            "page": 2,
-            "region": 14,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              613.2933894891046,
-              571.2755905511812,
-              670.5664164072515
-            ]
-          },
-          {
-            "page": 2,
-            "region": 15,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              539.3869592776753,
-              571.2755905511812,
-              597.1494992464046
-            ]
-          },
-          {
-            "page": 2,
-            "region": 16,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              465.97004211682844,
-              571.2755905511812,
-              523.2430690349753
-            ]
-          },
-          {
-            "page": 2,
-            "region": 17,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              392.0636119053991,
-              571.2755905511812,
-              449.8261518741284
-            ]
-          },
-          {
-            "page": 2,
-            "region": 18,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              318.1571816939698,
-              571.2755905511812,
-              375.9197216626991
-            ]
-          },
-          {
-            "page": 2,
-            "region": 19,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              244.7402645331229,
-              571.2755905511812,
-              302.01329145126977
-            ]
-          },
-          {
-            "page": 2,
-            "region": 20,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              171.32334737227603,
-              571.2755905511812,
-              228.59637429042292
-            ]
-          },
-          {
-            "page": 2,
-            "region": 21,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              97.41691716084675,
-              571.2755905511812,
-              155.17945712957606
-            ]
-          },
-          {
-            "page": 2,
-            "region": 22,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              23.9999999999999,
-              571.2755905511812,
-              81.27302691814677
-            ]
-          },
-          {
-            "page": 3,
-            "region": 23,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              761.5957629625457,
-              571.2755905511812,
-              817.8897637795277
-            ]
-          },
-          {
-            "page": 3,
-            "region": 24,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              694.2490135683527,
-              571.2755905511812,
-              751.9310166855722
-            ]
-          },
-          {
-            "page": 3,
-            "region": 25,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              627.3380927464551,
-              311.16933460240546,
-              684.5842672913791
-            ]
-          },
-          {
-            "page": 3,
-            "region": 26,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              559.991343352262,
-              571.2755905511812,
-              617.6733464694817
-            ]
-          },
-          {
-            "page": 3,
-            "region": 27,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              493.11355333300565,
-              571.2755905511812,
-              550.3265970752885
-            ]
-          },
-          {
-            "page": 3,
-            "region": 28,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              426.2357633137493,
-              571.2755905511812,
-              483.4488070560322
-            ]
-          },
-          {
-            "page": 3,
-            "region": 29,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              358.88901391955625,
-              571.2755905511812,
-              416.57101703677586
-            ]
-          },
-          {
-            "page": 3,
-            "region": 30,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              292.01122390029985,
-              571.2755905511812,
-              349.22426764258273
-            ]
-          },
-          {
-            "page": 3,
-            "region": 31,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              224.66447450610679,
-              571.2755905511812,
-              282.3464776233264
-            ]
-          },
-          {
-            "page": 3,
-            "region": 32,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              157.78668448685042,
-              571.2755905511812,
-              214.99972822913327
-            ]
-          },
-          {
-            "page": 3,
-            "region": 33,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              90.43993509265732,
-              571.2755905511812,
-              148.12193820987693
-            ]
-          },
-          {
-            "page": 3,
-            "region": 34,
-            "scale": 0.3007008739292204,
-            "bbox": [
-              24,
-              24.000000000000064,
-              317.1833520809899,
-              80.77518881568382
-            ]
-          }
-        ],
-        "routes": [
-          "imagegen",
-          "imagegen",
-          "imagegen"
-        ],
-        "method": "reviewed_host_images_and_vector_fallback",
-        "layout_version": 2,
-        "status": "needs_pdf_review",
-        "vector": {
-          "path": "exports/b0b2197059eb4d608cc79b77b7ecf87f/materials.json",
-          "sha256": "38360e737e624111cdeba93ac180bd245a6851f26dac61e41c14786274bfb57b"
+      "origin": {
+        "kind": "bilibili",
+        "bvid": "BV15crrYUEPA",
+        "page": 1,
+        "url": "https://www.bilibili.com/video/BV15crrYUEPA?p=1",
+        "authenticated": false,
+        "backend": "yt-dlp",
+        "backend_version": "2026.08.19",
+        "anonymous": true,
+        "single_file_fallback": false,
+        "actual_video": {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "30/1"
+        },
+        "format_attempts": 1,
+        "backup_used": false,
+        "selected_format": {
+          "format_id": "30080",
+          "width": 1920,
+          "height": 1080,
+          "fps": 30.0,
+          "quality": 80
         }
       },
-      "source_review": {
-        "viewed_captures": [
-          "capture-0001",
-          "capture-0002",
-          "capture-0003",
-          "capture-0004",
-          "capture-0005",
-          "capture-0006",
-          "capture-0007",
-          "capture-0008",
-          "capture-0009"
-        ],
-        "complete": true,
-        "unresolved": [],
-        "scope": "whole score 135 measures, 34 systems",
-        "continuity": "Printed starts 1,6,12,16 then four-measure rows; rest10–11 accounts jump6→12; 100–101 short row then102; overlap confirmed44,60,76,84,88,92,118; omitted incomplete rows only after obtaining full new source.",
-        "first_last": "0秒完整标题和第1行；191秒完整134–135结尾，208.5秒仍此结尾下白区无新谱。",
-        "notes": "实际看图核对 KiLLKiSS / Ave Mujica / 陈老师，200BPM 4/4，34完整行135小节，10–11多小节休止，67三连音，75装饰音，100短行和134–135短末行。高亮保留音符形状，不推断未知镲鼓件。"
-      },
-      "pages": [
+      "probes": [
+        {
+          "id": "probe-e8bd0f0a474c44e7a568192ec153dff1",
+          "path": "navigation/probe-e8bd0f0a474c44e7a568192ec153dff1.png",
+          "sha256": "93acda2129539fb64a33641057382786ef0278442d8551aae9b66bc2fe74152f",
+          "requested_seconds": 0,
+          "requested_width": 480,
+          "width": 480,
+          "height": 270,
+          "timestamp": 0.0,
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "id": "probe-68983434f37f4c21858004d949f9a054",
+          "path": "navigation/probe-68983434f37f4c21858004d949f9a054.png",
+          "sha256": "19c23b397b14d064a89c268bf6c99e8332cf88097c9ce0cdaf8b15353d49bed6",
+          "requested_seconds": 66,
+          "requested_width": 480,
+          "width": 480,
+          "height": 270,
+          "timestamp": 66.0,
+          "pts": 1056000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "id": "probe-8ec7d13120ab4b619233dfe395bc7bb1",
+          "path": "navigation/probe-8ec7d13120ab4b619233dfe395bc7bb1.png",
+          "sha256": "992e2a6bd70b6274bb6239a0b6195eff0296a9451ba25d242178f79c43b7fb37",
+          "requested_seconds": 86,
+          "requested_width": 480,
+          "width": 480,
+          "height": 270,
+          "timestamp": 86.0,
+          "pts": 1376000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "id": "probe-e50e7d3b84c340b8b3528e293bc5b4ed",
+          "path": "navigation/probe-e50e7d3b84c340b8b3528e293bc5b4ed.png",
+          "sha256": "c856c4ed482c0aa29a5c97f439ca4c79ef283afcff23087f7b264d21d20503b0",
+          "requested_seconds": 107,
+          "requested_width": 480,
+          "width": 480,
+          "height": 270,
+          "timestamp": 107.0,
+          "pts": 1712000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "id": "probe-b808bc9173a24ec6920b7393efe810e2",
+          "path": "navigation/probe-b808bc9173a24ec6920b7393efe810e2.png",
+          "sha256": "fad30212bd7d7f47efaa7d0157b609fa261920ac415192d3040b87c18662573c",
+          "requested_seconds": 129,
+          "requested_width": 480,
+          "width": 480,
+          "height": 270,
+          "timestamp": 129.0,
+          "pts": 2064000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "id": "probe-1270a6f94e0b4ae0b113e6143a2ef4bb",
+          "path": "navigation/probe-1270a6f94e0b4ae0b113e6143a2ef4bb.png",
+          "sha256": "e31c2300ec1cc835d5938a07abb2a35f65d172b877c4754c0eb7df79c63a3440",
+          "requested_seconds": 151,
+          "requested_width": 480,
+          "width": 480,
+          "height": 270,
+          "timestamp": 151.0,
+          "pts": 2416000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "id": "probe-79a896dec5444c4a85609b506551bbe9",
+          "path": "navigation/probe-79a896dec5444c4a85609b506551bbe9.png",
+          "sha256": "2a7d28804ede888f9561f806b8335d0bbb7a1c7d9541e98d77d18df09d91b2c9",
+          "requested_seconds": 171,
+          "requested_width": 480,
+          "width": 480,
+          "height": 270,
+          "timestamp": 171.0,
+          "pts": 2736000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "id": "probe-964325699495418bbedc9569a0ff6102",
+          "path": "navigation/probe-964325699495418bbedc9569a0ff6102.png",
+          "sha256": "b2e16c460c81cc4c9f480bb092e1a2ce81226bbbd138289e93e4a90836f7bd3b",
+          "requested_seconds": 191,
+          "requested_width": 480,
+          "width": 480,
+          "height": 270,
+          "timestamp": 191.0,
+          "pts": 3056000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "id": "probe-fc3a0e72a93e4ef291bde414415a0d5a",
+          "path": "navigation/probe-fc3a0e72a93e4ef291bde414415a0d5a.png",
+          "sha256": "ab60d641631d78fdb129044c9b03aeb1f2d6fc50eb250571e9a1665053ddccf0",
+          "requested_seconds": 140,
+          "requested_width": 480,
+          "width": 480,
+          "height": 270,
+          "timestamp": 140.0,
+          "pts": 2240000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "id": "probe-af57fab924f84648ba00a99870d5eb30",
+          "path": "navigation/probe-af57fab924f84648ba00a99870d5eb30.png",
+          "sha256": "fd50bec104594c8c5a46896f214330bea3b84d300473be4e9433565460055370",
+          "requested_seconds": 208.5,
+          "requested_width": 480,
+          "width": 480,
+          "height": 270,
+          "timestamp": 208.5,
+          "pts": 3336000,
+          "time_base": [
+            1,
+            16000
+          ]
+        },
+        {
+          "id": "probe-51db661d9e2a46bd9d4f8b99908cf2d4",
+          "path": "navigation/probe-51db661d9e2a46bd9d4f8b99908cf2d4.png",
+          "sha256": "16205b78223e456deccfccc629976a4db20e0addab0dce3cd5b38201c03340d9",
+          "requested_seconds": 78,
+          "requested_width": 480,
+          "width": 480,
+          "height": 270,
+          "timestamp": 78.0,
+          "pts": 1248000,
+          "time_base": [
+            1,
+            16000
+          ]
+        }
+      ],
+      "redraw_pages": [
         {
           "id": "page-1",
           "regions": [
@@ -579,8 +1179,8 @@
             11
           ],
           "input": {
-            "path": "redraw/9c504a1634ed4f4c841ada37963d3e80/input-1.png",
-            "sha256": "47e378e1adae575aa2b3f5dafc826e0a7c2fc3c91386dd1dbb14b8fee024f19a",
+            "path": "redraw/19769331be7c422f9315560215cda438/input-1.png",
+            "sha256": "ccfaff40e379f3f858046a709fa731b68925b0b4fdad4ad8fb73462b3847c0ab",
             "inputs": [
               "da64c07e03dc1904cada4fccd717fdbd279e8a0d777614cabd23867a0ec413db",
               "9112926cd498aa39897abad39bb1909c6a941507549cf4b67074a9b27bd0a6e9",
@@ -589,7 +1189,7 @@
               "ab04c33bd7f191f2b58ef62693bcb9b57f3bdb409c0cb23c8ee3c36037c4df97",
               "a077959eacd0a70804a0f07294cc5abbbbefc8238196d7b0c6d4bdabb5257958",
               "6863c263902850e40db7626268a591ac33ea962fd4ca6ba7881f35003be8a78b",
-              "a1e1cac714a6ca02eeada9a625809cb394b8ff32b77ffe1b97c0363d1b673748",
+              "a6b1de2a354f4d045f1036a5791099b25b15f728de7615acb78a972d83e0580c",
               "f1d5adfcd9886b47ded7a684af973e74f5043a8148e97143582d173a480b5428",
               "2d64c034c7f9db36cfa58117967b05678799d726aa62d107de191ab6d41d79cb",
               "88850322d837ea1204bb9532064c4e18bd9255a649940d0ee6135f6cb6ae0824",
@@ -643,138 +1243,159 @@
               0,
               1350,
               1820,
-              1510
+              1541
             ],
             [
               0,
-              1510,
+              1541,
               1820,
-              1701
+              1732
             ],
             [
               0,
-              1701,
+              1732,
               1820,
-              1892
+              1923
             ],
             [
               0,
-              1892,
+              1923,
               1820,
-              2084
+              2115
             ],
             [
               0,
-              2084,
+              2115,
               1820,
-              2274
+              2305
             ]
           ],
           "status": "accepted",
-          "corrections_used": 0,
+          "corrections_used": 1,
           "attempts": [
             {
-              "request": "82ff86ae7fcf4bf6982a6250ad531bc0",
+              "request": "97c4c0dba24142708a6bcbc3ad9d648d",
               "kind": "initial",
-              "input_sha256": "47e378e1adae575aa2b3f5dafc826e0a7c2fc3c91386dd1dbb14b8fee024f19a",
-              "notes": "实际查看粗拼页：标题+11行，1至47；完整10–11休止与高亮音符保留。",
+              "input_sha256": "ccfaff40e379f3f858046a709fa731b68925b0b4fdad4ad8fb73462b3847c0ab",
+              "notes": "实际已view本次新78秒28行与原粗拼：31grace避开水印；保留全11系统音乐。",
               "status": "returned",
               "tool": "host-imagegen",
               "receipt": {
-                "invocation": "functions.exec real image_gen 52.4sec",
-                "output": "exec-1b475607-74fe-4c8a-8bb3-334690ee83ac.png"
+                "invocation": "functions.exec real image_gen yielded121sec andwait",
+                "output": "exec-f983d53a-4c3e-44f0-91eb-df087853f72e.png"
               },
               "output": {
-                "path": "redraw/82ff86ae7fcf4bf6982a6250ad531bc0.png",
-                "sha256": "57ac3448abf9614523d282f4f12c0476c590fce23eb8f133d459efd96380b280",
-                "input_sha256": "47e378e1adae575aa2b3f5dafc826e0a7c2fc3c91386dd1dbb14b8fee024f19a"
+                "path": "redraw/97c4c0dba24142708a6bcbc3ad9d648d.png",
+                "sha256": "d9a4d6389457fad73acf08157ea6529cc3c937d540e36d5648d46d1d8fc777d1",
+                "input_sha256": "ccfaff40e379f3f858046a709fa731b68925b0b4fdad4ad8fb73462b3847c0ab"
+              }
+            },
+            {
+              "request": "11ebd0ff58174e239c0be3d87ec51193",
+              "kind": "correction",
+              "input_sha256": "ccfaff40e379f3f858046a709fa731b68925b0b4fdad4ad8fb73462b3847c0ab",
+              "notes": "实际看新生成图，36行open0两个误成r/C；唯一定向纠正保持所有音乐不变。",
+              "status": "returned",
+              "tool": "host-imagegen",
+              "receipt": {
+                "invocation": "functions.exec real correction image_gen47.4sec",
+                "output": "exec-5c721f47-f18d-456a-8ef6-00a60796fe6b.png"
+              },
+              "output": {
+                "path": "redraw/11ebd0ff58174e239c0be3d87ec51193.png",
+                "sha256": "c27106f8edc4d8b4e51bdd2cad7810e99b363a830e7175ab7b1cdc6f400b83af",
+                "input_sha256": "ccfaff40e379f3f858046a709fa731b68925b0b4fdad4ad8fb73462b3847c0ab"
               }
             }
           ],
           "output": {
-            "path": "redraw/82ff86ae7fcf4bf6982a6250ad531bc0.png",
-            "sha256": "57ac3448abf9614523d282f4f12c0476c590fce23eb8f133d459efd96380b280",
-            "input_sha256": "47e378e1adae575aa2b3f5dafc826e0a7c2fc3c91386dd1dbb14b8fee024f19a"
+            "path": "redraw/11ebd0ff58174e239c0be3d87ec51193.png",
+            "sha256": "c27106f8edc4d8b4e51bdd2cad7810e99b363a830e7175ab7b1cdc6f400b83af",
+            "input_sha256": "ccfaff40e379f3f858046a709fa731b68925b0b4fdad4ad8fb73462b3847c0ab"
           },
+          "reviews": [
+            {
+              "accepted": false,
+              "notes": "新生图第36行第三个开放0被改为r形状，同一行后段0也变形；音乐标记不保真。"
+            },
+            {
+              "accepted": true,
+              "notes": "唯一修正实际查看36行所有open0恢复圆形；31新补采grace保留，标题与11完整行逐行对照；其余附点/符梁/跨声部保留。"
+            }
+          ],
           "boundaries": [
             [
               0,
               0,
-              1122,
-              128
+              1115,
+              127
             ],
             [
               0,
-              128,
-              1122,
-              252
+              127,
+              1115,
+              248
             ],
             [
               0,
-              252,
-              1122,
-              370
+              248,
+              1115,
+              365
             ],
             [
               0,
-              370,
-              1122,
-              488
+              365,
+              1115,
+              482
             ],
             [
               0,
-              488,
-              1122,
-              606
+              482,
+              1115,
+              599
             ],
             [
               0,
-              606,
-              1122,
-              724
+              599,
+              1115,
+              716
             ],
             [
               0,
-              724,
-              1122,
-              843
+              716,
+              1115,
+              834
             ],
             [
               0,
-              843,
-              1122,
-              939
+              834,
+              1115,
+              951
             ],
             [
               0,
-              939,
-              1122,
-              1057
+              951,
+              1115,
+              1068
             ],
             [
               0,
-              1057,
-              1122,
-              1176
+              1068,
+              1115,
+              1185
             ],
             [
               0,
-              1176,
-              1122,
-              1293
+              1185,
+              1115,
+              1302
             ],
             [
               0,
-              1293,
-              1122,
-              1402
+              1302,
+              1115,
+              1411
             ]
-          ],
-          "reviews": [
-            {
-              "accepted": true,
-              "notes": "实际逐行对照标题与11行；源蓝绿音符转黑，MMrest2、附点、密集符梁、装饰音与0标记保留；没有加删行。"
-            }
           ]
         },
         {
@@ -794,7 +1415,7 @@
             23
           ],
           "input": {
-            "path": "redraw/9c504a1634ed4f4c841ada37963d3e80/input-2.png",
+            "path": "redraw/19769331be7c422f9315560215cda438/input-2.png",
             "sha256": "798c935f77f27c97cdcb00f5ff64127d79f746df69e808c927ee577dce31ea0c",
             "inputs": [
               "344ea7bcf98618471bcab45a5c18f86372d93941b7ef845acaf563d0fa490426",
@@ -889,106 +1510,106 @@
           "corrections_used": 0,
           "attempts": [
             {
-              "request": "8b489ab79b614308b61e1581ba760881",
+              "request": "9e750f3d974f4f95b4ae0f95db6e3f86",
               "kind": "initial",
               "input_sha256": "798c935f77f27c97cdcb00f5ff64127d79f746df69e808c927ee577dce31ea0c",
-              "notes": "实际粗拼查看48–95，12行；67三连音、75装饰音、83填充均完整。",
+              "notes": "粗拼48–95已实际查看，源hash与本次先前已view输入相同；reselect新版本重新真实生图。",
               "status": "returned",
               "tool": "host-imagegen",
               "receipt": {
-                "invocation": "functions.exec real image_gen 58.0sec",
-                "output": "exec-a28aee1d-1fbc-45bd-a7b5-88550784b8b3.png"
+                "invocation": "functions.exec real image_gen58.8sec",
+                "output": "exec-e5c68557-0ed2-4c91-860c-04e03df3912e.png"
               },
               "output": {
-                "path": "redraw/8b489ab79b614308b61e1581ba760881.png",
-                "sha256": "5b6bf10a3be1f6e2c302293760624b5361ff10834dfdba719476a56b89dc9025",
+                "path": "redraw/9e750f3d974f4f95b4ae0f95db6e3f86.png",
+                "sha256": "ac917333bdf519ca22fb549c38ac942053f5f3f43fbe35c42dd2d330da4a3e2b",
                 "input_sha256": "798c935f77f27c97cdcb00f5ff64127d79f746df69e808c927ee577dce31ea0c"
               }
             }
           ],
           "output": {
-            "path": "redraw/8b489ab79b614308b61e1581ba760881.png",
-            "sha256": "5b6bf10a3be1f6e2c302293760624b5361ff10834dfdba719476a56b89dc9025",
+            "path": "redraw/9e750f3d974f4f95b4ae0f95db6e3f86.png",
+            "sha256": "ac917333bdf519ca22fb549c38ac942053f5f3f43fbe35c42dd2d330da4a3e2b",
             "input_sha256": "798c935f77f27c97cdcb00f5ff64127d79f746df69e808c927ee577dce31ea0c"
           },
           "boundaries": [
             [
               0,
               0,
-              1118,
+              1117,
               117
             ],
             [
               0,
               117,
-              1118,
+              1117,
               235
             ],
             [
               0,
               235,
-              1118,
+              1117,
               352
             ],
             [
               0,
               352,
-              1118,
+              1117,
               470
             ],
             [
               0,
               470,
-              1118,
+              1117,
               587
             ],
             [
               0,
               587,
-              1118,
+              1117,
               705
             ],
             [
               0,
               705,
-              1118,
+              1117,
               823
             ],
             [
               0,
               823,
-              1118,
+              1117,
               940
             ],
             [
               0,
               940,
-              1118,
+              1117,
               1057
             ],
             [
               0,
               1057,
-              1118,
+              1117,
               1175
             ],
             [
               0,
               1175,
-              1118,
+              1117,
               1292
             ],
             [
               0,
               1292,
-              1118,
-              1407
+              1117,
+              1408
             ]
           ],
           "reviews": [
             {
               "accepted": true,
-              "notes": "实际逐行对照12行：67两组三连音、75三装饰音与附点，80–83多声部和填充，开放0、叉圈镲、附点及符梁保留。源高亮转黑未见增删，非整曲MIDI校对。"
+              "notes": "新输出实际查看，48至95完整12行，67三连音、75三grace、符梁附点与0标记核对未见改变。"
             }
           ]
         },
@@ -1008,7 +1629,7 @@
             34
           ],
           "input": {
-            "path": "redraw/9c504a1634ed4f4c841ada37963d3e80/input-3.png",
+            "path": "redraw/19769331be7c422f9315560215cda438/input-3.png",
             "sha256": "430282e276d0830ecf21a702abddeece97cdae39820f476059b5e2fcf596df4c",
             "inputs": [
               "39e8323ad8d1cef66c6293c69395567499483b9392908b579b9681d831faaf32",
@@ -1096,26 +1717,26 @@
           "corrections_used": 0,
           "attempts": [
             {
-              "request": "52a6b7df274e4bf0808b21b0f193ff1b",
+              "request": "7cafc69430134f86ac4eafa90aa0e7d4",
               "kind": "initial",
               "input_sha256": "430282e276d0830ecf21a702abddeece97cdae39820f476059b5e2fcf596df4c",
-              "notes": "实际粗拼查看96–135，11行包括100短行与134–135短末行；结尾双竖线、staccato及装饰音保留。",
+              "notes": "原粗拼96–135实际已view相同hash，reselect后新版本真实生成保持11完整行。",
               "status": "returned",
               "tool": "host-imagegen",
               "receipt": {
-                "invocation": "functions.exec actual image_gen yielded121sec completed nextwait",
-                "output": "exec-a8a9279c-42d4-4d25-a4f1-5651cd600a78.png"
+                "invocation": "functions.exec real image_gen111sec",
+                "output": "exec-8a4d4c9a-0b40-4af4-8836-a0ed74d423e7.png"
               },
               "output": {
-                "path": "redraw/52a6b7df274e4bf0808b21b0f193ff1b.png",
-                "sha256": "3c7d0bb73c7cc75699276c53430f65fcaaedf0411d96d8e2dea36630a07d8d4f",
+                "path": "redraw/7cafc69430134f86ac4eafa90aa0e7d4.png",
+                "sha256": "31062d8cd88aaf55b064471013007de72fa01b0889cc81bd92f1109bd3cda2b1",
                 "input_sha256": "430282e276d0830ecf21a702abddeece97cdae39820f476059b5e2fcf596df4c"
               }
             }
           ],
           "output": {
-            "path": "redraw/52a6b7df274e4bf0808b21b0f193ff1b.png",
-            "sha256": "3c7d0bb73c7cc75699276c53430f65fcaaedf0411d96d8e2dea36630a07d8d4f",
+            "path": "redraw/7cafc69430134f86ac4eafa90aa0e7d4.png",
+            "sha256": "31062d8cd88aaf55b064471013007de72fa01b0889cc81bd92f1109bd3cda2b1",
             "input_sha256": "430282e276d0830ecf21a702abddeece97cdae39820f476059b5e2fcf596df4c"
           },
           "boundaries": [
@@ -1189,14 +1810,570 @@
           "reviews": [
             {
               "accepted": true,
-              "notes": "实际对照96–13511行：100短行、134–135短末行及终止双线；134两staccato、98/101grace、110跨鼓圈叉、130填充附点和符梁保留。未见增删，不推断镲鼓映射。"
+              "notes": "新输出实际查看11行96至135，100短行、134staccato双线和130密集附点核对。"
             }
           ]
         }
-      ]
+      ],
+      "presentations": [
+        {
+          "images": [
+            "capture-0001",
+            "capture-0002",
+            "capture-0003",
+            "capture-0004",
+            "capture-0005",
+            "capture-0006",
+            "capture-0007",
+            "capture-0008",
+            "capture-0009",
+            "probe-e8bd0f0a474c44e7a568192ec153dff1",
+            "probe-68983434f37f4c21858004d949f9a054",
+            "probe-8ec7d13120ab4b619233dfe395bc7bb1",
+            "probe-e50e7d3b84c340b8b3528e293bc5b4ed",
+            "probe-b808bc9173a24ec6920b7393efe810e2",
+            "probe-1270a6f94e0b4ae0b113e6143a2ef4bb",
+            "probe-79a896dec5444c4a85609b506551bbe9",
+            "probe-964325699495418bbedc9569a0ff6102",
+            "probe-fc3a0e72a93e4ef291bde414415a0d5a",
+            "probe-af57fab924f84648ba00a99870d5eb30"
+          ],
+          "notes": "实际 view_image 查看 9 张原生来源、10 张导航，核对有序上滚与同一行重叠；140秒专补80行；208.5秒确认最终134–135行后无新增。"
+        },
+        {
+          "images": [
+            "capture-0010"
+          ],
+          "notes": "实际查看78秒原帧完整28行，新位置避开固定水印，31grace笔划完整；forced-vector独立新帧hash与已view图相同。"
+        }
+      ],
+      "title": "KiLLKiSS",
+      "source_review": {
+        "viewed_captures": [
+          "capture-0001",
+          "capture-0002",
+          "capture-0003",
+          "capture-0004",
+          "capture-0005",
+          "capture-0006",
+          "capture-0007",
+          "capture-0008",
+          "capture-0009",
+          "capture-0010"
+        ],
+        "complete": true,
+        "unresolved": [],
+        "scope": "whole score 135 measures, 34 systems",
+        "continuity": "Printed starts 1,6,12,16 then four-measure rows; rest10–11 accounts jump6→12; 100–101 short row then102; overlap confirmed44,60,76,84,88,92,118; omitted incomplete rows only after obtaining full new source.",
+        "first_last": "0秒完整标题和第1行；191秒完整134–135结尾，208.5秒仍此结尾下白区无新谱。",
+        "notes": "实际看图核对 KiLLKiSS / Ave Mujica / 陈老师，200BPM 4/4，34完整行135小节，10–11多小节休止，67三连音，75装饰音，100短行和134–135短末行。高亮保留音符形状，不推断未知镲鼓件。 独立root复核发现86秒31grace被固定水印覆盖；78秒实际新补采完整28–31行，31grace清楚，无像素修补。此前vector与生图旧导出保留为被替代失败版本。"
+      },
+      "rough": {
+        "path": "rough-e451fb66df374c31be26251c76e18d64-1.png",
+        "sha256": "9bc7ba7dd4ccdecd75ac7aa3d31175dad51c55765a6eecfdefc67a3a5ad50646",
+        "inputs": [
+          "da64c07e03dc1904cada4fccd717fdbd279e8a0d777614cabd23867a0ec413db",
+          "9112926cd498aa39897abad39bb1909c6a941507549cf4b67074a9b27bd0a6e9",
+          "a3181ef6db5fdfc4ca4d4c5212aa7474d5a644cf89d6905f997491b7fc7f5a4b",
+          "a22a207a94c68a2c11df14ef0ac5ebde75916ed8e9e8d03186fe6ad2fa5b8d27",
+          "ab04c33bd7f191f2b58ef62693bcb9b57f3bdb409c0cb23c8ee3c36037c4df97",
+          "a077959eacd0a70804a0f07294cc5abbbbefc8238196d7b0c6d4bdabb5257958",
+          "6863c263902850e40db7626268a591ac33ea962fd4ca6ba7881f35003be8a78b",
+          "a6b1de2a354f4d045f1036a5791099b25b15f728de7615acb78a972d83e0580c",
+          "f1d5adfcd9886b47ded7a684af973e74f5043a8148e97143582d173a480b5428",
+          "2d64c034c7f9db36cfa58117967b05678799d726aa62d107de191ab6d41d79cb",
+          "88850322d837ea1204bb9532064c4e18bd9255a649940d0ee6135f6cb6ae0824",
+          "d82667e817aa5f7b0f6e7ea372d91eed89b8a75a04d32a49f06c052736228fc0",
+          "344ea7bcf98618471bcab45a5c18f86372d93941b7ef845acaf563d0fa490426",
+          "5b1cfcee4ec7bf2f99fd146e854a7582595e92e463826c905b005e2d80e6b89b",
+          "742ead317a86a2d1574c72786509fe691be11aca79c7a51c1b84a09bee2abf02",
+          "534de2eb7ce1c3894117295be6a9f363b55a3a9655516169baa85a37e275cb5e",
+          "11d77386c5cfcdeaf15ab2ec112ba419d660fda9c4c3b0b70c74fc3eda6019c5",
+          "19dcd0ca4b2f2eedcea9e3506b206bc2b7723af3647b976109f1ff4c3eccfac2",
+          "655f5d7496ddc2f4b7a6782c7c8dba42a7cb49ae6cd6af4a00ae23c34b737601",
+          "0d018d8d22b8eb7348903e2b10582cf9cf4395fae2a585f9062826741e38c31b",
+          "e397bc74d0f3e56cdeaad9ce441eeab39ea3f791783f7baeb8506537f46f01b5",
+          "8c82c02ac6f2dade141f20e659f088f5f22d5740d8e1c51d272352d38be8de39",
+          "65193a7cd2a5f7a080cd9ddc70ba5895e14756b5dcb2363269819e2bc224853e",
+          "b299d5d2e589dcd14a735aa7fb6a32addc32647838ef3461cb9a35a8e31f0e60",
+          "39e8323ad8d1cef66c6293c69395567499483b9392908b579b9681d831faaf32",
+          "5c658a57e813f11dfacba370eda308f55222b0bacaf8f9e014d83fffd2f2f4c5",
+          "9554eddc9565fde455ed7d432fdb0e4ec889fa4e595782f238429127dfe89b87",
+          "834050511f31e38539df0fb3151c89a971663fb42d2794f32cbd80ae749029ee",
+          "4c159bb0675d5184bd86a569430c1eee107b49ca245f647655f0a47775f4db95",
+          "42aa891b0e0bbd0457121877462c8e6e1b787b88447a93589d1616578e73ff60",
+          "1044bde88b116a570086d97f25b03d7662c355352c13877c9a33b24f158592d5",
+          "99971c32055d7f0f8c0abf1d3fc9c7ea4f3d74e6531e0ca10e524ad416b43f41",
+          "2821f045a159236e98779ac5539ecef1a9bdca6062ee61b3cd68b66b9d9335ca",
+          "935a46c629b48fd3967a9e88b899f276b53f56bd1e9101a91d571c5d65c8bb1b",
+          "e8732fe07ffbfa46dcec389f5428d43b5d303b6c3e7aa9534b73087ae287fa8e"
+        ]
+      },
+      "rough_chunks": [
+        {
+          "path": "rough-e451fb66df374c31be26251c76e18d64-1.png",
+          "sha256": "9bc7ba7dd4ccdecd75ac7aa3d31175dad51c55765a6eecfdefc67a3a5ad50646",
+          "inputs": [
+            "da64c07e03dc1904cada4fccd717fdbd279e8a0d777614cabd23867a0ec413db",
+            "9112926cd498aa39897abad39bb1909c6a941507549cf4b67074a9b27bd0a6e9",
+            "a3181ef6db5fdfc4ca4d4c5212aa7474d5a644cf89d6905f997491b7fc7f5a4b",
+            "a22a207a94c68a2c11df14ef0ac5ebde75916ed8e9e8d03186fe6ad2fa5b8d27",
+            "ab04c33bd7f191f2b58ef62693bcb9b57f3bdb409c0cb23c8ee3c36037c4df97",
+            "a077959eacd0a70804a0f07294cc5abbbbefc8238196d7b0c6d4bdabb5257958",
+            "6863c263902850e40db7626268a591ac33ea962fd4ca6ba7881f35003be8a78b",
+            "a6b1de2a354f4d045f1036a5791099b25b15f728de7615acb78a972d83e0580c",
+            "f1d5adfcd9886b47ded7a684af973e74f5043a8148e97143582d173a480b5428",
+            "2d64c034c7f9db36cfa58117967b05678799d726aa62d107de191ab6d41d79cb",
+            "88850322d837ea1204bb9532064c4e18bd9255a649940d0ee6135f6cb6ae0824",
+            "d82667e817aa5f7b0f6e7ea372d91eed89b8a75a04d32a49f06c052736228fc0",
+            "344ea7bcf98618471bcab45a5c18f86372d93941b7ef845acaf563d0fa490426",
+            "5b1cfcee4ec7bf2f99fd146e854a7582595e92e463826c905b005e2d80e6b89b",
+            "742ead317a86a2d1574c72786509fe691be11aca79c7a51c1b84a09bee2abf02",
+            "534de2eb7ce1c3894117295be6a9f363b55a3a9655516169baa85a37e275cb5e",
+            "11d77386c5cfcdeaf15ab2ec112ba419d660fda9c4c3b0b70c74fc3eda6019c5",
+            "19dcd0ca4b2f2eedcea9e3506b206bc2b7723af3647b976109f1ff4c3eccfac2",
+            "655f5d7496ddc2f4b7a6782c7c8dba42a7cb49ae6cd6af4a00ae23c34b737601",
+            "0d018d8d22b8eb7348903e2b10582cf9cf4395fae2a585f9062826741e38c31b",
+            "e397bc74d0f3e56cdeaad9ce441eeab39ea3f791783f7baeb8506537f46f01b5",
+            "8c82c02ac6f2dade141f20e659f088f5f22d5740d8e1c51d272352d38be8de39",
+            "65193a7cd2a5f7a080cd9ddc70ba5895e14756b5dcb2363269819e2bc224853e",
+            "b299d5d2e589dcd14a735aa7fb6a32addc32647838ef3461cb9a35a8e31f0e60",
+            "39e8323ad8d1cef66c6293c69395567499483b9392908b579b9681d831faaf32",
+            "5c658a57e813f11dfacba370eda308f55222b0bacaf8f9e014d83fffd2f2f4c5",
+            "9554eddc9565fde455ed7d432fdb0e4ec889fa4e595782f238429127dfe89b87",
+            "834050511f31e38539df0fb3151c89a971663fb42d2794f32cbd80ae749029ee",
+            "4c159bb0675d5184bd86a569430c1eee107b49ca245f647655f0a47775f4db95",
+            "42aa891b0e0bbd0457121877462c8e6e1b787b88447a93589d1616578e73ff60",
+            "1044bde88b116a570086d97f25b03d7662c355352c13877c9a33b24f158592d5",
+            "99971c32055d7f0f8c0abf1d3fc9c7ea4f3d74e6531e0ca10e524ad416b43f41",
+            "2821f045a159236e98779ac5539ecef1a9bdca6062ee61b3cd68b66b9d9335ca",
+            "935a46c629b48fd3967a9e88b899f276b53f56bd1e9101a91d571c5d65c8bb1b",
+            "e8732fe07ffbfa46dcec389f5428d43b5d303b6c3e7aa9534b73087ae287fa8e"
+          ]
+        }
+      ],
+      "output": {
+        "pdf": "exports/d05a5357da4e40d7a1b3dc9353b904d8/KiLLKiSS.pdf",
+        "sha256": "02edcd452f2d4fe25ff8d5b0ed5b747fc0938a909c3de8706b1e708de58232fd",
+        "page_count": 3,
+        "placements": [
+          {
+            "page": 1,
+            "region": 0,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              755.5543377705591,
+              571.2755905511812,
+              817.8897637795277
+            ]
+          },
+          {
+            "page": 1,
+            "region": 1,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              680.680998552311,
+              571.2755905511812,
+              740.0714438049505
+            ]
+          },
+          {
+            "page": 1,
+            "region": 2,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              607.7709798382826,
+              571.2755905511812,
+              665.1981045867026
+            ]
+          },
+          {
+            "page": 1,
+            "region": 3,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              534.8609611242542,
+              571.2755905511812,
+              592.2880858726742
+            ]
+          },
+          {
+            "page": 1,
+            "region": 4,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              461.9509424102259,
+              571.2755905511812,
+              519.3780671586458
+            ]
+          },
+          {
+            "page": 1,
+            "region": 5,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              389.0409236961974,
+              571.2755905511812,
+              446.4680484446173
+            ]
+          },
+          {
+            "page": 1,
+            "region": 6,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              315.64007485611404,
+              571.2755905511812,
+              373.5580297305888
+            ]
+          },
+          {
+            "page": 1,
+            "region": 7,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              242.73005614208563,
+              571.2755905511812,
+              300.1571808905055
+            ]
+          },
+          {
+            "page": 1,
+            "region": 8,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              169.82003742805716,
+              571.2755905511812,
+              227.24716217647705
+            ]
+          },
+          {
+            "page": 1,
+            "region": 9,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              96.91001871402868,
+              571.2755905511812,
+              154.33714346244858
+            ]
+          },
+          {
+            "page": 1,
+            "region": 10,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              24.000000000000213,
+              571.2755905511812,
+              81.42712474842011
+            ]
+          },
+          {
+            "page": 2,
+            "region": 11,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              764.3892800395467,
+              571.2755905511812,
+              817.8897637795277
+            ]
+          },
+          {
+            "page": 2,
+            "region": 12,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              697.3038688039792,
+              571.2755905511812,
+              754.6281696942999
+            ]
+          },
+          {
+            "page": 2,
+            "region": 13,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              629.7285062787508,
+              571.2755905511812,
+              687.5427584587324
+            ]
+          },
+          {
+            "page": 2,
+            "region": 14,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              562.6430950431833,
+              571.2755905511812,
+              619.967395933504
+            ]
+          },
+          {
+            "page": 2,
+            "region": 15,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              495.06773251795505,
+              571.2755905511812,
+              552.8819846979366
+            ]
+          },
+          {
+            "page": 2,
+            "region": 16,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              427.98232128238755,
+              571.2755905511812,
+              485.3066221727082
+            ]
+          },
+          {
+            "page": 2,
+            "region": 17,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              360.4069587571592,
+              571.2755905511812,
+              418.2212109371407
+            ]
+          },
+          {
+            "page": 2,
+            "region": 18,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              292.83159623193086,
+              571.2755905511812,
+              350.64584841191237
+            ]
+          },
+          {
+            "page": 2,
+            "region": 19,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              225.74618499636335,
+              571.2755905511812,
+              283.070485886684
+            ]
+          },
+          {
+            "page": 2,
+            "region": 20,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              158.66077376079585,
+              571.2755905511812,
+              215.98507465111652
+            ]
+          },
+          {
+            "page": 2,
+            "region": 21,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              91.08541123556748,
+              571.2755905511812,
+              148.899663415549
+            ]
+          },
+          {
+            "page": 2,
+            "region": 22,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              23.99999999999998,
+              571.2755905511812,
+              81.32430089032066
+            ]
+          },
+          {
+            "page": 3,
+            "region": 23,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              761.0554141788679,
+              571.2755905511812,
+              817.8897637795277
+            ]
+          },
+          {
+            "page": 3,
+            "region": 24,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              693.7577874013728,
+              571.2755905511812,
+              751.4397905185924
+            ]
+          },
+          {
+            "page": 3,
+            "region": 25,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              626.8959891961733,
+              311.16933460240546,
+              684.1421637410973
+            ]
+          },
+          {
+            "page": 3,
+            "region": 26,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              559.5983624186781,
+              571.2755905511812,
+              617.2803655358978
+            ]
+          },
+          {
+            "page": 3,
+            "region": 27,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              492.7696950161198,
+              571.2755905511812,
+              549.9827387584027
+            ]
+          },
+          {
+            "page": 3,
+            "region": 28,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              425.9410276135614,
+              571.2755905511812,
+              483.1540713558443
+            ]
+          },
+          {
+            "page": 3,
+            "region": 29,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              358.6434008360663,
+              571.2755905511812,
+              416.3254039532859
+            ]
+          },
+          {
+            "page": 3,
+            "region": 30,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              291.8147334335079,
+              571.2755905511812,
+              349.0277771757908
+            ]
+          },
+          {
+            "page": 3,
+            "region": 31,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              224.5171066560128,
+              571.2755905511812,
+              282.1991097732324
+            ]
+          },
+          {
+            "page": 3,
+            "region": 32,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              157.68843925345445,
+              571.2755905511812,
+              214.9014829957373
+            ]
+          },
+          {
+            "page": 3,
+            "region": 33,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              90.39081247595931,
+              571.2755905511812,
+              148.07281559317892
+            ]
+          },
+          {
+            "page": 3,
+            "region": 34,
+            "scale": 0.3007008739292204,
+            "bbox": [
+              24,
+              24.000000000000036,
+              317.1833520809899,
+              80.77518881568379
+            ]
+          }
+        ],
+        "routes": [
+          "imagegen",
+          "imagegen",
+          "imagegen"
+        ],
+        "method": "reviewed_host_images_and_vector_fallback",
+        "layout_version": 2,
+        "status": "reviewed",
+        "vector": {
+          "path": "exports/d05a5357da4e40d7a1b3dc9353b904d8/materials.json",
+          "sha256": "46dc640edd4bcccc291dfff0f8f4ae80d3d1ef6e27d3e8cad81beeea3d44fa41"
+        },
+        "review": {
+          "pages": [
+            1,
+            2,
+            3
+          ],
+          "notes": "实际查看水印补采修复后全部3页，31grace来源清楚、完整135m34行；标题2004/4、10–11休止、67tuplets、75graces、134staccato、短100与末行核对；无断行重叠，不宣称完整MIDI。"
+        }
+      }
     },
     "forced-vector": {
-      "source_sha256": "3137c5881ec628872d5424ed42991f9156a1808964616a8d391e376e9132c2eb",
+      "schema": "score-reconstruction/1",
+      "source": {
+        "path": "/home/kenqia/issue54-worktrees/killkiss/experiments/2026-10-13-issue58-recovered/killkiss/forced-vector-source-8ada927b2dc44ce4b85f38d3a51ad4f3/BV15crrYUEPA-p1.mp4",
+        "sha256": "3137c5881ec628872d5424ed42991f9156a1808964616a8d391e376e9132c2eb",
+        "width": 1920,
+        "height": 1080,
+        "duration": 208.966
+      },
       "captures": [
         {
           "id": "capture-0001",
@@ -1305,12 +2482,830 @@
             1,
             16000
           ]
+        },
+        {
+          "id": "capture-0010",
+          "path": "captures/capture-0010.png",
+          "sha256": "322c3143847df557ed45bb47a8c606072b9f8f5b8ef1b9a3fbc70032de028fbc",
+          "requested_seconds": 78,
+          "timestamp": 78.0,
+          "pts": 1248000,
+          "time_base": [
+            1,
+            16000
+          ]
         }
       ],
+      "regions": [
+        {
+          "capture": "capture-0001",
+          "bbox": [
+            35,
+            190,
+            1855,
+            394
+          ],
+          "kind": "header",
+          "position": "header",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0001.png",
+          "source_sha256": "d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 204,
+          "sha256": "da64c07e03dc1904cada4fccd717fdbd279e8a0d777614cabd23867a0ec413db"
+        },
+        {
+          "capture": "capture-0001",
+          "bbox": [
+            35,
+            394,
+            1855,
+            585
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-1",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0002.png",
+          "source_sha256": "d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "9112926cd498aa39897abad39bb1909c6a941507549cf4b67074a9b27bd0a6e9"
+        },
+        {
+          "capture": "capture-0001",
+          "bbox": [
+            35,
+            585,
+            1855,
+            776
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-6",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0003.png",
+          "source_sha256": "d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "a3181ef6db5fdfc4ca4d4c5212aa7474d5a644cf89d6905f997491b7fc7f5a4b"
+        },
+        {
+          "capture": "capture-0001",
+          "bbox": [
+            35,
+            776,
+            1855,
+            967
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-12",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0004.png",
+          "source_sha256": "d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5",
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "a22a207a94c68a2c11df14ef0ac5ebde75916ed8e9e8d03186fe6ad2fa5b8d27"
+        },
+        {
+          "capture": "capture-0002",
+          "bbox": [
+            35,
+            450,
+            1855,
+            641
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-16",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0005.png",
+          "source_sha256": "a38b3a0e4c954b244f151074c75baf8a6b882e1f561cfee3b9ad10599aa7306c",
+          "pts": 1056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "ab04c33bd7f191f2b58ef62693bcb9b57f3bdb409c0cb23c8ee3c36037c4df97"
+        },
+        {
+          "capture": "capture-0002",
+          "bbox": [
+            35,
+            642,
+            1855,
+            832
+          ],
+          "kind": "system",
+          "staff_top": 89.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-20",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0006.png",
+          "source_sha256": "a38b3a0e4c954b244f151074c75baf8a6b882e1f561cfee3b9ad10599aa7306c",
+          "pts": 1056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 190,
+          "sha256": "a077959eacd0a70804a0f07294cc5abbbbefc8238196d7b0c6d4bdabb5257958"
+        },
+        {
+          "capture": "capture-0002",
+          "bbox": [
+            35,
+            832,
+            1855,
+            1024
+          ],
+          "kind": "system",
+          "staff_top": 90.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-24",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0007.png",
+          "source_sha256": "a38b3a0e4c954b244f151074c75baf8a6b882e1f561cfee3b9ad10599aa7306c",
+          "pts": 1056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 192,
+          "sha256": "6863c263902850e40db7626268a591ac33ea962fd4ca6ba7881f35003be8a78b"
+        },
+        {
+          "capture": "capture-0010",
+          "bbox": [
+            35,
+            377,
+            1855,
+            568
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.625,
+          "position": "measures-start-28",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0008.png",
+          "source_sha256": "322c3143847df557ed45bb47a8c606072b9f8f5b8ef1b9a3fbc70032de028fbc",
+          "pts": 1248000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "a6b1de2a354f4d045f1036a5791099b25b15f728de7615acb78a972d83e0580c"
+        },
+        {
+          "capture": "capture-0003",
+          "bbox": [
+            35,
+            180,
+            1855,
+            371
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-32",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0009.png",
+          "source_sha256": "f328bf3967d31897f10a7bd914758d12e93e370e2d3e84fc0d05c1f2ae94e6a1",
+          "pts": 1376000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "f1d5adfcd9886b47ded7a684af973e74f5043a8148e97143582d173a480b5428"
+        },
+        {
+          "capture": "capture-0003",
+          "bbox": [
+            35,
+            371,
+            1855,
+            562
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-36",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0010.png",
+          "source_sha256": "f328bf3967d31897f10a7bd914758d12e93e370e2d3e84fc0d05c1f2ae94e6a1",
+          "pts": 1376000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "2d64c034c7f9db36cfa58117967b05678799d726aa62d107de191ab6d41d79cb"
+        },
+        {
+          "capture": "capture-0003",
+          "bbox": [
+            35,
+            562,
+            1855,
+            754
+          ],
+          "kind": "system",
+          "staff_top": 90.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-40",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0011.png",
+          "source_sha256": "f328bf3967d31897f10a7bd914758d12e93e370e2d3e84fc0d05c1f2ae94e6a1",
+          "pts": 1376000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 192,
+          "sha256": "88850322d837ea1204bb9532064c4e18bd9255a649940d0ee6135f6cb6ae0824"
+        },
+        {
+          "capture": "capture-0003",
+          "bbox": [
+            35,
+            754,
+            1855,
+            944
+          ],
+          "kind": "system",
+          "staff_top": 89.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-44",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0012.png",
+          "source_sha256": "f328bf3967d31897f10a7bd914758d12e93e370e2d3e84fc0d05c1f2ae94e6a1",
+          "pts": 1376000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 190,
+          "sha256": "d82667e817aa5f7b0f6e7ea372d91eed89b8a75a04d32a49f06c052736228fc0"
+        },
+        {
+          "capture": "capture-0004",
+          "bbox": [
+            35,
+            169,
+            1855,
+            360
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-48",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0013.png",
+          "source_sha256": "eb532ce2c2eb5c23050ff9161733cddc1350ebcbac28d3bf9587a510e13630ce",
+          "pts": 1712000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "344ea7bcf98618471bcab45a5c18f86372d93941b7ef845acaf563d0fa490426"
+        },
+        {
+          "capture": "capture-0004",
+          "bbox": [
+            35,
+            360,
+            1855,
+            551
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-52",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0014.png",
+          "source_sha256": "eb532ce2c2eb5c23050ff9161733cddc1350ebcbac28d3bf9587a510e13630ce",
+          "pts": 1712000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "5b1cfcee4ec7bf2f99fd146e854a7582595e92e463826c905b005e2d80e6b89b"
+        },
+        {
+          "capture": "capture-0004",
+          "bbox": [
+            35,
+            551,
+            1855,
+            742
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-56",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0015.png",
+          "source_sha256": "eb532ce2c2eb5c23050ff9161733cddc1350ebcbac28d3bf9587a510e13630ce",
+          "pts": 1712000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "742ead317a86a2d1574c72786509fe691be11aca79c7a51c1b84a09bee2abf02"
+        },
+        {
+          "capture": "capture-0004",
+          "bbox": [
+            35,
+            742,
+            1855,
+            933
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-60",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0016.png",
+          "source_sha256": "eb532ce2c2eb5c23050ff9161733cddc1350ebcbac28d3bf9587a510e13630ce",
+          "pts": 1712000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "534de2eb7ce1c3894117295be6a9f363b55a3a9655516169baa85a37e275cb5e"
+        },
+        {
+          "capture": "capture-0005",
+          "bbox": [
+            35,
+            158,
+            1855,
+            348
+          ],
+          "kind": "system",
+          "staff_top": 89.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-64",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0017.png",
+          "source_sha256": "feb4fe003db23a4184df69673066bebabc19ba0eb1af6f705cd6ce3d8d7cce79",
+          "pts": 2064000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 190,
+          "sha256": "11d77386c5cfcdeaf15ab2ec112ba419d660fda9c4c3b0b70c74fc3eda6019c5"
+        },
+        {
+          "capture": "capture-0005",
+          "bbox": [
+            35,
+            348,
+            1855,
+            540
+          ],
+          "kind": "system",
+          "staff_top": 90.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-68",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0018.png",
+          "source_sha256": "feb4fe003db23a4184df69673066bebabc19ba0eb1af6f705cd6ce3d8d7cce79",
+          "pts": 2064000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 192,
+          "sha256": "19dcd0ca4b2f2eedcea9e3506b206bc2b7723af3647b976109f1ff4c3eccfac2"
+        },
+        {
+          "capture": "capture-0005",
+          "bbox": [
+            35,
+            540,
+            1855,
+            731
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-72",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0019.png",
+          "source_sha256": "feb4fe003db23a4184df69673066bebabc19ba0eb1af6f705cd6ce3d8d7cce79",
+          "pts": 2064000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "655f5d7496ddc2f4b7a6782c7c8dba42a7cb49ae6cd6af4a00ae23c34b737601"
+        },
+        {
+          "capture": "capture-0005",
+          "bbox": [
+            35,
+            731,
+            1855,
+            922
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-76",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0020.png",
+          "source_sha256": "feb4fe003db23a4184df69673066bebabc19ba0eb1af6f705cd6ce3d8d7cce79",
+          "pts": 2064000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "0d018d8d22b8eb7348903e2b10582cf9cf4395fae2a585f9062826741e38c31b"
+        },
+        {
+          "capture": "capture-0009",
+          "bbox": [
+            35,
+            275,
+            1855,
+            466
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-80",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0021.png",
+          "source_sha256": "40614a2a3062c7c53aaf616f86beed0e76e30a2ed24e055e8fac7ddc350d10e4",
+          "pts": 2240000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "e397bc74d0f3e56cdeaad9ce441eeab39ea3f791783f7baeb8506537f46f01b5"
+        },
+        {
+          "capture": "capture-0006",
+          "bbox": [
+            35,
+            78,
+            1855,
+            270
+          ],
+          "kind": "system",
+          "staff_top": 90.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-84",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0022.png",
+          "source_sha256": "26389cea9292a21763ed223346d04619614da29edd2b560ae7313eb79d506a65",
+          "pts": 2416000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 192,
+          "sha256": "8c82c02ac6f2dade141f20e659f088f5f22d5740d8e1c51d272352d38be8de39"
+        },
+        {
+          "capture": "capture-0006",
+          "bbox": [
+            35,
+            270,
+            1855,
+            460
+          ],
+          "kind": "system",
+          "staff_top": 89.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-88",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0023.png",
+          "source_sha256": "26389cea9292a21763ed223346d04619614da29edd2b560ae7313eb79d506a65",
+          "pts": 2416000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 190,
+          "sha256": "65193a7cd2a5f7a080cd9ddc70ba5895e14756b5dcb2363269819e2bc224853e"
+        },
+        {
+          "capture": "capture-0006",
+          "bbox": [
+            35,
+            461,
+            1855,
+            652
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-92",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0024.png",
+          "source_sha256": "26389cea9292a21763ed223346d04619614da29edd2b560ae7313eb79d506a65",
+          "pts": 2416000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "b299d5d2e589dcd14a735aa7fb6a32addc32647838ef3461cb9a35a8e31f0e60"
+        },
+        {
+          "capture": "capture-0006",
+          "bbox": [
+            35,
+            652,
+            1855,
+            843
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-96",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0025.png",
+          "source_sha256": "26389cea9292a21763ed223346d04619614da29edd2b560ae7313eb79d506a65",
+          "pts": 2416000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "39e8323ad8d1cef66c6293c69395567499483b9392908b579b9681d831faaf32"
+        },
+        {
+          "capture": "capture-0006",
+          "bbox": [
+            35,
+            843,
+            990,
+            1034
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-100",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0026.png",
+          "source_sha256": "26389cea9292a21763ed223346d04619614da29edd2b560ae7313eb79d506a65",
+          "pts": 2416000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 955,
+          "height": 191,
+          "sha256": "5c658a57e813f11dfacba370eda308f55222b0bacaf8f9e014d83fffd2f2f4c5"
+        },
+        {
+          "capture": "capture-0007",
+          "bbox": [
+            35,
+            129,
+            1855,
+            320
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-102",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0027.png",
+          "source_sha256": "f78367a347fb71d05e42a3e69b3adc362ca66c5e6a9ac71105750d263b38c979",
+          "pts": 2736000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "9554eddc9565fde455ed7d432fdb0e4ec889fa4e595782f238429127dfe89b87"
+        },
+        {
+          "capture": "capture-0007",
+          "bbox": [
+            35,
+            320,
+            1855,
+            511
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-106",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0028.png",
+          "source_sha256": "f78367a347fb71d05e42a3e69b3adc362ca66c5e6a9ac71105750d263b38c979",
+          "pts": 2736000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "834050511f31e38539df0fb3151c89a971663fb42d2794f32cbd80ae749029ee"
+        },
+        {
+          "capture": "capture-0007",
+          "bbox": [
+            35,
+            511,
+            1855,
+            702
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-110",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0029.png",
+          "source_sha256": "f78367a347fb71d05e42a3e69b3adc362ca66c5e6a9ac71105750d263b38c979",
+          "pts": 2736000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "4c159bb0675d5184bd86a569430c1eee107b49ca245f647655f0a47775f4db95"
+        },
+        {
+          "capture": "capture-0007",
+          "bbox": [
+            35,
+            702,
+            1855,
+            894
+          ],
+          "kind": "system",
+          "staff_top": 90.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-114",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0030.png",
+          "source_sha256": "f78367a347fb71d05e42a3e69b3adc362ca66c5e6a9ac71105750d263b38c979",
+          "pts": 2736000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 192,
+          "sha256": "42aa891b0e0bbd0457121877462c8e6e1b787b88447a93589d1616578e73ff60"
+        },
+        {
+          "capture": "capture-0008",
+          "bbox": [
+            35,
+            118,
+            1855,
+            308
+          ],
+          "kind": "system",
+          "staff_top": 89.5,
+          "staff_spacing": 13.75,
+          "position": "measures-start-118",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0031.png",
+          "source_sha256": "faf430cfa2e3d299cdd51a7639cc5646b33d816c1174878e8d031dff2d4dadef",
+          "pts": 3056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 190,
+          "sha256": "1044bde88b116a570086d97f25b03d7662c355352c13877c9a33b24f158592d5"
+        },
+        {
+          "capture": "capture-0008",
+          "bbox": [
+            35,
+            309,
+            1855,
+            500
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-122",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0032.png",
+          "source_sha256": "faf430cfa2e3d299cdd51a7639cc5646b33d816c1174878e8d031dff2d4dadef",
+          "pts": 3056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "99971c32055d7f0f8c0abf1d3fc9c7ea4f3d74e6531e0ca10e524ad416b43f41"
+        },
+        {
+          "capture": "capture-0008",
+          "bbox": [
+            35,
+            500,
+            1855,
+            691
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-126",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0033.png",
+          "source_sha256": "faf430cfa2e3d299cdd51a7639cc5646b33d816c1174878e8d031dff2d4dadef",
+          "pts": 3056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "2821f045a159236e98779ac5539ecef1a9bdca6062ee61b3cd68b66b9d9335ca"
+        },
+        {
+          "capture": "capture-0008",
+          "bbox": [
+            35,
+            691,
+            1855,
+            882
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-130",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0034.png",
+          "source_sha256": "faf430cfa2e3d299cdd51a7639cc5646b33d816c1174878e8d031dff2d4dadef",
+          "pts": 3056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 1820,
+          "height": 191,
+          "sha256": "935a46c629b48fd3967a9e88b899f276b53f56bd1e9101a91d571c5d65c8bb1b"
+        },
+        {
+          "capture": "capture-0008",
+          "bbox": [
+            35,
+            882,
+            1010,
+            1073
+          ],
+          "kind": "system",
+          "staff_top": 90,
+          "staff_spacing": 13.75,
+          "position": "measures-start-134",
+          "path": "regions/e17d3ce377a447fdb8f65351b5bf1f3e/region-0035.png",
+          "source_sha256": "faf430cfa2e3d299cdd51a7639cc5646b33d816c1174878e8d031dff2d4dadef",
+          "pts": 3056000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "width": 975,
+          "height": 191,
+          "sha256": "e8732fe07ffbfa46dcec389f5428d43b5d303b6c3e7aa9534b73087ae287fa8e"
+        }
+      ],
+      "status": "reviewed",
       "metrics": {
-        "seek_count": 9,
-        "decode_elapsed": 1.948395296000399,
-        "decoded_reported_frames": 18,
+        "seek_count": 10,
+        "decode_elapsed": 2.4076364190000277,
+        "decoded_reported_frames": 20,
         "peak_temp_disk": 492576,
         "presented_capture_ids": [
           "capture-0001",
@@ -1321,16 +3316,504 @@
           "capture-0006",
           "capture-0007",
           "capture-0008",
-          "capture-0009"
+          "capture-0009",
+          "capture-0010"
         ],
         "model_cost": null,
         "navigation_probes": 0,
-        "native_retained": 9,
-        "presented_images": 9
+        "native_retained": 10,
+        "presented_images": 10
       },
-      "pdf": {
-        "pdf": "exports/81cc97db9e69471f961f8f6c86ffae0d/KiLLKiSS.pdf",
-        "sha256": "b13962c25fc489e2d0cfa2740b1dfdff8254cbe55465fbb4d83cb64c000b64fb",
+      "origin": {
+        "kind": "bilibili",
+        "bvid": "BV15crrYUEPA",
+        "page": 1,
+        "url": "https://www.bilibili.com/video/BV15crrYUEPA?p=1",
+        "authenticated": false,
+        "backend": "yt-dlp",
+        "backend_version": "2026.08.19",
+        "anonymous": true,
+        "single_file_fallback": false,
+        "actual_video": {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "30/1"
+        },
+        "format_attempts": 1,
+        "backup_used": false,
+        "selected_format": {
+          "format_id": "30080",
+          "width": 1920,
+          "height": 1080,
+          "fps": 30.0,
+          "quality": 80
+        }
+      },
+      "probes": [],
+      "redraw_pages": [
+        {
+          "id": "page-1",
+          "regions": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11
+          ],
+          "input": {
+            "path": "redraw/162b7128a8214ff39332ea374cb24af0/input-1.png",
+            "sha256": "ccfaff40e379f3f858046a709fa731b68925b0b4fdad4ad8fb73462b3847c0ab",
+            "inputs": [
+              "da64c07e03dc1904cada4fccd717fdbd279e8a0d777614cabd23867a0ec413db",
+              "9112926cd498aa39897abad39bb1909c6a941507549cf4b67074a9b27bd0a6e9",
+              "a3181ef6db5fdfc4ca4d4c5212aa7474d5a644cf89d6905f997491b7fc7f5a4b",
+              "a22a207a94c68a2c11df14ef0ac5ebde75916ed8e9e8d03186fe6ad2fa5b8d27",
+              "ab04c33bd7f191f2b58ef62693bcb9b57f3bdb409c0cb23c8ee3c36037c4df97",
+              "a077959eacd0a70804a0f07294cc5abbbbefc8238196d7b0c6d4bdabb5257958",
+              "6863c263902850e40db7626268a591ac33ea962fd4ca6ba7881f35003be8a78b",
+              "a6b1de2a354f4d045f1036a5791099b25b15f728de7615acb78a972d83e0580c",
+              "f1d5adfcd9886b47ded7a684af973e74f5043a8148e97143582d173a480b5428",
+              "2d64c034c7f9db36cfa58117967b05678799d726aa62d107de191ab6d41d79cb",
+              "88850322d837ea1204bb9532064c4e18bd9255a649940d0ee6135f6cb6ae0824",
+              "d82667e817aa5f7b0f6e7ea372d91eed89b8a75a04d32a49f06c052736228fc0"
+            ]
+          },
+          "source_boundaries": [
+            [
+              0,
+              0,
+              1820,
+              204
+            ],
+            [
+              0,
+              204,
+              1820,
+              395
+            ],
+            [
+              0,
+              395,
+              1820,
+              586
+            ],
+            [
+              0,
+              586,
+              1820,
+              777
+            ],
+            [
+              0,
+              777,
+              1820,
+              968
+            ],
+            [
+              0,
+              968,
+              1820,
+              1158
+            ],
+            [
+              0,
+              1158,
+              1820,
+              1350
+            ],
+            [
+              0,
+              1350,
+              1820,
+              1541
+            ],
+            [
+              0,
+              1541,
+              1820,
+              1732
+            ],
+            [
+              0,
+              1732,
+              1820,
+              1923
+            ],
+            [
+              0,
+              1923,
+              1820,
+              2115
+            ],
+            [
+              0,
+              2115,
+              1820,
+              2305
+            ]
+          ],
+          "status": "vector",
+          "corrections_used": 0,
+          "attempts": [],
+          "fallback_reason": "整曲额外验收强制生图不可用；31水印失败修复后重新正常矢量转描。"
+        },
+        {
+          "id": "page-2",
+          "regions": [
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23
+          ],
+          "input": {
+            "path": "redraw/162b7128a8214ff39332ea374cb24af0/input-2.png",
+            "sha256": "798c935f77f27c97cdcb00f5ff64127d79f746df69e808c927ee577dce31ea0c",
+            "inputs": [
+              "344ea7bcf98618471bcab45a5c18f86372d93941b7ef845acaf563d0fa490426",
+              "5b1cfcee4ec7bf2f99fd146e854a7582595e92e463826c905b005e2d80e6b89b",
+              "742ead317a86a2d1574c72786509fe691be11aca79c7a51c1b84a09bee2abf02",
+              "534de2eb7ce1c3894117295be6a9f363b55a3a9655516169baa85a37e275cb5e",
+              "11d77386c5cfcdeaf15ab2ec112ba419d660fda9c4c3b0b70c74fc3eda6019c5",
+              "19dcd0ca4b2f2eedcea9e3506b206bc2b7723af3647b976109f1ff4c3eccfac2",
+              "655f5d7496ddc2f4b7a6782c7c8dba42a7cb49ae6cd6af4a00ae23c34b737601",
+              "0d018d8d22b8eb7348903e2b10582cf9cf4395fae2a585f9062826741e38c31b",
+              "e397bc74d0f3e56cdeaad9ce441eeab39ea3f791783f7baeb8506537f46f01b5",
+              "8c82c02ac6f2dade141f20e659f088f5f22d5740d8e1c51d272352d38be8de39",
+              "65193a7cd2a5f7a080cd9ddc70ba5895e14756b5dcb2363269819e2bc224853e",
+              "b299d5d2e589dcd14a735aa7fb6a32addc32647838ef3461cb9a35a8e31f0e60"
+            ]
+          },
+          "source_boundaries": [
+            [
+              0,
+              0,
+              1820,
+              191
+            ],
+            [
+              0,
+              191,
+              1820,
+              382
+            ],
+            [
+              0,
+              382,
+              1820,
+              573
+            ],
+            [
+              0,
+              573,
+              1820,
+              764
+            ],
+            [
+              0,
+              764,
+              1820,
+              954
+            ],
+            [
+              0,
+              954,
+              1820,
+              1146
+            ],
+            [
+              0,
+              1146,
+              1820,
+              1337
+            ],
+            [
+              0,
+              1337,
+              1820,
+              1528
+            ],
+            [
+              0,
+              1528,
+              1820,
+              1719
+            ],
+            [
+              0,
+              1719,
+              1820,
+              1911
+            ],
+            [
+              0,
+              1911,
+              1820,
+              2101
+            ],
+            [
+              0,
+              2101,
+              1820,
+              2292
+            ]
+          ],
+          "status": "vector",
+          "corrections_used": 0,
+          "attempts": [],
+          "fallback_reason": "整曲额外验收强制生图不可用；31水印失败修复后重新正常矢量转描。"
+        },
+        {
+          "id": "page-3",
+          "regions": [
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34
+          ],
+          "input": {
+            "path": "redraw/162b7128a8214ff39332ea374cb24af0/input-3.png",
+            "sha256": "430282e276d0830ecf21a702abddeece97cdae39820f476059b5e2fcf596df4c",
+            "inputs": [
+              "39e8323ad8d1cef66c6293c69395567499483b9392908b579b9681d831faaf32",
+              "5c658a57e813f11dfacba370eda308f55222b0bacaf8f9e014d83fffd2f2f4c5",
+              "9554eddc9565fde455ed7d432fdb0e4ec889fa4e595782f238429127dfe89b87",
+              "834050511f31e38539df0fb3151c89a971663fb42d2794f32cbd80ae749029ee",
+              "4c159bb0675d5184bd86a569430c1eee107b49ca245f647655f0a47775f4db95",
+              "42aa891b0e0bbd0457121877462c8e6e1b787b88447a93589d1616578e73ff60",
+              "1044bde88b116a570086d97f25b03d7662c355352c13877c9a33b24f158592d5",
+              "99971c32055d7f0f8c0abf1d3fc9c7ea4f3d74e6531e0ca10e524ad416b43f41",
+              "2821f045a159236e98779ac5539ecef1a9bdca6062ee61b3cd68b66b9d9335ca",
+              "935a46c629b48fd3967a9e88b899f276b53f56bd1e9101a91d571c5d65c8bb1b",
+              "e8732fe07ffbfa46dcec389f5428d43b5d303b6c3e7aa9534b73087ae287fa8e"
+            ]
+          },
+          "source_boundaries": [
+            [
+              0,
+              0,
+              1820,
+              191
+            ],
+            [
+              0,
+              191,
+              955,
+              382
+            ],
+            [
+              0,
+              382,
+              1820,
+              573
+            ],
+            [
+              0,
+              573,
+              1820,
+              764
+            ],
+            [
+              0,
+              764,
+              1820,
+              955
+            ],
+            [
+              0,
+              955,
+              1820,
+              1147
+            ],
+            [
+              0,
+              1147,
+              1820,
+              1337
+            ],
+            [
+              0,
+              1337,
+              1820,
+              1528
+            ],
+            [
+              0,
+              1528,
+              1820,
+              1719
+            ],
+            [
+              0,
+              1719,
+              1820,
+              1910
+            ],
+            [
+              0,
+              1910,
+              975,
+              2101
+            ]
+          ],
+          "status": "vector",
+          "corrections_used": 0,
+          "attempts": [],
+          "fallback_reason": "整曲额外验收强制生图不可用；31水印失败修复后重新正常矢量转描。"
+        }
+      ],
+      "presentations": [
+        {
+          "images": [
+            "capture-0001",
+            "capture-0002",
+            "capture-0003",
+            "capture-0004",
+            "capture-0005",
+            "capture-0006",
+            "capture-0007",
+            "capture-0008",
+            "capture-0009"
+          ],
+          "notes": "独立新任务实际取帧9次，hash逐张与本次Agent已view_image审阅来源相同，引用同次源图看图证据，不是旧决定或旧frames重放。"
+        },
+        {
+          "images": [
+            "capture-0010"
+          ],
+          "notes": "实际查看78秒原帧完整28行，新位置避开固定水印，31grace笔划完整；forced-vector独立新帧hash与已view图相同。"
+        }
+      ],
+      "title": "KiLLKiSS",
+      "source_review": {
+        "viewed_captures": [
+          "capture-0001",
+          "capture-0002",
+          "capture-0003",
+          "capture-0004",
+          "capture-0005",
+          "capture-0006",
+          "capture-0007",
+          "capture-0008",
+          "capture-0009",
+          "capture-0010"
+        ],
+        "complete": true,
+        "unresolved": [],
+        "scope": "whole score 135 measures, 34 systems",
+        "continuity": "Printed starts 1,6,12,16 then four-measure rows; rest10–11 accounts jump6→12; 100–101 short row then102; overlap confirmed44,60,76,84,88,92,118; omitted incomplete rows only after obtaining full new source.",
+        "first_last": "0秒完整标题和第1行；191秒完整134–135结尾，208.5秒仍此结尾下白区无新谱。",
+        "notes": "实际看图核对 KiLLKiSS / Ave Mujica / 陈老师，200BPM 4/4，34完整行135小节，10–11多小节休止，67三连音，75装饰音，100短行和134–135短末行。高亮保留音符形状，不推断未知镲鼓件。 独立root复核发现86秒31grace被固定水印覆盖；78秒实际新补采完整28–31行，31grace清楚，无像素修补。此前vector与生图旧导出保留为被替代失败版本。"
+      },
+      "rough": {
+        "path": "rough-e17d3ce377a447fdb8f65351b5bf1f3e-1.png",
+        "sha256": "9bc7ba7dd4ccdecd75ac7aa3d31175dad51c55765a6eecfdefc67a3a5ad50646",
+        "inputs": [
+          "da64c07e03dc1904cada4fccd717fdbd279e8a0d777614cabd23867a0ec413db",
+          "9112926cd498aa39897abad39bb1909c6a941507549cf4b67074a9b27bd0a6e9",
+          "a3181ef6db5fdfc4ca4d4c5212aa7474d5a644cf89d6905f997491b7fc7f5a4b",
+          "a22a207a94c68a2c11df14ef0ac5ebde75916ed8e9e8d03186fe6ad2fa5b8d27",
+          "ab04c33bd7f191f2b58ef62693bcb9b57f3bdb409c0cb23c8ee3c36037c4df97",
+          "a077959eacd0a70804a0f07294cc5abbbbefc8238196d7b0c6d4bdabb5257958",
+          "6863c263902850e40db7626268a591ac33ea962fd4ca6ba7881f35003be8a78b",
+          "a6b1de2a354f4d045f1036a5791099b25b15f728de7615acb78a972d83e0580c",
+          "f1d5adfcd9886b47ded7a684af973e74f5043a8148e97143582d173a480b5428",
+          "2d64c034c7f9db36cfa58117967b05678799d726aa62d107de191ab6d41d79cb",
+          "88850322d837ea1204bb9532064c4e18bd9255a649940d0ee6135f6cb6ae0824",
+          "d82667e817aa5f7b0f6e7ea372d91eed89b8a75a04d32a49f06c052736228fc0",
+          "344ea7bcf98618471bcab45a5c18f86372d93941b7ef845acaf563d0fa490426",
+          "5b1cfcee4ec7bf2f99fd146e854a7582595e92e463826c905b005e2d80e6b89b",
+          "742ead317a86a2d1574c72786509fe691be11aca79c7a51c1b84a09bee2abf02",
+          "534de2eb7ce1c3894117295be6a9f363b55a3a9655516169baa85a37e275cb5e",
+          "11d77386c5cfcdeaf15ab2ec112ba419d660fda9c4c3b0b70c74fc3eda6019c5",
+          "19dcd0ca4b2f2eedcea9e3506b206bc2b7723af3647b976109f1ff4c3eccfac2",
+          "655f5d7496ddc2f4b7a6782c7c8dba42a7cb49ae6cd6af4a00ae23c34b737601",
+          "0d018d8d22b8eb7348903e2b10582cf9cf4395fae2a585f9062826741e38c31b",
+          "e397bc74d0f3e56cdeaad9ce441eeab39ea3f791783f7baeb8506537f46f01b5",
+          "8c82c02ac6f2dade141f20e659f088f5f22d5740d8e1c51d272352d38be8de39",
+          "65193a7cd2a5f7a080cd9ddc70ba5895e14756b5dcb2363269819e2bc224853e",
+          "b299d5d2e589dcd14a735aa7fb6a32addc32647838ef3461cb9a35a8e31f0e60",
+          "39e8323ad8d1cef66c6293c69395567499483b9392908b579b9681d831faaf32",
+          "5c658a57e813f11dfacba370eda308f55222b0bacaf8f9e014d83fffd2f2f4c5",
+          "9554eddc9565fde455ed7d432fdb0e4ec889fa4e595782f238429127dfe89b87",
+          "834050511f31e38539df0fb3151c89a971663fb42d2794f32cbd80ae749029ee",
+          "4c159bb0675d5184bd86a569430c1eee107b49ca245f647655f0a47775f4db95",
+          "42aa891b0e0bbd0457121877462c8e6e1b787b88447a93589d1616578e73ff60",
+          "1044bde88b116a570086d97f25b03d7662c355352c13877c9a33b24f158592d5",
+          "99971c32055d7f0f8c0abf1d3fc9c7ea4f3d74e6531e0ca10e524ad416b43f41",
+          "2821f045a159236e98779ac5539ecef1a9bdca6062ee61b3cd68b66b9d9335ca",
+          "935a46c629b48fd3967a9e88b899f276b53f56bd1e9101a91d571c5d65c8bb1b",
+          "e8732fe07ffbfa46dcec389f5428d43b5d303b6c3e7aa9534b73087ae287fa8e"
+        ]
+      },
+      "rough_chunks": [
+        {
+          "path": "rough-e17d3ce377a447fdb8f65351b5bf1f3e-1.png",
+          "sha256": "9bc7ba7dd4ccdecd75ac7aa3d31175dad51c55765a6eecfdefc67a3a5ad50646",
+          "inputs": [
+            "da64c07e03dc1904cada4fccd717fdbd279e8a0d777614cabd23867a0ec413db",
+            "9112926cd498aa39897abad39bb1909c6a941507549cf4b67074a9b27bd0a6e9",
+            "a3181ef6db5fdfc4ca4d4c5212aa7474d5a644cf89d6905f997491b7fc7f5a4b",
+            "a22a207a94c68a2c11df14ef0ac5ebde75916ed8e9e8d03186fe6ad2fa5b8d27",
+            "ab04c33bd7f191f2b58ef62693bcb9b57f3bdb409c0cb23c8ee3c36037c4df97",
+            "a077959eacd0a70804a0f07294cc5abbbbefc8238196d7b0c6d4bdabb5257958",
+            "6863c263902850e40db7626268a591ac33ea962fd4ca6ba7881f35003be8a78b",
+            "a6b1de2a354f4d045f1036a5791099b25b15f728de7615acb78a972d83e0580c",
+            "f1d5adfcd9886b47ded7a684af973e74f5043a8148e97143582d173a480b5428",
+            "2d64c034c7f9db36cfa58117967b05678799d726aa62d107de191ab6d41d79cb",
+            "88850322d837ea1204bb9532064c4e18bd9255a649940d0ee6135f6cb6ae0824",
+            "d82667e817aa5f7b0f6e7ea372d91eed89b8a75a04d32a49f06c052736228fc0",
+            "344ea7bcf98618471bcab45a5c18f86372d93941b7ef845acaf563d0fa490426",
+            "5b1cfcee4ec7bf2f99fd146e854a7582595e92e463826c905b005e2d80e6b89b",
+            "742ead317a86a2d1574c72786509fe691be11aca79c7a51c1b84a09bee2abf02",
+            "534de2eb7ce1c3894117295be6a9f363b55a3a9655516169baa85a37e275cb5e",
+            "11d77386c5cfcdeaf15ab2ec112ba419d660fda9c4c3b0b70c74fc3eda6019c5",
+            "19dcd0ca4b2f2eedcea9e3506b206bc2b7723af3647b976109f1ff4c3eccfac2",
+            "655f5d7496ddc2f4b7a6782c7c8dba42a7cb49ae6cd6af4a00ae23c34b737601",
+            "0d018d8d22b8eb7348903e2b10582cf9cf4395fae2a585f9062826741e38c31b",
+            "e397bc74d0f3e56cdeaad9ce441eeab39ea3f791783f7baeb8506537f46f01b5",
+            "8c82c02ac6f2dade141f20e659f088f5f22d5740d8e1c51d272352d38be8de39",
+            "65193a7cd2a5f7a080cd9ddc70ba5895e14756b5dcb2363269819e2bc224853e",
+            "b299d5d2e589dcd14a735aa7fb6a32addc32647838ef3461cb9a35a8e31f0e60",
+            "39e8323ad8d1cef66c6293c69395567499483b9392908b579b9681d831faaf32",
+            "5c658a57e813f11dfacba370eda308f55222b0bacaf8f9e014d83fffd2f2f4c5",
+            "9554eddc9565fde455ed7d432fdb0e4ec889fa4e595782f238429127dfe89b87",
+            "834050511f31e38539df0fb3151c89a971663fb42d2794f32cbd80ae749029ee",
+            "4c159bb0675d5184bd86a569430c1eee107b49ca245f647655f0a47775f4db95",
+            "42aa891b0e0bbd0457121877462c8e6e1b787b88447a93589d1616578e73ff60",
+            "1044bde88b116a570086d97f25b03d7662c355352c13877c9a33b24f158592d5",
+            "99971c32055d7f0f8c0abf1d3fc9c7ea4f3d74e6531e0ca10e524ad416b43f41",
+            "2821f045a159236e98779ac5539ecef1a9bdca6062ee61b3cd68b66b9d9335ca",
+            "935a46c629b48fd3967a9e88b899f276b53f56bd1e9101a91d571c5d65c8bb1b",
+            "e8732fe07ffbfa46dcec389f5428d43b5d303b6c3e7aa9534b73087ae287fa8e"
+          ]
+        }
+      ],
+      "output": {
+        "pdf": "exports/ec04f9b4410946ccb770aa5395290de6/KiLLKiSS.pdf",
+        "sha256": "6be673f66d0c169ad316c7b968fd2fcf84300b9c56949bd9ca33a9dbe998c286",
         "page_count": 3,
         "placements": [
           {
@@ -1350,9 +3833,9 @@
             "scale": 0.3007008739292204,
             "bbox": [
               24,
-              689.104193444351,
+              689.9516231799697,
               571.2755905511812,
-              746.5380603648322
+              747.3854901004509
             ]
           },
           {
@@ -1361,9 +3844,9 @@
             "scale": 0.3007008739292204,
             "bbox": [
               24,
-              621.6616013907353,
+              623.3564608619728,
               571.2755905511812,
-              679.0954683112165
+              680.7903277824539
             ]
           },
           {
@@ -1372,9 +3855,9 @@
             "scale": 0.3007008739292204,
             "bbox": [
               24,
-              554.2190093371196,
+              556.7612985439758,
               571.2755905511812,
-              611.6528762576007
+              614.195165464457
             ]
           },
           {
@@ -1383,9 +3866,9 @@
             "scale": 0.3007008739292204,
             "bbox": [
               24,
-              486.7764172835039,
+              490.16613622597896,
               571.2755905511812,
-              544.210284203985
+              547.60000314646
             ]
           },
           {
@@ -1394,9 +3877,9 @@
             "scale": 0.3007008739292204,
             "bbox": [
               24,
-              419.63452610381745,
+              423.87167478191117,
               571.2755905511812,
-              476.7676921503693
+              481.00484082846305
             ]
           },
           {
@@ -1405,9 +3888,9 @@
             "scale": 0.3007008739292204,
             "bbox": [
               24,
-              351.8912331762725,
+              356.97581158998497,
               571.2755905511812,
-              409.62580097068286
+              414.7103793843953
             ]
           },
           {
@@ -1416,9 +3899,9 @@
             "scale": 0.3007008739292204,
             "bbox": [
               24,
-              293.7703682144627,
+              290.38064927198803,
               571.2755905511812,
-              341.88250804313793
+              347.8145161924691
             ]
           },
           {
@@ -1427,9 +3910,9 @@
             "scale": 0.3007008739292204,
             "bbox": [
               24,
-              226.327776160847,
+              223.78548695399104,
               571.2755905511812,
-              283.7616430813281
+              281.2193538744721
             ]
           },
           {
@@ -1438,9 +3921,9 @@
             "scale": 0.3007008739292204,
             "bbox": [
               24,
-              158.88518410723134,
+              157.19032463599405,
               571.2755905511812,
-              216.31905102771242
+              214.62419155647513
             ]
           },
           {
@@ -1449,9 +3932,9 @@
             "scale": 0.3007008739292204,
             "bbox": [
               24,
-              91.14189117968644,
+              90.29446144406782,
               571.2755905511812,
-              148.87645897409675
+              148.02902923847813
             ]
           },
           {
@@ -1460,9 +3943,9 @@
             "scale": 0.3007008739292204,
             "bbox": [
               24,
-              23.99999999999997,
+              24.000000000000057,
               571.2755905511812,
-              81.13316604655185
+              81.13316604655193
             ]
           },
           {
@@ -1726,364 +4209,24 @@
         ],
         "method": "reviewed_host_images_and_vector_fallback",
         "layout_version": 2,
-        "status": "needs_pdf_review",
+        "status": "reviewed",
         "vector": {
-          "path": "exports/81cc97db9e69471f961f8f6c86ffae0d/materials.json",
-          "sha256": "bf5429c5829de788094279087dbac17d443cd842af6d6e05ab03bba4899725df"
-        }
-      },
-      "source_review": {
-        "viewed_captures": [
-          "capture-0001",
-          "capture-0002",
-          "capture-0003",
-          "capture-0004",
-          "capture-0005",
-          "capture-0006",
-          "capture-0007",
-          "capture-0008",
-          "capture-0009"
-        ],
-        "complete": true,
-        "unresolved": [],
-        "scope": "whole score 135 measures, 34 systems",
-        "continuity": "Printed starts 1,6,12,16 then four-measure rows; rest10–11 accounts jump6→12; 100–101 short row then102; overlap confirmed44,60,76,84,88,92,118; omitted incomplete rows only after obtaining full new source.",
-        "first_last": "0秒完整标题和第1行；191秒完整134–135结尾，208.5秒仍此结尾下白区无新谱。",
-        "notes": "实际看图核对 KiLLKiSS / Ave Mujica / 陈老师，200BPM 4/4，34完整行135小节，10–11多小节休止，67三连音，75装饰音，100短行和134–135短末行。高亮保留音符形状，不推断未知镲鼓件。"
-      },
-      "pages": [
-        {
-          "id": "page-1",
-          "regions": [
-            0,
+          "path": "exports/ec04f9b4410946ccb770aa5395290de6/materials.json",
+          "sha256": "97c65a72377eb9a8f82bfeb6b553dff35b59157036696f7dcedb1cc23868455d"
+        },
+        "review": {
+          "pages": [
             1,
             2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11
+            3
           ],
-          "input": {
-            "path": "redraw/bb41d885d35f4272b84b7325f495c17f/input-1.png",
-            "sha256": "47e378e1adae575aa2b3f5dafc826e0a7c2fc3c91386dd1dbb14b8fee024f19a",
-            "inputs": [
-              "da64c07e03dc1904cada4fccd717fdbd279e8a0d777614cabd23867a0ec413db",
-              "9112926cd498aa39897abad39bb1909c6a941507549cf4b67074a9b27bd0a6e9",
-              "a3181ef6db5fdfc4ca4d4c5212aa7474d5a644cf89d6905f997491b7fc7f5a4b",
-              "a22a207a94c68a2c11df14ef0ac5ebde75916ed8e9e8d03186fe6ad2fa5b8d27",
-              "ab04c33bd7f191f2b58ef62693bcb9b57f3bdb409c0cb23c8ee3c36037c4df97",
-              "a077959eacd0a70804a0f07294cc5abbbbefc8238196d7b0c6d4bdabb5257958",
-              "6863c263902850e40db7626268a591ac33ea962fd4ca6ba7881f35003be8a78b",
-              "a1e1cac714a6ca02eeada9a625809cb394b8ff32b77ffe1b97c0363d1b673748",
-              "f1d5adfcd9886b47ded7a684af973e74f5043a8148e97143582d173a480b5428",
-              "2d64c034c7f9db36cfa58117967b05678799d726aa62d107de191ab6d41d79cb",
-              "88850322d837ea1204bb9532064c4e18bd9255a649940d0ee6135f6cb6ae0824",
-              "d82667e817aa5f7b0f6e7ea372d91eed89b8a75a04d32a49f06c052736228fc0"
-            ]
-          },
-          "source_boundaries": [
-            [
-              0,
-              0,
-              1820,
-              204
-            ],
-            [
-              0,
-              204,
-              1820,
-              395
-            ],
-            [
-              0,
-              395,
-              1820,
-              586
-            ],
-            [
-              0,
-              586,
-              1820,
-              777
-            ],
-            [
-              0,
-              777,
-              1820,
-              968
-            ],
-            [
-              0,
-              968,
-              1820,
-              1158
-            ],
-            [
-              0,
-              1158,
-              1820,
-              1350
-            ],
-            [
-              0,
-              1350,
-              1820,
-              1510
-            ],
-            [
-              0,
-              1510,
-              1820,
-              1701
-            ],
-            [
-              0,
-              1701,
-              1820,
-              1892
-            ],
-            [
-              0,
-              1892,
-              1820,
-              2084
-            ],
-            [
-              0,
-              2084,
-              1820,
-              2274
-            ]
-          ],
-          "status": "vector",
-          "corrections_used": 0,
-          "attempts": [],
-          "fallback_reason": "本次额外整曲验收明确强制宿主生图不可用，真实调用通用轮廓五线矢量兜底；非mock生图成功。"
-        },
-        {
-          "id": "page-2",
-          "regions": [
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-            21,
-            22,
-            23
-          ],
-          "input": {
-            "path": "redraw/bb41d885d35f4272b84b7325f495c17f/input-2.png",
-            "sha256": "798c935f77f27c97cdcb00f5ff64127d79f746df69e808c927ee577dce31ea0c",
-            "inputs": [
-              "344ea7bcf98618471bcab45a5c18f86372d93941b7ef845acaf563d0fa490426",
-              "5b1cfcee4ec7bf2f99fd146e854a7582595e92e463826c905b005e2d80e6b89b",
-              "742ead317a86a2d1574c72786509fe691be11aca79c7a51c1b84a09bee2abf02",
-              "534de2eb7ce1c3894117295be6a9f363b55a3a9655516169baa85a37e275cb5e",
-              "11d77386c5cfcdeaf15ab2ec112ba419d660fda9c4c3b0b70c74fc3eda6019c5",
-              "19dcd0ca4b2f2eedcea9e3506b206bc2b7723af3647b976109f1ff4c3eccfac2",
-              "655f5d7496ddc2f4b7a6782c7c8dba42a7cb49ae6cd6af4a00ae23c34b737601",
-              "0d018d8d22b8eb7348903e2b10582cf9cf4395fae2a585f9062826741e38c31b",
-              "e397bc74d0f3e56cdeaad9ce441eeab39ea3f791783f7baeb8506537f46f01b5",
-              "8c82c02ac6f2dade141f20e659f088f5f22d5740d8e1c51d272352d38be8de39",
-              "65193a7cd2a5f7a080cd9ddc70ba5895e14756b5dcb2363269819e2bc224853e",
-              "b299d5d2e589dcd14a735aa7fb6a32addc32647838ef3461cb9a35a8e31f0e60"
-            ]
-          },
-          "source_boundaries": [
-            [
-              0,
-              0,
-              1820,
-              191
-            ],
-            [
-              0,
-              191,
-              1820,
-              382
-            ],
-            [
-              0,
-              382,
-              1820,
-              573
-            ],
-            [
-              0,
-              573,
-              1820,
-              764
-            ],
-            [
-              0,
-              764,
-              1820,
-              954
-            ],
-            [
-              0,
-              954,
-              1820,
-              1146
-            ],
-            [
-              0,
-              1146,
-              1820,
-              1337
-            ],
-            [
-              0,
-              1337,
-              1820,
-              1528
-            ],
-            [
-              0,
-              1528,
-              1820,
-              1719
-            ],
-            [
-              0,
-              1719,
-              1820,
-              1911
-            ],
-            [
-              0,
-              1911,
-              1820,
-              2101
-            ],
-            [
-              0,
-              2101,
-              1820,
-              2292
-            ]
-          ],
-          "status": "vector",
-          "corrections_used": 0,
-          "attempts": [],
-          "fallback_reason": "本次额外整曲验收明确强制宿主生图不可用，真实调用通用轮廓五线矢量兜底；非mock生图成功。"
-        },
-        {
-          "id": "page-3",
-          "regions": [
-            24,
-            25,
-            26,
-            27,
-            28,
-            29,
-            30,
-            31,
-            32,
-            33,
-            34
-          ],
-          "input": {
-            "path": "redraw/bb41d885d35f4272b84b7325f495c17f/input-3.png",
-            "sha256": "430282e276d0830ecf21a702abddeece97cdae39820f476059b5e2fcf596df4c",
-            "inputs": [
-              "39e8323ad8d1cef66c6293c69395567499483b9392908b579b9681d831faaf32",
-              "5c658a57e813f11dfacba370eda308f55222b0bacaf8f9e014d83fffd2f2f4c5",
-              "9554eddc9565fde455ed7d432fdb0e4ec889fa4e595782f238429127dfe89b87",
-              "834050511f31e38539df0fb3151c89a971663fb42d2794f32cbd80ae749029ee",
-              "4c159bb0675d5184bd86a569430c1eee107b49ca245f647655f0a47775f4db95",
-              "42aa891b0e0bbd0457121877462c8e6e1b787b88447a93589d1616578e73ff60",
-              "1044bde88b116a570086d97f25b03d7662c355352c13877c9a33b24f158592d5",
-              "99971c32055d7f0f8c0abf1d3fc9c7ea4f3d74e6531e0ca10e524ad416b43f41",
-              "2821f045a159236e98779ac5539ecef1a9bdca6062ee61b3cd68b66b9d9335ca",
-              "935a46c629b48fd3967a9e88b899f276b53f56bd1e9101a91d571c5d65c8bb1b",
-              "e8732fe07ffbfa46dcec389f5428d43b5d303b6c3e7aa9534b73087ae287fa8e"
-            ]
-          },
-          "source_boundaries": [
-            [
-              0,
-              0,
-              1820,
-              191
-            ],
-            [
-              0,
-              191,
-              955,
-              382
-            ],
-            [
-              0,
-              382,
-              1820,
-              573
-            ],
-            [
-              0,
-              573,
-              1820,
-              764
-            ],
-            [
-              0,
-              764,
-              1820,
-              955
-            ],
-            [
-              0,
-              955,
-              1820,
-              1147
-            ],
-            [
-              0,
-              1147,
-              1820,
-              1337
-            ],
-            [
-              0,
-              1337,
-              1820,
-              1528
-            ],
-            [
-              0,
-              1528,
-              1820,
-              1719
-            ],
-            [
-              0,
-              1719,
-              1820,
-              1910
-            ],
-            [
-              0,
-              1910,
-              975,
-              2101
-            ]
-          ],
-          "status": "vector",
-          "corrections_used": 0,
-          "attempts": [],
-          "fallback_reason": "本次额外整曲验收明确强制宿主生图不可用，真实调用通用轮廓五线矢量兜底；非mock生图成功。"
+          "notes": "实际查看水印补采修复后全部3页，31grace来源清楚、完整135m34行；标题2004/4、10–11休止、67tuplets、75graces、134staccato、短100与末行核对；无断行重叠，不宣称完整MIDI。"
         }
-      ]
+      }
     }
-  }
+  },
+  "failure_history": [
+    "root independent review found m31 grace covered by watermark in86s capture; reacquired complete row at78s actualPTS1248000",
+    "new page1 initial generated two open0 inrow36 into r/C; one real correction restored0"
+  ]
 }

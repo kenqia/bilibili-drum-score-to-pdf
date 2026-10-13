@@ -15,3 +15,6 @@ forced-vector：额外新URL任务，再下载和独立取帧9次，hash与本�
 本次没有整曲135小节MIDI逐小节转写和回读；Issue #58及父规格均未通过。独立复核请求已给root，未提前记录其通过。未知模型成本null。
 
 持久worktree /home/kenqia/issue54-worktrees/killkiss 保留源视频和全部活动任务。不使用临时目录。两Python脚本保存此次Agent已看图的决定，不是新视频自动选行算法。archive.json提供产物hash。
+
+
+独立复核暴露首版第31小节grace被源水印破坏。78秒新取帧实际PTS1248000完整行替换，原失败PDF和初次3真实回执保留在 initial-superseded-evidence.json。选行变更按正式API失效所有重绘，新真实生成3次；新page1开放0畸变，唯一真实定向修正后接受。因此实际总生图7次(旧3、新3、修正1)，不是把失效前3次漏记。新六页和31/67/75/134共12局部已实际查看。更新产物hash和路径以 acceptance-evidence.json 活动记录为准；此前README首版hash仅表示已被替代产物。独立root新复核仍待确认。
