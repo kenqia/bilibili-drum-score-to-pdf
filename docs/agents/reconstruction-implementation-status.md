@@ -1,38 +1,45 @@
 # Issue #54 实施记录
 
-本页记录本地实施状态。测试通过、实际视觉审阅和音乐校对分别记录；未完成的验收不能记作工单完成。
+截至 2026-10-13，#55、#56、#57 的软件增量已合入 `codex/issue-54-integration`。#58 正在进行三视频完整 PDF、强制矢量及对应整曲音乐验收；可靠 MIDI 尚未放行。#59 的删除和默认入口切换等待 #58 完成。Issue #54 尚未完成。
 
-## 基线与工作区
+## 工作区和任务图
 
-- 重构前 Git 基线：`51aa468e1cab45010355100244a647ef3b8945e7`。
-- 集成分支：`codex/issue-54-integration`。
-- 任务图：#55 → #56 → #57 → #58 → #59。
-- 初始可开始票据：#55。
-- 初始工作区已有修改：`GLOSSARY.md`、`docs/agents/issue-tracker.md`，以及未跟踪的规格、ADR、研究、实验、`.scratch/` 和 `.archify/`。实施不覆盖这些材料，也不批量纳入提交。
-- 基线状态与已有规格 hash 保存在 `/tmp/issue54-context/baseline.json`；票据只读快照保存在同目录。
+Git 基线为 `51aa468e1cab45010355100244a647ef3b8945e7`，任务图为 #55 → #56 → #57 → #58 → #59。初始工作区已有 `GLOSSARY.md`、`docs/agents/issue-tracker.md` 修改，以及规格、ADR、研究、实验、`.scratch/` 和 `.archify/` 等未跟踪材料。实施没有覆盖或批量提交这些文件。基线与五份保护文件 hash 副本保存在 `experiments/2026-10-13-issue54-local/baseline.json`。
 
-## 当前实施状态
+运行环境中途重置，原 `/tmp`、运行中的测试和旧 Agent 丢失。Git 提交、工作区与已保存档案保留。旧临时任务不能称作可恢复；档案中的原路径是历史来源。新鲜验收使用 `experiments/2026-10-13-issue58-recovered/` 和 `/home/kenqia/issue54-worktrees/`，日志使用 `/home/kenqia/issue54-recovery-evidence/`。
 
-#55 的本地矢量 PDF 增量已合入集成提交 `402f3d1`。新的 `reconstruction.py` 复用媒体探测和实际 PTS 取帧，保存选行、粗拼与几何矢量来源，按完整行分页，并单独保存调用者的实际 PDF 审阅陈述。默认入口尚未切换。接口和现场证据见 [本地工作流](reconstruction-local.md)。
+## 已实现的软件
 
-十五小节 MIDI 评估已合入 `b74aae3`，证据见 [实际 MIDI 比较](../experiments/issue-55-midi/README.md)。Agent 加 Mido 在声明的实验映射下，回读的 141 次击打、60 拍与独立原图基准一致。Audiveris 加 MuseScore 实际执行后仍少一小节，有限交换修正后仅 77/141 次击打的鼓件与起拍相符。两种高度的镲符号缺少作者图例，因此最终可靠后端未放行。
+#55 的 `reconstruction.py` 保存实际 PTS、来源 hash、完整选行和粗拼，执行轮廓转描与补五线，按完整行等比分页，单独记录实际 PDF 审阅。独立版本目录保留旧 PDF 和用户文件，支持重新选行及中断恢复。粗拼按像素内存预算分块。详见[本地重构工作流](reconstruction-local.md)。
 
-#55 明确允许记录无候选达到基准。这个评估结论不阻塞 #56 的 PDF 流程，但不能用于宣称 #57 的可靠音乐转换或 #58 的整曲 MIDI 验收通过。#56 已完成本地增量和两条路线的片段验收，软件合入 `9caf67b`。`score_workflow.py` 提供统一来源、低清导航、原生主要截图、接续粗拼、真实宿主生图及矢量兜底、通用重排与恢复。详见[新工作流及实际验收](reconstruction-workflow.md)。这使任务前沿推进到 #57；未知作者镲映射仍必须在音乐转换中如实处理。
+#55 十五小节音乐比较实际执行两条候选。Agent 加 Mido 在声明的实验映射下回读 141 次击打和 60 拍；Audiveris 加 MuseScore 的有限交换修正仅有 77/141 次击打的鼓件和起拍一致。未知镲映射没有放行。#55 明确允许记录没有可靠候选，不阻塞 PDF 增量，但不能替代真实整曲 MIDI。见[候选比较](../experiments/issue-55-midi/README.md)。
 
-双轴审阅发现一项 P1：同名 PDF 阻塞重新选行和导出中断后的恢复。修复 `6a86cea` 已合入 `b8ab5f6`，每次导出使用独立版本目录，并保留真实谱名作为 PDF 文件名。旧产物及用户文件保留；当前 PDF 与矢量记录仍核验 hash。
+#56 的 `score_workflow.py` 提供统一匿名 URL/本地来源、低清导航、原生取帧、呈交记录、原位置去重、真实宿主生图交接、每页一次修正与矢量兜底。原生生成图按来源宽度归一化重排，无新增位图重采样。相同材料恢复保留输出和修正次数；变更选行原子失效旧生成材料；最终 PDF 审阅核验完整来源。见[新工作流](reconstruction-workflow.md)。
 
-新流程在分支中建立后，旧默认入口暂时保留。#58 的三视频完整 PDF、整曲 MIDI 和实际矢量兜底通过后，才执行 #59 的删除和正式切换。
+#57 的可选 `midi_workflow.py` 与 `midi_export.py` 将完整音乐审阅绑定到 PDF、原图和转写 hash。自然语言明确请求后才启动；全部小节和播放顺序必须覆盖，未知项拒绝导出并保留 PDF。导出使用 GM 第 10 通道、精确 480 PPQ、实际事件回读，路径限制在任务内。完整受控三小节谱经实际查看后展开为五小节、26 次击打和 18 拍，包含三连音、装饰音、反复、力度、变速与变拍号。见[受控整谱验收](../experiments/issue-57-midi/README.md)。受控谱不能替代三条真实样本。
 
-## 验证与远端状态
+后续审阅增加显式 `reject_accepted_redraw()`，保留旧图、PDF、审阅和预算，撤回当前交付引用；预算耗尽时转矢量。另修复小节内明确变速遗漏，`measure.tempo_changes` 使用精确局部拍点，随反复重放并接续下一小节初速。非法结构、区间、顺序、BPM 和不能精确表示的拍点在提交时拒绝。集成提交分别为 `383df669` 和 `e5da0f65`。
 
-- 基线完整 unittest：232 项，976.701 秒，231 项通过、1 项错误，退出码 1。错误发生在旧 `test_review_plan_above_compact_byte_limit_keeps_original_task_waiting` 构造视频时，ffmpeg 被 SIGKILL；错误不涉及新增模块。日志为 `/tmp/issue54-context/baseline-unittest.log`。
-- 同项第一次复查仍被 SIGKILL，第二次串行复查 1 项通过、39.531 秒，日志为 `/tmp/issue54-context/baseline-review-serial.log`。执行期间曾观察到内存紧张，但未取得证明 SIGKILL 原因的系统记录。单项通过不把原完整回归改记为通过。
-- 本地新工作流专项：修复后的 11 项通过，集成 `b8ab5f6` 上重新执行，3.088 秒。覆盖无效媒体、来源损坏、未决拒绝、失败恢复、用户文件保护、重复音乐与短末行分页。
-- #55 实际视觉验收：KiLLKiSS 起始第 1–15 小节的小范围原图与一页矢量 PDF；`pdfimages -list` 无位图。
-- #56 实际视觉验收：新取帧覆盖 KiLLKiSS 第 1–67 小节片段，四张原生图实际 PTS 为 `0/1120000/1440000/1760000`，时间基准 `1/16000`。真实宿主生图两次、零次修正，接受两张输出后重新排版为两页；另以四次独立取帧完成强制无生图能力的两页纯矢量交付。root 实际查看两条路线各两页，矢量路线另有 implementer 独立看图。尚未验收整曲、整曲 MIDI 或三视频。
-- #56 集成专项：`9caf67b` 合并后新鲜验证，9 项 workflow 通过，2.518 秒；11 项 reconstruction 通过，2.592 秒，对应归档中的 `issue56-workflow-green.log` 和 `issue56-local-green.log`。merger 在同一集成提交上的独立串行复验分别为 2.880 秒和 2.847 秒，也全部通过。同名重入、分块和不同生图分辨率打印宽度的反例保留 red→green 证据。
-- MIDI 可选专项：集成 `b8ab5f6` 上使用 Mido 1.3.3 重新执行 6 项通过。普通 PDF 依赖未增加 Mido。
-- PDF worktree 的重复全回归未完成，保留日志及中止记录，不计为通过。集成最终完整回归尚未运行。
-- 基线、审阅和小范围 PDF/MIDI 视觉证据副本保存在 `experiments/2026-10-13-issue54-local/`。#56 的原生图、粗拼、两次真实生成图、版本化 PDF、实际审阅记录、专项日志与公开作者图例调研副本保存在 `experiments/2026-10-13-issue56-local/`，共 85 个文件、24,443,460 字节。两处 `archive.json` 记录原路径及复制后 hash。临时任务的原路径仍保留；副本不冒充任务迁移或新验收。
+## 新鲜验证
 
-没有 push、PR、远端合并、Issue 修改或产品发布。完整模型成本未知，保持 `null`。软件增量和片段验收不代表 Issue #54 已完成。
+在 `d832de4` 上重新执行仓库完整命令，共 269 项、954.108 秒，255 项通过、14 项因可选 Mido 缺失跳过，退出码 0。日志为 `full-unittest-retry.log`。更早的基线完整回归有一次 ffmpeg SIGKILL；目标单项后来通过，不把原失败改记为通过。其他中断运行不计为完成。
+
+后续两项修复合并后按影响范围验证。`e5da0f65` 上 workflow 13 项通过、3.197 秒，日志为 `final-score-workflow.log`。可选 MIDI 使用隔离 requirements 加 Mido 1.3.3，17 项通过、0.129 秒，日志为 `tempo-merge-green.log`。两项修复没有重跑完整套件；旧提交的完整结果不标为当前提交的完整回归。
+
+```sh
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
+uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -p 'test_score_workflow.py' -v
+uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt --with mido==1.3.3 python -m unittest discover -s tests -p 'test_midi*.py' -v
+```
+
+独立 Standards 审阅在冻结提交 `383df669` 上无发现；Spec 审阅发现小节内变速遗漏，修复后独立复核无新发现。审阅记录位于持久日志目录。
+
+## 实际样本和发布门槛
+
+标准 BV1rH4y1R7Rk 新鲜匿名获取后，实际查看 5 张原生图和 6 张导航图，两次真实宿主生图、零修正，完整 1 至 88 小节输出两页 PDF。root 与 implementer 独立查看页面，并放大核对第 59 小节脚踩叉形符头和第 87 小节镲附点。两处均保留，root 的缩图疑点已撤回。见[标准 PDF 验收](../experiments/issue-58-standard-pdf.md)。整曲 MIDI 未验收。
+
+第三作者 BV1np421S78S 实际查看 1 张原生图与 3 张导航图，一次真实宿主生图、零修正，完整 16 小节输出一页“小星星.pdf”。两位 Agent 独立查看原图与最终 PDF 后接受。完整音乐转写记录 58 次写定击打，反复后为 107 次、120 拍；作者鼓件映射及 rit 播放约定未决。实际 MIDI 导出拒绝，PDF hash 不变。见[第三作者验收](../experiments/issue-58-other-pdf.md)。
+
+KiLLKiSS BV15crrYUEPA 的新鲜三页生图和三页强制矢量产物已实际查看。矢量第 31 小节装饰音受到源水印遮挡，正在针对该行补采和重新导出；旧版本不计为矢量通过。整曲音乐验收未完成。新记录保存在持久 killkiss worktree，不以原型或片段替代整曲验收。
+
+未知模型及完整宿主成本保持 `null`。没有 push、PR、远端合并、Issue 修改或发布。
