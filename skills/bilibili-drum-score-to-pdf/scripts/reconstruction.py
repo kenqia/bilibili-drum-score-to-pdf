@@ -249,10 +249,15 @@ def export_vector(task):
         raise ReconstructionError('原图尚未确认完整，或仍有未决内容。')
     vectors = [trace_region(task, item) for item in record['regions']]
     placements, page_count = paginate(record['regions'])
-    filename = pdf_name(record['title'])
-    if (Path(task) / filename).exists():
-        raise ReconstructionError('同名 PDF 已存在，停止以避免覆盖。')
-    canvas = Canvas(str(Path(task) / filename), pagesize=A4, invariant=1)
+    exports = Path(task) / 'exports'
+    if exports.is_symlink():
+        raise ReconstructionError('导出目录不能指向任务外部或已有用户目录。')
+    exports.mkdir(exist_ok=True)
+    revision = exports / uuid.uuid4().hex
+    revision.mkdir()
+    pdf_path = revision / pdf_name(record['title'])
+    filename = str(pdf_path.relative_to(task))
+    canvas = Canvas(str(pdf_path), pagesize=A4, invariant=1)
     canvas.setTitle(record['title'])
     for page in range(1, page_count + 1):
         for placement in (p for p in placements if p['page'] == page):
@@ -273,13 +278,13 @@ def export_vector(task):
             canvas.restoreState()
         canvas.showPage()
     canvas.save()
-    vector_path = Path(task) / 'vector.json'
+    vector_path = revision / 'vector.json'
     vector_path.write_text(json.dumps({'inputs': [r['sha256'] for r in record['regions']], 'regions': vectors}))
     output = {'pdf': filename, 'sha256': digest(Path(task) / filename),
               'page_count': page_count, 'placements': placements,
               'method': 'geometric_contours_and_staff_lines', 'semantic_transcription': False,
               'hidden_symbol_recovery': False, 'status': 'needs_pdf_review',
-              'vector': {'path': vector_path.name, 'sha256': digest(vector_path)}}
+              'vector': {'path': str(vector_path.relative_to(task)), 'sha256': digest(vector_path)}}
     record.update(output=output, status='needs_pdf_review')
     _save(task, record)
     return output

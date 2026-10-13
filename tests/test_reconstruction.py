@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from PIL import Image, ImageDraw
 
@@ -45,7 +46,7 @@ class LocalScoreWorkflow(unittest.TestCase):
     def test_local_video_delivers_reviewed_named_vector_pdf(self):
         self.select()
         result = workflow.export_vector(self.task)
-        self.assertEqual(result['pdf'], 'Test Score.pdf')
+        self.assertEqual(Path(result['pdf']).name, 'Test Score.pdf')
         self.assertEqual(result['page_count'], 1)
         self.assertEqual(result['status'], 'needs_pdf_review')
         subprocess.run(['pdftoppm', '-scale-to', '600', '-png', '-singlefile',
@@ -140,6 +141,50 @@ class LocalScoreWorkflow(unittest.TestCase):
         listed = subprocess.run(['pdfimages', '-list', str(self.task / result['pdf'])],
                                 check=True, capture_output=True, text=True).stdout.splitlines()
         self.assertEqual(len(listed), 2)
+
+    def test_reselect_same_title_preserves_old_pdf_and_unknown_user_file(self):
+        self.select()
+        first = workflow.export_vector(self.task)
+        workflow.review_pdf(self.task, [1], 'Controlled test review, not actual visual acceptance.')
+        old_pdf = self.task / first['pdf']
+        old_bytes = old_pdf.read_bytes()
+        user_pdf = self.task / 'Test Score.pdf'
+        user_pdf.write_bytes(b'user-owned PDF')
+        record = workflow.load(self.task)
+        corrected = [dict(region) for region in record['regions']]
+        corrected[0]['bbox'] = [0, 0, 640, 60]
+        workflow.assemble(self.task, 'Test Score', corrected, record['source_review'])
+        second = workflow.export_vector(self.task)
+        self.assertEqual(Path(second['pdf']).name, 'Test Score.pdf')
+        self.assertNotEqual(second['pdf'], first['pdf'])
+        self.assertEqual(second['status'], 'needs_pdf_review')
+        self.assertEqual(old_pdf.read_bytes(), old_bytes)
+        self.assertEqual(user_pdf.read_bytes(), b'user-owned PDF')
+        self.assertEqual(workflow.export_vector(self.task), second)
+
+    def test_resume_after_export_record_write_interrupt_preserves_sources_and_budget(self):
+        self.select()
+        before = workflow.load(self.task)
+        # Controlled interruption at the persistence boundary, after PDF save.
+        with patch.object(workflow, '_save', side_effect=OSError('controlled record write interruption')):
+            with self.assertRaises(OSError):
+                workflow.export_vector(self.task)
+        orphan_pdfs = list(self.task.rglob('*.pdf'))
+        self.assertEqual(len(orphan_pdfs), 1)
+        orphan = orphan_pdfs[0]
+        old_bytes = orphan.read_bytes()
+        incomplete = workflow.load(self.task)
+        self.assertNotIn('output', incomplete)
+        resumed = workflow.export_vector(self.task)
+        after = workflow.load(self.task)
+        self.assertEqual(Path(resumed['pdf']).name, 'Test Score.pdf')
+        self.assertEqual(resumed['status'], 'needs_pdf_review')
+        self.assertNotEqual(self.task / resumed['pdf'], orphan)
+        self.assertEqual(orphan.read_bytes(), old_bytes)
+        self.assertEqual(after['source'], before['source'])
+        self.assertEqual(after['captures'], before['captures'])
+        self.assertEqual(after['metrics'], before['metrics'])
+        self.assertEqual(workflow.export_vector(self.task), resumed)
 
 
 if __name__ == '__main__':
