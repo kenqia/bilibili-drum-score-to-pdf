@@ -1,0 +1,1741 @@
+{
+  "status": "source transcription checked against independently rendered PDF for fifteen measures; author cymbal mapping unresolved",
+  "title": "KiLLKiSS",
+  "tempo_bpm": 200,
+  "time_signature": [
+    4,
+    4
+  ],
+  "model_cost": null,
+  "measures": [
+    {
+      "number": 1,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-001.png",
+      "source_sha256": "9112926cd498aa39897abad39bb1909c6a941507549cf4b67074a9b27bd0a6e9",
+      "voice_tapes": [
+        "R:q R:q R:q R:e K:s K:s"
+      ],
+      "events": [
+        {
+          "beat": "7/2",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "15/4",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/4",
+          "staccato": false
+        }
+      ],
+      "unresolved": [],
+      "source_frame": {
+        "frame": "frames/frame-0000.0.png",
+        "bbox": [
+          35,
+          394,
+          1855,
+          585
+        ],
+        "timestamp": 0.0,
+        "pts": 0,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5"
+      }
+    },
+    {
+      "number": 2,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-001.png",
+      "source_sha256": "9112926cd498aa39897abad39bb1909c6a941507549cf4b67074a9b27bd0a6e9",
+      "voice_tapes": [
+        "C2+S:q R:e C1+S:e R:q C2+S:q",
+        "R:e K:e K:q K:e K:e R:e K:e"
+      ],
+      "events": [
+        {
+          "beat": "0",
+          "duration": "1",
+          "note": 57,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "0",
+          "duration": "1",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/2",
+          "note": 49,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1",
+          "note": 57,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "1/2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "5/2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "7/2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        }
+      ],
+      "unresolved": [],
+      "source_frame": {
+        "frame": "frames/frame-0000.0.png",
+        "bbox": [
+          35,
+          394,
+          1855,
+          585
+        ],
+        "timestamp": 0.0,
+        "pts": 0,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5"
+      }
+    },
+    {
+      "number": 10,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-006.png",
+      "source_sha256": "a3181ef6db5fdfc4ca4d4c5212aa7474d5a644cf89d6905f997491b7fc7f5a4b",
+      "voice_tapes": [
+        "R:w"
+      ],
+      "events": [],
+      "unresolved": [],
+      "source_frame": {
+        "frame": "frames/frame-0000.0.png",
+        "bbox": [
+          35,
+          585,
+          1855,
+          776
+        ],
+        "timestamp": 0.0,
+        "pts": 0,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5"
+      }
+    },
+    {
+      "number": 11,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-006.png",
+      "source_sha256": "a3181ef6db5fdfc4ca4d4c5212aa7474d5a644cf89d6905f997491b7fc7f5a4b",
+      "voice_tapes": [
+        "R:w"
+      ],
+      "events": [],
+      "unresolved": [],
+      "source_frame": {
+        "frame": "frames/frame-0000.0.png",
+        "bbox": [
+          35,
+          585,
+          1855,
+          776
+        ],
+        "timestamp": 0.0,
+        "pts": 0,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5"
+      }
+    },
+    {
+      "number": 23,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-020.png",
+      "source_sha256": "c39527a7c7d071edeb1580a5f45a0e8abee91e4e6b8d526aada61a42af85083c",
+      "voice_tapes": [
+        "H:q H+S:q F:s F:de H+S:q",
+        "R:e K:e R:e K:s K:s R:e K:s K:s R:q"
+      ],
+      "events": [
+        {
+          "beat": "0",
+          "duration": "1",
+          "note": 46,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1",
+          "note": 46,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1/4",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "9/4",
+          "duration": "3/4",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "3/4",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1",
+          "note": 46,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "1/2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "7/4",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "5/2",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "11/4",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        }
+      ],
+      "unresolved": [],
+      "source_frame": {
+        "frame": "frames/frame-0070.0.png",
+        "bbox": [
+          35,
+          382,
+          1855,
+          573
+        ],
+        "timestamp": 70.0,
+        "pts": 1120000,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "65a3cf89336ce542cde0090fca7a4b88821c0f4e7be666046cf0b1e4782cf1f6"
+      }
+    },
+    {
+      "number": 27,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-024.png",
+      "source_sha256": "697834758c8aa28af8418a783a749d07126fbfb127d5984390564790bcebbed7",
+      "voice_tapes": [
+        "R:q C2+S:e S:s S:s S:e T:e F:e F:e",
+        "K:e K:e R:q R:q R:q"
+      ],
+      "events": [
+        {
+          "beat": "1",
+          "duration": "1/2",
+          "note": 57,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/4",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "7/4",
+          "duration": "1/4",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "5/2",
+          "duration": "1/2",
+          "note": 48,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1/2",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "7/2",
+          "duration": "1/2",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "0",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1/2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        }
+      ],
+      "unresolved": [],
+      "voice_tape_note": "Leading/trailing R tokens that fill an otherwise unprinted voice gap denote implicit silence, not additional visible printed rests.",
+      "source_frame": {
+        "frame": "frames/frame-0070.0.png",
+        "bbox": [
+          35,
+          574,
+          1855,
+          765
+        ],
+        "timestamp": 70.0,
+        "pts": 1120000,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "65a3cf89336ce542cde0090fca7a4b88821c0f4e7be666046cf0b1e4782cf1f6"
+      }
+    },
+    {
+      "number": 32,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-032.png",
+      "source_sha256": "a4cab79f346774629a6bbeb57b3f85043f957b90fb56305f0ff415d78380d3b0",
+      "voice_tapes": [
+        "C2:q C2:q C2+S:q C2:q",
+        "K:s K:s K:s K:s K:s K:s K:s K:s R:q K:q"
+      ],
+      "events": [
+        {
+          "beat": "0",
+          "duration": "1",
+          "note": 57,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1",
+          "note": 57,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1",
+          "note": 57,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1",
+          "note": 57,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "0",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "1/4",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "1/2",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "3/4",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "5/4",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "7/4",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1",
+          "staccato": false
+        }
+      ],
+      "unresolved": [],
+      "source_frame": {
+        "frame": "frames/frame-0090.0.png",
+        "bbox": [
+          35,
+          51,
+          1855,
+          242
+        ],
+        "timestamp": 90.0,
+        "pts": 1440000,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "384374661fe9edbd65b09fe874e1055c78755a12240e11f372d0a0b636640fa6"
+      }
+    },
+    {
+      "number": 67,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-064.png",
+      "source_sha256": "858014570c19e3f9a8cab88b1eefd9b2bf9f1d81839da9d70ec163f5f3683e0e",
+      "voice_tapes": [
+        "R:e H+S:e H+S:q S:t T:t T:t T:t F:t F:t",
+        "K:q R:e K:s K:s R:q R:q"
+      ],
+      "events": [
+        {
+          "beat": "1/2",
+          "duration": "1/2",
+          "note": 46,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1/2",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1",
+          "note": 46,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1/3",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/3",
+          "staccato": false
+        },
+        {
+          "beat": "7/3",
+          "duration": "1/3",
+          "note": 48,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/3",
+          "staccato": false
+        },
+        {
+          "beat": "8/3",
+          "duration": "1/3",
+          "note": 48,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/3",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1/3",
+          "note": 48,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/3",
+          "staccato": false
+        },
+        {
+          "beat": "10/3",
+          "duration": "1/3",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/3",
+          "staccato": false
+        },
+        {
+          "beat": "11/3",
+          "duration": "1/3",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/3",
+          "staccato": false
+        },
+        {
+          "beat": "0",
+          "duration": "1",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "7/4",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        }
+      ],
+      "unresolved": [],
+      "voice_tape_note": "Leading/trailing R tokens that fill an otherwise unprinted voice gap denote implicit silence, not additional visible printed rests.",
+      "source_frame": {
+        "frame": "frames/frame-0110.0.png",
+        "bbox": [
+          35,
+          804,
+          1855,
+          995
+        ],
+        "timestamp": 110.0,
+        "pts": 1760000,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "cac02dd4362ef249b10c44bab6d60d70edbf44b81b0b7d43d113aac7c26875bb"
+      }
+    },
+    {
+      "number": 75,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-072.png",
+      "source_sha256": "94cee90a8b336ba92108b6dc4e4ec5258bec7d0ef31b5f5b177504173978c2ec",
+      "voice_tapes": [
+        "H:q R:e K:s K:s gT+T:de gS+S:s R:e gF+F:e"
+      ],
+      "events": [
+        {
+          "beat": "0",
+          "duration": "1",
+          "note": 46,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "7/4",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "31/16",
+          "duration": "1/16",
+          "note": 48,
+          "velocity": 64,
+          "voice": 1,
+          "notation": "slashed eighth grace"
+        },
+        {
+          "beat": "2",
+          "duration": "3/4",
+          "note": 48,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "3/4",
+          "staccato": false
+        },
+        {
+          "beat": "43/16",
+          "duration": "1/16",
+          "note": 38,
+          "velocity": 64,
+          "voice": 1,
+          "notation": "slashed eighth grace"
+        },
+        {
+          "beat": "11/4",
+          "duration": "1/4",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "55/16",
+          "duration": "1/16",
+          "note": 43,
+          "velocity": 64,
+          "voice": 1,
+          "notation": "slashed eighth grace"
+        },
+        {
+          "beat": "7/2",
+          "duration": "1/2",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        }
+      ],
+      "unresolved": [],
+      "source_frame": {
+        "frame": "frames/frame-0130.0.png",
+        "bbox": [
+          35,
+          410,
+          1855,
+          601
+        ],
+        "timestamp": 130.0,
+        "pts": 2080000,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "d8de86ac2cd8ab29687b6a93ee2a957a11a9cd6805317878b6b355162f4f8729"
+      }
+    },
+    {
+      "number": 110,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-110.png",
+      "source_sha256": "2f26ccf1ea122f1365c366e0110c33e17907d0cfa265624391d000658f1f04d9",
+      "voice_tapes": [
+        "R:e S:e H:q H+S:e S:e C1:e C2:e",
+        "R:q K:e K:e R:q K:e K:e"
+      ],
+      "events": [
+        {
+          "beat": "1/2",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1",
+          "note": 46,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1/2",
+          "note": 46,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "5/2",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1/2",
+          "note": 49,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "7/2",
+          "duration": "1/2",
+          "note": 57,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "7/2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        }
+      ],
+      "unresolved": [],
+      "voice_tape_note": "Leading/trailing R tokens that fill an otherwise unprinted voice gap denote implicit silence, not additional visible printed rests.",
+      "source_frame": {
+        "frame": "frames/frame-0170.0.png",
+        "bbox": [
+          35,
+          640,
+          1855,
+          831
+        ],
+        "timestamp": 170.0,
+        "pts": 2720000,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "501cf3fdce6c5121b347b8e14b4e803c9a91612b85a002dc6dc712f5488134ff"
+      }
+    },
+    {
+      "number": 111,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-110.png",
+      "source_sha256": "2f26ccf1ea122f1365c366e0110c33e17907d0cfa265624391d000658f1f04d9",
+      "voice_tapes": [
+        "R:e S:e H:q H+S:q S:e C2:e",
+        "R:q K:e K:s K:s R:e K:e R:e K:e"
+      ],
+      "events": [
+        {
+          "beat": "1/2",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1",
+          "note": 46,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1",
+          "note": 46,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "7/2",
+          "duration": "1/2",
+          "note": 57,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "7/4",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "5/2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "7/2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        }
+      ],
+      "unresolved": [],
+      "voice_tape_note": "Leading/trailing R tokens that fill an otherwise unprinted voice gap denote implicit silence, not additional visible printed rests.",
+      "source_frame": {
+        "frame": "frames/frame-0170.0.png",
+        "bbox": [
+          35,
+          640,
+          1855,
+          831
+        ],
+        "timestamp": 170.0,
+        "pts": 2720000,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "501cf3fdce6c5121b347b8e14b4e803c9a91612b85a002dc6dc712f5488134ff"
+      }
+    },
+    {
+      "number": 112,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-110.png",
+      "source_sha256": "2f26ccf1ea122f1365c366e0110c33e17907d0cfa265624391d000658f1f04d9",
+      "voice_tapes": [
+        "R:e S:e H:q H+S:e S:e C1:e C2:e",
+        "R:q K:e K:s K:s R:q K:e K:e"
+      ],
+      "events": [
+        {
+          "beat": "1/2",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1",
+          "note": 46,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1/2",
+          "note": 46,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "5/2",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1/2",
+          "note": 49,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "7/2",
+          "duration": "1/2",
+          "note": 57,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "7/4",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "7/2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        }
+      ],
+      "unresolved": [],
+      "voice_tape_note": "Leading/trailing R tokens that fill an otherwise unprinted voice gap denote implicit silence, not additional visible printed rests.",
+      "source_frame": {
+        "frame": "frames/frame-0170.0.png",
+        "bbox": [
+          35,
+          640,
+          1855,
+          831
+        ],
+        "timestamp": 170.0,
+        "pts": 2720000,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "501cf3fdce6c5121b347b8e14b4e803c9a91612b85a002dc6dc712f5488134ff"
+      }
+    },
+    {
+      "number": 113,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-110.png",
+      "source_sha256": "2f26ccf1ea122f1365c366e0110c33e17907d0cfa265624391d000658f1f04d9",
+      "voice_tapes": [
+        "R:e S:e H:q T:s T:de C2+S:q",
+        "R:q K:e K:s K:s R:e K:s K:s R:e K:e"
+      ],
+      "events": [
+        {
+          "beat": "1/2",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1",
+          "note": 46,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1/4",
+          "note": 48,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "9/4",
+          "duration": "3/4",
+          "note": 48,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "3/4",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1",
+          "note": 57,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "7/4",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "5/2",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "11/4",
+          "duration": "1/4",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/4",
+          "staccato": false
+        },
+        {
+          "beat": "7/2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        }
+      ],
+      "unresolved": [],
+      "voice_tape_note": "Leading/trailing R tokens that fill an otherwise unprinted voice gap denote implicit silence, not additional visible printed rests.",
+      "source_frame": {
+        "frame": "frames/frame-0170.0.png",
+        "bbox": [
+          35,
+          640,
+          1855,
+          831
+        ],
+        "timestamp": 170.0,
+        "pts": 2720000,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "501cf3fdce6c5121b347b8e14b4e803c9a91612b85a002dc6dc712f5488134ff"
+      }
+    },
+    {
+      "number": 134,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-134.png",
+      "source_sha256": "9cca41ff13cbc8723e9f3d026cb42f60c0a3a2b60e94e483349e66df15da6344",
+      "voice_tapes": [
+        "S+F:e S+F:e S+F:e S+F:e R:e C1*:e R:e C1*:e",
+        "R:q R:q R:e K:e R:e K:e"
+      ],
+      "events": [
+        {
+          "beat": "0",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "0",
+          "duration": "1/2",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1/2",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1/2",
+          "duration": "1/2",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1/2",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/2",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/2",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "5/2",
+          "duration": "1/4",
+          "note": 49,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": true
+        },
+        {
+          "beat": "7/2",
+          "duration": "1/4",
+          "note": 49,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": true
+        },
+        {
+          "beat": "5/2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "7/2",
+          "duration": "1/2",
+          "note": 36,
+          "velocity": 96,
+          "voice": 2,
+          "notation_duration": "1/2",
+          "staccato": false
+        }
+      ],
+      "unresolved": [],
+      "voice_tape_note": "Leading/trailing R tokens that fill an otherwise unprinted voice gap denote implicit silence, not additional visible printed rests.",
+      "source_frame": {
+        "frame": "frames/frame-0190.0.png",
+        "bbox": [
+          35,
+          882,
+          1855,
+          1073
+        ],
+        "timestamp": 190.0,
+        "pts": 3040000,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "f361bce4a48c9b2420536f37cb85a976ec3a1bd129320c743f7a5108cf11b4ce"
+      }
+    },
+    {
+      "number": 135,
+      "beats": "4",
+      "source": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-BV15crrYUEPA/rows/measure-134.png",
+      "source_sha256": "9cca41ff13cbc8723e9f3d026cb42f60c0a3a2b60e94e483349e66df15da6344",
+      "voice_tapes": [
+        "R:e M+F:e M+F:e M+F:e M+F:e M+F:e C2+S:q"
+      ],
+      "events": [
+        {
+          "beat": "1/2",
+          "duration": "1/2",
+          "note": 47,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1/2",
+          "duration": "1/2",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1/2",
+          "note": 47,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "1",
+          "duration": "1/2",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/2",
+          "note": 47,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3/2",
+          "duration": "1/2",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1/2",
+          "note": 47,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "2",
+          "duration": "1/2",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "5/2",
+          "duration": "1/2",
+          "note": 47,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "5/2",
+          "duration": "1/2",
+          "note": 43,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1/2",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1",
+          "note": 57,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        },
+        {
+          "beat": "3",
+          "duration": "1",
+          "note": 38,
+          "velocity": 96,
+          "voice": 1,
+          "notation_duration": "1",
+          "staccato": false
+        }
+      ],
+      "unresolved": [],
+      "source_frame": {
+        "frame": "frames/frame-0190.0.png",
+        "bbox": [
+          35,
+          882,
+          1855,
+          1073
+        ],
+        "timestamp": 190.0,
+        "pts": 3040000,
+        "time_base": [
+          1,
+          16000
+        ],
+        "sha256": "f361bce4a48c9b2420536f37cb85a976ec3a1bd129320c743f7a5108cf11b4ce"
+      }
+    }
+  ],
+  "mapping": {
+    "K": 36,
+    "S": 38,
+    "F": 43,
+    "T": 48,
+    "M": 47,
+    "H": 46,
+    "C1": 49,
+    "C2": 57
+  },
+  "playback_policy": {
+    "unmarked_velocity": 96,
+    "grace_velocity": 64,
+    "grace_duration_quarter_beats": "1/16",
+    "grace_placement": "immediately before the principal; these three principal beats are all positive",
+    "staccato_gate": "half notated duration",
+    "unmarked_gate": "full notated duration",
+    "instrument_mapping": "Audiveris default 5-line drum-set.xml conventions checked against source positions and noteheads; author intent not separately established"
+  },
+  "unresolved": [
+    {
+      "symbols": [
+        "crossed oval at pitch position -6",
+        "crossed oval at pitch position -7"
+      ],
+      "reason": "No author legend in inspected source; independent reviewer interprets lower as ride, Audiveris default maps lower to crash1. Declared experimental GM convention cannot prove author intent."
+    }
+  ]
+}

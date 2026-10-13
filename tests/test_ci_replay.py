@@ -19,14 +19,18 @@ class CIReplayTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             summary = json.loads((output / 'summary.json').read_text())
             self.assertEqual(summary['status'], 'passed')
-            self.assertEqual(summary['row_count'], 3)
+            self.assertEqual(summary['evaluation'], 'synthetic_vector_replay_only')
+            self.assertEqual(summary['system_count'], 3)
             self.assertEqual(summary['negative_cases'], {
-                'unknown_version': 'invalid_decision', 'out_of_bounds': 'invalid_decision',
-                'corrupt_image': 'source_mismatch'})
-            self.assertTrue(summary['native_crops_equal'])
+                'unknown_version': 'reconstruction_rejected',
+                'out_of_bounds': 'reconstruction_rejected',
+                'unresolved': 'reconstruction_rejected',
+                'corrupt_image': 'reconstruction_rejected'})
             self.assertTrue(summary['replay_pdf_equal'])
             self.assertEqual(summary['pdf_pages'], 1)
-            self.assertGreaterEqual(summary['minimum_effective_dpi'], 150)
+            self.assertEqual(summary['pdf_name'], 'Fixture song.pdf')
+            self.assertEqual(summary['embedded_images'], 0)
+            self.assertIsNone(summary['model_cost'])
             files = list(output.iterdir())
             self.assertEqual({p.name for p in files}, {'summary.json', 'fixture-score.pdf'})
             self.assertLess(sum(p.stat().st_size for p in files), 5 * 1024 * 1024)

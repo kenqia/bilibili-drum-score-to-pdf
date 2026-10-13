@@ -8,11 +8,11 @@ import subprocess
 import sys
 import tempfile
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'tests'))
-from score_fixtures import CLI, score_frame, video_from_image
+sys.path.insert(0, str(ROOT / 'skills/bilibili-drum-score-to-pdf/scripts'))
+import score_workflow as workflow
 
 LIMIT = 5 * 1024 * 1024
 
@@ -22,95 +22,105 @@ def require(condition, code):
         raise AssertionError(code)
 
 
-def cli(*arguments):
-    process = subprocess.run([sys.executable, str(CLI), *map(str, arguments)],
-                             capture_output=True, text=True, timeout=90)
-    result = json.loads(process.stdout)
-    return process.returncode, result
-
-
 def write(path, value):
     path.write_text(json.dumps(value, sort_keys=True), encoding='utf-8')
 
 
-def verify(base, evidence, summary):
-    video = video_from_image(score_frame(), base)
-    task = base / 'task'
-    _, prepared = cli(video, '--operation', 'prepare', '--output', task)
-    require(prepared['status'] == 'waiting', 'prepare_failed')
-    observation = json.loads((task / 'observation.json').read_text())
-    decision = dict(schema_version=1, task_id=prepared['task_id'],
-                    observation_sha256=prepared['observation_sha256'], decision_id='ci-fixed-1',
-                    model={'id': 'synthetic-fixture', 'version': '1'},
-                    prompt={'version': 'ci-fixed-1', 'text': 'Replay controlled three-row fixture.'},
-                    presented_images=[image['id'] for image in observation['images']],
-                    visual_review=True, complete=True, evidence='Controlled fixed fixture with three complete rows.',
-                    selected_candidates=[c['id'] for c in observation['candidates']
-                                         if c['frame_id'] == observation['frames'][0]['id']], unresolved=[])
-    decision_path = base / 'fixed-decision.json'
-    write(decision_path, {**decision, 'schema_version': 999})
-    code, rejected = cli('--operation', 'submit', '--task', task, '--decision', decision_path)
-    require(code != 0 and rejected['error']['code'] == 'invalid_decision', 'unknown_version_accepted')
-    summary['negative_cases']['unknown_version'] = rejected['error']['code']
-    require(not (task / 'decision.json').exists(), 'invalid_decision_persisted')
+def fixture_video(base):
+    """Controlled geometry; no network, model or musical interpretation."""
+    image = Image.new('RGB', (640, 640), 'white')
+    draw = ImageDraw.Draw(image)
+    draw.text((20, 15), 'Fixture song   quarter=120   4/4', fill='black')
+    for top in (100, 260, 420):
+        for line in range(5):
+            draw.line((20, top + line * 10, 620, top + line * 10), fill='black')
+        draw.ellipse((110, top + 21, 125, top + 30), fill='black')
+        draw.line((125, top + 25, 125, top - 15), fill='black', width=2)
+    png, video = base / 'fixture.png', base / 'fixture.mp4'
+    image.save(png)
+    subprocess.run(['ffmpeg', '-v', 'error', '-loop', '1', '-i', str(png),
+                    '-t', '1', '-r', '5', '-pix_fmt', 'yuv420p', str(video)],
+                   check=True, capture_output=True, timeout=30)
+    return video
 
-    # An out-of-bounds saved observation must be rejected even when its envelope hash matches.
-    original_packet = (task / 'observation.json').read_bytes()
-    original_state = (task / 'task.json').read_bytes()
-    observation['candidates'][0]['bbox'][0] = -1
-    write(task / 'observation.json', observation)
-    bad_hash = hashlib.sha256((task / 'observation.json').read_bytes()).hexdigest()
-    state = json.loads(original_state)
-    state['observation_sha256'] = bad_hash
-    write(task / 'task.json', state)
-    write(decision_path, {**decision, 'observation_sha256': bad_hash})
-    code, rejected = cli('--operation', 'submit', '--task', task, '--decision', decision_path)
-    require(code != 0 and rejected['error']['code'] == 'invalid_decision', 'invalid_coordinates_accepted')
-    summary['negative_cases']['out_of_bounds'] = rejected['error']['code']
-    require(not (task / 'decision.json').exists(), 'invalid_decision_persisted')
-    (task / 'observation.json').write_bytes(original_packet)
-    (task / 'task.json').write_bytes(original_state)
-    write(decision_path, decision)
-    code, accepted = cli('--operation', 'submit', '--task', task, '--decision', decision_path)
-    require(accepted['phase'] == 'accepted' and 'error' not in accepted, 'submit_failed')
-    exported, replayed = base / 'export', base / 'replay'
-    code, result = cli('--operation', 'export', '--task', task, '--output', exported)
-    require(code == 0 and result['status'] == 'success', 'export_failed')
-    require(len(result['rows']) == 3, 'missing_rows')
-    independent_frame = base / 'independent-frame.png'
-    subprocess.run(['ffmpeg', '-v', 'error', '-i', str(video), '-frames:v', '1',
-                    '-pix_fmt', 'rgb24', str(independent_frame)], capture_output=True, check=True, timeout=30)
-    for row in [result['header']] + result['rows']:
-        with Image.open(independent_frame) as frame, Image.open(exported / row['original_image']) as crop:
-            require(row['timestamp'] == 0, 'unexpected_fixture_timestamp')
-            require(frame.crop(row['bbox']).tobytes() == crop.tobytes(), 'crop_pixels_changed')
-            with Image.open(exported / row['image']) as printable:
-                require(crop.convert('L').tobytes() == printable.tobytes(), 'print_pixels_changed')
-        if 'quality' in row:
-            pixels = row['bbox'][2] - row['bbox'][0]
-            inches = (row['pdf_bbox'][2] - row['pdf_bbox'][0]) / 72
-            require(inches > 0 and pixels / inches >= 150, 'low_dpi')
-            require(abs(pixels / inches - row['quality']['effective_dpi']) < .01, 'dpi_report_mismatch')
-    summary.update(row_count=3, native_crops_equal=True,
-                   minimum_effective_dpi=min(r['quality']['effective_dpi'] for r in result['rows']))
-    code, replay = cli('--operation', 'replay', '--task', task, '--output', replayed)
-    require(code == 0 and replay['status'] == 'success', 'replay_failed')
-    pdf = (exported / 'score.pdf').read_bytes()
-    require(pdf == (replayed / 'score.pdf').read_bytes(), 'replay_pdf_changed')
-    info = subprocess.run(['pdfinfo', str(exported / 'score.pdf')], capture_output=True,
+
+def refused(action, code, summary):
+    try:
+        action()
+    except workflow.ReconstructionError:
+        summary['negative_cases'][code] = 'reconstruction_rejected'
+    else:
+        raise AssertionError(code + '_accepted')
+
+
+def verify(base, evidence, summary):
+    video = fixture_video(base)
+    task = base / 'task'
+    workflow.prepare(video, task)
+    shot = workflow.capture(task, 0)
+    regions = [{'capture': shot['id'], 'bbox': [0, 0, 640, 65],
+                'kind': 'header', 'position': 'title'}]
+    regions += [{'capture': shot['id'], 'bbox': [0, top - 35, 640, top + 80],
+                 'kind': 'system', 'position': 'system-' + str(index),
+                 'staff_top': 35, 'staff_spacing': 10}
+                for index, top in enumerate((100, 260, 420), 1)]
+    review = {'viewed_captures': [shot['id']], 'complete': True,
+              'notes': 'Fixed controlled geometry, automated replay only; no Agent visual acceptance.',
+              'continuity': 'Three fixture systems in their drawn order.',
+              'first_last': 'Fixture header and all three complete systems.'}
+    record_path = task / 'record.json'
+    original = record_path.read_bytes()
+    state = json.loads(original)
+    state['schema'] = 'unsupported/999'
+    write(record_path, state)
+    refused(lambda: workflow.load(task), 'unknown_version', summary)
+    record_path.write_bytes(original)
+    bad = [dict(r) for r in regions]
+    bad[1]['bbox'] = [-1, 65, 640, 180]
+    refused(lambda: workflow.assemble(task, 'Fixture song', bad, review),
+            'out_of_bounds', summary)
+    require(workflow.load(task)['regions'] == [], 'invalid_selection_persisted')
+    workflow.assemble(task, 'Fixture song', regions, review)
+    selected = record_path.read_bytes()
+    workflow.assemble(task, 'Fixture song', regions,
+                      {**review, 'unresolved': ['Controlled hidden note']})
+    refused(lambda: workflow.redraw_inputs(task), 'unresolved', summary)
+    require('output' not in workflow.load(task), 'unresolved_exported')
+    record_path.write_bytes(selected)
+    for page in workflow.redraw_inputs(task):
+        workflow.fail_redraw(task, page['id'], 'Offline CI explicitly forces vector; no host tool call.')
+    result = workflow.export(task)
+    pdf_path = task / result['pdf']
+    pdf = pdf_path.read_bytes()
+    require(pdf_path.name == 'Fixture song.pdf', 'incorrect_pdf_name')
+    require(result['page_count'] == 1 and result['routes'] == ['vector'], 'incorrect_export')
+    require(result['status'] == 'needs_pdf_review', 'false_visual_acceptance')
+    require(workflow.export(task) == result, 'resume_output_changed')
+    require(pdf_path.read_bytes() == pdf, 'replay_pdf_changed')
+    # Rebuild from an independent task, rather than merely returning a cached PDF.
+    replay_task = base / 'replay'
+    workflow.prepare(video, replay_task)
+    replay_shot = workflow.capture(replay_task, 0)
+    replay_regions = [{**r, 'capture': replay_shot['id']} for r in regions]
+    workflow.assemble(replay_task, 'Fixture song', replay_regions,
+                      {**review, 'viewed_captures': [replay_shot['id']]})
+    for page in workflow.redraw_inputs(replay_task):
+        workflow.fail_redraw(replay_task, page['id'], 'Offline CI explicitly forces vector; no host tool call.')
+    replay = workflow.export(replay_task)
+    require((replay_task / replay['pdf']).read_bytes() == pdf, 'independent_replay_pdf_changed')
+    info = subprocess.run(['pdfinfo', str(pdf_path)], capture_output=True,
                           text=True, check=True, timeout=20).stdout
     require(re.search(r'^Pages:\s+1\s*$', info, re.MULTILINE), 'incorrect_pdf_pages')
     require(re.search(r'^Page size:\s+595\.\d+ x 841\.\d+ pts \(A4\)', info, re.MULTILINE), 'incorrect_page_size')
-    summary.update(replay_pdf_equal=True, pdf_pages=1, pdf_sha256=hashlib.sha256(pdf).hexdigest())
-
-    observation = json.loads(original_packet)
-    damaged = task / observation['images'][0]['path']
-    damaged.write_bytes(b'controlled corrupt image')
-    rejected_output = base / 'corrupt'
-    code, rejected = cli('--operation', 'replay', '--task', task, '--output', rejected_output)
-    require(code != 0 and rejected['error']['code'] == 'source_mismatch', 'corrupt_image_accepted')
-    require(not (rejected_output / 'score.pdf').exists(), 'corrupt_image_exported')
-    summary['negative_cases']['corrupt_image'] = rejected['error']['code']
+    listing = subprocess.run(['pdfimages', '-list', str(pdf_path)], capture_output=True,
+                             text=True, check=True, timeout=20).stdout.splitlines()
+    require(len(listing) == 2, 'bitmap_in_vector_pdf')
+    summary.update(system_count=3, replay_pdf_equal=True, pdf_pages=1,
+                   pdf_name=pdf_path.name, embedded_images=0, model_cost=None,
+                   pdf_sha256=hashlib.sha256(pdf).hexdigest())
+    (task / shot['path']).write_bytes(b'controlled corrupt image')
+    refused(lambda: workflow.export(task), 'corrupt_image', summary)
+    require(pdf_path.read_bytes() == pdf, 'corruption_overwrote_pdf')
     require(len(pdf) < LIMIT - 16384, 'artifact_limit')
     (evidence / 'fixture-score.pdf').write_bytes(pdf)
 
@@ -121,8 +131,8 @@ def main():
     args = parser.parse_args()
     # Never overwrite or upload caller-provided content in an existing directory.
     args.output.mkdir(parents=True, exist_ok=False)
-    summary = {'status': 'failed', 'evaluation': 'fixed_decision_replay_only',
-               'fixture_version': '1', 'negative_cases': {}}
+    summary = {'status': 'failed', 'evaluation': 'synthetic_vector_replay_only',
+               'fixture_version': '2', 'negative_cases': {}}
     try:
         with tempfile.TemporaryDirectory(prefix='score-ci-') as directory:
             verify(Path(directory), args.output, summary)
