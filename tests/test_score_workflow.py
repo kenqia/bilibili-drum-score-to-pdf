@@ -2,6 +2,7 @@
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'skills/bilibili-drum-score-to-pdf/scripts'))
 import test_reconstruction as fixtures
 import score_workflow as workflow
@@ -10,6 +11,72 @@ class ScoreWorkflow(unittest.TestCase):
     setUp = fixtures.LocalScoreWorkflow.setUp
     tearDown = fixtures.LocalScoreWorkflow.tearDown
     select = fixtures.LocalScoreWorkflow.select
+    def test_same_selection_resume_keeps_consumed_correction_and_accepted_output(self):
+        self.select()
+        original = workflow.load(self.task)
+        selections = [{**r, 'position': str(i)} for i, r in enumerate(original['regions'])]
+        review = {**original['source_review'], 'continuity': 'Complete fixture.', 'first_last': 'Start and ending.'}
+        workflow.assemble(self.task, original['title'], selections, review)
+        page = workflow.redraw_inputs(self.task)[0]
+        request = workflow.begin_redraw(self.task, page['id'], 'Fixture viewed.')
+        workflow.finish_redraw(self.task, page['id'], request['request'], self.root / 'score.png', 'host-imagegen', 'fixture')
+        workflow.review_redraw(self.task, page['id'], False, 'Restore beam.')
+        correction = workflow.begin_redraw(self.task, page['id'], 'Restore beam.', correction=True)
+        workflow.assemble(self.task, original['title'], selections, review)
+        self.assertEqual(workflow.load(self.task)['redraw_pages'][0]['corrections_used'], 1)
+        workflow.finish_redraw(self.task, page['id'], correction['request'], self.root / 'score.png', 'host-imagegen', 'fixture-correction')
+        workflow.review_redraw(self.task, page['id'], True, 'Accepted fixture.', [[0,0,640,65], [0,65,640,180]])
+        output = workflow.export(self.task)
+        workflow.assemble(self.task, original['title'], selections, review)
+        self.assertEqual(workflow.export(self.task)['sha256'], output['sha256'])
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.fail_redraw(self.task, page['id'], 'Late failure must not downgrade accepted output.')
+
+    def test_mixed_routes_preserve_long_score_order_and_unresolved_sources_block_export(self):
+        self.select()
+        original = workflow.load(self.task)
+        selections = [{**original['regions'][0], 'position': 'title'}] + [
+            {**original['regions'][1], 'position': f'row-{i}'} for i in range(12)]
+        review = {**original['source_review'], 'continuity': 'Ordered full systems.', 'first_last': 'Complete fixture.'}
+        workflow.assemble(self.task, 'Mixed score', selections, review)
+        pages = workflow.redraw_inputs(self.task, [[0,1]] + [[i] for i in range(2,13)])
+        request = workflow.begin_redraw(self.task, pages[0]['id'], 'Fixture rough viewed.')
+        workflow.finish_redraw(self.task, pages[0]['id'], request['request'], self.root / 'score.png', 'host-imagegen', 'controlled-fixture')
+        workflow.review_redraw(self.task, pages[0]['id'], True, 'Fixture accepted.', [[0,0,640,65], [0,65,640,180]])
+        for page in pages[1:]:
+            request = workflow.begin_redraw(self.task, page['id'], 'Fixture rough viewed.')
+            workflow.fail_redraw(self.task, page['id'], 'Controlled tool call failure.')
+        output = workflow.export(self.task)
+        self.assertEqual(output['page_count'], 2)
+        counts = [sum(p['page'] == page and p['region'] > 0 for p in output['placements']) for page in (1, 2)]
+        self.assertLessEqual(abs(counts[0] - counts[1]), 1)
+        self.assertEqual(output['routes'], ['imagegen'] + ['vector'] * 11)
+        self.assertEqual([p['region'] for p in output['placements']], list(range(13)))
+        record = workflow.assemble(self.task, 'Mixed score', selections,
+            {**review, 'complete': False, 'unresolved': ['Unconfirmed ordered page transition.']})
+        self.assertEqual(record['redraw_pages'], [])
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.redraw_inputs(self.task)
+
+    def test_url_resume_normalizes_equivalent_public_urls_without_acquisition(self):
+        url = 'https://www.bilibili.com/video/BV15crrYUEPA/'
+        with patch.object(workflow, 'acquire', return_value=(self.video, workflow.video_origin(url))) as acquire:
+            workflow.prepare(url, self.task)
+            workflow.prepare(url, self.task)
+            workflow.prepare(url + '?p=1', self.task)
+        self.assertEqual(acquire.call_count, 1)
+
+    def test_large_rough_is_chunked_without_dropping_systems(self):
+        self.select()
+        record = workflow.load(self.task)
+        selections = []
+        for i in range(4):
+            selections.append({**record['regions'][1], 'position': str(i)})
+        with patch.object(workflow.local, 'ROUGH_PIXELS', 100_000, create=True):
+            record = workflow.assemble(self.task, 'Long fixture', selections,
+                {**record['source_review'], 'continuity': 'Distinct later positions.', 'first_last': 'Entire fixture.'})
+        self.assertEqual(len(record['rough_chunks']), 4)
+        self.assertEqual(len(record['regions']), 4)
     def test_navigation_preserves_only_agent_requested_native_captures(self):
         workflow.prepare(self.video, self.task)
         probe = workflow.navigate(self.task, 0, width=240)

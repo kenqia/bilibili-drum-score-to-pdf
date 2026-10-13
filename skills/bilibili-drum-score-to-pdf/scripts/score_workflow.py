@@ -35,7 +35,12 @@ def prepare(source, task, acquisition_timeout=ACQUISITION_SECONDS):
     task = Path(task)
     if (task / 'record.json').exists():
         record = load(task)
-        if str(source) not in (record['source']['path'], record.get('origin', {}).get('url')):
+        candidate = str(source)
+        if candidate.startswith(('http://', 'https://')):
+            candidate = video_origin(candidate)['url']
+        else:
+            candidate = str(Path(candidate).resolve())
+        if candidate not in (record['source']['path'], record.get('origin', {}).get('url')):
             raise ReconstructionError('已有任务对应另一来源。')
         return record
     if task.exists() and any(task.iterdir()):
@@ -117,24 +122,43 @@ def assemble(task, title, regions, review):
         if position not in seen:
             unique.append(region)
             seen.add(position)
+    previous = load(task)
+    fields = ('capture', 'bbox', 'kind', 'staff_top', 'staff_spacing', 'position')
+    def selection_key(region):
+        return [region.get(field, 'system' if field == 'kind' else None) for field in fields]
+    same = (title.strip() == previous.get('title') and
+            [selection_key(r) for r in unique] == [selection_key(r) for r in previous['regions']])
+    viewed = review.get('viewed_captures', [])
+    captures = {c['id'] for c in previous['captures']}
+    if not review.get('notes') or not set(viewed).issubset(captures) or any(r['capture'] not in viewed for r in unique):
+        raise ReconstructionError('每个选行必须引用实际审阅过的原截图。')
+    if same and review.get('complete') is True and not review.get('unresolved'):
+        # Re-confirming identical valid source material is recovery, not a new
+        # request. Preserve accepted outputs and persisted correction budgets.
+        previous['source_review'] = review
+        local._save(task, previous)
+        return previous
     record = local.assemble(task, title, unique, review)
     record['redraw_pages'] = []
     local._save(task, record)
     return record
 
 
-def redraw_inputs(task):
+def redraw_inputs(task, groups=None):
     record = load(task)
     if record.get('redraw_pages'):
         return record['redraw_pages']
     if record['status'] != 'ready_to_redraw':
         raise ReconstructionError('原图接续或完整性未确认。')
     placements, count = local.paginate(record['regions'])
+    if groups is None:
+        groups = [[p['region'] for p in placements if p['page'] == number] for number in range(1, count + 1)]
+    if not groups or any(not group for group in groups) or [i for group in groups for i in group] != list(range(len(record['regions']))):
+        raise ReconstructionError('重绘分块必须按完整谱行顺序覆盖全部材料。')
     directory = Path(task) / 'redraw' / uuid.uuid4().hex
     directory.mkdir(parents=True)
     pages = []
-    for number in range(1, count + 1):
-        indices = [p['region'] for p in placements if p['page'] == number]
+    for number, indices in enumerate(groups, 1):
         blocks = [record['regions'][i] for i in indices]
         width, height = max(b['width'] for b in blocks), sum(b['height'] for b in blocks)
         image = Image.new('RGB', (width, height), 'white')
@@ -197,8 +221,8 @@ def fail_redraw(task, identifier, notes):
     """Unavailable, failed or uncertain interrupted calls route to vector."""
     record = load(task)
     page = _page(record, identifier)
-    if not notes:
-        raise ReconstructionError('需要真实工具失败或无能力的记录。')
+    if not notes or page['status'] == 'accepted':
+        raise ReconstructionError('需要失败记录，且不能降级已接受重绘。')
     if page['attempts'] and page['attempts'][-1]['status'] == 'calling':
         page['attempts'][-1].update(status='failed', reason=notes)
     page.update(status='vector', fallback_reason=notes)
