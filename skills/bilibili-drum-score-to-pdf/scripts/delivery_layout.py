@@ -3,7 +3,6 @@ import re
 from pathlib import Path
 from video_seek import ConversionError
 
-MATERIALS = '材料'
 
 
 def pdf_name(title):
@@ -19,29 +18,3 @@ def pdf_name(title):
     while len(stem.encode('utf-8')) > 240:
         stem = stem[:-1]
     return stem + '.pdf'
-
-
-def package(output, result, title):
-    output = Path(output)
-    name = pdf_name(title)
-    paths = {p.relative_to(output).as_posix() for p in output.rglob('*') if p.is_file()}
-    def relocate(value):
-        if isinstance(value, dict):
-            for key, item in value.items():
-                if key in ('path','image','original_image','source_frame','screenshot') and isinstance(item, str) and item in paths:
-                    value[key] = f'{MATERIALS}/{item}'
-                else:
-                    relocate(item)
-        elif isinstance(value, list):
-            for item in value:
-                relocate(item)
-    # Render first, then move the unchanged PDF and exact source pixels.
-    material = output / MATERIALS
-    material.mkdir()
-    for item in list(output.iterdir()):
-        if item.name not in ('score.pdf', MATERIALS):
-            item.rename(material / item.name)
-    (output / 'score.pdf').rename(output / name)
-    relocate(result)
-    result.update(pdf=name, title=title.strip(), manifest=f'{MATERIALS}/manifest.json')
-    return result

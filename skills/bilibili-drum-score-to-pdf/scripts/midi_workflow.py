@@ -17,7 +17,9 @@ def _hash(path):
 
 
 def _save(task, record):
-    temporary = Path(task) / 'midi-record.tmp'
+    from reconstruction import write_path
+    temporary = write_path(task,'midi-record.tmp')
+    write_path(task,'midi-record.json')
     temporary.write_text(json.dumps(record, ensure_ascii=False, indent=2)+'\n')
     temporary.replace(Path(task) / 'midi-record.json')
 

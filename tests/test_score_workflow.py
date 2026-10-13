@@ -11,6 +11,53 @@ class ScoreWorkflow(unittest.TestCase):
     setUp = fixtures.LocalScoreWorkflow.setUp
     tearDown = fixtures.LocalScoreWorkflow.tearDown
     select = fixtures.LocalScoreWorkflow.select
+    def test_resolved_source_review_restores_same_selection_export(self):
+        self.select()
+        source=workflow.load(self.task)
+        regions=[{**r,'position':str(i)} for i,r in enumerate(source['regions'])]
+        review={**source['source_review'],'continuity':'Complete fixture.','first_last':'Whole fixture.'}
+        blocked=workflow.assemble(self.task,source['title'],regions,{**review,'unresolved':['Hidden note needs review.']})
+        self.assertEqual(blocked['status'],'needs_source_review')
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.redraw_inputs(self.task)
+        resolved=workflow.assemble(self.task,source['title'],regions,{**review,'unresolved':[]})
+        self.assertEqual(resolved['status'],'ready_to_redraw')
+        page=workflow.redraw_inputs(self.task)[0]
+        workflow.fail_redraw(self.task,page['id'],'No host tool in fixture.')
+        self.assertEqual(workflow.export(self.task)['page_count'],1)
+
+    def test_same_selection_withdrawal_preserves_consumed_correction(self):
+        self.select();record=workflow.load(self.task)
+        regions=[{**r,'position':str(i)} for i,r in enumerate(record['regions'])]
+        review={**record['source_review'],'continuity':'Static source.','first_last':'Whole fixture.'}
+        workflow.assemble(self.task,record['title'],regions,review)
+        page=workflow.redraw_inputs(self.task)[0]
+        for correction in (False,True):
+            req=workflow.begin_redraw(self.task,page['id'],'Controlled reviewed input.',correction=correction)
+            workflow.finish_redraw(self.task,page['id'],req['request'],self.root/'score.png','host-imagegen','fixture')
+            workflow.review_redraw(self.task,page['id'],False,'Controlled refusal.')
+        before=workflow.load(self.task)['redraw_pages']
+        workflow.assemble(self.task,record['title'],regions,{**review,'unresolved':['New source question.']})
+        with self.assertRaises(workflow.ReconstructionError):workflow.export(self.task)
+        workflow.assemble(self.task,record['title'],regions,review)
+        after=workflow.redraw_inputs(self.task)
+        self.assertEqual(after,before)
+        self.assertEqual(after[0]['corrections_used'],1)
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.begin_redraw(self.task,page['id'],'No second correction.',correction=True)
+
+    def test_custom_redraw_group_cannot_bypass_pixel_limit(self):
+        self.select();record=workflow.load(self.task)
+        region=record['regions'][1]
+        regions=[{**region,'position':str(i)} for i in range(4)]
+        review={**record['source_review'],'continuity':'Repeated fixture.','first_last':'All systems.'}
+        with patch.object(workflow.local,'ROUGH_PIXELS',100000):
+            workflow.assemble(self.task,record['title'],regions,review)
+            with self.assertRaises(workflow.ReconstructionError):
+                workflow.redraw_inputs(self.task,[[0,1,2,3]])
+            pages=workflow.redraw_inputs(self.task)
+            self.assertEqual(len(pages),4)
+
     def test_late_notation_rejection_invalidates_approved_pdf_and_preserves_one_correction(self):
         self.select()
         original = workflow.load(self.task)
@@ -187,7 +234,7 @@ class ScoreWorkflow(unittest.TestCase):
         self.assertEqual([p['region'] for p in output['placements']], list(range(13)))
         record = workflow.assemble(self.task, 'Mixed score', selections,
             {**review, 'complete': False, 'unresolved': ['Unconfirmed ordered page transition.']})
-        self.assertEqual(record['redraw_pages'], [])
+        self.assertEqual(len(record['redraw_pages']),len(pages))
         with self.assertRaises(workflow.ReconstructionError):
             workflow.redraw_inputs(self.task)
 
