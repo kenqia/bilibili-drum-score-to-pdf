@@ -1,10 +1,10 @@
 # Issue #54 实施记录
 
-截至 2026-10-13，#55、#56、#57 的软件增量已合入 `codex/issue-54-integration`。#58 完成三视频 PDF、第31小节修复后的真实强制矢量及用户授权的近似整曲 MIDI 验收。#59 在独立 worktree 删除旧流程并切换新版默认入口，等待最终集成回归与独立审阅。原可靠音乐准确性门槛仍未通过，不能将近似 MIDI 称为可靠。
+截至 2026-10-13，#55、#56、#57 的软件增量已合入 `codex/issue-54-integration`。#58 完成三视频 PDF、第31小节修复后的真实强制矢量及用户授权的近似整曲 MIDI 验收。#59 已删除旧流程、切换新版默认入口并通过最终集成回归与两轴独立审阅。原可靠音乐准确性门槛仍未通过，不能将近似 MIDI 称为可靠。
 
 ## 工作区和任务图
 
-Git 基线为 `51aa468e1cab45010355100244a647ef3b8945e7`，任务图为 #55 → #56 → #57 → #58 → #59。初始工作区已有 `GLOSSARY.md`、`docs/agents/issue-tracker.md` 修改，以及规格、ADR、研究、实验、`.scratch/` 和 `.archify/` 等未跟踪材料。实施没有覆盖或批量提交这些文件。基线与五份保护文件 hash 副本保存在 `experiments/2026-10-13-issue54-local/baseline.json`。
+Git 基线为 `51aa468e1cab45010355100244a647ef3b8945e7`，任务图为 #55 → #56 → #57 → #58 → #59。初始工作区已有 `GLOSSARY.md`、`docs/agents/issue-tracker.md` 修改，以及规格、ADR、研究、实验、`.scratch/` 和 `.archify/` 等未跟踪材料。实施没有批量提交这些文件。GLOSSARY 的旧定义已定点改写，用户新增的重绘术语完整保留；issue-tracker 和未跟踪材料保持原状。基线与五份保护文件 hash 副本保存在 `experiments/2026-10-13-issue54-local/baseline.json`。
 
 运行环境中途重置，原 `/tmp`、运行中的测试和旧 Agent 丢失。Git 提交、工作区与已保存档案保留。旧临时任务不能称作可恢复；档案中的原路径是历史来源。新鲜验收使用 `experiments/2026-10-13-issue58-recovered/` 和 `/home/kenqia/issue54-worktrees/`，日志使用 `/home/kenqia/issue54-recovery-evidence/`。
 
@@ -42,7 +42,7 @@ uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/
 
 KiLLKiSS BV15crrYUEPA 的新鲜三页生图和三页强制矢量产物已实际查看。早期矢量第31小节装饰音受到源水印遮挡，该版本不计为通过。78秒新完整原行修复后，全部三页强制矢量和生图重新实际审阅通过；近似整曲 MIDI 已实际回读，原可靠音乐等价未通过。新记录保存在持久 killkiss worktree，不以原型或片段替代整曲验收。
 
-未知模型及完整宿主成本保持 `null`。没有 push、PR、远端合并、Issue 修改或发布。
+未知模型及完整宿主成本保持 `null`。截至该批实际验收完成时没有远端写入；最终发布结果见后续收口记录。
 
 
 ## #59 默认切换与清理
@@ -57,3 +57,13 @@ KiLLKiSS BV15crrYUEPA 的新鲜三页生图和三页强制矢量产物已实际�
 #59 worktree 最终离线回归加入可选 Mido，共87项、43.578秒全部通过，日志 `/home/kenqia/issue54-recovery-evidence/issue59-full-final2.log`。旧完整性撤回测试原先期望丢弃全部重绘记录，因新预算保留行为出现一次失败；保留原失败日志，更新断言为保留历史且阻断导出后复验通过。三项审阅修复包含任务写路径 symlink 拒绝、同输入撤回后的修正预算保留，以及生图分组像素上限。共享写路径检查覆盖 record.tmp、captures、regions、navigation、redraw、exports 与 MIDI 临时记录。
 
 独立仓库外工作目录通过新版 help smoke，无认证或宿主设置修改；Python compileall 与 diff 检查通过。该结果是实施 worktree 的完成验证，最终 integration 冻结回归和两轴审阅由 root 另行记录，不宣称远端 CI 已运行。
+
+## 最终集成验证
+
+冻结软件提交为 `c78bf48236a5127405ca36ed51e80755d246c4dd`，与两轴审阅提交 `d86ff9185a9622d1980934c8cc263670674c240e` 的文件树相同。Standards 和 Spec 独立复核均为零剩余可操作发现。已修复任务写路径逃逸、生图分组内存上限绕过与同材料审阅撤回后的预算重置。
+
+root 在冻结集成提交执行带 Mido 1.3.3 的完整离线回归，87 项全部通过、34.875 秒、无跳过。独立运行 CI 合成检查，两次生成相同 A4 矢量 PDF、零位图，并通过来源损坏、裁剪越界、未知版本与未决内容四类拒绝检查。它只证明确定性软件，不代表新宿主调用或看图。
+
+正式 CLI 对标准曲、小星星、KiLLKiSS 生图及 KiLLKiSS 强制矢量四个已验收任务执行 resume/export，保存的 PDF 路径、hash 和审阅记录保持不变；三个 MIDI 任务经 midi-resume 保持记录相同。没有再次生成图片或追溯声明新的视觉判断。复核矢量文件仍为3页 A4、无位图，hash 为 `6be673f66d0c169ad316c7b968fd2fcf84300b9c56949bd9ca33a9dbe998c286`。
+
+集成回归日志为 `/home/kenqia/issue54-recovery-evidence/integration-final-full.log`；正式入口重放、CI 摘要和两轴报告的可提交副本见 `docs/experiments/issue-59-final/`。旧历史来源工作树继续保留，因为任务引用原视频和图像的绝对路径。干净实现工作树可移除，不删除历史实验。
