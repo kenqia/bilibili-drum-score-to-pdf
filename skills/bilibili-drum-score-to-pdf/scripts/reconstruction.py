@@ -124,7 +124,13 @@ def assemble(task, title, regions, review):
     Repeated music at later positions stays as another region. The Agent omits
     only overlap at the same score position and states completeness explicitly.
     """
-    record = load(task)
+    record = _assemble(task, title, regions, review, load(task))
+    _save(task, record)
+    return record
+
+
+def _assemble(task, title, regions, review, record):
+    """Prepare validated artifacts without publishing the task record."""
     if not title or not title.strip() or not review.get('notes'):
         raise ReconstructionError('需要实际确认的谱名和原图审阅记录。')
     viewed = review.get('viewed_captures', [])
@@ -194,7 +200,6 @@ def assemble(task, title, regions, review):
                   status='ready_to_redraw' if review.get('complete') is True and not review.get('unresolved') else 'needs_source_review')
     record.pop('output', None)
     record['metrics']['presented_capture_ids'] = list(dict.fromkeys(viewed))
-    _save(task, record)
     return record
 
 
@@ -276,6 +281,20 @@ def paginate(blocks, margin=24, minimum_gap=6):
     return placements, len(pages)
 
 
+def draw_vector(canvas, vector):
+    """Draw traced notation and staff lines in the caller's coordinate space."""
+    path = canvas.beginPath()
+    for points in vector['paths']:
+        path.moveTo(*points[0])
+        for point in points[1:]:
+            path.lineTo(*point)
+        path.close()
+    canvas.drawPath(path, fill=1, stroke=0, fillMode=0)
+    canvas.setLineWidth(1.1)
+    for x1, y, x2 in vector['lines']:
+        canvas.line(x1, y, x2, y)
+
+
 def export_vector(task):
     record = load(task)
     if record.get('output'):
@@ -300,16 +319,7 @@ def export_vector(task):
             canvas.saveState()
             canvas.translate(placement['bbox'][0], placement['bbox'][3])
             canvas.scale(placement['scale'], -placement['scale'])
-            path = canvas.beginPath()
-            for points in vector['paths']:
-                path.moveTo(*points[0])
-                for point in points[1:]:
-                    path.lineTo(*point)
-                path.close()
-            canvas.drawPath(path, fill=1, stroke=0, fillMode=0)
-            canvas.setLineWidth(1.1)
-            for x1, y, x2 in vector['lines']:
-                canvas.line(x1, y, x2, y)
+            draw_vector(canvas, vector)
             canvas.restoreState()
         canvas.showPage()
     canvas.save()
