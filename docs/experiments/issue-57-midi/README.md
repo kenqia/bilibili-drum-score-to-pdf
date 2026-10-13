@@ -41,11 +41,14 @@ grace 在主音前 1/16 个四分拍开始，播放时长 1/16。该音的主音
 ## 专项软件验证与边界
 
 ```sh
-uv run --with mido==1.3.3 python -m unittest discover -s tests -p 'test_midi*.py' -v
+uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
+  --with mido==1.3.3 python -m unittest discover -s tests -p 'test_midi*.py' -v
 ```
 
-隔离 Python 环境实际运行 14 项通过。新边界测试覆盖 PDF-only 无操作、完整反复与变拍/变速、原图与转写改变后拒绝旧审核、遗漏复杂小节的播放顺序拒绝、作者映射未决时保留 PDF、实际回读失败保存失败状态后续跑，以及独立实看谱例的精确事件重放。故障注入只测试系统文件解析边界，不作为音乐验收。本次未并行运行完整旧回归。
+修复文档遗漏的基础依赖后，使用上述完整命令在新隔离 Python 环境实际运行 15 项通过。此前 14 项记录不代表仅安装 Mido 即可复现完整工作流。
 
-只使用可选 Mido 1.3.3，不改产品默认 requirements。自建谱例排版重用 `/tmp/issue54-midi-tools` 已隔离 MuseScore 工具，不新增生产 OMR、付费模型、音源或认证设置。模型成本未知，保持 null。
+新边界测试覆盖 PDF-only 无操作、完整反复与变拍/变速、原图与转写改变后拒绝旧审核、遗漏复杂小节的播放顺序拒绝、作者映射未决时保留 PDF、实际回读失败保存失败状态后续跑、独立实看谱例的精确事件重放，以及导出目录链接指向任务外部时拒绝写入和成功状态。故障注入只测试系统文件解析边界，不作为音乐验收。本次未并行运行完整旧回归。
+
+在现有基础运行依赖上只新增可选 Mido 1.3.3，不改产品默认 requirements。自建谱例排版重用 `/tmp/issue54-midi-tools` 已隔离 MuseScore 工具，不新增生产 OMR、付费模型、音源或认证设置。模型成本未知，保持 null。
 
 当前完整转换支持 Agent 已解释的小节顺序、全声部、精确拍点、休止、速度/拍号变化、反复展开、三连音、装饰音与力度；它不自动识谱。480 PPQ 无法精确表达的时值或小节拍数与拍号不一致的拾音仍拒绝，不四舍五入。真实歌曲需要按相同边界实际全曲音乐校对，KiLLKiSS 未确认作者镲片映射不得沿用本例图例。PDF 可独立保留，三视频整曲 MIDI 首发门槛仍未通过。

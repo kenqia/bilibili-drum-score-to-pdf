@@ -40,6 +40,29 @@ class MidiWorkflowTests(unittest.TestCase):
             self.assertEqual(resume(task)['output'],result['output'])
             self.assertEqual(pdf.read_bytes(),b'pdf fixture')
 
+    def test_export_directory_symlink_preserves_outside_files_and_rejects_success(self):
+        from midi_workflow import request_conversion, submit_transcription, export_complete, resume
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);pdf=root/'score.pdf';source=root/'source.png'
+            pdf.write_bytes(b'accepted PDF');source.write_bytes(b'original')
+            task=root/'midi'
+            request_conversion(task,pdf,[source],'完整 MIDI',requested_midi=True)
+            score={'title':'complete','policy':{'default_velocity':96},'mapping_unresolved':[],'unresolved':[],
+                   'measures':[{'id':'1','beats':'4','meter':[4,4],'tempo_bpm':120,'events':[]}],'play_order':['1']}
+            review={'complete':True,'reviewed_measures':['1'],'viewed_pdf':True,'viewed_sources':[str(source.resolve())],'notes':'state fixture'}
+            submit_transcription(task,score,review)
+            outside=root/'outside';outside.mkdir()
+            marker=outside/'user.mid';marker.write_bytes(b'user file')
+            (task/'exports').symlink_to(outside,target_is_directory=True)
+            with self.assertRaises(ValueError):
+                export_complete(task)
+            self.assertEqual(list(outside.iterdir()),[marker])
+            self.assertEqual(marker.read_bytes(),b'user file')
+            self.assertEqual(pdf.read_bytes(),b'accepted PDF')
+            recovered=resume(task)
+            self.assertNotEqual(recovered['status'],'midi_reviewed')
+            self.assertNotIn('output',recovered)
+
     def test_unresolved_mapping_preserves_pdf_and_rejects_delivery(self):
         from midi_workflow import request_conversion, submit_transcription, export_complete
         with tempfile.TemporaryDirectory() as d:
