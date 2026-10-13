@@ -18,6 +18,7 @@ from reportlab.pdfgen.canvas import Canvas
 from video_seek import ConversionError, VideoReader, probe_video
 from delivery_layout import pdf_name
 
+ROUGH_PIXELS = 80_000_000
 
 class ReconstructionError(ValueError):
     pass
@@ -57,6 +58,8 @@ def load(task):
         _artifact(task, item)
     if record.get('rough'):
         _artifact(task, record['rough'])
+    for chunk in record.get('rough_chunks', []):
+        _artifact(task, chunk)
     if record.get('output'):
         _artifact(task, record['output']['vector'])
         _artifact(task, {'path': record['output']['pdf'], 'sha256': record['output']['sha256']})
@@ -148,31 +151,46 @@ def assemble(task, title, regions, review):
             if not isinstance(top, (int, float)) or not isinstance(spacing, (int, float)) or not math.isfinite(top) or not math.isfinite(spacing) or not (spacing > 0 and 0 <= top < top + 4 * spacing < crop.height):
                 raise ReconstructionError('五线位置需要 Agent 确认。')
         path = Path(task) / 'regions' / revision / f'region-{index+1:04d}.png'
-        pending.append((path, crop))
+        pending.append((path, capture_id, box))
         blocks.append({**selection, 'kind': kind, 'path': str(path.relative_to(task)),
                        'source_sha256': source['sha256'], 'pts': source['pts'],
                        'time_base': source['time_base'], 'width': crop.width, 'height': crop.height})
+        crop.close()
     if not any(item['kind'] == 'system' for item in blocks):
         raise ReconstructionError('没有完整谱行。')
     width = max(item['width'] for item in blocks)
-    height = sum(item['height'] for item in blocks)
-    if width * height > 80_000_000:
-        raise ReconstructionError('粗拼图过大；请按连续完整谱行分段处理。')
-    for item, (path, crop) in zip(blocks, pending):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        crop.save(path)
-        item['sha256'] = digest(path)
-    rough = Image.new('RGB', (width, height), 'white')
-    cursor = 0
+    batches, batch, height = [], [], 0
     for item in blocks:
-        with Image.open(Path(task) / item['path']) as image:
-            rough.paste(image, (0, cursor))
-        cursor += item['height']
-    path = Path(task) / f'rough-{revision}.png'
-    rough.save(path)
+        if width * item['height'] > ROUGH_PIXELS:
+            raise ReconstructionError('单个完整谱行超出粗拼内存范围。')
+        if batch and width * (height + item['height']) > ROUGH_PIXELS:
+            batches.append(batch)
+            batch, height = [], 0
+        batch.append(item)
+        height += item['height']
+    batches.append(batch)
+    for item, (path, capture_id, box) in zip(blocks, pending):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with Image.open(_artifact(task, captures[capture_id])) as image:
+            crop = image.crop(box).convert('RGB')
+            crop.save(path)
+            crop.close()
+        item['sha256'] = digest(path)
+    chunks = []
+    for number, batch in enumerate(batches, 1):
+        rough = Image.new('RGB', (width, sum(item['height'] for item in batch)), 'white')
+        cursor = 0
+        for item in batch:
+            with Image.open(Path(task) / item['path']) as image:
+                rough.paste(image, (0, cursor))
+            cursor += item['height']
+        path = Path(task) / f'rough-{revision}-{number}.png'
+        rough.save(path)
+        rough.close()
+        chunks.append({'path': path.name, 'sha256': digest(path),
+                       'inputs': [item['sha256'] for item in batch]})
     record.update(title=title.strip(), regions=blocks, source_review=review,
-                  rough={'path': path.name, 'sha256': digest(path),
-                         'inputs': [item['sha256'] for item in blocks]},
+                  rough=chunks[0], rough_chunks=chunks,
                   status='ready_to_redraw' if review.get('complete') is True and not review.get('unresolved') else 'needs_source_review')
     record.pop('output', None)
     record['metrics']['presented_capture_ids'] = list(dict.fromkeys(viewed))
@@ -226,6 +244,23 @@ def paginate(blocks, margin=24, minimum_gap=6):
         pages.append(current)
     if len(pages[0]) == 1 and blocks[0].get('kind') == 'header':
         raise ReconstructionError('标题占据整页，需要重新裁剪或布局。')
+    def occupied_height(batch):
+        return sum(blocks[i]['height'] * scale for i in batch) + minimum_gap * (len(batch) - 1)
+    # Keep the greedy minimum page count, then balance neighboring pages using
+    # complete systems. Each move strictly decreases squared occupied heights.
+    changed = True
+    while changed:
+        changed = False
+        for left, right in zip(pages, pages[1:]):
+            if len(left) <= 1 or (blocks[left[0]].get('kind') == 'header' and len(left) <= 2):
+                continue
+            before = abs(occupied_height(left) - occupied_height(right))
+            moved = left[-1]
+            next_left, next_right = left[:-1], [moved] + right
+            if occupied_height(next_right) <= height - 2 * margin and abs(occupied_height(next_left) - occupied_height(next_right)) < before:
+                left.pop()
+                right.insert(0, moved)
+                changed = True
     placements = []
     for number, batch in enumerate(pages, 1):
         used = sum(blocks[i]['height'] * scale for i in batch)
