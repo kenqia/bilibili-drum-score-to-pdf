@@ -15,10 +15,11 @@
 7. 只在无音乐/映射未决且完整审核后安装可选 Mido 并调用 `export_complete()`。它展开全部 `play_order`，输出每次回到反复起点对应的速度与拍号，导出后重新读取实际 MIDI 字节。核对击打、起拍、播放时长、鼓件、velocity、通道、tempo、拍号、note-on/off 配对和总长度。输出按实际标题命名，位于版本化子目录，旧 PDF 与历史 MIDI 均不覆盖。
 8. 单独报告 PDF 与 MIDI 的结果。`midi_reviewed` 只证明当前完整转写通过调用者音乐审核陈述和实际字节回读。真实曲谱仍需实际逐小节音乐审阅证据；受控小谱例或软件测试不证明三条真实整曲首发。
 
-可选依赖仅为 Mido 1.3.3，MIT，放到独立 uv 环境。PDF 所用基础依赖照原工作流管理，不新增 OMR 或音源依赖，不读取真实模型认证。
+可选依赖仅为 Mido 1.3.3，MIT，放到独立 uv 环境。完整 MIDI 工作流的安全文件名复用 PDF 基础模块，因此独立验证同时加载现有 `requirements.txt`，不新增 OMR 或音源依赖，不读取真实模型认证。
 
 ```sh
-uv run --with mido==1.3.3 python -m unittest discover -s tests -p 'test_midi*.py' -v
+uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
+  --with mido==1.3.3 python -m unittest discover -s tests -p 'test_midi*.py' -v
 ```
 
 Agent 内部调用示例，数值与路径必须来自本次实际材料。
@@ -44,6 +45,8 @@ result = export_complete(midi_task)
 ## 失败、来源与续跑
 
 `resume()` 重新核对 PDF、全部证据和 MIDI 输出的 SHA256；转写 hash 与实际审阅陈述、PDF/source hashes 一并绑定。来源或转写改变后拒绝沿用旧音乐审核，Agent 重新核查材料并提交。不要改 JSON 的 hash 来跳过审阅。
+
+导出前拒绝 `exports` 符号链接，并检查 MIDI 目标仍在任务内。新版本目录必须不存在；外部目录、用户文件和历史导出不会被覆盖。
 
 `needs_music_review` 保留未决与 PDF，不生成 MIDI。依赖缺失、事件冲突、实际 MIDI 回读失败等记录 `midi_failed`，PDF 保留。来源不变时再次调用 `export_complete()` 可重试，原失败文件不标为成功。导出写完后记录保存中断也可以在同一任务继续；每次生成新版本，恢复不重新要求用户提供 JSON 或逐小节修正。改变转写后提交会清除当前 MIDI 成功引用，历史文件仍保留。
 

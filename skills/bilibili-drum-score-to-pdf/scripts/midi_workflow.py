@@ -139,7 +139,12 @@ def export_complete(task):
         from midi_export import export_midi, inspect_midi
         import mido
         from delivery_layout import pdf_name
-        output = Path(task) / 'exports' / uuid.uuid4().hex / (Path(pdf_name(record['transcription']['title'])).stem + '.mid')
+        exports = Path(task) / 'exports'
+        if exports.is_symlink():
+            raise ValueError('MIDI export directory must not be a symlink')
+        output = exports / uuid.uuid4().hex / (Path(pdf_name(record['transcription']['title'])).stem + '.mid')
+        if not output.resolve().is_relative_to(Path(task).resolve()):
+            raise ValueError('MIDI output must remain inside the task')
         output.parent.mkdir(parents=True)
         export_midi(score,output)
         actual = inspect_midi(output)
