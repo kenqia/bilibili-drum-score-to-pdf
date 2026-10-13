@@ -200,3 +200,49 @@ class MidiWorkflowTests(unittest.TestCase):
         self.assertEqual(observed,expected)
         self.assertEqual(actual['end_tick'],8640)
         self.assertEqual(actual['tempos'],[[0,500000],[1920,375000],[3360,500000],[5280,375000],[6720,600000]])
+
+@unittest.skipUnless(importlib.util.find_spec('mido'),'optional Mido absent')
+class PlayableMidiTests(unittest.TestCase):
+    def test_explicit_approximation_keeps_original_limits_and_pairs_actual_notes(self):
+        from midi_workflow import request_conversion, submit_playable_transcription, export_complete, resume
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);pdf=root/'score.pdf';source=root/'source.png';task=root/'task'
+            pdf.write_bytes(b'accepted');source.write_bytes(b'original')
+            request_conversion(task,pdf,[source],'能跑就行',requested_midi=True)
+            original={'title':'uncertain','policy':{'velocity':96},'unresolved':['rit unspecified'],'mapping_unresolved':['no legend'],
+                'measures':[{'id':'1','beats':'4','meter':[4,4],'tempo_bpm':120,'events':[{'beat':'0','duration':'1','note':None,'velocity':96,'voice':'upper'}]}],'play_order':['1','1']}
+            adapted=json.loads(json.dumps(original));adapted['measures'][0]['events'][0]['note']=49
+            review={'complete':True,'reviewed_measures':['1'],'viewed_sources':[str(source.resolve())],'viewed_pdf':True,'notes':'controlled state fixture'}
+            submit_playable_transcription(task,original,adapted,review,authorization='允许近似，能跑就行',assumptions=['crossed oval -> crash49; constant tempo for uncertain rit'],adjustments=[])
+            result=export_complete(task)
+            self.assertEqual(result['status'],'midi_playable')
+            self.assertFalse(result['playback_approval']['reliable'])
+            self.assertEqual(result['playback_approval']['original_transcription'],original)
+            self.assertEqual(result['transcription']['unresolved'],['rit unspecified'])
+            self.assertEqual(result['readback']['end_tick'],3840)
+            self.assertEqual([e['note'] for e in result['readback']['events']],[49,49])
+            self.assertEqual(pdf.read_bytes(),b'accepted')
+            self.assertEqual(resume(task)['status'],'midi_playable')
+            saved=json.loads((task/'midi-record.json').read_text());saved['playback_approval']['assumptions']=['silently changed'];(task/'midi-record.json').write_text(json.dumps(saved))
+            with self.assertRaisesRegex(ValueError,'playback approval'):
+                resume(task)
+
+    def test_playable_approval_cannot_omit_a_written_measure_or_original_limits(self):
+        from midi_workflow import request_conversion, submit_playable_transcription, resume
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);pdf=root/'score.pdf';source=root/'source.png';task=root/'task'
+            pdf.write_bytes(b'accepted');source.write_bytes(b'original')
+            request_conversion(task,pdf,[source],'能跑就行',requested_midi=True)
+            original={'title':'uncertain','policy':{'velocity':96},'unresolved':['rit'], 'mapping_unresolved':[],
+                'measures':[{'id':'1','beats':'4','meter':[4,4],'tempo_bpm':120,'events':[]},
+                            {'id':'2','beats':'4','meter':[4,4],'tempo_bpm':120,'events':[]}],'play_order':['1','2']}
+            review={'complete':True,'reviewed_measures':['1','2'],'viewed_sources':[str(source.resolve())],'viewed_pdf':True,'notes':'controlled state fixture'}
+            for field in ('measures','play_order','unresolved'):
+                with self.subTest(field=field):
+                    adapted=json.loads(json.dumps(original));adapted[field]=adapted[field][:-1]
+                    with self.assertRaisesRegex(ValueError,'preserve'):
+                        submit_playable_transcription(task,original,adapted,review,authorization='近似',assumptions=['GM convention'],adjustments=[])
+            with self.assertRaisesRegex(ValueError,'authorization'):
+                submit_playable_transcription(task,original,original,review,authorization='',assumptions=['GM convention'],adjustments=[])
+            self.assertEqual(resume(task)['status'],'needs_music_review')
+            self.assertEqual(pdf.read_bytes(),b'accepted')

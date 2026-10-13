@@ -44,7 +44,7 @@ result = export_complete(midi_task)
 
 480 PPQ 可精确表示常见二分细分与三连音。不能精确落在该网格的事件拒绝导出，不自动四舍五入。小节拍数须和拍号一致；拾音或自由拍号要明确处理，当前小节结构不支持拍数与拍号不一致的拾音。未知反复、不支持的时值或含糊装饰音保留未决，不声称通用全谱覆盖。
 
-`unresolved` 和 `mapping_unresolved` 均为空才可在完整流程正常导出。底层 `midi_export.export_midi(experimental=True)` 的片段实验通道不能用于这个完整交付流程，`export_complete()` 不提供该参数。
+`unresolved` 和 `mapping_unresolved` 均为空才可在严格质量流程正常导出。底层 `midi_export.export_midi(experimental=True)` 的片段实验通道不能用于这个完整交付流程，`export_complete()` 不提供该参数。
 
 ## 失败、来源与续跑
 
@@ -55,3 +55,16 @@ result = export_complete(midi_task)
 `needs_music_review` 保留未决与 PDF，不生成 MIDI。依赖缺失、事件冲突、实际 MIDI 回读失败等记录 `midi_failed`，PDF 保留。来源不变时再次调用 `export_complete()` 可重试，原失败文件不标为成功。导出写完后记录保存中断也可以在同一任务继续；每次生成新版本，恢复不重新要求用户提供 JSON 或逐小节修正。改变转写后提交会清除当前 MIDI 成功引用，历史文件仍保留。
 
 KiLLKiSS 十五小节实测依旧有作者镲片图例未决。当前完整流程会拒绝把这条曲谱标为可靠 MIDI。技术路线已实测不等于作者映射已确认。小型完整实看验收见 `docs/experiments/issue-57-midi/README.md`；真实三视频的整曲验收另行记录。
+
+
+## 用户授权的近似可播放 MIDI
+
+用户明确接受“劣质一点也无所谓，能跑就行”时，可以采用近似播放。用户只请求 MIDI 而未接受近似时，继续使用上面的严格流程。
+
+在新的 MIDI 任务中调用 `submit_playable_transcription(task, original, adapted, review, authorization=verbatim_request, assumptions=[...], adjustments=[...])`。`original` 是带有未决项的完整原转写，`adapted` 是 Agent 明确赋予 GM 鼓件、合法拍点和释放时长的播放版本。两者必须保留完全相同的写下小节 ID、长度、拍号、完整播放顺序、`unresolved` 和 `mapping_unresolved`。近似版本不能删掉复杂小节或静默小节。
+
+`assumptions` 记录未确认作者图例时采用的 GM 对应、未标力度及渐慢数字曲线。`adjustments` 记录每个播放调整及其原始事件，例如同 GM 同拍击打合并、释放时长裁短，或超长候选在完整小节长度内按比例压缩。Agent 明确计算这些调整；模块不自动猜谱位或改变事件。
+
+函数保存原转写、原转写 SHA256、近似转写审核绑定、用户原话、假设和调整。记录状态为 `ready_for_playable`。调用 `export_complete()` 后仍必须通过 GM 数值、时值、通道 10、note-on/off 配对、tempo、拍号、完整总长度与实际字节事件回读。通过后的状态是 `midi_playable`，`playback_approval.reliable` 始终为 `false`，未决项仍留在转写里。`resume()` 同时检查播放批准记录的 hash。PDF 和严格质量路径保留。
+
+三首完整真实材料的可播放实测见 `docs/experiments/issue-58-playable-midi/README.md`。这个验收证明实际文件可以被 MIDI 解析器完整回读，并符合用户接受的近似质量；未做音源渲染或听感验收，也不证明作者映射或所有复杂节奏准确。

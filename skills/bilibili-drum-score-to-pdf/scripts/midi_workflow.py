@@ -34,6 +34,13 @@ def resume(task):
         semantic_hash = hashlib.sha256(json.dumps(record['transcription'],sort_keys=True).encode()).hexdigest()
         if semantic_hash != review['transcription_sha256'] or review['pdf_sha256'] != record['pdf']['sha256'] or review['source_hashes'] != [r['sha256'] for r in record['sources']]:
             raise ValueError('transcription or musical review evidence changed')
+    if record.get('playback_approval'):
+        approval = dict(record['playback_approval'])
+        digest = approval.pop('sha256', None)
+        if (hashlib.sha256(json.dumps(approval, sort_keys=True).encode()).hexdigest() != digest
+                or approval['transcription_sha256'] != record['music_review']['transcription_sha256']
+                or approval['original_sha256'] != hashlib.sha256(json.dumps(approval['original_transcription'], sort_keys=True).encode()).hexdigest()):
+            raise ValueError('playback approval changed; review again')
     if record.get('output'):
         output = (Path(task) / record['output']['path']).resolve()
         if not output.is_relative_to(Path(task).resolve()) or not output.is_file() or _hash(output) != record['output']['sha256']:
@@ -90,10 +97,36 @@ def submit_transcription(task, transcription, review):
                               'source_hashes':[r['sha256'] for r in record['sources']],
                               'transcription_sha256':hashlib.sha256(json.dumps(transcription,sort_keys=True).encode()).hexdigest()}
     record['status'] = 'needs_music_review' if transcription.get('unresolved') or transcription.get('mapping_unresolved') else 'ready_for_midi'
+    record.pop('playback_approval',None)
     record.pop('output',None)
     record.pop('readback',None)
     record.pop('failure',None)
     _save(task,record)
+    return record
+
+
+def submit_playable_transcription(task, original, adapted, review, *, authorization, assumptions, adjustments):
+    """Accept user-authorized approximations without certifying source fidelity.
+
+    The host Agent explicitly supplies GM mapping and playback adjustments.
+    Complete written measures, order and lengths cannot be approximated away.
+    """
+    if not isinstance(authorization, str) or not authorization.strip() or not isinstance(assumptions, list) or not assumptions or not all(isinstance(a, str) and a.strip() for a in assumptions) or not isinstance(adjustments, list):
+        raise ValueError('explicit approximation authorization and assumptions required')
+    for key in ('play_order', 'unresolved', 'mapping_unresolved'):
+        if original.get(key, []) != adapted.get(key, []):
+            raise ValueError('preserve original order and limitations')
+    structure = lambda t: [(m['id'], m['beats'], m['meter']) for m in t['measures']]
+    if structure(original) != structure(adapted):
+        raise ValueError('preserve every original complete measure and length')
+    record = submit_transcription(task, adapted, review)
+    approval = json.loads(json.dumps({'authorization':authorization, 'assumptions':assumptions,
+        'adjustments':adjustments, 'original_transcription':original,
+        'original_sha256':hashlib.sha256(json.dumps(original, sort_keys=True).encode()).hexdigest(),
+        'transcription_sha256':record['music_review']['transcription_sha256'], 'reliable':False}))
+    approval['sha256'] = hashlib.sha256(json.dumps(approval, sort_keys=True).encode()).hexdigest()
+    record.update(playback_approval=approval, status='ready_for_playable')
+    _save(task, record)
     return record
 
 
@@ -159,12 +192,18 @@ def _expand(transcription):
 def export_complete(task):
     """Export complete accepted semantics and compare actual MIDI bytes."""
     record = resume(task)
-    if record.get('status') == 'midi_reviewed':
+    if record.get('status') in ('midi_reviewed', 'midi_playable'):
         return record
-    if record.get('status') not in ('ready_for_midi','midi_failed'):
+    if record.get('status') not in ('ready_for_midi','ready_for_playable','midi_failed'):
         raise ValueError('musical or mapping review unresolved; PDF retained')
     try:
         score = _expand(record['transcription'])
+        approximate = bool(record.get('playback_approval'))
+        if approximate:
+            # Limitations remain in the task and approval; this only serializes
+            # the explicitly authorized playback interpretation.
+            score['unresolved'] = []
+            score['author_mapping_unresolved'] = []
         # Import only after explicit request and complete review.
         from midi_export import export_midi, inspect_midi
         import mido
@@ -189,6 +228,6 @@ def export_complete(task):
         _save(task,record)
         raise
     record.pop('failure',None)
-    record.update(status='midi_reviewed',readback=actual,output={'path':str(output.relative_to(task)),'sha256':_hash(output),'expanded_order':record['transcription']['play_order'],'beats':score['beats']})
+    record.update(status='midi_playable' if approximate else 'midi_reviewed',readback=actual,output={'path':str(output.relative_to(task)),'sha256':_hash(output),'expanded_order':record['transcription']['play_order'],'beats':score['beats']})
     _save(task,record)
     return record
