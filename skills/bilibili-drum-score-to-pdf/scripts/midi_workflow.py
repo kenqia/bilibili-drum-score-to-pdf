@@ -7,6 +7,7 @@ from collections import Counter
 from fractions import Fraction
 import hashlib
 import json
+import math
 from pathlib import Path
 import uuid
 
@@ -82,6 +83,8 @@ def submit_transcription(task, transcription, review):
         raise ValueError('score title and explicit playback conventions required')
     if review.get('complete') is not True or set(review.get('reviewed_measures',[])) != set(ids) or review.get('viewed_pdf') is not True or set(review.get('viewed_sources',[])) != {r['path'] for r in record['sources']} or not review.get('notes'):
         raise ValueError('Agent must review full PDF and originals, including every measure')
+    # Validate supported measure timing before accepting a musical review.
+    _expand(transcription)
     record['transcription'] = transcription
     record['music_review'] = {**review,'pdf_sha256':record['pdf']['sha256'],
                               'source_hashes':[r['sha256'] for r in record['sources']],
@@ -95,6 +98,8 @@ def submit_transcription(task, transcription, review):
 
 
 def _expand(transcription):
+    if 'tempo_changes' in transcription:
+        raise ValueError('tempo changes must use reviewed measure-local beats')
     measures = {m['id']:m for m in transcription['measures']}
     beat = Fraction(0)
     score = {'events':[],'tempo_changes':[],'meter_changes':[], 'unresolved':transcription.get('unresolved',[]), 'author_mapping_unresolved':transcription.get('mapping_unresolved',[])}
@@ -106,9 +111,34 @@ def _expand(transcription):
         if type(numerator) is not int or type(denominator) is not int or denominator <= 0 or length != Fraction(numerator*4,denominator):
             raise ValueError('measure beats disagree with reviewed meter')
         tempo = measure['tempo_bpm']
+        if type(tempo) not in (int, float) or not math.isfinite(tempo) or not 0 < tempo <= 1000:
+            raise ValueError('invalid measure initial tempo')
+        changes = measure.get('tempo_changes', [])
+        if not isinstance(changes, list):
+            raise ValueError('measure tempo changes must be a list')
+        previous_local = Fraction(0)
+        for change in changes:
+            if not isinstance(change, dict) or set(change) != {'beat', 'bpm'}:
+                raise ValueError('unsupported measure tempo change structure')
+            try:
+                local = Fraction(str(change['beat']))
+            except (ValueError, ZeroDivisionError):
+                raise ValueError('invalid measure tempo change beat') from None
+            bpm = change['bpm']
+            if not previous_local < local < length or (local * 480).denominator != 1:
+                raise ValueError('tempo change beats must be ordered, inside measure and exact at 480 PPQ')
+            if type(bpm) not in (int, float) or not math.isfinite(bpm) or not 0 < bpm <= 1000:
+                raise ValueError('invalid measure tempo change BPM')
+            previous_local = local
         if tempo != previous_tempo:
             score['tempo_changes'].append({'beat':str(beat),'bpm':tempo})
             previous_tempo = tempo
+        for change in measure.get('tempo_changes', []):
+            local = Fraction(str(change['beat']))
+            tempo = change['bpm']
+            if tempo != previous_tempo:
+                score['tempo_changes'].append({'beat': str(beat + local), 'bpm': tempo})
+                previous_tempo = tempo
         if measure['meter'] != previous_meter:
             score['meter_changes'].append({'beat':str(beat),'numerator':numerator,'denominator':denominator})
             previous_meter = measure['meter']
