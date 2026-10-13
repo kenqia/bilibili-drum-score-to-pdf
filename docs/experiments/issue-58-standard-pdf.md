@@ -17,3 +17,11 @@ export 通用重排产生两页 A4。Agent 实际查看 Poppler 2000 像素渲�
 独立审阅提出第 59 小节脚踩 cross 和第 87 小节镲附点的疑点。Agent 从原生源、生成图与实际 PDF 渲染各裁出放大核查图，六张定位图确认本任务的两个符号均保留；没有追加生图或重置修正预算。根 Agent 的独立结论单独保存。
 
 root 在 2026-10-13 独立实际查看两张最终 PDF 页面、五张原生源图与第 59/87 小节的六张 source/gen/final 放大图。root 确认脚踩 x 与镲附点保留，撤回缩略全页产生的疑点。两份视觉判断均支持本标准样本 PDF；整曲 MIDI 尚未验收。
+
+## 完整范围的未决 MIDI 转写
+
+随后依 #58 首发验收要求创建独立 MIDI 任务。Agent 再次实际查看 12 个完整原裁剪谱行，以及第 46/67 小节放大图，使用 midi_workflow 的真实 request_conversion、submit_transcription 与 hash 绑定的音乐审阅记录。转写包含全部 88 个书写小节、顺序 1–88、352 个四分拍，明确展开 1–37 和 72–77 共 43 个静默小节，并记录 594 个攻击事件与 120 个印刷休止。每个事件均含 Fraction 拍点、时值、voice、符头和五线半间隔谱位，保留 ghost、装饰音、重音与渐强。47–50 的 tom groove 使用实际独立谱位，不把它们当作普通 snare。
+
+此次覆盖整曲，但音乐仍有未决项。所有 GM note 保持 null；作者映射不明。填充音的相邻 tom 谱位、67 两个双音及未印完整休止的下声部需要独立复核，具体小节写在 transcription.unresolved。正常力度 96、ghost 64、重音 112、装饰音主音前 1/16 四分拍均是披露的播放约定；78–79 渐强没有已知数字，未称动态表现通过。complete 审阅字段表示 88 小节全部实际检查和记录，不表示未决项已经通过。
+
+实际 export_complete 拒绝，报告 musical or mapping review unresolved; PDF retained。原 PDF 前后 SHA-256 均为 0572a7efa70192b8a089a504780ef9528d2b8fcced9894cf70395ffa0fa034f2。实际任务在原 standard worktree 的 midi-task，仓库实验校验副本包含 midi-task/midi-record.json、transcribe.py 和 midi-export-rejected.txt。没有以空 events 冒充响声小节，也没有生成可靠 MIDI 或关闭 #58。本步骤没有改生产代码或运行全回归。
