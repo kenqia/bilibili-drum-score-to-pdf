@@ -13,7 +13,7 @@ uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/
 
 新测试保留匿名网络、真实工作进程与信号期限、分 P、公共 DNS/TLS、签名 URL 脱敏、配置与认证哨兵、资源大小、原媒体尺寸、跨文件系统独占发布、用户目录保护、实际 PTS 和临时解码清理。默认入口检查新版任务、旧任务拒绝、恢复与 PDF-only 无 MIDI。重绘测试覆盖来源损坏、完整性、重叠与重复音乐、原生输出比例、一次修正、预算恢复、矢量路由、失败选择原子发布和最终 PDF 验证。MIDI 检查完整播放顺序、精确事件、读回、用户近似授权及路径边界。
 
-CI 使用合成视频和保存的确定性选择检查矢量 PDF、A4 与来源拒绝，并另跑可选 MIDI 测试。它不调用宿主模型，不提供真实视觉或音乐准确证据。具体 #59 冻结回归结果由最终集成记录追加；实施中针对性测试不能冒充最终冻结全量回归。
+CI 使用合成视频和保存的确定性选择检查矢量 PDF、A4 与来源拒绝，并另跑可选 MIDI 测试。它不调用宿主模型，不提供真实视觉或音乐准确证据。#59 实施 worktree 完整87项、43.578秒通过，日志 `/home/kenqia/issue54-recovery-evidence/issue59-full-final2.log`，包含可选 Mido。Python compileall、diff 检查和仓库外新版 help smoke 通过。最终 integration 冻结回归结果另行追加，实施 worktree 验证不冒充远端 CI。
 
 ## 三视频真实验收
 

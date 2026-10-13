@@ -43,6 +43,19 @@ class LocalScoreWorkflow(unittest.TestCase):
             {'viewed_captures': [shot['id']], 'complete': True, 'notes': 'One complete score system; title, tempo, meter and ending visible.'})
         return shot
 
+    def test_capture_and_record_writes_reject_external_symlinks(self):
+        for component in ('captures','record.tmp','captures/capture-0001.png'):
+            with self.subTest(component=component):
+                task=self.root/component.replace('.','-').replace('/','-')
+                workflow.prepare(self.video,task)
+                external=self.root/(component.replace('/','-')+'-external');external.mkdir()
+                sentinel=external/'capture-0001.png';sentinel.write_bytes(b'keep')
+                target=external if component=='captures' else sentinel
+                (task/component).parent.mkdir(parents=True,exist_ok=True)
+                (task/component).symlink_to(target,target_is_directory=component=='captures')
+                with self.assertRaises(workflow.ReconstructionError):workflow.capture(task,0)
+                self.assertEqual(sentinel.read_bytes(),b'keep')
+
     def test_local_video_delivers_reviewed_named_vector_pdf(self):
         self.select()
         result = workflow.export_vector(self.task)

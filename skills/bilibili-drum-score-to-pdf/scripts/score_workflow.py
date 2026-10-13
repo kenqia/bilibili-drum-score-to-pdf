@@ -86,10 +86,10 @@ def navigate(task, seconds, width=480):
         reader.close()
         local._save(task, record)
     image.thumbnail((width, max(1, round(width * image.height / image.width))))
-    directory = Path(task) / 'navigation'
+    directory = local.write_path(task, 'navigation')
     directory.mkdir(exist_ok=True)
     identifier = 'probe-' + uuid.uuid4().hex
-    path = directory / (identifier + '.png')
+    path = local.write_path(task, Path('navigation') / (identifier + '.png'))
     image.save(path)
     probe = {'id': identifier, 'path': str(path.relative_to(task)), 'sha256': local.digest(path), 'requested_seconds': seconds, 'requested_width': width, 'width': image.width, 'height': image.height, **pts}
     record.setdefault('probes', []).append(probe)
@@ -144,11 +144,15 @@ def assemble(task, title, regions, review):
     captures = {c['id'] for c in previous['captures']}
     if not review.get('notes') or not set(viewed).issubset(captures) or any(r['capture'] not in viewed for r in unique):
         raise ReconstructionError('每个选行必须引用实际审阅过的原截图。')
-    if same and review.get('complete') is True and not review.get('unresolved'):
+    if same:
         # Re-confirming identical valid source material is recovery, not a new
         # request. Preserve accepted outputs and persisted correction budgets.
         previous['source_review'] = review
-        if previous['status'] == 'needs_source_review':
+        if review.get('complete') is not True or review.get('unresolved'):
+            if previous.get('output'):
+                previous.setdefault('source_review_withdrawals',[]).append({'review':review,'output':previous.pop('output')})
+            previous['status'] = 'needs_source_review'
+        elif previous['status'] == 'needs_source_review':
             previous['status'] = 'ready_to_redraw'
         local._save(task, previous)
         return previous
@@ -160,16 +164,29 @@ def assemble(task, title, regions, review):
 
 def redraw_inputs(task, groups=None):
     record = load(task)
+    if record.get('source_review',{}).get('complete') is not True or record['source_review'].get('unresolved'):
+        raise ReconstructionError('原图完整性尚未确认。')
     if record.get('redraw_pages'):
         return record['redraw_pages']
     if record['status'] != 'ready_to_redraw':
         raise ReconstructionError('原图接续或完整性未确认。')
     placements, count = local.paginate(record['regions'])
     if groups is None:
-        groups = [[p['region'] for p in placements if p['page'] == number] for number in range(1, count + 1)]
+        groups=[]
+        for number in range(1,count+1):
+            group=[]
+            for i in [p['region'] for p in placements if p['page']==number]:
+                proposed=group+[i]
+                if group and max(record['regions'][j]['width'] for j in proposed)*sum(record['regions'][j]['height'] for j in proposed)>local.ROUGH_PIXELS:
+                    groups.append(group)
+                    group=[]
+                group.append(i)
+            if group:groups.append(group)
     if not groups or any(not group for group in groups) or [i for group in groups for i in group] != list(range(len(record['regions']))):
         raise ReconstructionError('重绘分块必须按完整谱行顺序覆盖全部材料。')
-    directory = Path(task) / 'redraw' / uuid.uuid4().hex
+    if any(max(record['regions'][i]['width'] for i in group) * sum(record['regions'][i]['height'] for i in group) > local.ROUGH_PIXELS for group in groups):
+        raise ReconstructionError('重绘分组超出内存像素限制；拆分完整谱行。')
+    directory = local.write_path(task, Path('redraw') / uuid.uuid4().hex)
     directory.mkdir(parents=True)
     pages = []
     for number, indices in enumerate(groups, 1):
@@ -182,7 +199,7 @@ def redraw_inputs(task, groups=None):
                 image.paste(crop, (0, y))
             boundaries.append([0, y, block['width'], y + block['height']])
             y += block['height']
-        path = directory / f'input-{number}.png'
+        path = local.write_path(task, directory.relative_to(task) / f'input-{number}.png')
         image.save(path)
         pages.append({'id': f'page-{number}', 'regions': indices, 'input': {'path': str(path.relative_to(task)), 'sha256': local.digest(path), 'inputs': [b['sha256'] for b in blocks]}, 'source_boundaries': boundaries, 'status': 'needs_generation', 'corrections_used': 0, 'attempts': []})
     record['redraw_pages'] = pages
@@ -221,7 +238,7 @@ def finish_redraw(task, identifier, request, output, tool, receipt):
         raise ReconstructionError('宿主工具调用来源无效。')
     with Image.open(output) as image:
         image.verify()
-    path = Path(task) / 'redraw' / (request + '.png')
+    path = local.write_path(task, Path('redraw') / (request + '.png'))
     # Copy byte-for-byte. A receipt is an assertion, not proof of a tool call.
     path.write_bytes(Path(output).read_bytes())
     page['output'] = {'path': str(path.relative_to(task)), 'sha256': local.digest(path), 'input_sha256': page['input']['sha256']}
@@ -293,6 +310,8 @@ def reject_accepted_redraw(task, identifier, notes):
 def export(task):
     """Reflow complete generated systems and unchanged vector paths together."""
     record = load(task)
+    if record.get('source_review',{}).get('complete') is not True or record['source_review'].get('unresolved'):
+        raise ReconstructionError('原图完整性尚未确认，停止导出。')
     if record.get('output', {}).get('layout_version') == 2:
         return record['output']
     pages = record.get('redraw_pages', [])
@@ -313,7 +332,7 @@ def export(task):
     placements, count = local.paginate(blocks)
     if (Path(task) / 'exports').is_symlink():
         raise ReconstructionError('导出目录不能指向任务外。')
-    revision = Path(task) / 'exports' / uuid.uuid4().hex
+    revision = local.write_path(task, Path('exports') / uuid.uuid4().hex)
     revision.mkdir(parents=True)
     pdf = revision / local.pdf_name(record['title'])
     canvas = Canvas(str(pdf), pagesize=A4, invariant=1)

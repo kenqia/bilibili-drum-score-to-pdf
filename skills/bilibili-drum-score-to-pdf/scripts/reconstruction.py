@@ -32,9 +32,27 @@ def digest(path):
     return sha.hexdigest()
 
 
+def write_path(task, relative):
+    """Validate every existing write component before touching the filesystem."""
+    root=Path(task)
+    if root.is_symlink():
+        raise ReconstructionError('任务目录不能是符号链接。')
+    suffix=Path(relative)
+    if suffix.is_absolute() or '..' in suffix.parts:
+        raise ReconstructionError('写入路径必须位于任务内。')
+    candidate=root
+    for part in suffix.parts:
+        candidate=candidate/part
+        if candidate.is_symlink():
+            raise ReconstructionError('任务写入路径不能包含符号链接。')
+    if not candidate.resolve().is_relative_to(root.resolve()):
+        raise ReconstructionError('写入路径必须位于任务内。')
+    return candidate
+
+
 def _save(task, record):
-    path = Path(task) / 'record.json'
-    temporary = path.with_suffix('.tmp')
+    path = write_path(task, 'record.json')
+    temporary = write_path(task, 'record.tmp')
     temporary.write_text(json.dumps(record, ensure_ascii=False, indent=2))
     temporary.replace(path)
 
@@ -48,6 +66,8 @@ def _artifact(task, reference):
 
 
 def load(task):
+    for name in ('record.json','record.tmp','captures','regions','navigation','redraw','exports'):
+        write_path(task,name)
     record = json.loads((Path(task) / 'record.json').read_text())
     if record.get('schema') != 'score-reconstruction/1':
         raise ReconstructionError('不是当前重构任务。')
@@ -69,6 +89,8 @@ def load(task):
 def prepare(source, task):
     """Probe a local video, or resume an intact task for the same source."""
     source, task = Path(source).resolve(), Path(task)
+    write_path(task,'record.json')
+    write_path(task,'record.tmp')
     if not source.is_file():
         raise ConversionError('invalid_input', '本地视频不存在。')
     if (task / 'record.json').exists():
@@ -107,9 +129,9 @@ def capture(task, seconds):
         reader.close()
         _save(task, record)
     identifier = f'capture-{len(record["captures"])+1:04d}'
-    directory = Path(task) / 'captures'
+    directory = write_path(task, 'captures')
     directory.mkdir(exist_ok=True)
-    path = directory / f'{identifier}.png'
+    path = write_path(task, Path('captures') / f'{identifier}.png')
     picture.save(path)
     shot = {'id': identifier, 'path': str(path.relative_to(task)), 'sha256': digest(path),
             'requested_seconds': seconds, **pts}
@@ -156,7 +178,7 @@ def _assemble(task, title, regions, review, record):
             top, spacing = selection.get('staff_top'), selection.get('staff_spacing')
             if not isinstance(top, (int, float)) or not isinstance(spacing, (int, float)) or not math.isfinite(top) or not math.isfinite(spacing) or not (spacing > 0 and 0 <= top < top + 4 * spacing < crop.height):
                 raise ReconstructionError('五线位置需要 Agent 确认。')
-        path = Path(task) / 'regions' / revision / f'region-{index+1:04d}.png'
+        path = write_path(task, Path('regions') / revision / f'region-{index+1:04d}.png')
         pending.append((path, capture_id, box))
         blocks.append({**selection, 'kind': kind, 'path': str(path.relative_to(task)),
                        'source_sha256': source['sha256'], 'pts': source['pts'],
@@ -190,7 +212,7 @@ def _assemble(task, title, regions, review, record):
             with Image.open(Path(task) / item['path']) as image:
                 rough.paste(image, (0, cursor))
             cursor += item['height']
-        path = Path(task) / f'rough-{revision}-{number}.png'
+        path = write_path(task, f'rough-{revision}-{number}.png')
         rough.save(path)
         rough.close()
         chunks.append({'path': path.name, 'sha256': digest(path),
@@ -303,7 +325,7 @@ def export_vector(task):
         raise ReconstructionError('原图尚未确认完整，或仍有未决内容。')
     vectors = [trace_region(task, item) for item in record['regions']]
     placements, page_count = paginate(record['regions'])
-    exports = Path(task) / 'exports'
+    exports = write_path(task, 'exports')
     if exports.is_symlink():
         raise ReconstructionError('导出目录不能指向任务外部或已有用户目录。')
     exports.mkdir(exist_ok=True)

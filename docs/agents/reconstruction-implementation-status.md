@@ -36,11 +36,11 @@ uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/
 
 ## 实际样本和发布门槛
 
-标准 BV1rH4y1R7Rk 新鲜匿名获取后，实际查看 5 张原生图和 6 张导航图，两次真实宿主生图、零修正，完整 1 至 88 小节输出两页 PDF。root 与 implementer 独立查看页面，并放大核对第 59 小节脚踩叉形符头和第 87 小节镲附点。两处均保留，root 的缩图疑点已撤回。见[标准 PDF 验收](../experiments/issue-58-standard-pdf.md)。整曲 MIDI 未验收。
+标准 BV1rH4y1R7Rk 新鲜匿名获取后，实际查看 5 张原生图和 6 张导航图，两次真实宿主生图、零修正，完整 1 至 88 小节输出两页 PDF。root 与 implementer 独立查看页面，并放大核对第 59 小节脚踩叉形符头和第 87 小节镲附点。两处均保留，root 的缩图疑点已撤回。见[标准 PDF 验收](../experiments/issue-58-standard-pdf.md)。此前严格整曲 MIDI 未通过；用户调整后近似整曲 MIDI 已实际回读。
 
-第三作者 BV1np421S78S 实际查看 1 张原生图与 3 张导航图，一次真实宿主生图、零修正，完整 16 小节输出一页“小星星.pdf”。两位 Agent 独立查看原图与最终 PDF 后接受。完整音乐转写记录 58 次写定击打，反复后为 107 次、120 拍；作者鼓件映射及 rit 播放约定未决。实际 MIDI 导出拒绝，PDF hash 不变。见[第三作者验收](../experiments/issue-58-other-pdf.md)。
+第三作者 BV1np421S78S 实际查看 1 张原生图与 3 张导航图，一次真实宿主生图、零修正，完整 16 小节输出一页“小星星.pdf”。两位 Agent 独立查看原图与最终 PDF 后接受。完整音乐转写记录 58 次写定击打，反复后为 107 次、120 拍；作者鼓件映射及 rit 播放约定未决。此前严格 MIDI 导出拒绝，PDF hash 不变；用户授权后107事件近似整曲导出和实际回读通过。见[第三作者验收](../experiments/issue-58-other-pdf.md)。
 
-KiLLKiSS BV15crrYUEPA 的新鲜三页生图和三页强制矢量产物已实际查看。矢量第 31 小节装饰音受到源水印遮挡，正在针对该行补采和重新导出；旧版本不计为矢量通过。整曲音乐验收未完成。新记录保存在持久 killkiss worktree，不以原型或片段替代整曲验收。
+KiLLKiSS BV15crrYUEPA 的新鲜三页生图和三页强制矢量产物已实际查看。早期矢量第31小节装饰音受到源水印遮挡，该版本不计为通过。78秒新完整原行修复后，全部三页强制矢量和生图重新实际审阅通过；近似整曲 MIDI 已实际回读，原可靠音乐等价未通过。新记录保存在持久 killkiss worktree，不以原型或片段替代整曲验收。
 
 未知模型及完整宿主成本保持 `null`。没有 push、PR、远端合并、Issue 修改或发布。
 
@@ -52,3 +52,8 @@ KiLLKiSS BV15crrYUEPA 的新鲜三页生图和三页强制矢量产物已实际�
 获取和生命周期测试迁到新版 CLI，保留公共 DNS/TLS、匿名配置哨兵、脱敏、真实 SIGTERM/期限、跨文件系统发布、大小及实测尺寸保护。URL/local 来源相同、实际 PTS、临时目录与文件名测试单独保留。新版 CI 使用合成确定性矢量产物和可选 MIDI job，不计真实生图或看图。
 
 选行不变但完整性疑点后来解除时，恢复 ready_to_redraw 状态；受控公共接口测试先失败后通过。正式 Skill、README、项目约定、架构、验证、安装和首发说明改写为当前流程，保留近似 MIDI 授权要求和 reliable=false。具体冻结测试与集成结果由最终收口追加。
+
+
+#59 worktree 最终离线回归加入可选 Mido，共87项、43.578秒全部通过，日志 `/home/kenqia/issue54-recovery-evidence/issue59-full-final2.log`。旧完整性撤回测试原先期望丢弃全部重绘记录，因新预算保留行为出现一次失败；保留原失败日志，更新断言为保留历史且阻断导出后复验通过。三项审阅修复包含任务写路径 symlink 拒绝、同输入撤回后的修正预算保留，以及生图分组像素上限。共享写路径检查覆盖 record.tmp、captures、regions、navigation、redraw、exports 与 MIDI 临时记录。
+
+独立仓库外工作目录通过新版 help smoke，无认证或宿主设置修改；Python compileall 与 diff 检查通过。该结果是实施 worktree 的完成验证，最终 integration 冻结回归和两轴审阅由 root 另行记录，不宣称远端 CI 已运行。

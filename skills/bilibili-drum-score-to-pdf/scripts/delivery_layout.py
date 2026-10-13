@@ -18,4 +18,3 @@ def pdf_name(title):
     while len(stem.encode('utf-8')) > 240:
         stem = stem[:-1]
     return stem + '.pdf'
-
