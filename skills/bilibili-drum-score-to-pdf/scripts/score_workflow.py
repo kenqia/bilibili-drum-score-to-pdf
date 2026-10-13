@@ -10,7 +10,7 @@ from PIL import Image
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen.canvas import Canvas
 import reconstruction as local
-from public_video import acquire, video_origin, ACQUISITION_SECONDS
+from public_video import acquire, video_origin, ACQUISITION_SECONDS, retryable_acquisition
 from video_seek import VideoReader
 
 ReconstructionError = local.ReconstructionError
@@ -33,6 +33,8 @@ def load(task):
 def prepare(source, task, acquisition_timeout=ACQUISITION_SECONDS):
     """Same local/anonymous URL entry; resumes without downloading twice."""
     task = Path(task)
+    if task.is_symlink():
+        raise ReconstructionError('目标目录不能是符号链接。')
     if (task / 'record.json').exists():
         record = load(task)
         candidate = str(source)
@@ -43,13 +45,23 @@ def prepare(source, task, acquisition_timeout=ACQUISITION_SECONDS):
         if candidate not in (record['source']['path'], record.get('origin', {}).get('url')):
             raise ReconstructionError('已有任务对应另一来源。')
         return record
-    if task.exists() and any(task.iterdir()):
+    retry = task.exists() and retryable_acquisition(task)
+    if task.exists() and any(task.iterdir()) and not retry:
         raise ReconstructionError('目标目录已有用户文件。')
     origin = None
-    if str(source).startswith(('http://', 'https://')):
+    if '://' in str(source):
         origin = video_origin(str(source))
         destination = task.parent / (task.name + '-source-' + uuid.uuid4().hex)
-        source, origin = acquire(str(source), destination, timeout=acquisition_timeout)
+        try:
+            source, origin = acquire(str(source), destination, timeout=acquisition_timeout)
+        except BaseException:
+            if retryable_acquisition(destination):
+                (destination / 'manifest.json').unlink()
+                destination.rmdir()
+            raise
+    if retry:
+        local.probe_video(source)
+        (task / 'manifest.json').unlink()
     record = local.prepare(source, task)
     if origin:
         record['origin'] = origin
@@ -136,6 +148,8 @@ def assemble(task, title, regions, review):
         # Re-confirming identical valid source material is recovery, not a new
         # request. Preserve accepted outputs and persisted correction budgets.
         previous['source_review'] = review
+        if previous['status'] == 'needs_source_review':
+            previous['status'] = 'ready_to_redraw'
         local._save(task, previous)
         return previous
     record = local._assemble(task, title, unique, review, previous)

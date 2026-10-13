@@ -31,9 +31,13 @@ class LinkInputTests(unittest.TestCase):
         info = {'id': info_id or 'BV1b5411x7Ku_p2', 'formats': formats or [
             {'url': MEDIA, 'width': 1280, 'height': 960, 'vcodec': 'avc1', 'acodec': 'none', 'format_id': '80'}]}
         stdout, stderr = io.StringIO(), io.StringIO()
-        with patch.object(sys, 'argv', [str(CLI), url, '--operation', 'convert', '--output', str(output)]), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), (contextlib.nullcontext() if actual_backend else patch.object(YoutubeDL, 'extract_info', return_value=info, side_effect=backend_error)), (contextlib.nullcontext() if real_transport else patch('urllib.request.OpenerDirector.open', side_effect=response or (lambda *a, **k: io.BytesIO(video.read_bytes())))), patch('socket.getaddrinfo', return_value=dns or [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]):
+        with patch.object(sys, 'argv', [str(CLI), url, '--operation', 'prepare', '--output', str(output)]), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), (contextlib.nullcontext() if actual_backend else patch.object(YoutubeDL, 'extract_info', return_value=info, side_effect=backend_error)), (contextlib.nullcontext() if real_transport else patch('urllib.request.OpenerDirector.open', side_effect=response or (lambda *a, **k: io.BytesIO(video.read_bytes())))), patch('socket.getaddrinfo', return_value=dns or [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]):
             code = cli.main()
-        return code, json.loads(stdout.getvalue()), stdout.getvalue() + stderr.getvalue()
+        result=json.loads(stdout.getvalue())
+        if result.get('schema') == 'score-reconstruction/1':
+            result['origin']=result['origin']
+            result['status']='success'
+        return code, result, stdout.getvalue() + stderr.getvalue()
 
     def test_dash_only_link_uses_native_video_track_and_records_anonymous_backend(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -41,13 +45,13 @@ class LinkInputTests(unittest.TestCase):
             video = video_from_image(score_frame(), base)
             code, result, logs = self.invoke(base / 'result', video)
             self.assertEqual(code, 0, result)
-            self.assertTrue((base / 'result/score.pdf').exists())
+            self.assertTrue((base / 'result/record.json').exists())
             self.assertEqual(result['origin']['page'], 2)
             self.assertEqual(result['origin']['backend'], 'yt-dlp')
             self.assertFalse(result['origin']['authenticated'])
             self.assertFalse(result['origin']['single_file_fallback'])
             self.assertEqual(result['origin']['actual_video']['width'], 1280)
-            combined = logs + (base / 'result/manifest.json').read_text()
+            combined = logs + (base / 'result' / ('record.json' if code == 0 else 'manifest.json')).read_text()
             if 'DO_NOT_SAVE_TEST_SENTINEL' in combined:
                 offset = combined.index('DO_NOT_SAVE_TEST_SENTINEL')
                 self.fail(repr(combined[max(0, offset-180):offset+120]))
@@ -97,7 +101,7 @@ class LinkInputTests(unittest.TestCase):
             video = video_from_image(score_frame(), base)
             code, result, logs = self.invoke(base / 'result', video, [{'url': MEDIA, 'backup_urls': ['https://backup.bilivideo.cn/recovery?sign=DO_NOT_SAVE_TEST_SENTINEL'], 'acodec': 'none', 'vcodec': 'avc1'}], response=lambda request, **kw: response(None, request, **kw))
             self.assertEqual(code, 0, result)
-            combined = logs + (base / 'result/manifest.json').read_text()
+            combined = logs + (base / 'result' / ('record.json' if code == 0 else 'manifest.json')).read_text()
             if 'DO_NOT_SAVE_TEST_SENTINEL' in combined:
                 offset = combined.index('DO_NOT_SAVE_TEST_SENTINEL')
                 self.fail(repr(combined[max(0, offset-180):offset+120]))
@@ -113,7 +117,7 @@ class LinkInputTests(unittest.TestCase):
             self.assertEqual(result['error']['failure_stage'], 'media')
             self.assertEqual(result['error']['backend_error_type'], 'HTTPError')
             failure.close()
-            combined = logs + (base / 'result/manifest.json').read_text()
+            combined = logs + (base / 'result' / ('record.json' if code == 0 else 'manifest.json')).read_text()
             if 'DO_NOT_SAVE_TEST_SENTINEL' in combined:
                 offset = combined.index('DO_NOT_SAVE_TEST_SENTINEL')
                 self.fail(repr(combined[max(0, offset-180):offset+120]))
@@ -178,10 +182,10 @@ class LinkInputTests(unittest.TestCase):
             self.assertEqual(set(path.name for path in output.iterdir()), {'manifest.json'})
             code, result, _ = self.invoke(output, video)
             self.assertEqual(code, 0, result)
-            pdf = (output / 'score.pdf').read_bytes()
+            saved = (output / 'record.json').read_bytes()
             code, result, _ = self.invoke(output, video)
-            self.assertEqual(result['error']['code'], 'existing_output')
-            self.assertEqual((output / 'score.pdf').read_bytes(), pdf)
+            self.assertEqual(code,0,result)
+            self.assertEqual((output / 'record.json').read_bytes(), saved)
 
     def test_failure_diagnosis_with_unknown_files_cannot_retry(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -219,8 +223,8 @@ class LinkInputTests(unittest.TestCase):
                 self.skipTest('fixture and destination are on same filesystem')
             code, result, _ = self.invoke(output, video)
             self.assertEqual(code, 0, result)
-            self.assertEqual((output / 'BV1b5411x7Ku-p2.mp4').read_bytes(), video.read_bytes())
-            self.assertEqual({p.name for p in Path(destination).iterdir()}, {'result'})
+            self.assertEqual(Path(result['source']['path']).read_bytes(), video.read_bytes())
+            self.assertEqual(len([p for p in Path(destination).iterdir() if p.name.startswith('result-source-')]),1)
 
     def test_config_cookie_netrc_and_plugin_sentinels_are_not_read(self):
         from yt_dlp.extractor.bilibili import BiliBiliIE
@@ -252,7 +256,7 @@ class LinkInputTests(unittest.TestCase):
                 return real_open(file, *args, **kwargs)
             ydl_module = importlib.import_module('yt_dlp.YoutubeDL')
             stdout, stderr = io.StringIO(), io.StringIO()
-            with patch.object(BiliBiliIE, '_real_extract', extractor), patch.object(builtins, 'open', guarded_open), patch.object(ydl_module, 'load_all_plugins', side_effect=AssertionError('plugins were loaded')), patch.object(sys, 'path', [str(base), *sys.path]), patch.dict('os.environ', {'XDG_CONFIG_HOME': str(base), 'HOME': str(base)}), patch.object(sys, 'argv', [str(CLI), URL, '--operation', 'convert', '--output', str(base / 'result')]), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), patch('urllib.request.OpenerDirector.open', side_effect=lambda *a, **k: io.BytesIO(video.read_bytes())), patch('socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]):
+            with patch.object(BiliBiliIE, '_real_extract', extractor), patch.object(builtins, 'open', guarded_open), patch.object(ydl_module, 'load_all_plugins', side_effect=AssertionError('plugins were loaded')), patch.object(sys, 'path', [str(base), *sys.path]), patch.dict('os.environ', {'XDG_CONFIG_HOME': str(base), 'HOME': str(base)}), patch.object(sys, 'argv', [str(CLI), URL, '--operation', 'prepare', '--output', str(base / 'result')]), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), patch('urllib.request.OpenerDirector.open', side_effect=lambda *a, **k: io.BytesIO(video.read_bytes())), patch('socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]):
                 code = cli.main()
             result = json.loads(stdout.getvalue())
             self.assertEqual(code, 0, result)

@@ -1,6 +1,6 @@
 # Agent 的截图、重绘与 PDF 工作流
 
-`score_workflow.py` 是 Issue #56 的工作流接口。用户提供公开 B站链接或本地视频，Agent 负责导航、看图、确认接续、调用真实宿主生图并审阅 PDF。用户无需选择路线或填写任务 JSON。正式默认入口由 Issue #59 切换；现有默认入口暂时保留。
+`score_workflow.py` 是新版工作流接口。用户提供公开 B站链接或本地视频，Agent 负责导航、看图、确认接续、调用真实宿主生图并审阅 PDF。用户无需选择路线或填写任务 JSON。`convert.py` 默认 prepare 使用本接口；命令参数见[新版入口](reconstruction-entry.md)。
 
 ## 准备与采集
 

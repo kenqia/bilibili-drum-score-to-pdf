@@ -61,7 +61,7 @@ PDF 只使用路径和直线，不把粗拼图嵌入成位图。所有系统采�
 
 ## 验证记录
 
-重构基线为 `51aa468`。新工作流在独立工单 worktree 开发，未修改原实验和旧默认入口。运行以下聚焦验证。
+重构基线为 `51aa468`。新工作流在独立工单 worktree 开发，原实验保留；#59 已将新版设为默认入口。运行以下聚焦验证。
 
 ```sh
 uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
@@ -72,7 +72,7 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 2026-10-13，另以既有 KiLLKiSS 实验源视频起始 0.2 秒的无音频拷贝作小范围样本，只验收完整第 1–15 小节。没有声称整曲完成。实际查看原生截图和最终一页 Poppler 1600 像素渲染，核对 KiLLKiSS、Ave Mujica、陈老师、四分音符速度 200、4/4、首行和 6/12 行号、10–11 多小节休止、末小节 15 及蓝色休止符转黑。未见裁断、重叠或重复行；短片段上下留白平衡。`pdfimages -list` 无位图项。
 
-现场产物位于仓库外 `/tmp/issue54-context/pdf-acceptance/`，可供本次集成复核，不是永久交付位置。任务记录保存全部来源 hash、实际 PTS `0`、时间基准 `1/16000`、1 次 seek、解码器报告 2 帧、实际呈交 1 张原截图和逐页审阅陈述。完整帧视觉分析为 1 张，不能把解码器报告帧数称为实际看图数量。本次未调用生图或 MIDI。PDF SHA-256 为 `4f19226d9bead2a94a343f22366abc79f683aabba67b40845d3bcefec58bf57c`。
+历史现场产物曾位于仓库外 `/tmp/issue54-context/pdf-acceptance/`。运行环境重置后该临时位置已丢失，不作为可恢复任务或永久交付位置。任务记录保存全部来源 hash、实际 PTS `0`、时间基准 `1/16000`、1 次 seek、解码器报告 2 帧、实际呈交 1 张原截图和逐页审阅陈述。完整帧视觉分析为 1 张，不能把解码器报告帧数称为实际看图数量。本次未调用生图或 MIDI。PDF SHA-256 为 `4f19226d9bead2a94a343f22366abc79f683aabba67b40845d3bcefec58bf57c`。
 
 该次实看记录绑定以下原材料 hash，位于同一 `record.json`。
 

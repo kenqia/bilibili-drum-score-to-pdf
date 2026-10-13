@@ -11,6 +11,21 @@ class ScoreWorkflow(unittest.TestCase):
     setUp = fixtures.LocalScoreWorkflow.setUp
     tearDown = fixtures.LocalScoreWorkflow.tearDown
     select = fixtures.LocalScoreWorkflow.select
+    def test_resolved_source_review_restores_same_selection_export(self):
+        self.select()
+        source=workflow.load(self.task)
+        regions=[{**r,'position':str(i)} for i,r in enumerate(source['regions'])]
+        review={**source['source_review'],'continuity':'Complete fixture.','first_last':'Whole fixture.'}
+        blocked=workflow.assemble(self.task,source['title'],regions,{**review,'unresolved':['Hidden note needs review.']})
+        self.assertEqual(blocked['status'],'needs_source_review')
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.redraw_inputs(self.task)
+        resolved=workflow.assemble(self.task,source['title'],regions,{**review,'unresolved':[]})
+        self.assertEqual(resolved['status'],'ready_to_redraw')
+        page=workflow.redraw_inputs(self.task)[0]
+        workflow.fail_redraw(self.task,page['id'],'No host tool in fixture.')
+        self.assertEqual(workflow.export(self.task)['page_count'],1)
+
     def test_late_notation_rejection_invalidates_approved_pdf_and_preserves_one_correction(self):
         self.select()
         original = workflow.load(self.task)

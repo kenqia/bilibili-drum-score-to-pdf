@@ -35,6 +35,6 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 
 ## 验证安装
 
-让 Agent 读取已注册的 SKILL.md、仓库的 `docs/agents/agent-workflow.md` 和 `docs/agents/workflow-modes.md`，执行 `convert.py --help`。预期输出包含 prepare、submit、export、replay 和 auto/fast/full 模式。随后使用一个属于支持范围的视频，实际完成原图审阅和逐页 PDF 检查；帮助命令成功只证明脚本入口可用。
+让 Agent 读取已注册的 SKILL.md、仓库的 `docs/agents/reconstruction-workflow.md` 和 `docs/agents/reconstruction-entry.md`，执行 `convert.py --help`。预期输出包含 prepare、capture、assemble、重绘操作、export 与 review-pdf，默认使用新版 prepare。旧模式和决定兼容层不再提供。随后使用一个属于支持范围的视频，实际完成原图审阅和逐页 PDF 检查；帮助命令成功只证明脚本入口可用。
 
 更新时记录原源码版本，并保留已有任务与产物。需要回滚时恢复原安装副本，转换使用新任务和新结果目录。不同版本的决定、耗时与成功记录分开保存。
