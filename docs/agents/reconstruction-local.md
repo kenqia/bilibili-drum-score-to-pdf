@@ -73,3 +73,10 @@ uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirement
 2026-10-13，另以既有 KiLLKiSS 实验源视频起始 0.2 秒的无音频拷贝作小范围样本，只验收完整第 1–15 小节。没有声称整曲完成。实际查看原生截图和最终一页 Poppler 1600 像素渲染，核对 KiLLKiSS、Ave Mujica、陈老师、四分音符速度 200、4/4、首行和 6/12 行号、10–11 多小节休止、末小节 15 及蓝色休止符转黑。未见裁断、重叠或重复行；短片段上下留白平衡。`pdfimages -list` 无位图项。
 
 现场产物位于仓库外 `/tmp/issue54-context/pdf-acceptance/`，可供本次集成复核，不是永久交付位置。任务记录保存全部来源 hash、实际 PTS `0`、时间基准 `1/16000`、1 次 seek、解码器报告 2 帧、实际呈交 1 张原截图和逐页审阅陈述。完整帧视觉分析为 1 张，不能把解码器报告帧数称为实际看图数量。本次未调用生图或 MIDI。PDF SHA-256 为 `4f19226d9bead2a94a343f22366abc79f683aabba67b40845d3bcefec58bf57c`。
+
+该次实看记录绑定以下原材料 hash，位于同一 `record.json`。
+
+- 小范围视频 SHA-256 为 `4f9b46b56d240434fe38170098db6fa9cd85e91f0c1a0d920091dc2372dd1335`。
+- 实际呈交原截图 SHA-256 为 `d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5`。
+
+`pdfimages -list` 实际输出只有表头与分隔线，没有图像对象；原生截图和 PDF 并非像素相等，轮廓转描属于派生几何重绘。
