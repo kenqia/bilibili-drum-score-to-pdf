@@ -10,7 +10,7 @@ Agent 实际查看六张低清导航与五张原生截图。导航请求时间�
 
 export 通用重排产生两页 A4。Agent 实际查看 Poppler 2000 像素渲染的每页，确认标题、谱行顺序、首尾、完整行边界与共同打印宽度，未见裁断、重叠、遗漏或重复。页 2 稀疏留白上下平衡。pdfimages.txt 保存实际对象列表，两张生成图以各自原生分辨率嵌入；没有图像重采样。PDF SHA-256 为 0572a7efa70192b8a089a504780ef9528d2b8fcced9894cf70395ffa0fa034f2。
 
-永久校验副本位于 experiments/2026-10-13-issue58-recovered/standard，archive.json 保存 67 份文件的来源、大小与 SHA-256。实际任务仍在 /home/kenqia/issue54-worktrees/standard/experiments/2026-10-13-issue58-recovered/standard/task；副本没有搬迁任务引用或重新调用工具。源视频未复制进仓库实验副本。未知模型成本保持 null。
+永久校验副本位于 experiments/2026-10-13-issue58-recovered/standard，archive.json 保存 68 份文件的来源、大小与 SHA-256。实际任务仍在 /home/kenqia/issue54-worktrees/standard/experiments/2026-10-13-issue58-recovered/standard/task；副本没有搬迁任务引用或重新调用工具。源视频未复制进仓库实验副本。未知模型成本保持 null。
 
 这是 #58 标准样本的完整 PDF 验收，包含双份 PDF 视觉判断，但整曲 MIDI 尚未通过；不能据此关闭 #58 或声明首发完成。没有改动生产代码或运行重型回归。根 Agent 单独进行独立审阅与集成全回归。
 
@@ -27,3 +27,5 @@ root 在 2026-10-13 独立实际查看两张最终 PDF 页面、五张原生源�
 实际 export_complete 拒绝，报告 musical or mapping review unresolved; PDF retained。原 PDF 前后 SHA-256 均为 0572a7efa70192b8a089a504780ef9528d2b8fcced9894cf70395ffa0fa034f2。实际任务在原 standard worktree 的 midi-task，仓库实验校验副本包含 midi-task/midi-record.json、transcribe.py 和 midi-export-rejected.txt。没有以空 events 冒充响声小节，也没有生成可靠 MIDI 或关闭 #58。本步骤没有改生产代码或运行全回归。
 
 合并集成 b2ca217 后，真实 resume 和重新 submit_transcription 通过新增 _expand 拍点/时值校验。继续实际查看 59/67/83/87 填充放大图与 69 小节放大图后，修正 67 双音谱位为 1+5、69 末四个十六分音谱位为 3/3/4/4。装饰音事件力度改为已披露的 64。midi-refinement.json 保存前后转写 hash 与实际修正依据。594 攻击数量保持不变，疑点继续保留；实际 export 再次拒绝，PDF hash 不变。此处没有手工修改 hash 或伪造新版校验结果。
+
+为保留第一次读谱内容，midi-first-transcription.json 从当前事件反向还原上述三处更正，并严格验证 semantic hash 等于第一次真实 submit 的 ca1ccd4e733327a06dab8fab077f185068cd181cc639fff09037cd8af77043f4。该文件明示为校验还原快照，没有伪造新调用或修改当前任务审阅。
