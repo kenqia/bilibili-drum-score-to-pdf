@@ -138,7 +138,7 @@ def assemble(task, title, regions, review):
         previous['source_review'] = review
         local._save(task, previous)
         return previous
-    record = local.assemble(task, title, unique, review)
+    record = local._assemble(task, title, unique, review, previous)
     record['redraw_pages'] = []
     local._save(task, record)
     return record
@@ -300,16 +300,7 @@ def export(task):
                     canvas.drawImage(str(local._artifact(task, block['image'])), -box[0] * native_scale, -(image.height - box[1]) * native_scale, width=image.width * native_scale, height=image.height * native_scale)
             else:
                 canvas.scale(scale, -scale)
-                path = canvas.beginPath()
-                for points in vector['paths']:
-                    path.moveTo(*points[0])
-                    for point in points[1:]:
-                        path.lineTo(*point)
-                    path.close()
-                canvas.drawPath(path, fill=1, stroke=0, fillMode=0)
-                canvas.setLineWidth(1.1)
-                for x1, y, x2 in vector['lines']:
-                    canvas.line(x1, y, x2, y)
+                local.draw_vector(canvas, vector)
             canvas.restoreState()
         canvas.showPage()
     canvas.save()
@@ -322,4 +313,7 @@ def export(task):
     return output
 
 
-review_pdf = local.review_pdf
+def review_pdf(task, pages, notes):
+    """Validate all workflow references before recording final PDF approval."""
+    load(task)
+    return local.review_pdf(task, pages, notes)
