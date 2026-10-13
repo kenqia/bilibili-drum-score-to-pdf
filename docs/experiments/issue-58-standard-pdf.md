@@ -10,6 +10,8 @@ Agent 实际查看六张低清导航与五张原生截图。导航请求时间�
 
 export 通用重排产生两页 A4。Agent 实际查看 Poppler 2000 像素渲染的每页，确认标题、谱行顺序、首尾、完整行边界与共同打印宽度，未见裁断、重叠、遗漏或重复。页 2 稀疏留白上下平衡。pdfimages.txt 保存实际对象列表，两张生成图以各自原生分辨率嵌入；没有图像重采样。PDF SHA-256 为 0572a7efa70192b8a089a504780ef9528d2b8fcced9894cf70395ffa0fa034f2。
 
-永久校验副本位于 experiments/2026-10-13-issue58-recovered/standard，archive.json 保存 36 份文件的来源、大小与 SHA-256。实际任务仍在 /home/kenqia/issue54-worktrees/standard/experiments/2026-10-13-issue58-recovered/standard/task；副本没有搬迁任务引用或重新调用工具。源视频未复制进仓库实验副本。未知模型成本保持 null。
+永久校验副本位于 experiments/2026-10-13-issue58-recovered/standard，archive.json 保存 42 份文件的来源、大小与 SHA-256。实际任务仍在 /home/kenqia/issue54-worktrees/standard/experiments/2026-10-13-issue58-recovered/standard/task；副本没有搬迁任务引用或重新调用工具。源视频未复制进仓库实验副本。未知模型成本保持 null。
 
 这是 #58 标准样本的完整 PDF 验收，尚不包含独立第二份视觉判断或整曲 MIDI；不能据此关闭 #58 或声明首发完成。没有改动生产代码或运行重型回归。根 Agent 单独进行独立审阅与集成全回归。
+
+独立审阅提出第 59 小节脚踩 cross 和第 87 小节镲附点的疑点。Agent 从原生源、生成图与实际 PDF 渲染各裁出放大核查图，六张定位图确认本任务的两个符号均保留；没有追加生图或重置修正预算。根 Agent 的独立结论单独保存。
