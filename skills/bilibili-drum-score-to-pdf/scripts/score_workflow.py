@@ -257,7 +257,7 @@ def review_redraw(task, identifier, accepted, notes, boundaries=None):
 def export(task):
     """Reflow complete generated systems and unchanged vector paths together."""
     record = load(task)
-    if record.get('output'):
+    if record.get('output', {}).get('layout_version') == 2:
         return record['output']
     pages = record.get('redraw_pages', [])
     if not pages or any(p['status'] not in ('accepted', 'vector') for p in pages):
@@ -269,7 +269,7 @@ def export(task):
             original = record['regions'][index]
             if page['status'] == 'accepted':
                 box = page['boundaries'][offset]
-                blocks.append({'kind': original['kind'], 'width': box[2] - box[0], 'height': box[3] - box[1], 'image': page['output'], 'crop_bbox': box, 'source_region': index})
+                blocks.append({'kind': original['kind'], 'width': original['width'], 'height': (box[3] - box[1]) * original['width'] / (box[2] - box[0]), 'image': page['output'], 'crop_bbox': box, 'source_region': index})
                 vectors.append(None)
             else:
                 blocks.append({**original, 'source_region': index})
@@ -292,11 +292,12 @@ def export(task):
             if vector is None:
                 # PDF clipping preserves native output bytes and avoids pixel resampling.
                 box = block['crop_bbox']
+                native_scale = scale * block['width'] / (box[2] - box[0])
                 clip = canvas.beginPath()
                 clip.rect(0, -block['height'] * scale, block['width'] * scale, block['height'] * scale)
                 canvas.clipPath(clip, stroke=0)
                 with Image.open(local._artifact(task, block['image'])) as image:
-                    canvas.drawImage(str(local._artifact(task, block['image'])), -box[0] * scale, -(image.height - box[1]) * scale, width=image.width * scale, height=image.height * scale)
+                    canvas.drawImage(str(local._artifact(task, block['image'])), -box[0] * native_scale, -(image.height - box[1]) * native_scale, width=image.width * native_scale, height=image.height * native_scale)
             else:
                 canvas.scale(scale, -scale)
                 path = canvas.beginPath()
@@ -315,7 +316,7 @@ def export(task):
     manifest = revision / 'materials.json'
     import json
     manifest.write_text(json.dumps({'blocks': blocks, 'vectors': vectors, 'inputs': [r['sha256'] for r in record['regions']]}))
-    output = {'pdf': str(pdf.relative_to(task)), 'sha256': local.digest(pdf), 'page_count': count, 'placements': placements, 'routes': routes, 'method': 'reviewed_host_images_and_vector_fallback', 'status': 'needs_pdf_review', 'vector': {'path': str(manifest.relative_to(task)), 'sha256': local.digest(manifest)}}
+    output = {'pdf': str(pdf.relative_to(task)), 'sha256': local.digest(pdf), 'page_count': count, 'placements': placements, 'routes': routes, 'method': 'reviewed_host_images_and_vector_fallback', 'layout_version': 2, 'status': 'needs_pdf_review', 'vector': {'path': str(manifest.relative_to(task)), 'sha256': local.digest(manifest)}}
     record.update(output=output, status='needs_pdf_review')
     local._save(task, record)
     return output

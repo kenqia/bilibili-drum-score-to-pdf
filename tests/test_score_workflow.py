@@ -58,6 +58,30 @@ class ScoreWorkflow(unittest.TestCase):
         with self.assertRaises(workflow.ReconstructionError):
             workflow.redraw_inputs(self.task)
 
+    def test_generated_pages_with_different_native_resolutions_share_source_print_width(self):
+        self.select()
+        original = workflow.load(self.task)
+        selections = [{**original['regions'][1], 'position': f'row-{i}'} for i in range(2)]
+        review = {**original['source_review'], 'continuity': 'Two complete systems.', 'first_last': 'Complete fixture.'}
+        workflow.assemble(self.task, 'Resolution fixture', selections, review)
+        pages = workflow.redraw_inputs(self.task, [[0], [1]])
+        for page, size, box in zip(pages, [(640,320),(320,160)], [[0,65,640,180],[0,32,320,90]]):
+            image = self.root / (page['id'] + '.png')
+            with fixtures.Image.open(self.root / 'score.png') as source:
+                source.resize(size).save(image)
+            request = workflow.begin_redraw(self.task, page['id'], 'Fixture viewed.')
+            workflow.finish_redraw(self.task, page['id'], request['request'], image, 'host-imagegen', 'controlled-fixture')
+            workflow.review_redraw(self.task, page['id'], True, 'Fixture accepted.', [box])
+        output = workflow.export(self.task)
+        widths = [p['bbox'][2]-p['bbox'][0] for p in output['placements']]
+        self.assertAlmostEqual(widths[0], widths[1])
+        second = output['placements'][1]
+        self.assertAlmostEqual((second['bbox'][3]-second['bbox'][1]) / widths[1], 58/320)
+        import subprocess
+        listed = subprocess.run(['pdfimages', '-list', str(self.task / output['pdf'])], check=True, capture_output=True, text=True).stdout
+        self.assertIn('640   320', listed)
+        self.assertIn('320   160', listed)
+
     def test_url_resume_normalizes_equivalent_public_urls_without_acquisition(self):
         url = 'https://www.bilibili.com/video/BV15crrYUEPA/'
         with patch.object(workflow, 'acquire', return_value=(self.video, workflow.video_origin(url))) as acquire:
