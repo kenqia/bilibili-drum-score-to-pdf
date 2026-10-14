@@ -75,6 +75,53 @@ class ScoreWorkflow(unittest.TestCase):
         self.assertNotEqual(refreshed['input']['sha256'], page['input']['sha256'])
         self.assertEqual((self.task / output['pdf']).is_file(), True)
 
+    def test_default_generation_groups_are_independent_of_print_pages(self):
+        self.select()
+        record = workflow.load(self.task)
+        regions = [record['regions'][0]] + [
+            {**record['regions'][1], 'position': f'row-{i}'} for i in range(12)]
+        review = {**record['source_review'], 'continuity': 'Ordered synthetic rows.',
+            'first_last': 'Synthetic whole source.'}
+        regions[0] = {**regions[0], 'position': 'title'}
+        workflow.assemble(self.task, record['title'], regions, review)
+        groups = workflow.redraw_inputs(self.task)
+        self.assertEqual([p['regions'] for p in groups],
+            [list(range(9)), list(range(9, 13))])
+
+    def test_withdrawn_source_review_blocks_new_host_calls(self):
+        self.select()
+        record = workflow.load(self.task)
+        regions = [{**r, 'position': str(i)} for i,r in enumerate(record['regions'])]
+        review = {**record['source_review'], 'continuity': 'Synthetic source.',
+            'first_last': 'Whole source.'}
+        workflow.assemble(self.task, record['title'], regions, review)
+        page = workflow.redraw_inputs(self.task)[0]
+        workflow.assemble(self.task, record['title'], regions,
+            {**review, 'unresolved': ['Hidden symbol.']})
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.begin_redraw(self.task, page['id'], 'Must not call tool.')
+
+    def test_interrupted_capture_publication_preserves_orphan_and_can_resume(self):
+        workflow.prepare(self.video, self.task)
+        original_replace = Path.replace
+        calls = 0
+        def interrupt_final_publish(temporary, target):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError('Controlled publication interruption')
+            return original_replace(temporary, target)
+        with patch.object(Path, 'replace', autospec=True, side_effect=interrupt_final_publish):
+            with self.assertRaises(RuntimeError):
+                workflow.capture(self.task, 0)
+        orphan = self.task / 'captures/capture-0001.png'
+        preserved = orphan.read_bytes()
+        workflow.prepare(self.video, self.task)
+        recovered = workflow.capture(self.task, 0)
+        self.assertNotEqual(recovered['path'], str(orphan.relative_to(self.task)))
+        self.assertEqual(orphan.read_bytes(), preserved)
+        self.assertEqual(workflow.load(self.task)['captures'][0], recovered)
+
     def test_custom_redraw_group_cannot_bypass_pixel_limit(self):
         self.select();record=workflow.load(self.task)
         region=record['regions'][1]

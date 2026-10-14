@@ -56,7 +56,7 @@ def artifact(task, reference):
 
 
 def load(task):
-    for name in ('record.json','record.tmp','captures','regions','navigation','redraw','exports'):
+    for name in ('record.json','record.tmp','captures','regions','navigation','native-cache','redraw','exports'):
         write_path(task,name)
     record = json.loads((Path(task) / 'record.json').read_text())
     if record.get('schema') != 'score-reconstruction/1':
@@ -157,7 +157,7 @@ def assemble(task, title, regions, review, *, positioned=False):
 
 
 def redraw_inputs(task, groups=None):
-    from reconstruction import paginate, ROUGH_PIXELS
+    from reconstruction import ROUGH_PIXELS
 
     record = load(task)
     if record.get('source_review',{}).get('complete') is not True or record['source_review'].get('unresolved'):
@@ -166,18 +166,24 @@ def redraw_inputs(task, groups=None):
         return record['redraw_pages']
     if record['status'] != 'ready_to_redraw':
         raise ReconstructionError('原图接续或完整性未确认。')
-    placements, count = paginate(record['regions'])
     if groups is None:
-        groups=[]
-        for number in range(1,count+1):
-            group=[]
-            for i in [p['region'] for p in placements if p['page']==number]:
-                proposed=group+[i]
-                if group and max(record['regions'][j]['width'] for j in proposed)*sum(record['regions'][j]['height'] for j in proposed)>ROUGH_PIXELS:
-                    groups.append(group)
-                    group=[]
-                group.append(i)
-            if group:groups.append(group)
+        groups, group = [], []
+        for index, block in enumerate(record['regions']):
+            proposed = group + [index]
+            blocks = [record['regions'][i] for i in proposed]
+            width = max(b['width'] for b in blocks)
+            height = sum(b['height'] for b in blocks)
+            effective_scale = min(1, 4096 / max(width, height))
+            systems = [b for b in blocks if b['kind'] == 'system']
+            symbol_resolution = min((b['staff_spacing'] * effective_scale
+                for b in systems), default=4)
+            if group and (len(systems) > 8 or width * height > ROUGH_PIXELS or
+                          symbol_resolution < 4):
+                groups.append(group)
+                group = []
+            group.append(index)
+        if group:
+            groups.append(group)
     if not groups or any(not group for group in groups) or [i for group in groups for i in group] != list(range(len(record['regions']))):
         raise ReconstructionError('重绘分块必须按完整谱行顺序覆盖全部材料。')
     if any(max(record['regions'][i]['width'] for i in group) * sum(record['regions'][i]['height'] for i in group) > ROUGH_PIXELS for group in groups):
@@ -214,11 +220,13 @@ def begin_redraw(task, identifier, viewed_notes, correction=False):
     """Persist BEFORE invoking host tool; interrupted calls cannot reset budget."""
     record = load(task)
     page = _page(record, identifier)
+    if record.get('source_review', {}).get('complete') is not True or record['source_review'].get('unresolved'):
+        raise ReconstructionError('原图完整性尚未确认，禁止宿主调用。')
     if not viewed_notes or (correction and (page['status'] != 'needs_correction' or page['corrections_used'] >= 1)) or (not correction and page['status'] != 'needs_generation'):
         raise ReconstructionError('实际粗拼审阅或重绘次数无效。')
     if correction:
         page['corrections_used'] += 1
-    attempt = {'request': uuid.uuid4().hex, 'kind': 'correction' if correction else 'initial', 'input_sha256': page['input']['sha256'], 'notes': viewed_notes, 'status': 'calling'}
+    attempt = {'request': uuid.uuid4().hex, 'kind': 'correction' if correction else 'initial', 'input_sha256': page['input']['sha256'], 'notes': viewed_notes, 'status': 'calling', 'cost': None}
     page['attempts'].append(attempt)
     page['status'] = 'calling'
     save(task, record)
@@ -244,14 +252,14 @@ def finish_redraw(task, identifier, request, output, tool, receipt):
     return page
 
 
-def fail_redraw(task, identifier, notes):
+def fail_redraw(task, identifier, notes, outcome='failed'):
     """Unavailable, failed or uncertain interrupted calls route to vector."""
     record = load(task)
     page = _page(record, identifier)
-    if not notes or page['status'] == 'accepted':
+    if outcome not in ('failed', 'unavailable', 'unknown') or not notes or page['status'] == 'accepted':
         raise ReconstructionError('需要失败记录，且不能降级已接受重绘。')
     if page['attempts'] and page['attempts'][-1]['status'] == 'calling':
-        page['attempts'][-1].update(status='failed', reason=notes)
+        page['attempts'][-1].update(status=outcome, reason=notes)
     page.update(status='vector', fallback_reason=notes)
     save(task, record)
     return page
@@ -274,6 +282,13 @@ def review_redraw(task, identifier, accepted, notes, boundaries=None):
                     raise ReconstructionError('重绘边界越界或重叠。')
                 previous = box[3]
         page.update(status='accepted', boundaries=boxes)
+        page['row_materials'] = [
+            {'source_region': index, 'kind': record['regions'][index]['kind'],
+             'image': page['output'], 'crop_bbox': box,
+             'source': {key: record['regions'][index].get(key) for key in
+                ('capture', 'position', 'pts', 'time_base', 'source_sha256', 'sha256')},
+             'source_width': record['regions'][index]['width']}
+            for index, box in zip(page['regions'], boxes)]
     else:
         page['status'] = 'needs_correction' if page['corrections_used'] == 0 else 'vector'
     page.setdefault('reviews', []).append({'accepted': accepted, 'notes': notes})
@@ -298,6 +313,7 @@ def reject_accepted_redraw(task, identifier, notes):
     page.setdefault('rejections', []).append(rejection)
     page['status'] = 'needs_correction' if page['corrections_used'] == 0 else 'vector'
     page.pop('boundaries', None)
+    page.pop('row_materials', None)
     record['status'] = 'needs_redraw_review'
     save(task, record)
     return page
@@ -328,3 +344,26 @@ def export(task, render, *, host_redraw=False):
     record.update(output=output, status='needs_pdf_review')
     save(task, record)
     return output
+
+
+def generation_materials(task):
+    """Ordered complete rows from accepted groups and geometric fallback."""
+    record = load(task)
+    rows = []
+    pages = record.get('redraw_pages', [])
+    if not pages or any(p['status'] not in ('accepted', 'vector') for p in pages):
+        raise ReconstructionError('先完成全部组审阅或矢量兜底。')
+    for page in pages:
+        for offset, index in enumerate(page['regions']):
+            region = record['regions'][index]
+            row = {'source_region': index, 'group': page['id'], 'kind': region['kind'],
+                'source_width': region['width'], 'source': {key: region.get(key)
+                for key in ('capture', 'position', 'pts', 'time_base', 'source_sha256', 'sha256')}}
+            if page['status'] == 'accepted':
+                row.update(image=page['output'], crop_bbox=page['boundaries'][offset],
+                    route='imagegen')
+            else:
+                row.update(region=region, route='vector',
+                    method='contour_trace_with_staff_repair', music_recognition=False)
+            rows.append(row)
+    return rows
