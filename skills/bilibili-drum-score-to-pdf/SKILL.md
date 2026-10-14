@@ -17,12 +17,11 @@ uv run --isolated --with-requirements /absolute/repository/skills/bilibili-drum-
 
 把 `/absolute/repository` 换成实际仓库路径。省略 `--operation` 使用新版 `prepare`；本地视频使用同一入口。链接支持 `?p=2`。准备只创建待审阅任务，不表示已交付。后续操作使用 `--task` 与 Agent 编写的 `--request` JSON，用户无需填写 JSON。完整操作列表和请求规则见 `docs/agents/reconstruction-entry.md`。
 
-1. 低清导航定位主要谱面推进，保留必要的原生截图并实际查看。记录真实 PTS，分别计量低清探测、原生截图和实际呈交图像。确认视频首尾、重叠和有序翻页接续，不用稀疏样本声称没有漏谱。
-2. 选取完整谱行及标题、速度、拍号、署名和行外记号，按原谱位置拼成粗拼谱。去掉同位置截图重叠，保留后续重复音乐。水印、播放矩形和高亮可留在输入；关键符号遮住或不可读时有目的地局部补采，不猜音符，不设置旧补采轮数限制。
-3. 默认调用宿主实际可用的生图工具，参考粗拼输入清理重绘。每个图页最多一次定向修正，预算在调用前保存。工具缺失、失败或修正后仍不合格时，使用本地轮廓转描及补五线的矢量兜底。它不能恢复完全隐藏的符号，也不生成音乐语义。
-4. 实际查看重绘输出，核对原谱音符、鼓谱符头、符梁、附点、装饰音、连音、力度、速度和首尾。确认输出中每个完整谱行的边界后导出。完整行等比例重排为 A4 竖页，自动计算分页，不能纵向拉伸记谱。
-5. 渲染并实际查看最终每页 PDF，检查整曲顺序、关键记号、首尾、裁断、重叠和留白，再调用 `review-pdf`。有未决内容时保留问题，不报完整成功。当前交付位于 `exports/<revision>/<实际谱名>.pdf`；材料与任务记录留在任务目录。
+1. 准备任务后调用 `stage`，按响应的 `phase`、产物、检查、未决和 `next` 继续。正常来源自动采集、检查与冻结，生图前无需 Agent 复看。音乐、接续或裁剪未决时补采；未解决保留 blocked。
+2. 按 `handoffs` 执行真实宿主生图或恢复已有 request。实际查看每个生成结果，核对音乐记号，提交完整行边界。每个输入版本最多一次定向修正；工具缺失、失败或修正后仍不合格时转矢量，轮廓转描不称为音乐识别。
+3. 再调用 `stage` 导出 A4 和全部有序预览。实际查看最终每页，检查标题、顺序、首尾、关键记号、裁断、重叠和留白，用当前 output_revision 调用 `review-pdf`。只有 complete 才交付。
 
+局部裁剪、A→B→A 额度恢复、重新分组、未知调用与仅改布局时，读取 `docs/agents/stage-recovery-layout.md`。低层来源异常操作读取 `docs/agents/automatic-source-checks.md` 和 `docs/agents/reconstruction-workflow.md`。
 恢复时使用当前任务 `record.json`，验证来源和派生产物 hash 后复用有效截图、已接受生成图和修正预算。旧观察包、决定协议、auto/fast/full 模式及 `--operation convert` 已退出；不自动迁移旧任务。历史实现通过 Git history 查看，回滚使用独立 checkout 与新任务目录。
 
 只有用户自然语言明确要求 MIDI 时才读取 `docs/agents/midi-conversion.md`，并加载可选 Mido。普通 PDF 任务不提供 MIDI 配置提示。完整音乐转写和导出回读独立于 PDF；MIDI 失败保留已审核 PDF。可靠门槛不满足时拒绝可靠交付；只有用户明确接受近似播放时才能执行 `midi-playable`，保留原转写、未决项、授权原话和应用假设，输出 `midi_playable`、`reliable=false`。文件可解析不证明音乐准确。

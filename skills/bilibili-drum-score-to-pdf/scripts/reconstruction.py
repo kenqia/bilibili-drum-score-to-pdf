@@ -192,7 +192,7 @@ def paginate(blocks, margin=24, minimum_gap=6):
         used = sum(blocks[i]['height'] * scale for i in batch)
         gap = (height - 2 * margin - used) / (len(batch) - 1) if len(batch) > 1 else 0
         # Sparse pages keep modest gaps and centered content instead of stretching.
-        gap = min(gap, 36)
+        gap = min(gap, max(36, minimum_gap))
         top = height - margin - max(0, (height - 2 * margin - used - gap * (len(batch)-1)) / 2)
         for index in batch:
             size = blocks[index]['height'] * scale

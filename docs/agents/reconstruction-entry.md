@@ -15,6 +15,8 @@ uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/
 | 操作 | 公共函数 |
 | --- | --- |
 | prepare / resume | prepare / load |
+| stage / layout | stage / layout，阶段推进与打印参数 |
+| overview / resample / auto-freeze / revise-crop | 同名函数（横线转下划线） |
 | navigate / capture / present / assemble | 同名函数 |
 | promote | promote，参数 identifier 为导航候选 ID |
 | cache-report / cache-limits | cache_report / cache_limits |
@@ -46,3 +48,7 @@ begin-redraw 在调用前保存 request、输入 hash、修正次数及未知 co
 ## 自动来源检查
 
 准备任务后可运行 `overview`、`resample`、`auto-freeze` 和 `revise-crop`。请求字段、冻结资格及检查限制见[程序检查与粗拼冻结](automatic-source-checks.md)。
+
+## 阶段入口与恢复
+
+准备后使用 `stage` 自动推进至宿主调用或实际审阅；局部来源版本、输入额度恢复、打印布局和全部页面预览见[阶段入口、局部恢复与打印布局](stage-recovery-layout.md)。`layout` 修改边距、最小行距和目标页数，复用已接受生成结果；最终审阅绑定当前 PDF hash。程序检查与实际看图分别记录。

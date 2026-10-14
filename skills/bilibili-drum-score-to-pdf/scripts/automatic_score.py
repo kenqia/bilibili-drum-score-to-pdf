@@ -856,6 +856,7 @@ def auto_freeze(task, title=None):
                         return auto_freeze(task,title)
                     record=refreshed
         if chosen and not same_materials:
+            state.invalidate_selection(record)
             try:
                 record.update(**geometry.build_selection(task,chosen,captures))
             except state.ReconstructionError as error:
@@ -871,8 +872,7 @@ def auto_freeze(task, title=None):
         materials={key:record[key] for key in ('regions','rough','rough_chunks')}
     else:
         materials=geometry.build_selection(task,chosen,captures)
-        record.update(redraw_pages=[])
-        record.pop('output',None)
+        state.invalidate_selection(record)
     record.update(**materials,title=(title or record.get('title') or 'Score').strip(),
         program_checks=checks,source_review={'producer':'program','complete':True,'unresolved':[]},
         status='ready_to_redraw')
@@ -893,10 +893,11 @@ def revise_crop(task, index, bbox):
         old['staff_top']+=old['bbox'][1]-bbox[1]
     old['bbox']=bbox
     materials=geometry.build_selection(task,regions,{c['id']:c for c in record['captures']})
+    state.invalidate_selection(record)
     record.update(**materials,status='needs_source_review',redraw_pages=[],
         source_review={'producer':'program','complete':False,'unresolved':[{'code':'crop_revision_needs_check'}]})
     record.pop('freeze',None)
-    record.pop('output',None)
+    state.invalidate_output(record, 'crop_revision')
     record.setdefault('crop_revisions',[]).append({'index':index,'capture':old['capture'],
         'original_bbox':original_box,'bbox':bbox,'source_sha256':old['source_sha256']})
     state.save(task,record)

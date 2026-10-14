@@ -36,3 +36,7 @@ uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/
 ```
 
 [架构](docs/architecture.md)说明输入与来源边界，[验证记录](docs/verification.md)区分离线测试、真实生图、实际看图与近似 MIDI，[首发状态](docs/launch-readiness.md)记录当前范围。CI 只检查合成和确定性产物，不调用宿主模型。未知模型成本保持 null。
+
+## 阶段入口与恢复
+
+准备后使用 `stage` 自动推进至宿主调用或实际审阅；局部来源版本、输入额度恢复、打印布局和全部页面预览见[阶段入口、局部恢复与打印布局](docs/agents/stage-recovery-layout.md)。`layout` 修改边距、最小行距和目标页数，复用已接受生成结果；最终审阅绑定当前 PDF hash。程序检查与实际看图分别记录。
