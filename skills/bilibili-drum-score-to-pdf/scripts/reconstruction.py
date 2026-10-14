@@ -48,32 +48,9 @@ def prepare(source, task):
 
 
 def capture(task, seconds):
-    """Save one native frame with actual PTS. Saving is not visual review."""
-    record = load(task)
-    if not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or not 0 <= seconds < record['source']['duration']:
-        raise ReconstructionError('取帧时间必须在视频范围内。')
-    for shot in record['captures']:
-        if shot['requested_seconds'] == seconds:
-            return shot
-    reader = VideoReader(record['source']['path'], record['source'], record['metrics'])
-    try:
-        pts, picture = reader.read_record(seconds)
-    except ConversionError as error:
-        record['last_decode_error'] = error.code
-        raise
-    finally:
-        reader.close()
-        save(task, record)
-    identifier = f'capture-{len(record["captures"])+1:04d}'
-    directory = write_path(task, 'captures')
-    directory.mkdir(exist_ok=True)
-    path = write_path(task, Path('captures') / f'{identifier}.png')
-    picture.save(path)
-    shot = {'id': identifier, 'path': str(path.relative_to(task)), 'sha256': digest(path),
-            'requested_seconds': seconds, **pts}
-    record['captures'].append(shot)
-    save(task, record)
-    return shot
+    """Save or promote one verified native frame without duplicate decoding."""
+    from native_cache import capture as cached_capture
+    return cached_capture(task, seconds)
 
 
 def assemble(task, title, regions, review):

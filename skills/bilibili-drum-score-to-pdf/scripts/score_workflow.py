@@ -16,7 +16,7 @@ from video_seek import VideoReader
 
 from score_task import (ReconstructionError, load, review_pdf, redraw_inputs,
                         begin_redraw, finish_redraw, fail_redraw, review_redraw,
-                        reject_accepted_redraw)
+                        reject_accepted_redraw, generation_materials)
 
 
 def prepare(source, task, acquisition_timeout=ACQUISITION_SECONDS):
@@ -65,24 +65,27 @@ def navigate(task, seconds, width=480):
     record = load(task)
     if type(width) is not int or not 64 <= width <= 960 or not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or not 0 <= seconds < record['source']['duration']:
         raise ReconstructionError('导航时间或宽度无效。')
+    import native_cache
+    entry = native_cache.native(task, record, seconds)
     for probe in record.get('probes', []):
         if probe['requested_seconds'] == seconds and probe['requested_width'] == width:
+            native_cache.evict(task, record)
+            score_task.save(task, record)
             return probe
-    reader = VideoReader(record['source']['path'], record['source'], record['metrics'])
-    try:
-        pts, image = reader.read_record(seconds)
-    finally:
-        reader.close()
-        score_task.save(task, record)
+    pts = {key: entry[key] for key in ('timestamp', 'pts', 'time_base')}
+    with Image.open(score_task.artifact(task, entry)) as source:
+        image = source.convert('RGB')
     image.thumbnail((width, max(1, round(width * image.height / image.width))))
     directory = score_task.write_path(task, 'navigation')
     directory.mkdir(exist_ok=True)
     identifier = 'probe-' + uuid.uuid4().hex
     path = score_task.write_path(task, Path('navigation') / (identifier + '.png'))
     image.save(path)
-    probe = {'id': identifier, 'path': str(path.relative_to(task)), 'sha256': score_task.digest(path), 'requested_seconds': seconds, 'requested_width': width, 'width': image.width, 'height': image.height, **pts}
+    image.close()
+    probe = {'id': identifier, 'path': str(path.relative_to(task)), 'sha256': score_task.digest(path), 'requested_seconds': seconds, 'requested_width': width, 'native_candidate': entry['id'], 'width': image.width, 'height': image.height, **pts}
     record.setdefault('probes', []).append(probe)
     record['metrics']['navigation_probes'] = len(record['probes'])
+    native_cache.evict(task, record)
     score_task.save(task, record)
     return probe
 
@@ -93,6 +96,31 @@ def capture(task, seconds):
     record['metrics']['native_retained'] = len(record['captures'])
     score_task.save(task, record)
     return shot
+
+
+def promote(task, identifier):
+    record = load(task)
+    for probe in record.get('probes', []):
+        if probe['id'] == identifier:
+            import native_cache
+            return native_cache.capture(task, probe['requested_seconds'], expected=probe)
+    raise ReconstructionError('导航候选引用无效。')
+
+
+def cache_report(task):
+    import native_cache
+    return native_cache.report(load(task))
+
+
+def cache_limits(task, max_entries=64, max_bytes=268435456):
+    import native_cache
+    if type(max_entries) is not int or type(max_bytes) is not int or max_entries < 1 or max_bytes < 1:
+        raise ReconstructionError('缓存限制必须为正整数。')
+    record = load(task)
+    native_cache.state(record).update(max_entries=max_entries, max_bytes=max_bytes)
+    native_cache.evict(task, record)
+    score_task.save(task, record)
+    return native_cache.report(record)
 
 
 def present(task, identifiers, notes):
