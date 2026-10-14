@@ -223,7 +223,8 @@ def export_vector(task):
 
 def _render_vector(task, record):
     vectors = [trace_region(task, item) for item in record['regions']]
-    placements, page_count = paginate(record['regions'])
+    options = record.get('layout', {})
+    placements, page_count = paginate(record['regions'], margin=options.get('margin', 24), minimum_gap=options.get('minimum_gap', 6))
     exports = write_path(task, 'exports')
     if exports.is_symlink():
         raise ReconstructionError('导出目录不能指向任务外部或已有用户目录。')
@@ -251,4 +252,4 @@ def _render_vector(task, record):
               'method': 'geometric_contours_and_staff_lines', 'semantic_transcription': False,
               'hidden_symbol_recovery': False, 'status': 'needs_pdf_review',
               'vector': {'path': str(vector_path.relative_to(task)), 'sha256': digest(vector_path)}}
-    return output
+    return score_task.finalize_output(task, output, [{**r, 'source_region': i} for i, r in enumerate(record['regions'])], options, record)

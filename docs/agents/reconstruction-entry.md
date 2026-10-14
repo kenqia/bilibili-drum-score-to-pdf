@@ -39,7 +39,7 @@ MIDI 参数见[独立转换流程](midi-conversion.md)，仅在用户明确要�
 
 cache-limits 接受正整数 max_entries 和 max_bytes，默认 64 个候选及 256 MiB，按最近使用顺序淘汰候选。来源截图独立保存在 captures 中。cache-report 输出 hits、misses、promotions、evictions、actual_decodes、duplicate_decodes、容量及原因记录，每个计数附 definitions。实际成功原生读取计为 actual_decodes；返回以前已解码的来源 hash、PTS 和 time_base 计为 duplicate_decodes。seek_count 和 decoded_reported_frames 保留真实解码器计数。
 
-默认 redraw-inputs 按连续完整谱行分组，每组最多 8 个 system，标题随首组保留。分组同时检查 8000 万像素预算，以及拟合 4096 像素长边后至少 4 像素的五线间距。这些是当前实现的资源与细节保护值，不是模型准确率承诺。单行已经低于细节阈值时保留完整原行，由实际输出审阅决定是否转矢量。显式 groups 保留现有公共接口和完整覆盖检查。
+默认 redraw-inputs 按连续完整谱行分组，每组最多 8 个 system，标题随首组保留。分组同时检查 8000 万像素预算，以及拟合 4096 像素长边后至少 4 像素的五线间距。这些是当前实现的资源与细节保护值，不是模型准确率承诺。默认和显式新分组遵循相同限制。单行已经低于细节阈值时拒绝生图输入并提示补采更清晰来源，不能通过显式 groups 绕过。恢复相同身份的历史接受材料保留原分组及已用额度。
 
 生图组不参考 A4 分页。generation-materials 仅在全部组 accepted 或 vector 后返回按原谱排序的完整行材料。imagegen 行包含生成图片引用、crop_bbox 和来源映射；vector 行提供原裁剪引用，method 为 contour_trace_with_staff_repair、music_recognition 为 false。当前导出使用相同边界与来源比例。
 

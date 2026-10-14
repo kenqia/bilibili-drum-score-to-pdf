@@ -43,7 +43,7 @@ class RevisionCLI(unittest.TestCase):
         for group in groups:
             self.cli('fail-redraw',identifier=group['id'],notes='Controlled unavailable host.')
         old=self.cli('export')
-        self.cli('review-pdf',pages=list(range(1,old['page_count']+1)),notes='Controlled full review.')
+        self.cli('review-pdf',pages=list(range(1,old['page_count']+1)),output_revision=old['output_revision'],notes='Controlled full review.')
         self.cli('layout',margin=32,minimum_gap=60,target_pages=1)
         fresh=self.cli('export')
         self.assertNotEqual(old['pdf'],fresh['pdf'])
@@ -67,7 +67,7 @@ class RevisionCLI(unittest.TestCase):
         printed=self.cli('stage')
         self.assertEqual(printed['phase'],'pdf_review')
         output=printed['artifacts']['output']
-        self.cli('review-pdf',pages=printed['next']['pages'],output_revision=output['sha256'],notes='Controlled complete preview review.')
+        self.cli('review-pdf',pages=printed['next']['pages'],output_revision=output['output_revision'],notes='Controlled complete preview review.')
         self.assertEqual(self.cli('stage')['phase'],'complete')
 
     def test_regrouping_restores_exact_membership_and_spent_version_budget(self):
@@ -147,8 +147,148 @@ class RevisionCLI(unittest.TestCase):
         for group in groups:
             self.cli('fail-redraw',identifier=group['id'],notes='Controlled unavailable host.')
         output=self.cli('export')
-        self.cli('review-pdf',pages=list(range(1,output['page_count']+1)),notes='Controlled full review.')
+        self.cli('review-pdf',pages=list(range(1,output['page_count']+1)),output_revision=output['output_revision'],notes='Controlled full review.')
         changed=self.cli('redraw-inputs',groups=[[0],[1],[2]])
         self.assertEqual(changed[2]['status'],'vector')
         self.assertNotIn('output',self.cli('resume'))
         self.assertTrue((self.task/output['pdf']).is_file())
+
+    def test_pdf_review_requires_explicit_current_revision_after_layout_change(self):
+        import json, subprocess, sys
+        self.selection()
+        for group in self.cli('redraw-inputs'):
+            self.cli('fail-redraw',identifier=group['id'],notes='Controlled unavailable host.')
+        old=self.cli('export')
+        self.cli('layout',margin=32)
+        fresh=self.cli('export')
+        for revision in (None,old['output_revision']):
+            payload={'pages':list(range(1,fresh['page_count']+1)),'notes':'Review of previous fixture.'}
+            if revision is not None:
+                payload['output_revision']=revision
+            request=self.root/'request.json';request.write_text(json.dumps(payload))
+            result=subprocess.run([sys.executable,str(fixtures.SCRIPT),'--operation','review-pdf','--task',str(self.task),'--request',str(request)],capture_output=True,text=True)
+            self.assertEqual(result.returncode,2,result.stdout)
+            self.assertEqual(self.cli('resume')['output']['status'],'needs_pdf_review')
+        reviewed=self.cli('review-pdf',pages=list(range(1,fresh['page_count']+1)),output_revision=fresh['output_revision'],notes='Controlled current preview review.')
+        self.assertEqual(reviewed['review']['output_revision'],fresh['output_revision'])
+
+    def test_public_vector_export_obeys_layout_and_produces_reviewable_pages(self):
+        import reconstruction, score_task
+        self.selection()
+        self.cli('layout',margin=32,minimum_gap=60,target_pages=1)
+        output=reconstruction.export_vector(self.task)
+        self.assertEqual(output['placements'][0]['bbox'][0],32)
+        boxes=[p['bbox'] for p in output['placements']]
+        self.assertGreaterEqual(boxes[0][1]-boxes[1][3],60)
+        self.assertEqual([p['page'] for p in output['previews']],list(range(1,output['page_count']+1)))
+        self.assertEqual(output['checks']['status'],'passed')
+        reviewed=score_task.review_pdf(self.task,list(range(1,output['page_count']+1)),
+            'Controlled vector previews viewed.',output_revision=output['output_revision'])
+        self.assertEqual(reviewed['status'],'reviewed')
+
+    def test_legacy_pdf_without_all_previews_or_checks_cannot_be_approved(self):
+        import score_task, reconstruction
+        self.selection()
+        output=reconstruction.export_vector(self.task)
+        pristine=score_task.load(self.task)
+        for field in ('previews','checks'):
+            legacy=copy.deepcopy(pristine)
+            legacy['output'].pop(field,None)
+            score_task.save(self.task,legacy)
+            with self.assertRaises(score_task.ReconstructionError):
+                score_task.review_pdf(self.task,[1],'Controlled legacy review.',output_revision=output['output_revision'])
+        missing_page=copy.deepcopy(pristine)
+        missing_page['output']['previews']=[]
+        score_task.save(self.task,missing_page)
+        with self.assertRaises(score_task.ReconstructionError):
+            score_task.review_pdf(self.task,[1],'Controlled absent page review.',output_revision=output['output_revision'])
+        refreshed=reconstruction.export_vector(self.task)
+        self.assertNotEqual(refreshed['pdf'],output['pdf'])
+        self.assertTrue((self.task/output['pdf']).is_file())
+        self.assertEqual(len(refreshed['previews']),refreshed['page_count'])
+
+    def test_new_explicit_group_and_single_unreadable_row_reject_host_input(self):
+        import json, subprocess, sys
+        rows=self.selection()
+        rows=[rows[0]]+[dict(rows[1],position=f'ordered-{i}') for i in range(110)]
+        self.cli('assemble',title='Synthetic',regions=rows,review=self.review)
+        request=self.root/'request.json'
+        for payload in ({'groups':[list(range(len(rows)))]},):
+            request.write_text(json.dumps(payload))
+            result=subprocess.run([sys.executable,str(fixtures.SCRIPT),'--operation','redraw-inputs','--task',str(self.task),'--request',str(request)],capture_output=True,text=True)
+            self.assertEqual(result.returncode,2,result.stdout)
+        narrow=[dict(rows[1],staff_spacing=3)]
+        self.cli('assemble',title='Synthetic',regions=narrow,review=self.review)
+        request.write_text('{}')
+        result=subprocess.run([sys.executable,str(fixtures.SCRIPT),'--operation','redraw-inputs','--task',str(self.task),'--request',str(request)],capture_output=True,text=True)
+        self.assertEqual(result.returncode,2,result.stdout)
+        self.assertNotIn('redraw_pages', {k:v for k,v in self.cli('resume').items() if v})
+
+    def test_same_pdf_bytes_new_export_rejects_old_revision_token(self):
+        import score_task, reconstruction
+        self.selection()
+        old=reconstruction.export_vector(self.task)
+        self.cli('layout',target_pages=512)
+        fresh=reconstruction.export_vector(self.task)
+        self.assertEqual(old['sha256'],fresh['sha256'])
+        self.assertNotEqual(old['output_revision'],fresh['output_revision'])
+        with self.assertRaises(score_task.ReconstructionError):
+            score_task.review_pdf(self.task,[1],'Controlled old preview review.',output_revision=old['output_revision'])
+        with self.assertRaises(score_task.ReconstructionError):
+            score_task.review_pdf(self.task,[1],'Hash cannot identify a revision.',output_revision=fresh['sha256'])
+        approved=score_task.review_pdf(self.task,[1],'Controlled new preview review.',output_revision=fresh['output_revision'])
+        self.assertEqual(approved['review']['output_revision'],fresh['output_revision'])
+
+    def test_legacy_large_accepted_identity_retains_materials_and_spent_budget(self):
+        import score_task
+        from PIL import Image
+        rows=self.selection()
+        rows=[rows[0]]+[dict(rows[1],position=f'legacy-{i}') for i in range(9)]
+        self.cli('assemble',title='Synthetic',regions=rows,review=self.review)
+        record=score_task.load(self.task)
+        indices=list(range(len(rows)))
+        # A saved pre-limit task fixture, with controlled offline image evidence.
+        image=Image.new('RGB',(640,1100),'white')
+        boundaries=[];top=0
+        for region in record['regions']:
+            with Image.open(self.task/region['path']) as crop:
+                image.paste(crop,(0,top))
+            boundaries.append([0,top,640,top+region['height']]);top+=region['height']
+        path=self.task/'legacy-input.png';image.save(path)
+        reference={'path':'legacy-input.png','sha256':score_task.digest(path)}
+        legacy={'id':'page-1','input_identity':score_task.input_identity(record,indices),
+            'regions':indices,'input':reference,'output':reference,'status':'accepted',
+            'freeze_id':record['freeze']['id'],'corrections_used':1,'boundaries':boundaries,
+            'attempts':[{'request':'legacy-initial','status':'returned','output':reference},
+                        {'request':'legacy-correction','status':'returned','output':reference}]}
+        record['redraw_pages']=[legacy]
+        score_task.save(self.task,record)
+        # Moving to a new membership then returning must recover the old identity.
+        self.cli('redraw-inputs',groups=[[0,1,2,3,4],[5,6,7,8,9]])
+        restored=self.cli('redraw-inputs',groups=[indices])[0]
+        self.assertEqual(restored['status'],'accepted')
+        self.assertEqual(restored['corrections_used'],1)
+        self.assertEqual(restored['attempts'],legacy['attempts'])
+        self.assertEqual(restored['output'],reference)
+
+    def test_stage_upgrades_legacy_hash_review_and_requires_new_page_review(self):
+        import score_task
+        self.selection()
+        for group in self.cli('redraw-inputs'):
+            self.cli('fail-redraw',identifier=group['id'],notes='Controlled unavailable host.')
+        output=self.cli('export')
+        pristine=score_task.load(self.task)
+        for preserve_output_token in (False,True):
+            record=copy.deepcopy(pristine)
+            if not preserve_output_token:
+                record['output'].pop('output_revision')
+            record['output']['status']='reviewed'
+            record['output']['review']={'output_revision':output['sha256'],'pages':[1],'notes':'Controlled old hash review.'}
+            record['status']='reviewed'
+            score_task.save(self.task,record)
+            stage=self.cli('stage')
+            self.assertEqual(stage['phase'],'pdf_review')
+            fresh=stage['artifacts']['output']
+            self.assertNotEqual(fresh['output_revision'],output['output_revision'])
+            self.assertEqual(stage['next']['output_revision'],fresh['output_revision'])
+            self.assertTrue((self.task/output['pdf']).is_file())
