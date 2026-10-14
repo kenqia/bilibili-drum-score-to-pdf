@@ -46,6 +46,82 @@ class ScoreWorkflow(unittest.TestCase):
         with self.assertRaises(workflow.ReconstructionError):
             workflow.begin_redraw(self.task,page['id'],'No second correction.',correction=True)
 
+    def test_local_reselection_preserves_same_budget_and_invalidates_changed_material(self):
+        self.select()
+        selected = workflow.load(self.task)
+        regions = [{**r, 'position': str(i)} for i, r in enumerate(selected['regions'])]
+        review = {**selected['source_review'], 'continuity': 'Synthetic full systems.',
+                  'first_last': 'Synthetic start and ending.'}
+        workflow.assemble(self.task, selected['title'], regions, review)
+        page = workflow.redraw_inputs(self.task)[0]
+        for correction in (False, True):
+            request = workflow.begin_redraw(self.task, page['id'], 'Synthetic input viewed.',
+                correction=correction)
+            workflow.finish_redraw(self.task, page['id'], request['request'],
+                self.root / 'score.png', 'host-imagegen', 'controlled-fixture')
+            workflow.review_redraw(self.task, page['id'], False, 'Synthetic rejection.')
+        output = workflow.export(self.task)
+        workflow.review_pdf(self.task, [1], 'Synthetic PDF reviewed.', output_revision=output['output_revision'])
+        same = workflow.local.assemble(self.task, selected['title'], regions, review)
+        self.assertEqual(same['output']['sha256'], output['sha256'])
+        self.assertEqual(same['output']['status'], 'reviewed')
+        self.assertEqual(same['redraw_pages'][0]['corrections_used'], 1)
+        changed = [{**regions[0], 'bbox': [0, 0, 640, 60]}, regions[1]]
+        revised = workflow.local.assemble(self.task, selected['title'], changed, review)
+        self.assertNotIn('output', revised)
+        self.assertEqual(revised['redraw_pages'], [])
+        refreshed = workflow.redraw_inputs(self.task)[0]
+        self.assertEqual(refreshed['corrections_used'], 0)
+        self.assertNotEqual(refreshed['input']['sha256'], page['input']['sha256'])
+        self.assertEqual((self.task / output['pdf']).is_file(), True)
+
+    def test_default_generation_groups_are_independent_of_print_pages(self):
+        self.select()
+        record = workflow.load(self.task)
+        regions = [record['regions'][0]] + [
+            {**record['regions'][1], 'position': f'row-{i}'} for i in range(12)]
+        review = {**record['source_review'], 'continuity': 'Ordered synthetic rows.',
+            'first_last': 'Synthetic whole source.'}
+        regions[0] = {**regions[0], 'position': 'title'}
+        workflow.assemble(self.task, record['title'], regions, review)
+        groups = workflow.redraw_inputs(self.task)
+        self.assertEqual([p['regions'] for p in groups],
+            [list(range(9)), list(range(9, 13))])
+
+    def test_withdrawn_source_review_blocks_new_host_calls(self):
+        self.select()
+        record = workflow.load(self.task)
+        regions = [{**r, 'position': str(i)} for i,r in enumerate(record['regions'])]
+        review = {**record['source_review'], 'continuity': 'Synthetic source.',
+            'first_last': 'Whole source.'}
+        workflow.assemble(self.task, record['title'], regions, review)
+        page = workflow.redraw_inputs(self.task)[0]
+        workflow.assemble(self.task, record['title'], regions,
+            {**review, 'unresolved': ['Hidden symbol.']})
+        with self.assertRaises(workflow.ReconstructionError):
+            workflow.begin_redraw(self.task, page['id'], 'Must not call tool.')
+
+    def test_interrupted_capture_publication_preserves_orphan_and_can_resume(self):
+        workflow.prepare(self.video, self.task)
+        original_replace = Path.replace
+        calls = 0
+        def interrupt_final_publish(temporary, target):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError('Controlled publication interruption')
+            return original_replace(temporary, target)
+        with patch.object(Path, 'replace', autospec=True, side_effect=interrupt_final_publish):
+            with self.assertRaises(RuntimeError):
+                workflow.capture(self.task, 0)
+        orphan = self.task / 'captures/capture-0001.png'
+        preserved = orphan.read_bytes()
+        workflow.prepare(self.video, self.task)
+        recovered = workflow.capture(self.task, 0)
+        self.assertNotEqual(recovered['path'], str(orphan.relative_to(self.task)))
+        self.assertEqual(orphan.read_bytes(), preserved)
+        self.assertEqual(workflow.load(self.task)['captures'][0], recovered)
+
     def test_custom_redraw_group_cannot_bypass_pixel_limit(self):
         self.select();record=workflow.load(self.task)
         region=record['regions'][1]
@@ -69,7 +145,7 @@ class ScoreWorkflow(unittest.TestCase):
         workflow.finish_redraw(self.task, page['id'], request['request'], self.root / 'score.png', 'host-imagegen', 'fixture')
         workflow.review_redraw(self.task, page['id'], True, 'Accepted fixture.', [[0,0,640,65], [0,65,640,180]])
         output = workflow.export(self.task)
-        workflow.review_pdf(self.task, [1], 'Fixture PDF viewed.')
+        workflow.review_pdf(self.task, [1], 'Fixture PDF viewed.', output_revision=output['output_revision'])
         old_pdf = (self.task / output['pdf']).read_bytes()
         before = (self.task / 'record.json').read_bytes()
         with self.assertRaises(workflow.ReconstructionError):
@@ -87,7 +163,7 @@ class ScoreWorkflow(unittest.TestCase):
         with self.assertRaises(workflow.ReconstructionError):
             workflow.export(self.task)
         with self.assertRaises(workflow.ReconstructionError):
-            workflow.review_pdf(self.task, [1], 'Cannot approve rejected output.')
+            workflow.review_pdf(self.task, [1], 'Cannot approve rejected output.', output_revision=output['output_revision'])
         workflow.prepare(self.video, self.task)
         workflow.assemble(self.task, original['title'], selections, review)
         correction = workflow.begin_redraw(self.task, page['id'], 'Restore crossed head.', correction=True)
@@ -112,7 +188,7 @@ class ScoreWorkflow(unittest.TestCase):
         workflow.finish_redraw(self.task, page['id'], correction['request'], self.root / 'score.png', 'host-imagegen', 'corrected-fixture')
         workflow.review_redraw(self.task, page['id'], True, 'Corrected fixture accepted.', [[0,0,640,65], [0,65,640,180]])
         old_output = workflow.export(self.task)
-        workflow.review_pdf(self.task, [1], 'Fixture PDF viewed.')
+        workflow.review_pdf(self.task, [1], 'Fixture PDF viewed.', output_revision=old_output['output_revision'])
         rejected = workflow.reject_accepted_redraw(self.task, page['id'], 'Independent check: dotted crossed head lost its dot.')
         self.assertEqual(rejected['status'], 'vector')
         self.assertEqual(rejected['corrections_used'], 1)
@@ -129,7 +205,7 @@ class ScoreWorkflow(unittest.TestCase):
         self.assertNotEqual(output['pdf'], old_output['pdf'])
         self.assertTrue((self.task / old_output['pdf']).exists())
         self.assertEqual(output['status'], 'needs_pdf_review')
-        self.assertEqual(workflow.review_pdf(self.task, [1], 'Vector fixture checked.')['status'], 'reviewed')
+        self.assertEqual(workflow.review_pdf(self.task, [1], 'Vector fixture checked.', output_revision=output['output_revision'])['status'], 'reviewed')
 
     def test_same_selection_resume_keeps_consumed_correction_and_accepted_output(self):
         self.select()
@@ -168,27 +244,26 @@ class ScoreWorkflow(unittest.TestCase):
             workflow.assemble(self.task, original['title'], invalid, review)
         self.assertEqual((self.task / 'record.json').read_bytes(), prior)
         selections[0] = {**selections[0], 'bbox': [0,0,640,60]}
-        with patch.object(workflow.local, '_save', side_effect=RuntimeError('Interrupted first publication')):
+        with patch.object(Path, 'replace', autospec=True,
+                          side_effect=RuntimeError('Interrupted record publication')):
             with self.assertRaises(RuntimeError):
                 workflow.assemble(self.task, original['title'], selections, review)
         self.assertEqual((self.task / 'record.json').read_bytes(), prior)
         self.assertEqual(workflow.load(self.task)['redraw_pages'][0]['status'], 'accepted')
-        save = workflow.local._save
+        replace = Path.replace
         calls = 0
-        def interrupted_save(task, record):
+        def interrupted_replace(temporary, target):
             nonlocal calls
             calls += 1
             if calls == 2:
                 raise RuntimeError('Interrupted publication')
-            return save(task, record)
-        with patch.object(workflow.local, '_save', side_effect=interrupted_save):
-            try:
-                workflow.assemble(self.task, original['title'], selections, review)
-            except RuntimeError:
-                pass
+            return replace(temporary, target)
+        with patch.object(Path, 'replace', autospec=True, side_effect=interrupted_replace):
+            workflow.assemble(self.task, original['title'], selections, review)
+        self.assertEqual(calls, 1)
         resumed = workflow.load(self.task)
-        if resumed['regions'][0]['bbox'] == [0,0,640,60]:
-            self.assertEqual(resumed['redraw_pages'], [])
+        self.assertEqual(resumed['regions'][0]['bbox'], [0,0,640,60])
+        self.assertEqual(resumed['redraw_pages'], [])
         workflow.assemble(self.task, original['title'], selections, review)
         refreshed = workflow.redraw_inputs(self.task)[0]
         self.assertEqual(refreshed['status'], 'needs_generation')
@@ -204,13 +279,38 @@ class ScoreWorkflow(unittest.TestCase):
                 request = workflow.begin_redraw(self.task, page['id'], 'Fixture viewed.')
                 result = workflow.finish_redraw(self.task, page['id'], request['request'], self.root / 'score.png', 'host-imagegen', 'controlled-fixture')
                 workflow.review_redraw(self.task, page['id'], True, 'Accepted fixture.', [[0,0,640,65], [0,65,640,180]])
-                workflow.export(self.task)
+                output = workflow.export(self.task)
                 before = (self.task / 'record.json').read_bytes()
                 reference = result['output'] if corrupt == 'generated' else probe
                 (self.task / reference['path']).write_bytes(b'broken')
                 with self.assertRaises(workflow.ReconstructionError):
-                    workflow.review_pdf(self.task, [1], 'Final PDF fixture viewed.')
+                    workflow.review_pdf(self.task, [1], 'Final PDF fixture viewed.', output_revision=output['output_revision'])
                 self.assertEqual((self.task / 'record.json').read_bytes(), before)
+
+    def test_local_entry_validates_workflow_artifacts_before_resume_or_approval(self):
+        self.select()
+        probe = workflow.navigate(self.task, 0)
+        page = workflow.redraw_inputs(self.task)[0]
+        request = workflow.begin_redraw(self.task, page['id'], 'Synthetic input viewed.')
+        generated = workflow.finish_redraw(self.task, page['id'], request['request'],
+            self.root / 'score.png', 'host-imagegen', 'controlled-fixture')
+        workflow.review_redraw(self.task, page['id'], True, 'Synthetic image accepted.',
+            [[0, 0, 640, 65], [0, 65, 640, 180]])
+        output = workflow.export(self.task)
+        prior = (self.task / 'record.json').read_bytes()
+        for reference in (probe, generated['output']):
+            with self.subTest(artifact=reference['path']):
+                path = self.task / reference['path']
+                intact = path.read_bytes()
+                path.write_bytes(b'synthetic corruption')
+                try:
+                    for action in (lambda: workflow.local.load(self.task),
+                                   lambda: workflow.local.review_pdf(self.task, [1], 'Synthetic PDF review.', output_revision=output['output_revision'])):
+                        with self.assertRaises(workflow.ReconstructionError):
+                            action()
+                    self.assertEqual((self.task / 'record.json').read_bytes(), prior)
+                finally:
+                    path.write_bytes(intact)
 
     def test_mixed_routes_preserve_long_score_order_and_unresolved_sources_block_export(self):
         self.select()
@@ -338,7 +438,7 @@ class ScoreWorkflow(unittest.TestCase):
         output = workflow.export(self.task)
         self.assertEqual(output['routes'], ['imagegen'])
         self.assertEqual(output['page_count'], 1)
-        self.assertEqual(workflow.review_pdf(self.task, [1], 'Fixture page reviewed.')['status'], 'reviewed')
+        self.assertEqual(workflow.review_pdf(self.task, [1], 'Fixture page reviewed.', output_revision=output['output_revision'])['status'], 'reviewed')
         (self.task / workflow.load(self.task)['redraw_pages'][0]['output']['path']).write_bytes(b'broken')
         with self.assertRaises(workflow.ReconstructionError):
             workflow.export(self.task)

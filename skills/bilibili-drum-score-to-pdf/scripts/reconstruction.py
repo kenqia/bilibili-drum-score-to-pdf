@@ -3,7 +3,6 @@
 No music recognition and no hidden-symbol recovery. Public functions are the
 local workflow boundary; visual assertions belong to the calling Agent.
 """
-import hashlib
 import json
 import math
 from pathlib import Path
@@ -17,74 +16,11 @@ from reportlab.pdfgen.canvas import Canvas
 
 from video_seek import ConversionError, VideoReader, probe_video
 from delivery_layout import pdf_name
+from score_task import ReconstructionError, digest, write_path, load, review_pdf
+from score_task import save, artifact
+import score_task
 
 ROUGH_PIXELS = 80_000_000
-
-class ReconstructionError(ValueError):
-    pass
-
-
-def digest(path):
-    sha = hashlib.sha256()
-    with Path(path).open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-            sha.update(chunk)
-    return sha.hexdigest()
-
-
-def write_path(task, relative):
-    """Validate every existing write component before touching the filesystem."""
-    root=Path(task)
-    if root.is_symlink():
-        raise ReconstructionError('任务目录不能是符号链接。')
-    suffix=Path(relative)
-    if suffix.is_absolute() or '..' in suffix.parts:
-        raise ReconstructionError('写入路径必须位于任务内。')
-    candidate=root
-    for part in suffix.parts:
-        candidate=candidate/part
-        if candidate.is_symlink():
-            raise ReconstructionError('任务写入路径不能包含符号链接。')
-    if not candidate.resolve().is_relative_to(root.resolve()):
-        raise ReconstructionError('写入路径必须位于任务内。')
-    return candidate
-
-
-def _save(task, record):
-    path = write_path(task, 'record.json')
-    temporary = write_path(task, 'record.tmp')
-    temporary.write_text(json.dumps(record, ensure_ascii=False, indent=2))
-    temporary.replace(path)
-
-
-def _artifact(task, reference):
-    base = Path(task).resolve()
-    path = (base / reference['path']).resolve()
-    if not path.is_relative_to(base) or not path.is_file() or digest(path) != reference['sha256']:
-        raise ReconstructionError('来源或派生产物损坏，停止导出。')
-    return path
-
-
-def load(task):
-    for name in ('record.json','record.tmp','captures','regions','navigation','redraw','exports'):
-        write_path(task,name)
-    record = json.loads((Path(task) / 'record.json').read_text())
-    if record.get('schema') != 'score-reconstruction/1':
-        raise ReconstructionError('不是当前重构任务。')
-    source = Path(record['source']['path'])
-    if not source.is_file() or digest(source) != record['source']['sha256']:
-        raise ReconstructionError('原视频损坏或改变，停止任务。')
-    for item in record['captures'] + record.get('regions', []):
-        _artifact(task, item)
-    if record.get('rough'):
-        _artifact(task, record['rough'])
-    for chunk in record.get('rough_chunks', []):
-        _artifact(task, chunk)
-    if record.get('output'):
-        _artifact(task, record['output']['vector'])
-        _artifact(task, {'path': record['output']['pdf'], 'sha256': record['output']['sha256']})
-    return record
-
 
 def prepare(source, task):
     """Probe a local video, or resume an intact task for the same source."""
@@ -107,72 +43,35 @@ def prepare(source, task):
               'status': 'needs_source_review', 'metrics': {'seek_count': 0,
               'decode_elapsed': 0, 'decoded_reported_frames': 0, 'peak_temp_disk': 0,
               'presented_capture_ids': [], 'model_cost': None}}
-    _save(task, record)
+    save(task, record)
     return record
 
 
 def capture(task, seconds):
-    """Save one native frame with actual PTS. Saving is not visual review."""
-    record = load(task)
-    if not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or not 0 <= seconds < record['source']['duration']:
-        raise ReconstructionError('取帧时间必须在视频范围内。')
-    for shot in record['captures']:
-        if shot['requested_seconds'] == seconds:
-            return shot
-    reader = VideoReader(record['source']['path'], record['source'], record['metrics'])
-    try:
-        pts, picture = reader.read_record(seconds)
-    except ConversionError as error:
-        record['last_decode_error'] = error.code
-        raise
-    finally:
-        reader.close()
-        _save(task, record)
-    identifier = f'capture-{len(record["captures"])+1:04d}'
-    directory = write_path(task, 'captures')
-    directory.mkdir(exist_ok=True)
-    path = write_path(task, Path('captures') / f'{identifier}.png')
-    picture.save(path)
-    shot = {'id': identifier, 'path': str(path.relative_to(task)), 'sha256': digest(path),
-            'requested_seconds': seconds, **pts}
-    record['captures'].append(shot)
-    _save(task, record)
-    return shot
+    """Save or promote one verified native frame without duplicate decoding."""
+    from native_cache import capture as cached_capture
+    return cached_capture(task, seconds)
 
 
 def assemble(task, title, regions, review):
-    """Persist the Agent's ordered full systems and optional header crop.
-
-    Repeated music at later positions stays as another region. The Agent omits
-    only overlap at the same score position and states completeness explicitly.
-    """
-    record = _assemble(task, title, regions, review, load(task))
-    _save(task, record)
-    return record
+    """Select local source systems through the shared task lifecycle."""
+    return score_task.assemble(task, title, regions, review)
 
 
-def _assemble(task, title, regions, review, record):
-    """Prepare validated artifacts without publishing the task record."""
-    if not title or not title.strip() or not review.get('notes'):
-        raise ReconstructionError('需要实际确认的谱名和原图审阅记录。')
-    viewed = review.get('viewed_captures', [])
-    captures = {item['id']: item for item in record['captures']}
-    if not regions or not set(viewed).issubset(captures):
-        raise ReconstructionError('选择或审阅引用无效。')
+def build_selection(task, regions, captures):
+    """Build validated crops and rough chunks without changing task state."""
     blocks, pending = [], []
     revision = uuid.uuid4().hex
     for index, selection in enumerate(regions):
         capture_id = selection['capture']
-        if capture_id not in captures or capture_id not in viewed:
-            raise ReconstructionError('每个选行来源必须由 Agent 实际查看。')
         source = captures[capture_id]
-        with Image.open(_artifact(task, source)) as image:
+        with Image.open(artifact(task, source)) as image:
             box = selection['bbox']
             if len(box) != 4 or any(type(v) is not int for v in box) or not (0 <= box[0] < box[2] <= image.width and 0 <= box[1] < box[3] <= image.height):
                 raise ReconstructionError('裁剪范围越界。')
             crop = image.crop(box).convert('RGB')
         kind = selection.get('kind', 'system')
-        if kind not in ('header', 'system') or (kind == 'header' and index != 0):
+        if kind not in ('header', 'system'):
             raise ReconstructionError('标题只能放在首行。')
         if kind == 'system':
             top, spacing = selection.get('staff_top'), selection.get('staff_spacing')
@@ -199,7 +98,7 @@ def _assemble(task, title, regions, review, record):
     batches.append(batch)
     for item, (path, capture_id, box) in zip(blocks, pending):
         path.parent.mkdir(parents=True, exist_ok=True)
-        with Image.open(_artifact(task, captures[capture_id])) as image:
+        with Image.open(artifact(task, captures[capture_id])) as image:
             crop = image.crop(box).convert('RGB')
             crop.save(path)
             crop.close()
@@ -217,24 +116,24 @@ def _assemble(task, title, regions, review, record):
         rough.close()
         chunks.append({'path': path.name, 'sha256': digest(path),
                        'inputs': [item['sha256'] for item in batch]})
-    record.update(title=title.strip(), regions=blocks, source_review=review,
-                  rough=chunks[0], rough_chunks=chunks,
-                  status='ready_to_redraw' if review.get('complete') is True and not review.get('unresolved') else 'needs_source_review')
-    record.pop('output', None)
-    record['metrics']['presented_capture_ids'] = list(dict.fromkeys(viewed))
-    return record
+    return {'regions': blocks, 'rough': chunks[0], 'rough_chunks': chunks}
 
 
 def ink_mask(image):
     """Preserve dark or saturated notation, ignore light highlight backgrounds."""
-    rgb = np.asarray(image.convert('RGB')).astype(np.int16)
-    gray = cv2.cvtColor(rgb.astype(np.uint8), cv2.COLOR_RGB2GRAY)
-    notation = (rgb.max(2) - rgb.min(2) > 45) & (rgb.min(2) < 150)
-    return ((gray < 165) | notation).astype(np.uint8) * 255
+    rgb = np.asarray(image.convert('RGB'))
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    red, green, blue = cv2.split(rgb)
+    maximum = cv2.max(cv2.max(red, green), blue)
+    minimum = cv2.min(cv2.min(red, green), blue)
+    saturated = cv2.bitwise_and(cv2.compare(cv2.subtract(maximum,minimum),45,cv2.CMP_GT),
+        cv2.compare(minimum,150,cv2.CMP_LT))
+    return cv2.bitwise_or(cv2.compare(gray,165,cv2.CMP_LT),saturated)
+
 
 
 def trace_region(task, item):
-    with Image.open(_artifact(task, item)) as image:
+    with Image.open(artifact(task, item)) as image:
         mask = ink_mask(image)
     outlines, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     paths = [cv2.approxPolyDP(outline, .25, True)[:, 0].tolist() for outline in outlines if len(outline) >= 3]
@@ -293,7 +192,7 @@ def paginate(blocks, margin=24, minimum_gap=6):
         used = sum(blocks[i]['height'] * scale for i in batch)
         gap = (height - 2 * margin - used) / (len(batch) - 1) if len(batch) > 1 else 0
         # Sparse pages keep modest gaps and centered content instead of stretching.
-        gap = min(gap, 36)
+        gap = min(gap, max(36, minimum_gap))
         top = height - margin - max(0, (height - 2 * margin - used - gap * (len(batch)-1)) / 2)
         for index in batch:
             size = blocks[index]['height'] * scale
@@ -318,13 +217,14 @@ def draw_vector(canvas, vector):
 
 
 def export_vector(task):
-    record = load(task)
-    if record.get('output'):
-        return record['output']
-    if record['status'] != 'ready_to_redraw':
-        raise ReconstructionError('原图尚未确认完整，或仍有未决内容。')
+    """Export through the shared task lifecycle and existing renderer."""
+    return score_task.export(task, _render_vector)
+
+
+def _render_vector(task, record):
     vectors = [trace_region(task, item) for item in record['regions']]
-    placements, page_count = paginate(record['regions'])
+    options = record.get('layout', {})
+    placements, page_count = paginate(record['regions'], margin=options.get('margin', 24), minimum_gap=options.get('minimum_gap', 6))
     exports = write_path(task, 'exports')
     if exports.is_symlink():
         raise ReconstructionError('导出目录不能指向任务外部或已有用户目录。')
@@ -352,18 +252,4 @@ def export_vector(task):
               'method': 'geometric_contours_and_staff_lines', 'semantic_transcription': False,
               'hidden_symbol_recovery': False, 'status': 'needs_pdf_review',
               'vector': {'path': str(vector_path.relative_to(task)), 'sha256': digest(vector_path)}}
-    record.update(output=output, status='needs_pdf_review')
-    _save(task, record)
-    return output
-
-
-def review_pdf(task, pages, notes):
-    """Record actual Agent inspection; callers must view rendered pages first."""
-    record = load(task)
-    output = record.get('output')
-    if not output or sorted(pages) != list(range(1, output['page_count'] + 1)) or not notes:
-        raise ReconstructionError('必须实际审阅最终每页 PDF。')
-    output.update(status='reviewed', review={'pages': pages, 'notes': notes})
-    record['status'] = 'reviewed'
-    _save(task, record)
-    return output
+    return score_task.finalize_output(task, output, [{**r, 'source_region': i} for i, r in enumerate(record['regions'])], options, record)
