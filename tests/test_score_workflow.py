@@ -46,6 +46,35 @@ class ScoreWorkflow(unittest.TestCase):
         with self.assertRaises(workflow.ReconstructionError):
             workflow.begin_redraw(self.task,page['id'],'No second correction.',correction=True)
 
+    def test_local_reselection_preserves_same_budget_and_invalidates_changed_material(self):
+        self.select()
+        selected = workflow.load(self.task)
+        regions = [{**r, 'position': str(i)} for i, r in enumerate(selected['regions'])]
+        review = {**selected['source_review'], 'continuity': 'Synthetic full systems.',
+                  'first_last': 'Synthetic start and ending.'}
+        workflow.assemble(self.task, selected['title'], regions, review)
+        page = workflow.redraw_inputs(self.task)[0]
+        for correction in (False, True):
+            request = workflow.begin_redraw(self.task, page['id'], 'Synthetic input viewed.',
+                correction=correction)
+            workflow.finish_redraw(self.task, page['id'], request['request'],
+                self.root / 'score.png', 'host-imagegen', 'controlled-fixture')
+            workflow.review_redraw(self.task, page['id'], False, 'Synthetic rejection.')
+        output = workflow.export(self.task)
+        workflow.review_pdf(self.task, [1], 'Synthetic PDF reviewed.')
+        same = workflow.local.assemble(self.task, selected['title'], regions, review)
+        self.assertEqual(same['output']['sha256'], output['sha256'])
+        self.assertEqual(same['output']['status'], 'reviewed')
+        self.assertEqual(same['redraw_pages'][0]['corrections_used'], 1)
+        changed = [{**regions[0], 'bbox': [0, 0, 640, 60]}, regions[1]]
+        revised = workflow.local.assemble(self.task, selected['title'], changed, review)
+        self.assertNotIn('output', revised)
+        self.assertEqual(revised['redraw_pages'], [])
+        refreshed = workflow.redraw_inputs(self.task)[0]
+        self.assertEqual(refreshed['corrections_used'], 0)
+        self.assertNotEqual(refreshed['input']['sha256'], page['input']['sha256'])
+        self.assertEqual((self.task / output['pdf']).is_file(), True)
+
     def test_custom_redraw_group_cannot_bypass_pixel_limit(self):
         self.select();record=workflow.load(self.task)
         region=record['regions'][1]
@@ -168,27 +197,26 @@ class ScoreWorkflow(unittest.TestCase):
             workflow.assemble(self.task, original['title'], invalid, review)
         self.assertEqual((self.task / 'record.json').read_bytes(), prior)
         selections[0] = {**selections[0], 'bbox': [0,0,640,60]}
-        with patch.object(workflow.local, '_save', side_effect=RuntimeError('Interrupted first publication')):
+        with patch.object(Path, 'replace', autospec=True,
+                          side_effect=RuntimeError('Interrupted record publication')):
             with self.assertRaises(RuntimeError):
                 workflow.assemble(self.task, original['title'], selections, review)
         self.assertEqual((self.task / 'record.json').read_bytes(), prior)
         self.assertEqual(workflow.load(self.task)['redraw_pages'][0]['status'], 'accepted')
-        save = workflow.local._save
+        replace = Path.replace
         calls = 0
-        def interrupted_save(task, record):
+        def interrupted_replace(temporary, target):
             nonlocal calls
             calls += 1
             if calls == 2:
                 raise RuntimeError('Interrupted publication')
-            return save(task, record)
-        with patch.object(workflow.local, '_save', side_effect=interrupted_save):
-            try:
-                workflow.assemble(self.task, original['title'], selections, review)
-            except RuntimeError:
-                pass
+            return replace(temporary, target)
+        with patch.object(Path, 'replace', autospec=True, side_effect=interrupted_replace):
+            workflow.assemble(self.task, original['title'], selections, review)
+        self.assertEqual(calls, 1)
         resumed = workflow.load(self.task)
-        if resumed['regions'][0]['bbox'] == [0,0,640,60]:
-            self.assertEqual(resumed['redraw_pages'], [])
+        self.assertEqual(resumed['regions'][0]['bbox'], [0,0,640,60])
+        self.assertEqual(resumed['redraw_pages'], [])
         workflow.assemble(self.task, original['title'], selections, review)
         refreshed = workflow.redraw_inputs(self.task)[0]
         self.assertEqual(refreshed['status'], 'needs_generation')
@@ -211,6 +239,31 @@ class ScoreWorkflow(unittest.TestCase):
                 with self.assertRaises(workflow.ReconstructionError):
                     workflow.review_pdf(self.task, [1], 'Final PDF fixture viewed.')
                 self.assertEqual((self.task / 'record.json').read_bytes(), before)
+
+    def test_local_entry_validates_workflow_artifacts_before_resume_or_approval(self):
+        self.select()
+        probe = workflow.navigate(self.task, 0)
+        page = workflow.redraw_inputs(self.task)[0]
+        request = workflow.begin_redraw(self.task, page['id'], 'Synthetic input viewed.')
+        generated = workflow.finish_redraw(self.task, page['id'], request['request'],
+            self.root / 'score.png', 'host-imagegen', 'controlled-fixture')
+        workflow.review_redraw(self.task, page['id'], True, 'Synthetic image accepted.',
+            [[0, 0, 640, 65], [0, 65, 640, 180]])
+        workflow.export(self.task)
+        prior = (self.task / 'record.json').read_bytes()
+        for reference in (probe, generated['output']):
+            with self.subTest(artifact=reference['path']):
+                path = self.task / reference['path']
+                intact = path.read_bytes()
+                path.write_bytes(b'synthetic corruption')
+                try:
+                    for action in (lambda: workflow.local.load(self.task),
+                                   lambda: workflow.local.review_pdf(self.task, [1], 'Synthetic PDF review.')):
+                        with self.assertRaises(workflow.ReconstructionError):
+                            action()
+                    self.assertEqual((self.task / 'record.json').read_bytes(), prior)
+                finally:
+                    path.write_bytes(intact)
 
     def test_mixed_routes_preserve_long_score_order_and_unresolved_sources_block_export(self):
         self.select()

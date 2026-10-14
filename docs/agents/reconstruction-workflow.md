@@ -2,6 +2,8 @@
 
 `score_workflow.py` 是新版工作流接口。用户提供公开 B站链接或本地视频，Agent 负责导航、看图、确认接续、调用真实宿主生图并审阅 PDF。用户无需选择路线或填写任务 JSON。`convert.py` 默认 prepare 使用本接口；命令参数见[新版入口](reconstruction-entry.md)。
 
+选行、重绘失效、恢复校验和记录发布统一由 `score_task.py` 管理。本页的函数名、参数和任务格式保持不变；调用方无需访问几何实现的私有函数或自行清空派生产物。
+
 ## 准备与采集
 
 使用项目现有 `requirements.txt`、`ffmpeg` 和 `ffprobe`。最终逐页检查使用 Poppler。没有新增模型认证、付费 API 或依赖。

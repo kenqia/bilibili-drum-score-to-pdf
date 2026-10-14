@@ -4,7 +4,9 @@
 
 ## 模块边界
 
-`convert.py` 是命令适配层，将操作与 JSON 参数交给 `score_workflow.py`。工作流记录低清导航、原生截图、实际呈交、空间位置去重、粗拼、宿主调用与修正状态。`reconstruction.py` 提供本地媒体、来源校验、选行、轮廓转描与补五线、完整行 A4 分页。`delivery_layout.pdf_name` 清洗跨 Windows/WSL 的谱名。
+`convert.py` 是命令适配层，将操作与 JSON 参数交给 `score_workflow.py`。`score_workflow.py` 保留公开 URL、本地视频、导航与宿主重绘的操作入口；`reconstruction.py` 保留独立本地矢量入口，并提供裁剪、粗拼、轮廓转描与补五线、完整行 A4 分页。
+
+两个入口共用 `score_task.py` 的谱面还原任务 module。它统一管理来源引用校验、原谱位置去重、选行身份、重绘请求与一次修正预算、结果撤回、PDF 审核失效及记录原子发布。几何实现准备版本化材料后返回引用，不修改任务状态；任务 module 将新选择和派生产物失效一起发布。本地矢量与混合路线使用现有两种绘制 adapter，导出资格、结果复用和待审阅状态由任务 module 管理。`delivery_layout.pdf_name` 清洗跨 Windows/WSL 的谱名。
 
 `public_video.py`、`anonymous_backend.py` 和 `anonymous_network.py` 保留匿名获取与网络保护。`video_seek.py` 保留 ffprobe、实际 PTS/time_base 解码与临时资源清理。`midi_workflow.py` 与 `midi_export.py` 独立实现明确请求后的完整音乐转写、用户授权近似播放、GM 鼓轨导出与实际事件回读；Mido 可选，普通 PDF 无需加载。
 
@@ -17,6 +19,8 @@
 粗拼分块按完整谱行形成真实宿主生图输入，每页最多一次定向修正，预算在调用之前写入。失败、无工具和修正拒绝转矢量。已接受结果后发现错误可撤回；旧结果和拒绝依据保留，当前 PDF 审核失效。新导出按来源宽度统一比例，保留短行，只在完整行之间分页，不预先重采样生图。
 
 `record.json` 保存轻量来源与派生引用，恢复验证所有引用 hash。变更选行与重绘失效原子发布，验证失败保留上个有效状态。导出使用版本目录，避免重名覆盖；最终 review_pdf 验证整个任务后登记实际每页审核。保存文件不能证明 Agent 看过。
+
+命令、请求字段及 `score-reconstruction/1` 格式保持不变，不增加迁移或旧重绘历史归档。本地入口与默认入口使用同一恢复和审核检查；同选择恢复保留当前结果与预算，改变选择清空当前重绘引用并撤销当前 PDF。已存在的文件不覆盖或删除。
 
 ## 输入和资源保护
 

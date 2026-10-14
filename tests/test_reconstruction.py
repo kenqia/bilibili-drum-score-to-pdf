@@ -179,7 +179,8 @@ class LocalScoreWorkflow(unittest.TestCase):
         self.select()
         before = workflow.load(self.task)
         # Controlled interruption at the persistence boundary, after PDF save.
-        with patch.object(workflow, '_save', side_effect=OSError('controlled record write interruption')):
+        with patch.object(Path, 'replace', autospec=True,
+                          side_effect=OSError('controlled record write interruption')):
             with self.assertRaises(OSError):
                 workflow.export_vector(self.task)
         orphan_pdfs = list(self.task.rglob('*.pdf'))
