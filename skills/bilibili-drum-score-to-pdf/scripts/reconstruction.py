@@ -71,7 +71,7 @@ def build_selection(task, regions, captures):
                 raise ReconstructionError('裁剪范围越界。')
             crop = image.crop(box).convert('RGB')
         kind = selection.get('kind', 'system')
-        if kind not in ('header', 'system') or (kind == 'header' and index != 0):
+        if kind not in ('header', 'system'):
             raise ReconstructionError('标题只能放在首行。')
         if kind == 'system':
             top, spacing = selection.get('staff_top'), selection.get('staff_spacing')
@@ -121,10 +121,15 @@ def build_selection(task, regions, captures):
 
 def ink_mask(image):
     """Preserve dark or saturated notation, ignore light highlight backgrounds."""
-    rgb = np.asarray(image.convert('RGB')).astype(np.int16)
-    gray = cv2.cvtColor(rgb.astype(np.uint8), cv2.COLOR_RGB2GRAY)
-    notation = (rgb.max(2) - rgb.min(2) > 45) & (rgb.min(2) < 150)
-    return ((gray < 165) | notation).astype(np.uint8) * 255
+    rgb = np.asarray(image.convert('RGB'))
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    red, green, blue = cv2.split(rgb)
+    maximum = cv2.max(cv2.max(red, green), blue)
+    minimum = cv2.min(cv2.min(red, green), blue)
+    saturated = cv2.bitwise_and(cv2.compare(cv2.subtract(maximum,minimum),45,cv2.CMP_GT),
+        cv2.compare(minimum,150,cv2.CMP_LT))
+    return cv2.bitwise_or(cv2.compare(gray,165,cv2.CMP_LT),saturated)
+
 
 
 def trace_region(task, item):
