@@ -3,8 +3,10 @@
 Both supported entry points share this module. Visual review assertions remain
 with the Agent; this module validates their references and persists decisions.
 """
+import copy
 import hashlib
 import json
+import math
 from pathlib import Path
 import uuid
 from PIL import Image
@@ -42,6 +44,14 @@ def write_path(task, relative):
 
 def save(task, record):
     path = write_path(task, 'record.json')
+    if path.exists():
+        previous = json.loads(path.read_text())
+        history = previous.get('generation_history', {}).copy()
+        history.update(record.get('generation_history', {}))
+        for page in previous.get('redraw_pages', []):
+            key = page.get('input_identity') or input_identity(previous, page['regions'])
+            history[key] = copy.deepcopy(page)
+        record['generation_history'] = history
     temporary = write_path(task, 'record.tmp')
     temporary.write_text(json.dumps(record, ensure_ascii=False, indent=2))
     temporary.replace(path)
@@ -71,6 +81,8 @@ def load(task):
     for chunk in record.get('rough_chunks', []):
         artifact(task, chunk)
     if record.get('output'):
+        for preview in record['output'].get('previews', []):
+            artifact(task, preview)
         artifact(task, record['output']['vector'])
         artifact(task, {'path': record['output']['pdf'], 'sha256': record['output']['sha256']})
     for reference in record.get('overview',{}).get('panels',[]):
@@ -89,13 +101,40 @@ def load(task):
     return record
 
 
-def review_pdf(task, pages, notes):
+def input_identity(record, indices):
+    captures = {c['id']: c for c in record['captures']}
+    members = []
+    for index in indices:
+        region = record['regions'][index]
+        shot = captures[region['capture']]
+        geometry = {key: float(region[key]) if region.get(key) is not None else None for key in ('staff_top','staff_spacing')}
+        members.append({'source': record['source']['sha256'], 'capture': shot['sha256'],
+            'pts': shot.get('pts'), 'time_base': shot.get('time_base'),
+            **{key: region.get(key) for key in ('position','bbox','sha256','kind','width','height')}, **geometry})
+    return hashlib.sha256(json.dumps(members, sort_keys=True).encode()).hexdigest()
+
+
+def invalidate_output(record, reason):
+    if record.get('output'):
+        record.setdefault('output_history', []).append({'reason': reason, 'output': record.pop('output')})
+
+
+def invalidate_selection(record):
+    if record.get('redraw_pages'):
+        record['generation_group_sizes'] = [len(p['regions']) for p in record['redraw_pages']]
+    record['redraw_pages'] = []
+    invalidate_output(record, 'source_revision')
+
+
+def review_pdf(task, pages, notes, output_revision=None):
     """Record actual Agent inspection; callers must view rendered pages first."""
     record = load(task)
     output = record.get('output')
+    if output_revision is not None and (not output or output_revision != output['sha256']):
+        raise ReconstructionError('终稿审阅版本已过期。')
     if not output or sorted(pages) != list(range(1, output['page_count'] + 1)) or not notes:
         raise ReconstructionError('必须实际审阅最终每页 PDF。')
-    output.update(status='reviewed', review={'pages': pages, 'notes': notes})
+    output.update(status='reviewed', review={'pages': pages, 'notes': notes, 'output_revision': output['sha256'], 'preview_hashes': [p['sha256'] for p in output.get('previews', [])]})
     record['status'] = 'reviewed'
     save(task, record)
     return output
@@ -154,9 +193,7 @@ def assemble(task, title, regions, review, *, positioned=False):
     materials = build_selection(task, unique, {c['id']: c for c in previous['captures']})
     previous.update(**materials, title=title.strip(), source_review=review,
         status='ready_to_redraw' if review.get('complete') is True and not review.get('unresolved') else 'needs_source_review')
-    previous.pop('output', None)
-    if positioned or 'redraw_pages' in previous:
-        previous['redraw_pages'] = []
+    invalidate_selection(previous)
     previous['metrics']['presented_capture_ids'] = list(dict.fromkeys(viewed))
     from automatic_score import freeze
     freeze(previous, 'agent')
@@ -172,10 +209,15 @@ def redraw_inputs(task, groups=None):
     require_frozen(record)
     if record.get('source_review',{}).get('complete') is not True or record['source_review'].get('unresolved'):
         raise ReconstructionError('原图完整性尚未确认。')
-    if record.get('redraw_pages'):
+    if record.get('redraw_pages') and (groups is None or groups == [p['regions'] for p in record['redraw_pages']]):
         return record['redraw_pages']
-    if record['status'] != 'ready_to_redraw':
+    if not record.get('redraw_pages') and record['status'] != 'ready_to_redraw':
         raise ReconstructionError('原图接续或完整性未确认。')
+    if groups is None and record.get('generation_group_sizes') and sum(record['generation_group_sizes']) == len(record['regions']):
+        groups, offset = [], 0
+        for size in record['generation_group_sizes']:
+            groups.append(list(range(offset, offset + size)))
+            offset += size
     if groups is None:
         groups, group = [], []
         for index, block in enumerate(record['regions']):
@@ -202,6 +244,22 @@ def redraw_inputs(task, groups=None):
     directory.mkdir(parents=True)
     pages = []
     for number, indices in enumerate(groups, 1):
+        identity = input_identity(record, indices)
+        historical = next((p for p in record.get('redraw_pages', []) if p.get('input_identity') == identity), None) or record.get('generation_history', {}).get(identity)
+        if historical:
+            restored = copy.deepcopy(historical)
+            artifact(task, restored['input'])
+            for attempt in restored.get('attempts', []):
+                if attempt.get('output'):
+                    artifact(task, attempt['output'])
+            if restored.get('output'):
+                artifact(task, restored['output'])
+            restored.update(id=f'page-{number}', regions=indices, freeze_id=record['freeze']['id'], input_identity=identity)
+            for row, index in zip(restored.get('row_materials', []), indices):
+                row['source_region'] = index
+                row['source'] = {key: record['regions'][index].get(key) for key in ('capture','position','pts','time_base','source_sha256','sha256')}
+            pages.append(restored)
+            continue
         blocks = [record['regions'][i] for i in indices]
         width, height = max(b['width'] for b in blocks), sum(b['height'] for b in blocks)
         image = Image.new('RGB', (width, height), 'white')
@@ -213,7 +271,11 @@ def redraw_inputs(task, groups=None):
             y += block['height']
         path = write_path(task, directory.relative_to(task) / f'input-{number}.png')
         image.save(path)
-        pages.append({'id': f'page-{number}', 'freeze_id': record['freeze']['id'], 'regions': indices, 'input': {'path': str(path.relative_to(task)), 'sha256': digest(path), 'inputs': [b['sha256'] for b in blocks]}, 'source_boundaries': boundaries, 'status': 'needs_generation', 'corrections_used': 0, 'attempts': []})
+        pages.append({'input_identity': identity, 'id': f'page-{number}', 'freeze_id': record['freeze']['id'], 'regions': indices, 'input': {'path': str(path.relative_to(task)), 'sha256': digest(path), 'inputs': [b['sha256'] for b in blocks]}, 'source_boundaries': boundaries, 'status': 'needs_generation', 'corrections_used': 0, 'attempts': []})
+    if record.get('redraw_pages') and groups != [p['regions'] for p in record['redraw_pages']]:
+        invalidate_output(record, 'generation_regrouping')
+        record['status'] = 'ready_to_redraw'
+    record['generation_group_sizes'] = [len(group) for group in groups]
     record['redraw_pages'] = pages
     save(task, record)
     return pages
@@ -254,6 +316,8 @@ def finish_redraw(task, identifier, request, output, tool, receipt):
     from automatic_score import require_frozen
     require_frozen(record)
     page = _page(record, identifier)
+    if not page.get('attempts'):
+        raise ReconstructionError('尚未启动宿主调用。')
     attempt = page['attempts'][-1]
     if page['status'] != 'calling' or attempt['request'] != request or tool != 'host-imagegen' or not receipt:
         raise ReconstructionError('宿主工具调用来源无效。')
@@ -355,7 +419,7 @@ def export(task, render, *, host_redraw=False):
     require_frozen(record)
     output = record.get('output')
     if host_redraw:
-        if output and output.get('layout_version') == 2:
+        if output and output.get('layout_version') == 2 and output.get('previews') and output.get('checks', {}).get('status') == 'passed':
             return output
         pages = record.get('redraw_pages', [])
         if not pages or any(p['status'] not in ('accepted', 'vector') for p in pages):
@@ -365,6 +429,8 @@ def export(task, render, *, host_redraw=False):
             return output
         if record['status'] != 'ready_to_redraw':
             raise ReconstructionError('原图尚未确认完整，或仍有未决内容。')
+    if output:
+        invalidate_output(record, 'preview_layout_upgrade')
     output = render(task, record)
     record.update(output=output, status='needs_pdf_review')
     save(task, record)
@@ -394,3 +460,18 @@ def generation_materials(task):
                     method='contour_trace_with_staff_repair', music_recognition=False)
             rows.append(row)
     return rows
+
+
+def layout(task, margin=24, minimum_gap=6, target_pages=None):
+    record = load(task)
+    if (type(margin) not in (int,float) or not math.isfinite(margin) or not 0 <= margin <= 144 or
+            type(minimum_gap) not in (int,float) or not math.isfinite(minimum_gap) or not 0 <= minimum_gap <= 144 or
+            (target_pages is not None and (type(target_pages) is not int or not 1 <= target_pages <= 512))):
+        raise ReconstructionError('布局需要有限边距、行距及可选正整数页数目标。')
+    value = {'margin': margin, 'minimum_gap': minimum_gap, 'target_pages': target_pages}
+    if value != record.get('layout'):
+        invalidate_output(record, 'layout_revision')
+        record['layout'] = value
+        record['status'] = 'ready_to_redraw'
+        save(task, record)
+    return {'layout': value, 'status': record['status'], 'generation_groups': record.get('redraw_pages', [])}
