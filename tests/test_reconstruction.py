@@ -65,7 +65,7 @@ class LocalScoreWorkflow(unittest.TestCase):
         subprocess.run(['pdftoppm', '-scale-to', '600', '-png', '-singlefile',
                         str(self.task / result['pdf']), str(self.root / 'page')], check=True, capture_output=True)
         self.assertTrue((self.root / 'page.png').exists())
-        final = workflow.review_pdf(self.task, [1], 'Checked title, tempo, meter, first/last system and no clipping.')
+        final = workflow.review_pdf(self.task, [1], 'Checked title, tempo, meter, first/last system and no clipping.', output_revision=result['output_revision'])
         self.assertEqual(final['status'], 'reviewed')
         record = json.loads((self.task / 'record.json').read_text())
         self.assertEqual(record['captures'][0]['pts'], 0)
@@ -158,7 +158,7 @@ class LocalScoreWorkflow(unittest.TestCase):
     def test_reselect_same_title_preserves_old_pdf_and_unknown_user_file(self):
         self.select()
         first = workflow.export_vector(self.task)
-        workflow.review_pdf(self.task, [1], 'Controlled test review, not actual visual acceptance.')
+        workflow.review_pdf(self.task, [1], 'Controlled test review, not actual visual acceptance.', output_revision=first['output_revision'])
         old_pdf = self.task / first['pdf']
         old_bytes = old_pdf.read_bytes()
         user_pdf = self.task / 'Test Score.pdf'

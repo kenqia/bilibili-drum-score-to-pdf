@@ -55,7 +55,7 @@ class NewEntryTests(unittest.TestCase):
             self.assertEqual(pdf['page_count'],1)
             self.assertEqual(Path(pdf['pdf']).name,'Fixture song.pdf')
             self.assertTrue((task/pdf['pdf']).is_file())
-            reviewed=operation('review-pdf',{'pages':[1],'notes':'Controlled fixture receipt only.'})
+            reviewed=operation('review-pdf',{'pages':[1],'notes':'Controlled fixture receipt only.','output_revision':pdf['output_revision']})
             self.assertEqual(reviewed['status'],'reviewed')
 
     def test_malformed_request_does_not_expose_traceback_or_payload(self):

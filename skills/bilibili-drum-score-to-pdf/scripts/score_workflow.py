@@ -194,63 +194,13 @@ def _render_pdf(task, record):
     manifest.write_text(json.dumps({'blocks': blocks, 'vectors': vectors, 'inputs': [r['sha256'] for r in record['regions']],
         'source_review':record.get('source_review'), 'program_checks':record.get('program_checks'), 'layout':layout_options}))
     output = {'pdf': str(pdf.relative_to(task)), 'sha256': score_task.digest(pdf), 'page_count': count, 'placements': placements, 'routes': routes, 'method': 'reviewed_host_images_and_vector_fallback', 'layout_version': 2, 'status': 'needs_pdf_review', 'vector': {'path': str(manifest.relative_to(task)), 'sha256': score_task.digest(manifest)}}
-    output['previews'], output['checks'] = _preview_and_check(task, output, blocks, layout_options)
-    target = layout_options.get('target_pages')
-    output['layout'] = {**layout_options, 'actual_pages': count, 'target_met': target is None or count == target,
-        'explanation': ('完整行与共同可读比例需要更多页面。' if count > target else '按完整行自然分页；页数目标为建议，不增加空白页。') if target and count != target else None}
-    return output
+    return score_task.finalize_output(task, output, blocks, layout_options, record)
 
 from automatic_score import overview, resample, auto_freeze, revise_crop
 
 
 from score_task import layout
 
-
-def _preview_and_check(task, output, blocks, options):
-    import subprocess
-    import math
-    from reportlab.lib.pagesizes import A4
-    directory = Path(task) / Path(output['pdf']).parent
-    previews = []
-    if output['page_count'] > 512:
-        raise ReconstructionError('PDF 页面数超过预览资源限制。')
-    for number in range(1, output['page_count'] + 1):
-        prefix = score_task.write_path(task, directory.relative_to(task) / f'preview-{number}')
-        subprocess.run(['pdftoppm','-f',str(number),'-l',str(number),'-scale-to','1200',
-            '-png','-singlefile',str(Path(task)/output['pdf']),str(prefix)],
-            check=True, capture_output=True, timeout=30)
-        path = prefix.with_suffix('.png')
-        with Image.open(path) as image:
-            dimensions = list(image.size)
-            image.verify()
-        previews.append({'page':number,'path':str(path.relative_to(task)),'sha256':score_task.digest(path),'dimensions':dimensions})
-    issues, warnings = [], []
-    placements = output['placements']
-    indices = [p['region'] for p in placements]
-    if sorted(indices) != list(range(len(blocks))):
-        issues.append({'code':'omitted_or_duplicate_position'})
-    margin = options.get('margin',24)
-    for placement in placements:
-        box = placement['bbox']; block = blocks[placement['region']]
-        if not math.isfinite(placement['scale']) or placement['scale'] <= 0 or any(not math.isfinite(v) for v in box):
-            issues.append({'code':'invalid_geometry','region':placement['region']})
-        if box[0] < margin-0.01 or box[1] < margin-0.01 or box[2] > A4[0]-margin+0.01 or box[3] > A4[1]-margin+0.01:
-            issues.append({'code':'print_boundary','region':placement['region']})
-        if abs((box[2]-box[0])/block['width']-(box[3]-box[1])/block['height']) > 0.00001:
-            issues.append({'code':'nonuniform_scale','region':placement['region']})
-    for number in range(1,output['page_count']+1):
-        page = [p for p in placements if p['page']==number]
-        for a,b in zip(page,page[1:]):
-            if a['bbox'][1] < b['bbox'][3]-0.01:
-                issues.append({'code':'overlap','page':number})
-        used = sum(p['bbox'][3]-p['bbox'][1] for p in page)
-        if used < (A4[1]-2*margin)*0.25:
-            warnings.append({'code':'sparse_page','page':number,'occupied_height':used})
-    if issues:
-        raise ReconstructionError('PDF 自动几何检查未通过。')
-    return previews, {'producer':'program','status':'passed','issues':issues,'warnings':warnings,
-        'scope':'placement geometry only; not music proofreading',
-        'ordered_source_regions':[b['source_region'] for b in blocks]}
 
 
 def stage(task, title=None):
@@ -280,7 +230,9 @@ def stage(task, title=None):
     groups = redraw_inputs(task)
     record = load(task)
     if record.get('output'):
-        if not record['output'].get('previews') or not record['output'].get('checks'):
+        try:
+            score_task.require_output_previews(task, record['output'], record)
+        except ReconstructionError:
             export(task)
             record = load(task)
         output = record['output']
@@ -288,7 +240,7 @@ def stage(task, title=None):
             'status':'complete' if output['status']=='reviewed' else 'pending',
             'artifacts':{**artifacts,'output':output},'checks':output.get('checks',{}),'unresolved':[],
             'next':None if output['status']=='reviewed' else {'operation':'review-pdf',
-                'pages':list(range(1,output['page_count']+1)),'output_revision':output['sha256'],
+                'pages':list(range(1,output['page_count']+1)),'output_revision':output['output_revision'],
                 'instruction':'实际查看全部有序预览并记录标题、顺序、首尾和关键记号。'}}
     handoffs=[]
     for group in groups:

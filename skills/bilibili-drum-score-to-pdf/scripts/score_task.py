@@ -130,11 +130,14 @@ def review_pdf(task, pages, notes, output_revision=None):
     """Record actual Agent inspection; callers must view rendered pages first."""
     record = load(task)
     output = record.get('output')
-    if output_revision is not None and (not output or output_revision != output['sha256']):
+    if not output_revision:
+        raise ReconstructionError('必须显式提交实际查看的 output_revision；导出并查看当前全部预览后再审阅。')
+    if not output or output_revision != output.get('output_revision'):
         raise ReconstructionError('终稿审阅版本已过期。')
     if not output or sorted(pages) != list(range(1, output['page_count'] + 1)) or not notes:
         raise ReconstructionError('必须实际审阅最终每页 PDF。')
-    output.update(status='reviewed', review={'pages': pages, 'notes': notes, 'output_revision': output['sha256'], 'preview_hashes': [p['sha256'] for p in output.get('previews', [])]})
+    require_output_previews(task, output, record)
+    output.update(status='reviewed', review={'pages': sorted(pages), 'notes': notes, 'output_revision': output['output_revision'], 'preview_hashes': [p['sha256'] for p in output.get('previews', [])]})
     record['status'] = 'reviewed'
     save(task, record)
     return output
@@ -240,6 +243,18 @@ def redraw_inputs(task, groups=None):
         raise ReconstructionError('重绘分块必须按完整谱行顺序覆盖全部材料。')
     if any(max(record['regions'][i]['width'] for i in group) * sum(record['regions'][i]['height'] for i in group) > ROUGH_PIXELS for group in groups):
         raise ReconstructionError('重绘分组超出内存像素限制；拆分完整谱行。')
+    # Exact historic identities retain their attempts and spent budgets. New
+    # memberships must satisfy the same resolution limits as default grouping.
+    for indices in groups:
+        identity = input_identity(record, indices)
+        historical = next((p for p in record.get('redraw_pages', []) if p.get('input_identity') == identity), None) or record.get('generation_history', {}).get(identity)
+        if historical:
+            continue
+        blocks = [record['regions'][i] for i in indices]
+        scale = min(1, 4096 / max(max(b['width'] for b in blocks), sum(b['height'] for b in blocks)))
+        systems = [b for b in blocks if b['kind'] == 'system']
+        if len(systems) > 8 or any(b['staff_spacing'] * scale < 4 for b in systems):
+            raise ReconstructionError('新重绘组超过八条完整谱行或小符号有效分辨率不足；拆分完整行，单行不足时补采更清晰来源。')
     directory = write_path(task, Path('redraw') / uuid.uuid4().hex)
     directory.mkdir(parents=True)
     pages = []
@@ -418,20 +433,24 @@ def export(task, render, *, host_redraw=False):
     from automatic_score import require_frozen
     require_frozen(record)
     output = record.get('output')
-    if host_redraw:
-        if output and output.get('layout_version') == 2 and output.get('previews') and output.get('checks', {}).get('status') == 'passed':
+    if output:
+        try:
+            require_output_previews(task, output, record)
+        except ReconstructionError:
+            pass
+        else:
             return output
+    if host_redraw:
         pages = record.get('redraw_pages', [])
         if not pages or any(p['status'] not in ('accepted', 'vector') for p in pages):
             raise ReconstructionError('先完成每页重绘审阅或自动兜底。')
     else:
-        if output:
-            return output
-        if record['status'] != 'ready_to_redraw':
+        if not output and record['status'] != 'ready_to_redraw':
             raise ReconstructionError('原图尚未确认完整，或仍有未决内容。')
     if output:
         invalidate_output(record, 'preview_layout_upgrade')
     output = render(task, record)
+    require_output_previews(task, output, record)
     record.update(output=output, status='needs_pdf_review')
     save(task, record)
     return output
@@ -475,3 +494,85 @@ def layout(task, margin=24, minimum_gap=6, target_pages=None):
         record['status'] = 'ready_to_redraw'
         save(task, record)
     return {'layout': value, 'status': record['status'], 'generation_groups': record.get('redraw_pages', [])}
+
+
+def _preview_and_check(task, output, blocks, options):
+    import subprocess
+    import math
+    from reportlab.lib.pagesizes import A4
+    directory = Path(task) / Path(output['pdf']).parent
+    previews = []
+    if output['page_count'] > 512:
+        raise ReconstructionError('PDF 页面数超过预览资源限制。')
+    for number in range(1, output['page_count'] + 1):
+        prefix = write_path(task, directory.relative_to(task) / f'preview-{number}')
+        subprocess.run(['pdftoppm','-f',str(number),'-l',str(number),'-scale-to','1200',
+            '-png','-singlefile',str(Path(task)/output['pdf']),str(prefix)],
+            check=True, capture_output=True, timeout=30)
+        path = prefix.with_suffix('.png')
+        with Image.open(path) as image:
+            dimensions = list(image.size)
+            image.verify()
+        previews.append({'page':number,'path':str(path.relative_to(task)),'sha256':digest(path),'dimensions':dimensions})
+    issues, warnings = [], []
+    placements = output['placements']
+    indices = [p['region'] for p in placements]
+    if sorted(indices) != list(range(len(blocks))):
+        issues.append({'code':'omitted_or_duplicate_position'})
+    margin = options.get('margin',24)
+    for placement in placements:
+        box = placement['bbox']; block = blocks[placement['region']]
+        if not math.isfinite(placement['scale']) or placement['scale'] <= 0 or any(not math.isfinite(v) for v in box):
+            issues.append({'code':'invalid_geometry','region':placement['region']})
+        if box[0] < margin-0.01 or box[1] < margin-0.01 or box[2] > A4[0]-margin+0.01 or box[3] > A4[1]-margin+0.01:
+            issues.append({'code':'print_boundary','region':placement['region']})
+        if abs((box[2]-box[0])/block['width']-(box[3]-box[1])/block['height']) > 0.00001:
+            issues.append({'code':'nonuniform_scale','region':placement['region']})
+    for number in range(1,output['page_count']+1):
+        page = [p for p in placements if p['page']==number]
+        for a,b in zip(page,page[1:]):
+            if a['bbox'][1] < b['bbox'][3]-0.01:
+                issues.append({'code':'overlap','page':number})
+        used = sum(p['bbox'][3]-p['bbox'][1] for p in page)
+        if used < (A4[1]-2*margin)*0.25:
+            warnings.append({'code':'sparse_page','page':number,'occupied_height':used})
+    if issues:
+        raise ReconstructionError('PDF 自动几何检查未通过。')
+    return previews, {'producer':'program','status':'passed','issues':issues,'warnings':warnings,
+        'scope':'placement geometry only; not music proofreading',
+        'ordered_source_regions':[b['source_region'] for b in blocks]}
+
+
+def finalize_output(task, output, blocks, options, record):
+    """Create ordered previews and geometry evidence for every public renderer."""
+    output['previews'], output['checks'] = _preview_and_check(task, output, blocks, options)
+    target = options.get('target_pages')
+    count = output['page_count']
+    output['layout_version'] = 2
+    output['output_revision'] = Path(output['pdf']).parent.name
+    output['freeze_id'] = record['freeze']['id']
+    output['layout_options'] = options
+    output['layout'] = {**options, 'actual_pages': count, 'target_met': target is None or count == target,
+        'explanation': ('完整行与共同可读比例需要更多页面。' if count > target else '按完整行自然分页；页数目标为建议，不增加空白页。') if target and count != target else None}
+    return output
+
+
+def require_output_previews(task, output, record):
+    if (not output or not output.get('output_revision') or
+            output['output_revision'] != Path(output['pdf']).parent.name or
+            output.get('freeze_id') != record.get('freeze', {}).get('id') or
+            output.get('layout_options') != record.get('layout', {}) or
+            output.get('layout_version') != 2 or
+            output.get('checks', {}).get('status') != 'passed' or
+            output.get('checks', {}).get('issues') != [] or
+            output.get('checks', {}).get('ordered_source_regions') != list(range(len(record['regions']))) or
+            [p.get('page') for p in output.get('previews', [])] != list(range(1, output['page_count'] + 1))):
+        raise ReconstructionError('终稿缺少有效的全部有序预览与检查；重新导出并查看当前全部页面。')
+    if output.get('status') == 'reviewed':
+        review = output.get('review', {})
+        if (review.get('output_revision') != output['output_revision'] or
+                review.get('pages') != list(range(1, output['page_count'] + 1)) or
+                review.get('preview_hashes') != [p['sha256'] for p in output['previews']]):
+            raise ReconstructionError('终稿审核未绑定当前版本与全部预览；重新导出并实际审阅。')
+    for preview in output['previews']:
+        artifact(task, preview)
