@@ -42,3 +42,7 @@ cache-limits 接受正整数 max_entries 和 max_bytes，默认 64 个候选及 
 生图组不参考 A4 分页。generation-materials 仅在全部组 accepted 或 vector 后返回按原谱排序的完整行材料。imagegen 行包含生成图片引用、crop_bbox 和来源映射；vector 行提供原裁剪引用，method 为 contour_trace_with_staff_repair、music_recognition 为 false。当前导出使用相同边界与来源比例。
 
 begin-redraw 在调用前保存 request、输入 hash、修正次数及未知 cost=null。calling 状态不可再次主生成；先用同一 request 回填已有结果。确认无法恢复时调用 fail-redraw，outcome 可以是 failed、unavailable 或 unknown，默认 failed。结果未知不能自动重新调用。实际查看输出后才提交 review-redraw，拒绝初次输出可修正一次，恢复不退还额度，第二次拒绝转矢量。受控测试回执不证明实际模型执行或音乐审阅。
+
+## 自动来源检查
+
+准备任务后可运行 `overview`、`resample`、`auto-freeze` 和 `revise-crop`。请求字段、冻结资格及检查限制见[程序检查与粗拼冻结](automatic-source-checks.md)。

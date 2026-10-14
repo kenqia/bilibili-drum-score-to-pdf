@@ -73,6 +73,10 @@ def load(task):
     if record.get('output'):
         artifact(task, record['output']['vector'])
         artifact(task, {'path': record['output']['pdf'], 'sha256': record['output']['sha256']})
+    for reference in record.get('overview',{}).get('panels',[]):
+        artifact(task,reference)
+    for reference in record.get('overview',{}).get('candidates',[]):
+        artifact(task,reference)
     for reference in record.get('probes', []):
         artifact(task, reference)
     for page in record.get('redraw_pages', []):
@@ -134,6 +138,8 @@ def assemble(task, title, regions, review, *, positioned=False):
         # Re-confirming identical valid source material is recovery, not a new
         # request. Preserve accepted outputs and persisted correction budgets.
         previous['source_review'] = review
+        from automatic_score import freeze
+        freeze(previous, 'agent')
         if review.get('complete') is not True or review.get('unresolved'):
             if previous.get('output'):
                 previous.setdefault('source_review_withdrawals',[]).append({'review':review,'output':previous.pop('output')})
@@ -152,6 +158,8 @@ def assemble(task, title, regions, review, *, positioned=False):
     if positioned or 'redraw_pages' in previous:
         previous['redraw_pages'] = []
     previous['metrics']['presented_capture_ids'] = list(dict.fromkeys(viewed))
+    from automatic_score import freeze
+    freeze(previous, 'agent')
     save(task, previous)
     return previous
 
@@ -160,6 +168,8 @@ def redraw_inputs(task, groups=None):
     from reconstruction import ROUGH_PIXELS
 
     record = load(task)
+    from automatic_score import require_frozen
+    require_frozen(record)
     if record.get('source_review',{}).get('complete') is not True or record['source_review'].get('unresolved'):
         raise ReconstructionError('原图完整性尚未确认。')
     if record.get('redraw_pages'):
@@ -203,7 +213,7 @@ def redraw_inputs(task, groups=None):
             y += block['height']
         path = write_path(task, directory.relative_to(task) / f'input-{number}.png')
         image.save(path)
-        pages.append({'id': f'page-{number}', 'regions': indices, 'input': {'path': str(path.relative_to(task)), 'sha256': digest(path), 'inputs': [b['sha256'] for b in blocks]}, 'source_boundaries': boundaries, 'status': 'needs_generation', 'corrections_used': 0, 'attempts': []})
+        pages.append({'id': f'page-{number}', 'freeze_id': record['freeze']['id'], 'regions': indices, 'input': {'path': str(path.relative_to(task)), 'sha256': digest(path), 'inputs': [b['sha256'] for b in blocks]}, 'source_boundaries': boundaries, 'status': 'needs_generation', 'corrections_used': 0, 'attempts': []})
     record['redraw_pages'] = pages
     save(task, record)
     return pages
@@ -216,17 +226,22 @@ def _page(record, identifier):
     raise ReconstructionError('重绘页引用无效。')
 
 
-def begin_redraw(task, identifier, viewed_notes, correction=False):
+def begin_redraw(task, identifier, viewed_notes=None, correction=False):
     """Persist BEFORE invoking host tool; interrupted calls cannot reset budget."""
     record = load(task)
+    from automatic_score import require_frozen
+    require_frozen(record)
     page = _page(record, identifier)
     if record.get('source_review', {}).get('complete') is not True or record['source_review'].get('unresolved'):
         raise ReconstructionError('原图完整性尚未确认，禁止宿主调用。')
-    if not viewed_notes or (correction and (page['status'] != 'needs_correction' or page['corrections_used'] >= 1)) or (not correction and page['status'] != 'needs_generation'):
+    program_approved=record['freeze']['producer']=='program'
+    if (not viewed_notes and not program_approved) or (correction and (page['status'] != 'needs_correction' or page['corrections_used'] >= 1)) or (not correction and page['status'] != 'needs_generation'):
         raise ReconstructionError('实际粗拼审阅或重绘次数无效。')
     if correction:
         page['corrections_used'] += 1
     attempt = {'request': uuid.uuid4().hex, 'kind': 'correction' if correction else 'initial', 'input_sha256': page['input']['sha256'], 'notes': viewed_notes, 'status': 'calling', 'cost': None}
+    attempt['approval']={'producer':'program' if program_approved else 'agent',
+        'freeze_id':record['freeze']['id']}
     page['attempts'].append(attempt)
     page['status'] = 'calling'
     save(task, record)
@@ -236,6 +251,8 @@ def begin_redraw(task, identifier, viewed_notes, correction=False):
 def finish_redraw(task, identifier, request, output, tool, receipt):
     """Host passes newly generated local output and real invocation receipt."""
     record = load(task)
+    from automatic_score import require_frozen
+    require_frozen(record)
     page = _page(record, identifier)
     attempt = page['attempts'][-1]
     if page['status'] != 'calling' or attempt['request'] != request or tool != 'host-imagegen' or not receipt:
@@ -255,6 +272,8 @@ def finish_redraw(task, identifier, request, output, tool, receipt):
 def fail_redraw(task, identifier, notes, outcome='failed'):
     """Unavailable, failed or uncertain interrupted calls route to vector."""
     record = load(task)
+    from automatic_score import require_frozen
+    require_frozen(record)
     page = _page(record, identifier)
     if outcome not in ('failed', 'unavailable', 'unknown') or not notes or page['status'] == 'accepted':
         raise ReconstructionError('需要失败记录，且不能降级已接受重绘。')
@@ -268,6 +287,8 @@ def fail_redraw(task, identifier, notes, outcome='failed'):
 def review_redraw(task, identifier, accepted, notes, boundaries=None):
     """Actual image review supplies complete system boundaries on accepted output."""
     record = load(task)
+    from automatic_score import require_frozen
+    require_frozen(record)
     page = _page(record, identifier)
     if page['status'] != 'needs_image_review' or type(accepted) is not bool or not notes:
         raise ReconstructionError('需要实际重绘图审阅。')
@@ -303,6 +324,8 @@ def reject_accepted_redraw(task, identifier, notes):
     explicit action invalidates PDF approval without refunding correction calls.
     """
     record = load(task)
+    from automatic_score import require_frozen
+    require_frozen(record)
     page = _page(record, identifier)
     if page['status'] != 'accepted' or not isinstance(notes, str) or not notes.strip():
         raise ReconstructionError('需要已接受重绘的具体后续错误审阅。')
@@ -328,6 +351,8 @@ def export(task, render, *, host_redraw=False):
     record = load(task)
     if record.get('source_review', {}).get('complete') is not True or record['source_review'].get('unresolved'):
         raise ReconstructionError('原图完整性尚未确认，停止导出。')
+    from automatic_score import require_frozen
+    require_frozen(record)
     output = record.get('output')
     if host_redraw:
         if output and output.get('layout_version') == 2:
@@ -349,6 +374,8 @@ def export(task, render, *, host_redraw=False):
 def generation_materials(task):
     """Ordered complete rows from accepted groups and geometric fallback."""
     record = load(task)
+    from automatic_score import require_frozen
+    require_frozen(record)
     rows = []
     pages = record.get('redraw_pages', [])
     if not pages or any(p['status'] not in ('accepted', 'vector') for p in pages):
