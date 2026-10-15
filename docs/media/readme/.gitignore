@@ -1,0 +1,4 @@
+# Local media authoring dependencies and renderer state
+node_modules/
+.hyperframes/
+renders/

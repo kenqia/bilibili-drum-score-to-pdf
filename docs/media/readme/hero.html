@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>鼓谱视频转 PDF</title>
+<style>
+@font-face{font-family:"WenQuanYi Zen Hei";src:local("WenQuanYi Zen Hei")}
+@font-face{font-family:"DejaVu Sans Mono";src:local("DejaVu Sans Mono")}
+*{box-sizing:border-box}body{margin:0;background:#151716;color:#F2EFE7;font-family:"WenQuanYi Zen Hei",sans-serif}
+main{width:1440px;height:560px;position:relative;overflow:hidden;padding:46px 60px;display:flex;gap:50px}
+.copy{width:850px;display:flex;flex-direction:column;gap:24px;z-index:1}.eyebrow{font-family:"DejaVu Sans Mono",monospace;color:#D5A45B;letter-spacing:2px;font-size:17px}
+h1{font-size:68px;line-height:1.35;margin:16px 0 0;letter-spacing:-2px}h1 span{display:block}p{font-size:25px;color:#B9BDB4;margin:0}.bottom{margin-top:auto;font-size:18px;letter-spacing:1px;display:flex;gap:24px;align-items:center}.bottom b{font-weight:400;color:#D5A45B}.bottom i{width:42px;height:1px;background:#D5A45B;display:inline-block}
+.score{position:absolute;width:306px;height:434px;right:78px;top:69px;transform:rotate(8deg);box-shadow:0 20px 70px #151716;border:5px solid #F2EFE7}.back{right:40px;top:82px;transform:rotate(16deg);opacity:.45}
+.staff{position:absolute;right:-50px;top:88px;width:600px;height:400px;transform:rotate(-16deg);background:repeating-linear-gradient(0deg,transparent 0 35px,#454940 36px,transparent 37px);opacity:.65}.rule{position:absolute;bottom:35px;left:60px;width:1320px;height:1px;background:#454940}
+</style></head><body>
+<main>
+<div class="staff"></div><div class="rule"></div>
+<div class="copy"><div class="eyebrow">BILIBILI DRUM SCORE → PDF</div><h1><span>把视频里的鼓谱，</span><span>带到鼓架前。</span></h1><p>一个链接，让视觉 Agent 整理成可打印的 A4 乐谱。</p><div class="bottom"><b>AGENT SKILL</b><i></i><span>采集 · 清理重绘 · 完整谱行排版</span></div></div>
+<img class="score back" src="assets/page-2.png" alt="历史PDF第二页"><img class="score" src="assets/page-1.png" alt="历史PDF第一页">
+</main></body></html>

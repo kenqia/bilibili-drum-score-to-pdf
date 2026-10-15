@@ -1,42 +1,153 @@
-# B站鼓谱视频转 PDF
+<p align="center">
+  <img src="docs/images/readme-hero.png" alt="B站鼓谱视频转 PDF · 把视频里的鼓谱，带到鼓架前。" width="100%">
+</p>
 
-给视觉 Agent 一个 B站链接或本地鼓谱视频，Agent 将原谱截图粗拼，调用宿主生图清理重绘，必要时使用轮廓矢量兜底，再把完整谱行重排为 A4 PDF。交付文件使用实际核对的谱名。项目是 Agent Skill，没有内嵌模型 API，也不要求 B站 Cookie。
+<p align="center">
+  从已有鼓谱的视频，到可以打印的 A4 乐谱。<br>
+  给视觉 Agent 一个链接，完成采集、清理、重排与逐页检查。
+</p>
+
+<p align="center">
+  <a href="https://github.com/kenqia/bilibili-drum-score-to-pdf/actions/workflows/offline.yml"><img src="https://github.com/kenqia/bilibili-drum-score-to-pdf/actions/workflows/offline.yml/badge.svg" alt="离线验证状态"></a>
+  <img src="https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square" alt="Python 3.12 及以上">
+  <img src="https://img.shields.io/badge/output-A4%20PDF-D5A45B?style=flat-square" alt="输出 A4 PDF">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-B9BDB4?style=flat-square" alt="代码使用 MIT 许可证"></a>
+</p>
+
+<p align="center">
+  <a href="#开始使用">开始使用</a> ·
+  <a href="#看看结果">看看结果</a> ·
+  <a href="#适合什么视频">支持范围</a> ·
+  <a href="llms.txt">给 AI 的检索入口 / For agents</a> ·
+  <a href="docs/README.md">文档导航</a>
+</p>
+
+## 把时间留给练习
+
+练一首歌，不该先花时间拖进度条、截屏、裁图，再把零散的谱面拼起来。
+
+这个项目把这段工作交给视觉 Agent。它沿视频收集完整谱行，去掉同一位置的重叠截图，清理谱面，再按原比例排成 A4。标题、速度、拍号和后续重复出现的音乐都需要保留。交付前，Agent 实际查看最终每一页。
+
+它是一个 **Agent Skill**。本地脚本处理视频、来源记录和排版，宿主 Agent 负责视觉判断与生图。已有 Codex 整曲验证记录，其他宿主尚未完成整曲验收。
+
+## 看看结果
+
+![从视频谱面、完整谱行到 A4 PDF 的流程演示](docs/images/workflow.gif)
+
+<p align="center"><sub>12 秒静音循环 · 使用已保存的真实样本 · 流程演示，非实际处理耗时</sub></p>
+
+示例来自《可惜没如果（新版）》的历史验收材料。原视频上传者为「看哦爱随风原创鼓谱」，谱面署名「陈老师」。[查看原视频](https://www.bilibili.com/video/BV1rH4y1R7Rk/) · [查看采集、重绘与逐页验收记录](docs/experiments/issue-58-standard-pdf.md)。音乐与谱面署名归原权利人。
+
+<details>
+<summary>查看静态流程图与实际 PDF 页面</summary>
+
+![视频到打印谱的静态流程展示](docs/images/workflow-poster.png)
+
+下面是该样本历史 PDF 的第一页。完整谱行之间分页，整份输出为两页。
+
+<img src="docs/media/readme/assets/page-1.png" alt="可惜没如果（新版）历史验收 PDF 第一页，保留标题、速度与完整谱行" width="520">
+
+展示使用历史已验收材料，未在本次重新转换或重新审核音乐内容。
+
+</details>
+
+## 开始使用
+
+你需要能读写文件、运行脚本、查看原生图片与 PDF 页面的视觉 Agent。环境需要 Python 3.12+、Git、uv、FFmpeg 和 Poppler。项目不要求 B站 Cookie，不读取模型认证，也没有内嵌模型 API。
+
+### 1. 让 Agent 安装
+
+把下面这段话发给 Agent：
 
 ```text
 请安装 https://github.com/kenqia/bilibili-drum-score-to-pdf 的
-bilibili-drum-score-to-pdf Skill，保留完整仓库并按当前宿主注册。
-请将 https://www.bilibili.com/video/BV1rH4y1R7Rk
-中的完整鼓谱整理为 PDF，保存在我指定的目录。
+bilibili-drum-score-to-pdf Skill，保留完整仓库，并按当前宿主注册。
+先读取 docs/install.md，检查依赖，再验证安装。
 ```
 
-安装方法见[安装指南](docs/install.md)。宿主需要文件读写、脚本运行、原生图片查看、PDF 页面查看能力。优先使用宿主已有生图工具，没有工具时使用矢量路线。每页最多一次定向修正；关键记谱遮挡时局部补采，不能补造音符。
+需要手动安装或更新时，按[安装指南](docs/install.md)操作。保留完整仓库，Skill 运行时还会读取 `docs/agents/`，只复制 Skill 子目录会缺少协议文档。
 
-当前验证范围是固定比例、白底多行、向上推进或可确认有序翻页的视频。横向滚动、无法确认接续及没有谱面的演奏视频不在支持范围内。准备任务和生成 PDF 不等于完成审核，Agent 必须实际检查每页。
+### 2. 交给它一个视频
 
-明确要求 MIDI 时，Agent 才加载[独立转换流程](docs/agents/midi-conversion.md)。可靠音乐转写未通过时不宣称可靠；用户明确接受近似播放后可以得到 `midi_playable`、`reliable=false` 的整曲 MIDI，保留鼓件与节奏假设。PDF 和 MIDI 分别验收，MIDI 失败不丢弃已审核 PDF。
+```text
+请将 https://www.bilibili.com/video/BV1rH4y1R7Rk
+中的完整鼓谱整理为 A4 PDF，保存在我指定的目录。
+请保留标题、速度、拍号和完整谱行，并逐页检查最终结果。
+```
 
-# 本地运行
+也可以直接给本地视频的绝对路径。公开 B站链接支持 `?p=2` 分 P。用户无需编写任务 JSON。
 
-需要 Python 3.12+、uv、ffmpeg、ffprobe 和 Poppler。入口使用新版截图与重绘流程。
+Agent 完成任务后，交付以实际谱名命名的 PDF。任务目录保存原截图、来源记录和历史结果；原视频保存在相邻的独立来源目录。恢复时会检查文件 hash，复用仍有效的材料。
+
+<details>
+<summary>开发者：从命令行准备本地任务</summary>
+
+在仓库根目录执行：
 
 ```sh
 uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
-  python skills/bilibili-drum-score-to-pdf/scripts/convert.py video.mp4 --output /absolute/new-task
+  python skills/bilibili-drum-score-to-pdf/scripts/convert.py \
+  /absolute/path/to/video.mp4 --output /absolute/path/to/new-task
 ```
 
-此命令准备任务，Agent 继续导航、采集、选行、重绘、导出和逐页审阅。命令请求见[新版入口](docs/agents/reconstruction-entry.md)，完整操作见[Agent 工作流](docs/agents/reconstruction-workflow.md)。产物位于任务目录的 `exports/<revision>/<谱名>.pdf`。原视频、截图及来源记录保留，恢复检查 hash 后复用有效工作。
+替换两个绝对路径，输出使用新的任务目录。此命令只准备任务。Agent 随后通过 `stage` 推进宿主生图、结果审阅、导出与最终页面检查。只有阶段返回 `complete` 才交付。
 
-旧 moving viewport、干净原帧门禁、决定兼容层和旧模式已移除。旧任务不自动迁移；历史代码和文档通过 Git history 查看，回滚使用独立 checkout 和新任务目录。
+PDF 位于任务目录的 `exports/<revision>/<谱名>.pdf`。操作请求见[命令入口](docs/agents/reconstruction-entry.md)，正常推进与恢复见[阶段指南](docs/agents/stage-recovery-layout.md)。
 
-# 验证
+</details>
+
+## 它怎样处理一份谱
+
+| 环节 | 实际处理 |
+| --- | --- |
+| 收集谱面 | 取得完整谱行，记录实际时间戳与来源 hash；同位置重叠去重，后续重复音乐保留。 |
+| 清理重绘 | 优先调用宿主生图工具；每个输入版本最多一次定向修正。工具不可用或结果不合格时使用轮廓矢量路线。 |
+| 整理打印 | 按来源比例统一排版，只在完整谱行之间分页；可调整边距、最小行距和目标页数。 |
+| 检查交付 | Agent 查看全部最终页面，再批准当前输出版本。来源、修正与历史文件保留。 |
+
+看不清的关键记号需要局部补采。轮廓转描无法恢复完全隐藏的音符，也不等于音乐识别。目标页数过少时，程序优先保留完整行与可读比例，并说明实际页数。
+
+## 适合什么视频
+
+| 输入 | 当前支持情况 |
+| --- | --- |
+| 固定比例、白底多行鼓谱，向上推进或可确认有序翻页 | 已有真实整曲 PDF 记录。 |
+| 公开 B站 BV 链接、本地鼓谱视频 | 共用任务入口；链接以匿名方式获取。 |
+| 水印、播放高亮或局部遮挡 | 可进入粗拼；关键音乐内容无法确认时补采，未解决则保留待处理状态。 |
+| 横向滚动、比例变化或无法确认接续的布局 | 不在当前验证范围内。 |
+| 只有演奏画面、没有谱面的视频 | 不支持从音频或演奏动作生成鼓谱。 |
+
+### MIDI 是独立的可选流程
+
+只有你明确要求 MIDI 时，Agent 才加载[音乐转写流程](docs/agents/midi-conversion.md)。当前没有通过可靠整曲 MIDI 的严格准确性门槛。你明确接受近似播放后，可以走近似输出分支，结果标记 `midi_playable`、`reliable=false`，并保留鼓件与节奏假设。MIDI 失败不丢弃已审核 PDF。
+
+## 有哪些验证
+
+已有《KiLLKiSS》《可惜没如果（新版）》和《小星星》的真实 PDF 验收记录，包含宿主生图、来源证据和全部页面查看；另有 KiLLKiSS 强制矢量与遮挡修复记录。[查看验证范围与证据](docs/verification.md)。
+
+这些是指定样本的结果。新的独立标准曲扫描仍有原生单像素疑点，状态保留为 `blocked`；没有用合成测试或旧样本验收替它放行。宿主、输入布局和原始清晰度都会影响可交付结果。
+
+运行仓库验证：
 
 ```sh
 uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
   --with mido==1.3.3 python -m unittest discover -s tests -v
 ```
 
-[架构](docs/architecture.md)说明输入与来源边界，[验证记录](docs/verification.md)区分离线测试、真实生图、实际看图与近似 MIDI，[首发状态](docs/launch-readiness.md)记录当前范围。CI 只检查合成和确定性产物，不调用宿主模型。未知模型成本保持 null。
+CI 验证合成与确定性产物，不调用宿主模型，不证明音乐准确率。模型成本未知时记录为 `null`。
 
-## 阶段入口与恢复
+## 继续阅读与反馈
 
-准备后使用 `stage` 自动推进至宿主调用或实际审阅；局部来源版本、输入额度恢复、打印布局和全部页面预览见[阶段入口、局部恢复与打印布局](docs/agents/stage-recovery-layout.md)。`layout` 修改边距、最小行距和目标页数，复用已接受生成结果；最终审阅绑定当前 PDF hash。程序检查与实际看图分别记录。
+| 你想做什么 | 从这里开始 |
+| --- | --- |
+| 安装、更新或回滚 | [安装指南](docs/install.md) |
+| 让 AI 判断项目是否适用 | [AI 检索摘要](llms.txt) · [Skill 规范入口](skills/bilibili-drum-score-to-pdf/SKILL.md) |
+| 运行与恢复任务 | [阶段指南](docs/agents/stage-recovery-layout.md) · [命令参数](docs/agents/reconstruction-entry.md) |
+| 理解实现、贡献改动 | [文档导航](docs/README.md) · [架构](docs/architecture.md) · [项目工作约定](AGENTS.md) |
+| 报告问题或提出建议 | [GitHub Issues](https://github.com/kenqia/bilibili-drum-score-to-pdf/issues) |
+
+反馈时请附公开来源或脱敏的复现材料、宿主、失败阶段和预期结果。不要提交 Cookie、认证文件或带签名的媒体地址。
+
+## 许可证与示例署名
+
+代码与原创文档采用 [MIT 许可证](LICENSE)。音乐、谱面及其衍生展示不属于本项目的 MIT 授权范围，权利归原权利人；[展示素材说明](docs/media/readme/README.md)保留来源与署名。

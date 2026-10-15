@@ -1,0 +1,49 @@
+# bilibili-drum-score-to-pdf
+
+> Agent Skill for converting existing drum sheet music in Bilibili or local videos into printable A4 PDFs. 中文：B站鼓谱视频转 PDF。输入必须已有可见鼓谱，不从演奏音频或动作生成乐谱。
+
+## Project facts
+
+- Type: Agent Skill with local Python scripts; not a standalone one-command converter or hosted API.
+- Input: public HTTPS Bilibili BV video URLs, including ?p=2, or local video files.
+- Supported layout: fixed-scale, white-background, multi-system drum notation moving upward or changing pages in a verifiable order.
+- Output: A4 PDF named after the verified score title, source evidence, and task records. PDF files are under exports/<revision>/ in the task directory.
+- Runtime: Python 3.12+, Git, uv, ffmpeg, ffprobe, Poppler; a host agent with file access, script execution, native image viewing, and PDF page viewing.
+- Rendering: host image generation first, contour-vector fallback when unavailable or unsuitable. Contour tracing is not music recognition and cannot recover fully hidden symbols.
+- Authentication: anonymous public-video acquisition; no Bilibili cookies, login session, or model credentials required or read. No embedded model API.
+- Validation: real full-score PDF evidence exists in Codex for three videos. Other hosts have not completed full-score acceptance. No general accuracy, speed, or cost guarantee.
+- Limitations: horizontal scrolling, changing scale, unverifiable continuity, and performance-only videos are outside the validated scope. New unresolved source checks remain blocked.
+- MIDI: load only when the user explicitly requests it. Reliable full-score transcription has not passed the strict accuracy threshold. Approximate playable output requires explicit user acceptance and must be labeled midi_playable, reliable=false, with assumptions preserved.
+
+## License
+
+Original code and documentation use the [MIT license](LICENSE). Third-party music, sheet music, and derived demonstration images are excluded from that grant and retain their original rights. See [asset attribution](docs/media/readme/README.md).
+
+## Install
+
+Keep the complete repository. Copying only the skill subdirectory omits required docs/agents protocols. Follow the installation guide and the host's actual skill registration mechanism.
+
+- [Installation, verification, updates and rollback](docs/install.md)
+- [Canonical Skill instructions](skills/bilibili-drum-score-to-pdf/SKILL.md)
+
+## Execute
+
+Read the canonical Skill instructions before acting. Prepare the source, then use stage to advance through source checks, host generation, output review and export. Actual host generation and image viewing remain agent actions. Do not claim delivery until every final page has been viewed and review-pdf approves the current independent output_revision. A PDF hash is not an output revision.
+
+- [Normal stages, local recovery and print layout](docs/agents/stage-recovery-layout.md)
+- [CLI operations and request fields](docs/agents/reconstruction-entry.md)
+- [Source checks and rough-score freezing](docs/agents/automatic-source-checks.md)
+- [Manual recovery workflow](docs/agents/reconstruction-workflow.md)
+- [Optional MIDI workflow](docs/agents/midi-conversion.md)
+
+## Evidence and development
+
+Keep original sources separate from derived outputs. Preserve actual PTS, hashes, generation history and correction budgets. Deduplicate overlapping copies of the same source location; retain repeated music at later locations. Keep costs null when unknown. Synthetic receipts, deterministic replay, actual model generation and actual visual review are different evidence categories.
+
+- [Human introduction and usage examples](README.md)
+- [Documentation index](docs/README.md)
+- [Architecture and safety boundaries](docs/architecture.md)
+- [Verification commands and actual evidence](docs/verification.md)
+- [Release scope](docs/launch-readiness.md)
+- [Domain terminology](GLOSSARY.md)
+- [Contributor working agreements](AGENTS.md)
