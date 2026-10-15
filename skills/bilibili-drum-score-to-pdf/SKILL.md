@@ -5,7 +5,7 @@ description: 将 B站链接或本地视频中的白底多行鼓谱粗拼、清�
 
 # 鼓谱视频转 PDF
 
-用户给出 B站链接或本地鼓谱视频后，Agent 自行导航、审阅、重绘和逐页检查，交付以实际谱名命名的 PDF。使用本文件旁的 `scripts/convert.py`，通过本文件真实路径向上定位仓库根目录。先读仓库 `docs/agents/reconstruction-workflow.md`；调用参数见 `docs/agents/reconstruction-local.md` 和 `docs/agents/reconstruction-navigation.md`。
+用户给出 B站链接或本地鼓谱视频后，Agent 自行导航、审阅、重绘和逐页检查，交付以实际谱名命名的 PDF。使用本文件旁的 `scripts/convert.py`，通过本文件真实路径向上定位仓库根目录。正常流程先读仓库 `docs/agents/stage-recovery-layout.md`；调用参数见 `docs/agents/reconstruction-entry.md`。来源异常和人工导航时再读 `docs/agents/reconstruction-workflow.md`、`docs/agents/reconstruction-local.md` 和 `docs/agents/reconstruction-navigation.md`。
 
 需要 Python 3.12+、uv、ffmpeg、ffprobe、原生图片查看能力以及 PDF 页面渲染工具，项目使用 Poppler。依赖在隔离 uv 环境中运行，不读取 B站 Cookie、登录态或模型认证。
 
