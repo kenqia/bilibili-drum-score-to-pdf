@@ -6,7 +6,7 @@
 
 | 文档 | 用途 |
 | --- | --- |
-| [安装指南](install.md) | 准备依赖，安装与更新完整仓库，验证和回滚。 |
+| [安装指南](install.md) | 安装、发现与更新自包含 Skill，验证和回滚。 |
 | [阶段、恢复与打印布局](agents/stage-recovery-layout.md) | 准备后通过 stage 推进，处理局部改动、调用恢复与全部页面审阅。 |
 | [命令入口](agents/reconstruction-entry.md) | 查询 CLI 操作和 JSON 请求字段。 |
 | [程序来源检查](agents/automatic-source-checks.md) | 理解自动检查、粗拼冻结与未决来源。 |

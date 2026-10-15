@@ -53,36 +53,64 @@
 
 ## 开始使用
 
-你需要能读写文件、运行脚本、查看原生图片与 PDF 页面的视觉 Agent。环境需要 Python 3.12+、Git、uv、FFmpeg 和 Poppler。项目不要求 B站 Cookie，不读取模型认证，也没有内嵌模型 API。
+### 1. 安装后这样用
 
-### 1. 让 Agent 安装
-
-把下面这段话发给 Agent：
+在宿主输入框中选中 [$bilibili-drum-score-to-pdf](skills/bilibili-drum-score-to-pdf/SKILL.md)，然后粘贴视频链接。例如在 Codex 中输入 `$`，从可用 Skill 中选择本项目，再发送：
 
 ```text
-请安装 https://github.com/kenqia/bilibili-drum-score-to-pdf 的
-bilibili-drum-score-to-pdf Skill，保留完整仓库，并按当前宿主注册。
-先读取 docs/install.md，检查依赖，再验证安装。
+$bilibili-drum-score-to-pdf
+
+https://www.bilibili.com/video/BV1Yw4m1Y7YH/
+
+整理成 A4 PDF，保存到我指定的目录。
 ```
 
-需要手动安装或更新时，按[安装指南](docs/install.md)操作。保留完整仓库，Skill 运行时还会读取 `docs/agents/`，只复制 Skill 子目录会缺少协议文档。
+上面的 Skill 链接用于查看指令文件；实际选择发生在宿主输入框中，无需复制任何人的本地安装路径。只提供 Skill 和链接也可以启动默认 PDF 流程。未指定保存位置时，Agent 在当前工作目录下创建独立任务目录，交付时报告绝对路径。
 
-### 2. 交给它一个视频
+也可以提供本地视频的绝对路径。公开 B站链接支持 `?p=2` 分 P。采集、整理、完整谱行排版和逐页检查由 Skill 指导 Agent 执行，用户无需填写任务 JSON。此处链接仅为调用格式示例，不代表该视频已经通过验收。
+
+### 2. 还没安装？
+
+把下面这段话发给有文件读写和脚本运行能力的 Agent：
 
 ```text
-请将 https://www.bilibili.com/video/BV1rH4y1R7Rk
-中的完整鼓谱整理为 A4 PDF，保存在我指定的目录。
-请保留标题、速度、拍号和完整谱行，并逐页检查最终结果。
+请安装这个仓库中的 bilibili-drum-score-to-pdf Skill：
+https://github.com/kenqia/bilibili-drum-score-to-pdf
+
+先读取 docs/install.md，将 skills/bilibili-drum-score-to-pdf
+整个目录安装到当前宿主能发现 Skill 的位置。
+请一起保留 SKILL.md、scripts/、references/ 和 LICENSE，
+检查运行依赖；更新已有安装时先保留可恢复副本。
+
+安装后确认它出现在宿主的技能列表或选择器中，
+并报告安装位置、源码版本和验证结果。
 ```
 
-也可以直接给本地视频的绝对路径。公开 B站链接支持 `?p=2` 分 P。用户无需编写任务 JSON。
+对外 Skill 是自包含目录，执行所需协议随 `references/` 一起分发，运行时无需源码仓库的 `docs/`。依赖 Python 3.12+、uv、FFmpeg、ffprobe 和 Poppler；宿主需要实际查看原生图片及 PDF 页面。代码开源，宿主 AI 服务可能收费。
 
-Agent 完成任务后，交付以实际谱名命名的 PDF。任务目录保存原截图、来源记录和历史结果；原视频保存在相邻的独立来源目录。恢复时会检查文件 hash，复用仍有效的材料。
+手动安装、受管理安装与回滚见[安装指南](docs/install.md)。不同宿主的发现位置和调用界面不同，其他宿主尚未完成整曲验收。
+
+### 3. 怎样确认安装成功？
+
+让 Agent 核对以下事项，而不只是报告“文件已下载”：
+
+- 宿主技能列表或选择器能找到并选中 `bilibili-drum-score-to-pdf`。未出现时重新加载或重启宿主后再核对。
+- 已安装目录内的 `SKILL.md`、`scripts/convert.py` 和 `references/stage-recovery-layout.md` 存在且可读。
+- 在安装目录中运行下面的帮助命令，退出成功并显示 `stage`、`export`、`review-pdf` 等操作；同时核对 FFmpeg、ffprobe、Poppler 与宿主看图能力。
+
+```sh
+uv run --isolated --with-requirements scripts/requirements.txt \
+  python scripts/convert.py --help
+```
+
+这些检查证明安装和入口可用。具体视频仍需通过来源检查和最终全部页面审阅，才能交付完整 PDF。
+
+### 4. 开发者入口
 
 <details>
-<summary>开发者：从命令行准备本地任务</summary>
+<summary>从命令行准备任务、理解产物与恢复</summary>
 
-在仓库根目录执行：
+在源码仓库根目录执行：
 
 ```sh
 uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
@@ -90,9 +118,9 @@ uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/
   /absolute/path/to/video.mp4 --output /absolute/path/to/new-task
 ```
 
-替换两个绝对路径，输出使用新的任务目录。此命令只准备任务。Agent 随后通过 `stage` 推进宿主生图、结果审阅、导出与最终页面检查。只有阶段返回 `complete` 才交付。
+替换两个绝对路径，输出使用新的任务目录。安装目录中使用同一命令的 `scripts/` 相对路径。该命令只准备任务；Agent 随后通过 `stage` 推进宿主生图、结果审阅、导出与最终页面检查。只有阶段返回 `complete` 才交付。
 
-PDF 位于任务目录的 `exports/<revision>/<谱名>.pdf`。操作请求见[命令入口](docs/agents/reconstruction-entry.md)，正常推进与恢复见[阶段指南](docs/agents/stage-recovery-layout.md)。
+PDF 位于任务目录的 `exports/<revision>/<谱名>.pdf`。原视频保存在相邻的独立来源目录，原截图和历史结果保留，恢复检查来源与材料 hash。操作请求见[命令入口](skills/bilibili-drum-score-to-pdf/references/reconstruction-entry.md)，正常推进与恢复见[阶段指南](skills/bilibili-drum-score-to-pdf/references/stage-recovery-layout.md)。
 
 </details>
 

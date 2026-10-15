@@ -17,3 +17,5 @@ uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/
 修改正常流程先运行针对性合成测试，再按变更风险验收真实来源和全部页面。#58保存 KiLLKiSS、BV1rH4y1R7Rk 与第三作者的实际证据，包含强制矢量与遮挡修复。记录实际 PTS、导航、原生保留和呈交数量、来源、修正、分页、保存决定恢复与耗时。未知成本保留 null。真实样本失败先检查 seek、几何、检测和原始内容，不新增样本颜色或 codec 例外。固定决定检查只证明确定性执行，不能冒充新的视觉判断。
 
 匿名获取、网络公共地址校验、资源期限、解码清理、输出不覆盖和来源完整性保护不得随旧实现删除。只使用合成标记测试脱敏，不读真实凭证。GitHub Issues 位于 kenqia/bilibili-drum-score-to-pdf，远端读取核对 Git remote。写入按用户明确授权范围执行，不自动关闭工单或合并。历史实现与旧文档通过 Git history 查看。保护无关用户修改、实验及未跟踪规格。
+
+对外 Skill 为 `skills/bilibili-drum-score-to-pdf/` 自包含目录，运行协议位于随包的 `references/`。修改 `docs/agents/` 协议后运行 `python tools/sync_skill_references.py`，提交生成材料；`--check` 与 `tests/test_skill_package.py` 验证同步和仓库外运行。保留现有安装保护与任务备份，不将开发测试、实验或宣传素材加入安装包。
