@@ -21,7 +21,7 @@ Original code and documentation use the [MIT license](LICENSE). Third-party musi
 
 ## Install
 
-Keep the complete repository. Copying only the skill subdirectory omits required docs/agents protocols. Follow the installation guide and the host's actual skill registration mechanism.
+Install the complete skills/bilibili-drum-score-to-pdf directory, including SKILL.md, scripts/, references/, and LICENSE. It is self-contained and does not require the source repository's docs/ at runtime. Follow the host's actual discovery mechanism and verify visibility in its skill selector, readable protocols, dependencies, and CLI help. After installation, explicitly select $bilibili-drum-score-to-pdf and provide a video URL; the default task is PDF.
 
 - [Installation, verification, updates and rollback](docs/install.md)
 - [Canonical Skill instructions](skills/bilibili-drum-score-to-pdf/SKILL.md)
@@ -30,11 +30,11 @@ Keep the complete repository. Copying only the skill subdirectory omits required
 
 Read the canonical Skill instructions before acting. Prepare the source, then use stage to advance through source checks, host generation, output review and export. Actual host generation and image viewing remain agent actions. Do not claim delivery until every final page has been viewed and review-pdf approves the current independent output_revision. A PDF hash is not an output revision.
 
-- [Normal stages, local recovery and print layout](docs/agents/stage-recovery-layout.md)
-- [CLI operations and request fields](docs/agents/reconstruction-entry.md)
-- [Source checks and rough-score freezing](docs/agents/automatic-source-checks.md)
-- [Manual recovery workflow](docs/agents/reconstruction-workflow.md)
-- [Optional MIDI workflow](docs/agents/midi-conversion.md)
+- [Normal stages, local recovery and print layout](skills/bilibili-drum-score-to-pdf/references/stage-recovery-layout.md)
+- [CLI operations and request fields](skills/bilibili-drum-score-to-pdf/references/reconstruction-entry.md)
+- [Source checks and rough-score freezing](skills/bilibili-drum-score-to-pdf/references/automatic-source-checks.md)
+- [Manual recovery workflow](skills/bilibili-drum-score-to-pdf/references/reconstruction-workflow.md)
+- [Optional MIDI workflow](skills/bilibili-drum-score-to-pdf/references/midi-conversion.md)
 
 ## Evidence and development
 

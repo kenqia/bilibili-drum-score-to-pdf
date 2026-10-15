@@ -1,40 +1,71 @@
-# 安装 Skill
+# 安装与使用 Skill
 
-安装时保留完整仓库。`skills/bilibili-drum-score-to-pdf/SKILL.md` 和脚本依赖仓库根目录的 `docs/agents` 协议；只复制 Skill 子目录会缺少这些文档。
+对外发布目录是 `skills/bilibili-drum-score-to-pdf/`，包含 `SKILL.md`、`scripts/`、`references/` 和 `LICENSE`。运行协议已随包携带，安装时保留整个目录即可，无需复制源码仓库的 `docs/`、实验、测试或宣传素材。
 
-## 交给 Agent 安装
+## 安装后调用
 
-将下面这段话交给你正在使用的视觉 Agent。
+在宿主输入框中选择 `bilibili-drum-score-to-pdf`，再提供视频链接。在 Codex 中可输入 `$` 选择 Skill。示例：
 
 ```text
-请从 https://github.com/kenqia/bilibili-drum-score-to-pdf 安装
-bilibili-drum-score-to-pdf Skill。
-
-保留完整仓库，按当前宿主的 Skill 安装约定注册
-skills/bilibili-drum-score-to-pdf 目录。
-通过 SKILL.md 的真实路径定位仓库根目录，确认 docs/agents 可读。
-检查 Python 3.12+、uv、ffmpeg、ffprobe，以及查看原生 PNG 的能力。
-逐页 PDF 审核需要渲染工具，本项目使用 Poppler 的 pdftoppm。
-报告安装路径、源码版本和检查结果。更新已有安装时先保留可恢复副本。
+$bilibili-drum-score-to-pdf
+https://www.bilibili.com/video/BV1Yw4m1Y7YH/
 ```
 
-宿主需要读写本地文件、运行脚本、实际查看原生图像和渲染后的 PDF 页。注册位置与发现方式取决于宿主；可读 Markdown 不等于能完成整个工作流。跨宿主整曲交付的验证状态见 [首发准备记录](launch-readiness.md)。
+Skill 默认处理 PDF。需要特定保存位置时，在同条消息补充路径。示例不构成该视频已通过验收的声明。其他宿主的选择方式依其界面而定。
 
-## 手动保留仓库
+## 首次安装
 
-先将仓库保存到你选定的持久目录。
+从仓库取得完整 Skill 目录，安装到当前宿主实际发现 Skill 的位置。可以让 Agent 按 README 中的安装提示完成，也可以使用宿主现有的 Skill 安装器。安装器必须同时复制 `scripts/`、`references/` 和许可证；只下载 SKILL.md 不完整。注册符号链接时，链接目标必须是保留所有内容的完整目录。
+
+宿主需要文件读写、脚本运行、原生图片查看与 PDF 页面查看能力。环境需要 Python 3.12+、uv、ffmpeg、ffprobe 和 Poppler 的 pdftoppm。普通 PDF 不依赖 Mido。项目不要求 B站 Cookie，不读取模型认证。
+
+## 使用仓库安装工具
+
+需要可校验的提交版本、更新备份和任务保留时，在源码仓库执行：
 
 ```sh
 git clone https://github.com/kenqia/bilibili-drum-score-to-pdf.git
 cd bilibili-drum-score-to-pdf
-uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
-  python skills/bilibili-drum-score-to-pdf/scripts/convert.py --help
+python tools/install_skill.py install --revision HEAD --target /absolute/host/skills/bilibili-drum-score-to-pdf
+python tools/install_skill.py verify --target /absolute/host/skills/bilibili-drum-score-to-pdf
 ```
 
-将该仓库里的 Skill 目录注册到宿主，不移动或删除根目录的协议文档。若宿主支持目录符号链接，链接到这个持久仓库中的 Skill 目录；若宿主只支持复制，保留完整仓库副本并让 Agent 明确协议根路径。此项目不修改模型认证，也不需要 B站 Cookie。
+将目标换成宿主实际发现 Skill 的绝对目录。工具从指定 Git 提交中只提取自包含 Skill，不复制工作区改动和未跟踪文件。`installation.json` 记录提交及所有受管理文件的 SHA-256，相同内容再次安装返回 `unchanged`；受管理文件损坏时拒绝更新。通用安装器复制的目录没有该清单时，先将原目录移到备份位置，再安装，不覆盖未知内容。
+
+更新前停止使用目标安装的转换任务。工具在同一文件系统的 `skill-backups` 保留旧安装，迁移未管理任务目录后发布新版本。发现文件冲突时停止；发布失败时恢复旧安装与任务。旧完整仓库快照可升级，原材料保存在备份。机器断电或进程被强制终止时，从备份核对并恢复安装和任务位置；恢复失败保留带 `.recovery-required` 的暂存目录，检查任务前保留该目录。
 
 ## 验证安装
 
-让 Agent 读取已注册的 SKILL.md、仓库的 `docs/agents/reconstruction-workflow.md` 和 `docs/agents/reconstruction-entry.md`，执行 `convert.py --help`。预期输出包含 prepare、capture、assemble、重绘操作、export 与 review-pdf，默认使用新版 prepare。旧模式和决定兼容层不再提供。随后使用一个属于支持范围的视频，实际完成原图审阅和逐页 PDF 检查；帮助命令成功只证明脚本入口可用。
+1. 在宿主技能列表或选择器中找到并选中本 Skill。若未发现，重新加载或重启宿主后检查。
+2. 确认安装根的 `SKILL.md`、`scripts/convert.py` 和 `references/stage-recovery-layout.md` 可读；SKILL.md 的引用相对这个根目录。
+3. 在安装目录执行下列命令，同时核对宿主看图能力与外部工具。
 
-更新时记录原源码版本，并保留已有任务与产物。需要回滚时恢复原安装副本，转换使用新任务和新结果目录。不同版本的决定、耗时与成功记录分开保存。
+```sh
+uv run --isolated --with-requirements scripts/requirements.txt python scripts/convert.py --help
+ffmpeg -version
+ffprobe -version
+pdftoppm -v
+```
+
+帮助应包含 prepare、stage、export 和 review-pdf。能找到 Skill、能读取协议且命令成功，才说明安装入口可用。任务是否完成仍取决于真实来源、宿主调用与全部页面审阅，不把安装检查称为整曲验收。跨宿主状态见[首发记录](launch-readiness.md)。
+
+## 回滚受管理安装
+
+使用更新回执中的备份路径：
+
+```sh
+python tools/install_skill.py rollback --target /absolute/host/skills/bilibili-drum-score-to-pdf --backup /absolute/host/skill-backups/old-install
+```
+
+回滚保留当前版本备份和未管理任务。旧重复 SKILL.md 布局可能无法通过新校验，此时核对旧源码版本与任务位置后，恢复原备份或重新安装对应版本；确认全部任务恢复前保留备份。不同代码版本的转换使用新任务目录。
+
+## 维护发布目录
+
+仓库的 `docs/agents/` 是协议维护源；执行下面命令更新并检查随包引用。修改协议时同时提交生成的 references，避免已发布 Skill 与源码文档分离。
+
+```sh
+python tools/sync_skill_references.py
+python tools/sync_skill_references.py --check
+```
+
+`tests/test_skill_package.py` 检查同步、包内链接、许可证，并把 Skill 单独复制到仓库外执行 CLI 和现有合成 PDF 验收流程。测试不调用模型、不证明音乐准确，也不证明宿主界面已发现安装。
