@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>鼓谱视频转 PDF · 流程演示</title>
+<style>
+@font-face{font-family:"WenQuanYi Zen Hei";src:local("WenQuanYi Zen Hei")}
+@font-face{font-family:"DejaVu Sans Mono";src:local("DejaVu Sans Mono")}
+*{box-sizing:border-box}body{margin:0;background:#151716;color:#F2EFE7;font-family:"WenQuanYi Zen Hei",sans-serif}
+#readme{width:1280px;height:720px;position:relative;overflow:hidden;background:#151716}
+.texture{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 47px,#454940 48px,transparent 49px);opacity:.18;transform:rotate(-12deg) scale(1.3)}
+.content{position:relative;width:100%;height:100%;padding:34px 42px;display:flex;flex-direction:column;gap:22px}
+.meta,.footer,.step-index{font-family:"DejaVu Sans Mono",monospace;font-size:16px;letter-spacing:1px;color:#B9BDB4}
+.meta{display:flex;justify-content:space-between}.meta b{font-weight:400;color:#D5A45B}
+h1{margin:0;font-size:48px;line-height:1.25;font-weight:700;letter-spacing:-1px}
+.flow{display:grid;grid-template-columns:392px 38px 352px 38px 290px;flex:1;align-items:center}
+.step{height:400px;display:flex;flex-direction:column;gap:20px}.step-index{color:#D5A45B;display:flex;gap:16px;align-items:center}.step-index span{color:#F2EFE7;font-family:"WenQuanYi Zen Hei",sans-serif;font-size:24px;letter-spacing:0}
+.stage-body{height:292px;display:flex;flex-direction:column;justify-content:center;gap:18px;position:relative}
+.video{background:#454940;padding:5px;border-radius:8px;position:relative}.video img{display:block;width:382px;height:215px;object-fit:contain;background:#FFFFFF;border-radius:4px}
+.bar{height:3px;background:#B9BDB4;position:relative;margin-top:14px}.bar-fill{height:3px;background:#D5A45B;width:72%;transform-origin:left}
+.video-meta{display:flex;justify-content:space-between;margin-top:8px;font-size:16px;color:#B9BDB4;font-family:"DejaVu Sans Mono",monospace}
+.row{background:#FFFFFF;box-shadow:0 10px 24px #151716;padding:8px 4px;transform-origin:left}.row img{display:block;width:344px;height:53px;object-fit:contain}
+.arrow{align-self:center;font-size:28px;color:#D5A45B;text-align:center;transform:translateY(-14px)}
+.pages{position:relative;display:flex;align-items:center;justify-content:center;height:292px}
+.page{width:196px;height:277px;object-fit:contain;background:#FFFFFF;box-shadow:0 12px 30px #151716}
+.page-back{position:absolute;right:10px;top:5px;transform:rotate(6deg)}.page-front{position:relative;transform:rotate(-3deg) translateX(-14px)}
+.caption{font-size:22px;color:#B9BDB4;line-height:1.5;margin:0;white-space:nowrap}
+.footer{display:flex;justify-content:space-between;border-top:1px solid #454940;padding-top:20px;font-family:"WenQuanYi Zen Hei",sans-serif;letter-spacing:0;font-size:17px}
+.footer span:last-child{color:#D5A45B}
+</style>
+</head>
+<body>
+<div id="readme" data-composition-id="readme" data-start="0" data-duration="12" data-width="1280" data-height="720">
+  <div class="texture" data-layout-ignore></div>
+  <main class="content">
+    <div class="meta"><span>BILIBILI DRUM SCORE <b>→</b> PDF</span><span>AGENT SKILL / A4</span></div>
+    <h1>从一段视频，到一份打印谱。</h1>
+    <div class="flow">
+      <section class="step" id="source">
+        <div class="step-index">01 <span>视频里的原谱</span></div>
+        <div class="stage-body">
+          <div class="video"><img src="assets/source.png" alt="原视频首帧，保留播放高亮与署名"></div>
+          <div><div class="bar"><div class="bar-fill"></div></div><div class="video-meta"><span>BV1rH4y1R7Rk</span><span>VIDEO SOURCE</span></div></div>
+        </div>
+        <p class="caption">保留来源，沿视频采集</p>
+      </section>
+      <div class="arrow" id="arrow-one">→</div>
+      <section class="step" id="systems">
+        <div class="step-index">02 <span>完整谱行</span></div>
+        <div class="stage-body">
+          <div class="row"><img src="assets/row-39.png" alt="原谱第39小节起完整谱行"></div>
+          <div class="row"><img src="assets/row-43.png" alt="原谱第43小节起完整谱行"></div>
+          <div class="row"><img src="assets/row-47.png" alt="原谱第47小节起完整谱行"></div>
+        </div>
+        <p class="caption">去除同位置重叠，清理重绘</p>
+      </section>
+      <div class="arrow" id="arrow-two">→</div>
+      <section class="step" id="pdf">
+        <div class="step-index">03 <span>A4 PDF</span></div>
+        <div class="stage-body pages">
+          <img class="page page-back" src="assets/page-2.png" alt="历史PDF第二页">
+          <img class="page page-front" src="assets/page-1.png" alt="历史PDF第一页">
+        </div>
+        <p class="caption">按比例分页，逐页检查</p>
+      </section>
+    </div>
+    <div class="footer"><span>历史样本 · 可惜没如果（新版）</span><span>流程演示 · 非实际处理耗时</span></div>
+  </main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<script>
+window.__timelines=window.__timelines||{};
+const tl=gsap.timeline({paused:true});
+tl.to('.texture',{y:26,duration:6,repeat:1,yoyo:true,ease:'sine.inOut'},0);
+tl.from('h1',{x:-14,opacity:0,duration:.7,ease:'power3.out'},.15);
+tl.from('.video',{scale:.96,duration:.8,ease:'expo.out'},.25);
+tl.from('.row',{x:-18,opacity:.2,stagger:.16,duration:.7,ease:'power2.out'},3);
+tl.from('#arrow-one',{x:-8,opacity:.2,duration:.45,ease:'circ.out'},2.7);
+tl.from('.page-back',{x:20,rotation:0,opacity:.25,duration:1,ease:'power3.out'},6.0);
+tl.fromTo('.page-front',{x:-14,y:20,rotation:0,opacity:.25},{x:-14,y:0,rotation:-3,opacity:1,duration:.8,ease:'expo.out'},6.25);
+tl.from('#arrow-two',{x:-8,opacity:.2,duration:.45,ease:'circ.out'},5.8);
+tl.from('.bar-fill',{scaleX:.18,duration:5,ease:'sine.inOut'},.4);
+tl.to('.row',{x:-18,opacity:.2,stagger:.05,duration:.5,ease:'sine.inOut'},11.2);
+tl.to('.page-back',{x:20,rotation:0,opacity:.25,duration:.5,ease:'sine.inOut'},11.2);
+tl.fromTo('.page-front',{x:-14,y:0,rotation:-3,opacity:1},{x:-14,y:20,rotation:0,opacity:.25,duration:.5,ease:'sine.inOut',immediateRender:false},11.2);
+tl.to('.bar-fill',{scaleX:.18,duration:.5,ease:'sine.inOut'},11.2);
+tl.to('#arrow-one,#arrow-two',{x:-8,opacity:.2,duration:.4,ease:'sine.inOut'},11.3);
+tl.to('h1',{x:-14,opacity:0,duration:.35,ease:'sine.inOut'},11.6);
+tl.to('.video',{scale:.96,duration:.35,ease:'sine.inOut'},11.6);
+window.__timelines.readme=tl;
+</script>
+</body>
+</html>
