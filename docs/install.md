@@ -11,6 +11,25 @@ git clone https://github.com/kenqia/bilibili-drum-score-to-pdf.git
 cd bilibili-drum-score-to-pdf
 ```
 
+## 发现宿主与检查依赖
+
+先运行不依赖第三方包的检查命令：
+
+```sh
+python skills/bilibili-drum-score-to-pdf/scripts/host_check.py
+```
+
+默认只检查 `~/.agents/skills`、`~/.codex/skills`、`~/.claude/skills` 的直接子目录 `SKILL.md`。宿主使用其他目录时传 `--skills-root /absolute/skills`，可重复指定。检查不读取宿主配置或凭证，也不修改安装。输出 JSON 包含匹配入口、同一根的重复入口、运行时工具、固定依赖版本和正常流程文档是否存在。文件存在不能证明宿主已经加载；实际工具清单和图片查看、生图能力仍须在宿主确认。
+
+在实际隔离依赖环境中检查运行条件：
+
+```sh
+uv run --quiet --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
+  python skills/bilibili-drum-score-to-pdf/scripts/host_check.py
+```
+
+安装副本使用根 `scripts/host_check.py` 和 `scripts/requirements.txt`。`--quiet` 减少依赖解析输出，命令失败时保留错误。依赖准备只运行一次检查，不反复编写探测脚本。扫描等待与进度见[程序检查](agents/automatic-source-checks.md#扫描预算进度与人工裁剪)。
+
 ## 安装或更新提交快照
 
 停止使用目标安装的转换任务后，在源码仓库执行：

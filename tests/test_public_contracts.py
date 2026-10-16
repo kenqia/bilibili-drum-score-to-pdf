@@ -10,11 +10,15 @@ from score_fixtures import CLI
 import reconstruction
 import score_task
 import score_workflow
+import automatic_score
 
 
 EXPORT_ENTRIES = ('cli', 'workflow', 'vector')
 REVIEW_ENTRIES = ('cli', 'workflow', 'vector', 'task')
 GROUP_ENTRIES = ('cli', 'workflow', 'task')
+CROP_ENTRIES = ('cli', 'workflow', 'task')
+REQUEST_ENTRIES = ('cli', 'workflow', 'task')
+SCAN_ENTRIES = ('cli', 'workflow', 'automatic')
 
 
 class PublicContracts(unittest.TestCase):
@@ -50,6 +54,116 @@ class PublicContracts(unittest.TestCase):
             return self.cli('redraw-inputs', {} if groups is None else {'groups': groups})
         owner = {'workflow': score_workflow, 'task': score_task}[entry]
         return owner.redraw_inputs(self.task, groups=groups)
+
+    def test_scan_status_is_explicitly_metadata_only_at_every_entry(self):
+        self.select()
+        self.video.write_bytes(b'controlled damaged source')
+        for entry in SCAN_ENTRIES:
+            with self.subTest(entry=entry):
+                if entry == 'cli':
+                    status = self.cli('scan-status', {})
+                else:
+                    owner = {'workflow': score_workflow, 'automatic': automatic_score}[entry]
+                    status = owner.scan_status(self.task)
+                self.assertTrue(status['metadata_only'])
+                self.assertFalse(status['complete'])
+                self.assertEqual(status['progress'], {})
+        with self.assertRaises(score_task.ReconstructionError):
+            score_task.load(self.task)
+
+    def test_manual_cut_stem_blocks_every_generation_entry_until_crop_is_repaired(self):
+        self.select()
+        original = score_task.load(self.task)
+        regions = copy.deepcopy(original['regions'])
+        regions[1]['bbox'][1] = 90
+        regions[1]['staff_top'] = 10
+        reconstruction.assemble(self.task, 'Cut stem', regions, original['source_review'])
+        group = score_task.redraw_inputs(self.task)[0]
+        before = score_task.load(self.task)
+        for entry in CROP_ENTRIES:
+            with self.subTest(entry=entry):
+                if entry == 'cli':
+                    checks = self.cli('crop-checks', {})
+                    begin = lambda: self.cli('begin-redraw', {
+                        'identifier': group['id'], 'viewed_notes': 'Controlled input review.'})
+                else:
+                    owner = {'workflow': score_workflow, 'task': score_task}[entry]
+                    checks = owner.crop_checks(self.task)
+                    begin = lambda: owner.begin_redraw(
+                        self.task, group['id'], viewed_notes='Controlled input review.')
+                self.assertEqual(checks['status'], 'blocked')
+                self.assertIn('crop_edge', [issue['code'] for issue in checks['issues']])
+                with self.assertRaises(score_task.ReconstructionError):
+                    begin()
+                self.assertEqual(score_task.load(self.task), before)
+        reconstruction.assemble(self.task, 'Cut stem', original['regions'], original['source_review'])
+        repaired = score_task.redraw_inputs(self.task)[0]
+        self.assertEqual(score_task.crop_checks(self.task)['status'], 'passed')
+        score_task.begin_redraw(self.task, repaired['id'], viewed_notes='Controlled repaired review.')
+
+    def test_manual_stem_endpoint_touching_boundary_is_reported(self):
+        self.select()
+        original = score_task.load(self.task)
+        regions = copy.deepcopy(original['regions'])
+        regions[1]['bbox'][1] = 85
+        regions[1]['staff_top'] = 15
+        reconstruction.assemble(self.task, 'Touching stem', regions, original['source_review'])
+        for entry in CROP_ENTRIES:
+            with self.subTest(entry=entry):
+                if entry == 'cli':
+                    checks = self.cli('crop-checks', {})
+                else:
+                    owner = {'workflow': score_workflow, 'task': score_task}[entry]
+                    checks = owner.crop_checks(self.task)
+                self.assertEqual(checks['status'], 'blocked')
+                self.assertIn('top', checks['issues'][0]['edges'])
+
+    def test_every_request_entry_keeps_all_groups_and_preserves_dispatch_state(self):
+        self.select()
+        score_task.redraw_inputs(self.task, groups=[[0], [1]])
+        baseline = score_task.load(self.task)
+        for entry in REQUEST_ENTRIES:
+            with self.subTest(entry=entry):
+                score_task.save(self.task, copy.deepcopy(baseline))
+                owner = {'workflow': score_workflow, 'task': score_task}.get(entry)
+                def call(operation, payload):
+                    if entry == 'cli':
+                        return self.cli(operation, payload)
+                    return getattr(owner, operation.replace('-', '_'))(self.task, **payload)
+                batch = call('redraw-requests', {'viewed_notes': 'Controlled complete input review.'})
+                self.assertEqual(batch['group_count'], 2)
+                self.assertEqual([h['group'] for h in batch['handoffs']], ['page-1', 'page-2'])
+                self.assertEqual(call('redraw-requests', {}), batch)
+                request = batch['handoffs'][0]['request']['request']
+                call('dispatch-redraw', {'identifier': 'page-1', 'request': request})
+                with self.assertRaises(score_task.ReconstructionError):
+                    call('cancel-redraw', {'identifier': 'page-1', 'request': request, 'notes': 'Unknown result.'})
+                self.assertEqual(call('redraw-requests', {})['handoffs'][0]['status'], 'recover_existing_call')
+                pending = batch['handoffs'][1]['request']['request']
+                call('cancel-redraw', {'identifier': 'page-2', 'request': pending, 'notes': 'Not submitted.'})
+                self.assertEqual(score_task.load(self.task)['redraw_pages'][1]['attempts'][-1]['status'], 'cancelled')
+
+    def test_batch_rejects_duplicate_request_ids_and_wrong_input_hash(self):
+        self.select()
+        score_task.redraw_inputs(self.task, groups=[[0], [1]])
+        score_task.redraw_requests(self.task, viewed_notes='Controlled batch input review.')
+        baseline = score_task.load(self.task)
+        for entry in REQUEST_ENTRIES:
+            for corruption in ('duplicate_id', 'wrong_hash'):
+                with self.subTest(entry=entry, corruption=corruption):
+                    record = copy.deepcopy(baseline)
+                    attempt = record['redraw_pages'][1]['attempts'][-1]
+                    if corruption == 'duplicate_id':
+                        attempt['request'] = record['redraw_pages'][0]['attempts'][-1]['request']
+                    else:
+                        attempt['input_sha256'] = '0' * 64
+                    score_task.save(self.task, record)
+                    with self.assertRaises(score_task.ReconstructionError):
+                        if entry == 'cli':
+                            self.cli('redraw-requests', {})
+                        else:
+                            owner = {'workflow': score_workflow, 'task': score_task}[entry]
+                            owner.redraw_requests(self.task)
 
     def test_every_export_obeys_layout_and_every_review_binds_current_previews(self):
         self.select()

@@ -5,6 +5,7 @@ with the Agent; this module validates their references and persists decisions.
 """
 import copy
 import hashlib
+from functools import lru_cache
 import json
 import math
 from pathlib import Path
@@ -48,9 +49,22 @@ def save(task, record):
         previous = json.loads(path.read_text())
         history = previous.get('generation_history', {}).copy()
         history.update(record.get('generation_history', {}))
+        current = {p.get('input_identity') for p in record.get('redraw_pages', [])}
         for page in previous.get('redraw_pages', []):
+            page = copy.deepcopy(page)
             key = page.get('input_identity') or input_identity(previous, page['regions'])
-            history[key] = copy.deepcopy(page)
+            if page.get('status') == 'prepared' and page.get('input_identity') not in current:
+                size = len(page['regions'])
+                still_selected = any(input_identity(record, list(range(start, start + size))) ==
+                                     page.get('input_identity')
+                                     for start in range(len(record.get('regions', [])) - size + 1))
+                if still_selected:
+                    history[key] = page
+                    continue
+                attempt = page['attempts'][-1]
+                attempt.update(status='cancelled', reason='input_selection_changed_before_dispatch')
+                page['status'] = 'vector' if attempt['kind'] == 'correction' else 'needs_generation'
+            history[key] = page
         record['generation_history'] = history
     temporary = write_path(task, 'record.tmp')
     temporary.write_text(json.dumps(record, ensure_ascii=False, indent=2))
@@ -303,26 +317,171 @@ def _page(record, identifier):
     raise ReconstructionError('重绘页引用无效。')
 
 
-def begin_redraw(task, identifier, viewed_notes=None, correction=False):
-    """Persist BEFORE invoking host tool; interrupted calls cannot reset budget."""
+def _crop_checks(task, record):
+    import cv2
+    import numpy as np
+    from reconstruction import ink_mask
+
+    issues = []
+    captures = {shot['id']: shot for shot in record['captures']}
+
+    @lru_cache(maxsize=1)
+    def native_mask(identifier):
+        with Image.open(artifact(task, captures[identifier])) as image:
+            return ink_mask(image) > 0
+
+    for index, region in enumerate(record['regions']):
+        identifier = region['capture']
+        mask = native_mask(identifier)
+        left, top, right, bottom = region['bbox']
+        edges = []
+        for name, inside, outside in (('top', top, top - 1), ('bottom', bottom - 1, bottom)):
+            ink = mask[inside, left:right]
+            # Header envelopes are intentionally tight around complete text.
+            if region['kind'] != 'system' and 0 <= outside < mask.shape[0]:
+                ink = ink & mask[outside, left:right]
+            if np.any(ink):
+                edges.append(name)
+        patch = mask[top:bottom, left:right]
+        if region['kind'] == 'system':
+            horizontal = cv2.morphologyEx(patch.astype(np.uint8), cv2.MORPH_OPEN,
+                                         np.ones((1, max(24, patch.shape[1] // 4)), np.uint8))
+            staff = np.zeros_like(patch)
+            for line in range(5):
+                y = round(region['staff_top'] + line * region['staff_spacing'])
+                low, high = max(0, y - 2), min(len(staff), y + 3)
+                staff[low:high] = horizontal[low:high] > 0
+            patch = patch & ~staff
+        for name, inside, outside in (('left', 0, left - 1), ('right', -1, right)):
+            ink = patch[:, inside]
+            if region['kind'] != 'system' and 0 <= outside < mask.shape[1]:
+                ink = ink & mask[top:bottom, outside]
+            if np.any(ink):
+                edges.append(name)
+        if edges:
+            issues.append({'code': 'crop_edge', 'region': index, 'capture': identifier,
+                           'bbox': region['bbox'], 'edges': edges})
+    return {'producer': 'program', 'status': 'blocked' if issues else 'passed',
+            'issues': issues, 'scope': 'system ink touching crop boundaries; not music proofreading'}
+
+
+def crop_checks(task):
+    """Inspect manual and automatic selections before a host request is reserved."""
+    return _crop_checks(task, load(task))
+
+
+def _require_safe_crops(task, record):
+    if _crop_checks(task, record)['status'] != 'passed':
+        raise ReconstructionError('裁剪边缘穿过可见记号；运行 crop-checks 并修正后再调用或导出。')
+
+
+def _reserve_redraw(record, page, viewed_notes, correction, reserve):
+    program_approved = record['freeze']['producer'] == 'program'
+    if (not viewed_notes and not program_approved) or (correction and (
+            page['status'] != 'needs_correction' or page['corrections_used'] >= 1)) or (
+            not correction and page['status'] != 'needs_generation'):
+        raise ReconstructionError('实际粗拼审阅或重绘次数无效。')
+    if correction:
+        page['corrections_used'] += 1
+    attempt = {'request': uuid.uuid4().hex, 'kind': 'correction' if correction else 'initial',
+               'input_sha256': page['input']['sha256'], 'notes': viewed_notes,
+               'status': 'prepared' if reserve else 'calling', 'cost': None,
+               'approval': {'producer': 'program' if program_approved else 'agent',
+                            'freeze_id': record['freeze']['id']}}
+    page['attempts'].append(attempt)
+    page['status'] = attempt['status']
+    return attempt
+
+
+def _host_request(task, page):
+    return {**page['attempts'][-1], 'input': str(artifact(task, page['input'])),
+            'previous_output': str(artifact(task, page['output'])) if page.get('output') else None}
+
+
+def begin_redraw(task, identifier, viewed_notes=None, correction=False, reserve=False):
+    """Legacy calls are conservatively dispatched; reserve=True prepares only."""
+    record = load(task)
+    from automatic_score import require_frozen
+    require_frozen(record)
+    _require_safe_crops(task, record)
+    page = _page(record, identifier)
+    if type(correction) is not bool or type(reserve) is not bool:
+        raise ReconstructionError('修正与预留参数必须是布尔值。')
+    _reserve_redraw(record, page, viewed_notes, correction, reserve)
+    save(task, record)
+    return _host_request(task, page)
+
+
+def redraw_requests(task, viewed_notes=None):
+    """Return one ordered handoff for every group, including resumed requests."""
+    redraw_inputs(task)
+    record = load(task)
+    _require_safe_crops(task, record)
+    handoffs = []
+    changed = False
+    for page in record['redraw_pages']:
+        if page['status'] == 'needs_generation' and (
+                record['freeze']['producer'] == 'program' or viewed_notes):
+            _reserve_redraw(record, page, viewed_notes, False, True)
+            changed = True
+        status = page['status']
+        action = {'prepared': 'ready_to_dispatch', 'calling': 'recover_existing_call',
+                  'needs_generation': 'needs_input_review'}.get(status, status)
+        handoff = {'group': page['id'], 'status': action,
+                   'input_identity': page['input_identity'],
+                   'input': str(artifact(task, page['input']))}
+        if status in ('prepared', 'calling'):
+            handoff['request'] = _host_request(task, page)
+        if page.get('output'):
+            handoff['output'] = page['output']
+        handoffs.append(handoff)
+    requests = [h['request'] for h in handoffs if 'request' in h]
+    if len({r['request'] for r in requests}) != len(requests):
+        raise ReconstructionError('批量请求的 request ID 重复。')
+    for page in record['redraw_pages']:
+        if page['status'] in ('prepared', 'calling') and (
+                page['attempts'][-1]['input_sha256'] != page['input']['sha256'] or
+                page['attempts'][-1]['status'] != page['status']):
+            raise ReconstructionError('请求状态或输入 hash 不一致。')
+    if len({h['group'] for h in handoffs}) != len(record['redraw_pages']):
+        raise ReconstructionError('批量请求的组 ID 重复。')
+    if changed:
+        save(task, record)
+    return {'group_count': len(record['redraw_pages']), 'handoffs': handoffs}
+
+
+def dispatch_redraw(task, identifier, request):
+    """Persist before the host call; interruption now means result unknown."""
+    record = load(task)
+    from automatic_score import require_frozen
+    require_frozen(record)
+    _require_safe_crops(task, record)
+    page = _page(record, identifier)
+    if page['status'] != 'prepared' or page['attempts'][-1]['request'] != request:
+        raise ReconstructionError('只能提交当前预留请求；已提交或结果未知时先恢复。')
+    page['attempts'][-1]['status'] = 'calling'
+    page['status'] = 'calling'
+    save(task, record)
+    return _host_request(task, page)
+
+
+def cancel_redraw(task, identifier, request, notes):
+    """Cancel only a known unsubmitted reservation; spent correction stays spent."""
     record = load(task)
     from automatic_score import require_frozen
     require_frozen(record)
     page = _page(record, identifier)
-    if record.get('source_review', {}).get('complete') is not True or record['source_review'].get('unresolved'):
-        raise ReconstructionError('原图完整性尚未确认，禁止宿主调用。')
-    program_approved=record['freeze']['producer']=='program'
-    if (not viewed_notes and not program_approved) or (correction and (page['status'] != 'needs_correction' or page['corrections_used'] >= 1)) or (not correction and page['status'] != 'needs_generation'):
-        raise ReconstructionError('实际粗拼审阅或重绘次数无效。')
-    if correction:
-        page['corrections_used'] += 1
-    attempt = {'request': uuid.uuid4().hex, 'kind': 'correction' if correction else 'initial', 'input_sha256': page['input']['sha256'], 'notes': viewed_notes, 'status': 'calling', 'cost': None}
-    attempt['approval']={'producer':'program' if program_approved else 'agent',
-        'freeze_id':record['freeze']['id']}
-    page['attempts'].append(attempt)
-    page['status'] = 'calling'
+    if (page['status'] != 'prepared' or not isinstance(notes, str) or not notes.strip()
+            or page['attempts'][-1]['request'] != request):
+        raise ReconstructionError('只能作废当前尚未提交的预留请求，且必须记录原因。')
+    attempt = page['attempts'][-1]
+    attempt.update(status='cancelled', reason=notes)
+    page['status'] = 'vector' if attempt['kind'] == 'correction' else 'needs_generation'
+    if attempt['kind'] == 'correction':
+        page['fallback_reason'] = notes
     save(task, record)
-    return {**attempt, 'input': str(artifact(task, page['input'])), 'previous_output': str(artifact(task, page['output'])) if page.get('output') else None}
+    return page
+
 
 
 def finish_redraw(task, identifier, request, output, tool, receipt):
@@ -356,7 +515,7 @@ def fail_redraw(task, identifier, notes, outcome='failed'):
     page = _page(record, identifier)
     if outcome not in ('failed', 'unavailable', 'unknown') or not notes or page['status'] == 'accepted':
         raise ReconstructionError('需要失败记录，且不能降级已接受重绘。')
-    if page['attempts'] and page['attempts'][-1]['status'] == 'calling':
+    if page['attempts'] and page['attempts'][-1]['status'] in ('prepared', 'calling'):
         page['attempts'][-1].update(status=outcome, reason=notes)
     page.update(status='vector', fallback_reason=notes)
     save(task, record)
@@ -432,6 +591,7 @@ def export(task, render, *, host_redraw=False):
         raise ReconstructionError('原图完整性尚未确认，停止导出。')
     from automatic_score import require_frozen
     require_frozen(record)
+    _require_safe_crops(task, record)
     output = record.get('output')
     if output:
         try:
@@ -521,7 +681,8 @@ def _preview_and_check(task, output, blocks, options):
         issues.append({'code':'omitted_or_duplicate_position'})
     margin = options.get('margin',24)
     for placement in placements:
-        box = placement['bbox']; block = blocks[placement['region']]
+        box = placement['bbox']
+        block = blocks[placement['region']]
         if not math.isfinite(placement['scale']) or placement['scale'] <= 0 or any(not math.isfinite(v) for v in box):
             issues.append({'code':'invalid_geometry','region':placement['region']})
         if box[0] < margin-0.01 or box[1] < margin-0.01 or box[2] > A4[0]-margin+0.01 or box[3] > A4[1]-margin+0.01:

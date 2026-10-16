@@ -16,6 +16,8 @@ uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/
 | --- | --- |
 | prepare / resume | prepare / load |
 | stage / layout | stage / layout，阶段推进与打印参数 |
+| scan-status / crop-checks | 扫描元数据进度 / 当前选行边缘检查 |
+| redraw-requests / dispatch-redraw / cancel-redraw | 完整批量预留 / 提交前登记 / 未提交作废 |
 | overview / resample / auto-freeze / revise-crop | 同名函数（横线转下划线） |
 | navigate / capture / present / assemble | 同名函数 |
 | promote | promote，参数 identifier 为导航候选 ID |
@@ -43,7 +45,7 @@ cache-limits 接受正整数 max_entries 和 max_bytes，默认 64 个候选及 
 
 生图组不参考 A4 分页。generation-materials 仅在全部组 accepted 或 vector 后返回按原谱排序的完整行材料。imagegen 行包含生成图片引用、crop_bbox 和来源映射；vector 行提供原裁剪引用，method 为 contour_trace_with_staff_repair、music_recognition 为 false。当前导出使用相同边界与来源比例。
 
-begin-redraw 在调用前保存 request、输入 hash、修正次数及未知 cost=null。calling 状态不可再次主生成；先用同一 request 回填已有结果。确认无法恢复时调用 fail-redraw，outcome 可以是 failed、unavailable 或 unknown，默认 failed。结果未知不能自动重新调用。实际查看输出后才提交 review-redraw，拒绝初次输出可修正一次，恢复不退还额度，第二次拒绝转矢量。受控测试回执不证明实际模型执行或音乐审阅。
+批量请求及 prepared/calling/cancelled 的状态规则见[阶段入口](stage-recovery-layout.md)。`redraw-requests` 返回所有组，包含已存在请求，校验组 ID、request ID 和输入 hash。以 `group_count` 和有序 `handoffs` 验证完整性，不用临时脚本逐组拼装。begin-redraw 在调用前保存 request、输入 hash、修正次数及未知 cost=null。calling 状态不可再次主生成；先用同一 request 回填已有结果。确认无法恢复时调用 fail-redraw，outcome 可以是 failed、unavailable 或 unknown，默认 failed。结果未知不能自动重新调用。实际查看输出后才提交 review-redraw，拒绝初次输出可修正一次，恢复不退还额度，第二次拒绝转矢量。受控测试回执不证明实际模型执行或音乐审阅。
 
 ## 自动来源检查
 

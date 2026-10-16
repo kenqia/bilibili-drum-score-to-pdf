@@ -2,6 +2,7 @@
 import hashlib
 import json
 import math
+import time
 from pathlib import Path
 import uuid
 from functools import lru_cache
@@ -17,7 +18,7 @@ cv2.setNumThreads(2)
 from video_seek import VideoReader, ConversionError
 
 PROGRAM_CHECK_VERSION = "geometry-temporal/8"
-SCAN_POLICY_VERSION = "native-visible-ink/2"
+SCAN_POLICY_VERSION = "native-visible-ink/3"
 MAX_EVENTS = 8192
 MAX_NATIVE_BYTES = 1024 * 1024 * 1024
 SIGNATURE_PIXELS = 512 * 1024 * 1024
@@ -186,14 +187,39 @@ def _same(a,b):
         return True
     # Two narrow tall displaced traces identify a moving playback cursor by
     # geometry. A lone small mark or an ordinary symbol edit is not a cursor.
-    columns=np.flatnonzero(difference.sum(axis=0)>0)
-    runs=np.split(columns,np.where(np.diff(columns)>1)[0]+1)
-    if len(runs)!=2 or any(len(run)>max(2,a.shape[1]*.005) for run in runs):
-        return False
-    profiles=[difference[:,run].any(axis=1) for run in runs]
-    extents=[np.flatnonzero(profile) for profile in profiles]
-    return (all(len(rows)>=48 and np.ptp(rows)>=64 and len(rows)>=np.ptp(rows)*.7 for rows in extents)
-        and abs(extents[0][0]-extents[1][0])<=2 and abs(extents[0][-1]-extents[1][-1])<=2)
+    for traces in (difference, unmatched):
+        columns = np.flatnonzero(traces.sum(axis=0) > 0)
+        runs = np.split(columns, np.where(np.diff(columns) > 1)[0] + 1)
+        if len(runs) != 2 or any(len(run) > max(2, a.shape[1] * .005) for run in runs):
+            continue
+        extents = [np.flatnonzero(traces[:, run].any(axis=1)) for run in runs]
+        tolerance = max(2, max(map(len, runs)))
+        if (all(len(rows) >= 48 and np.ptp(rows) >= 64 and
+                len(rows) >= np.ptp(rows) * .7 for rows in extents) and
+                abs(extents[0][0] - extents[1][0]) <= tolerance and
+                abs(extents[0][-1] - extents[1][-1]) <= tolerance):
+            return True
+    # Overlapping cursor positions can merge into one difference run. Require
+    # both a removed and an added tall trace, and retain every unmatched pixel
+    # outside their narrow bounds, including isolated notation changes.
+    boxes = []
+    for trace in ((foreground_a > 0) & (foreground_b == 0),
+                  (foreground_b > 0) & (foreground_a == 0)):
+        columns = np.flatnonzero(trace.sum(axis=0) >= 48)
+        if not len(columns) or np.ptp(columns) + 1 > max(2, a.shape[1] * .01):
+            break
+        rows = np.flatnonzero(trace[:, columns].any(axis=1))
+        if np.ptp(rows) < 64 or len(rows) < np.ptp(rows) * .7:
+            break
+        boxes.append((int(columns[0]), int(rows[0]), int(columns[-1]), int(rows[-1])))
+    if len(boxes) == 2 and all(abs(boxes[0][i] - boxes[1][i]) <= 2 for i in (1, 3)):
+        residual = unmatched.copy()
+        for left, top, right, bottom in boxes:
+            residual[max(0, top - 1):bottom + 2, max(0, left - 1):right + 2] = False
+        if not np.any(residual):
+            return True
+    return False
+
 
 
 def _panels(task, candidates):
@@ -218,7 +244,11 @@ def _panels(task, candidates):
     return refs
 
 
-def overview(task, intervals=None, reason='full continuous source scan', *, force=False):
+def overview(task, intervals=None, reason='full continuous source scan', *, force=False,
+             max_new_candidates=128):
+    if type(max_new_candidates) is not int or not 1 <= max_new_candidates <= MAX_EVENTS:
+        raise state.ReconstructionError('单次候选预算必须为 1–8192 的整数。')
+    started = time.monotonic()
     record = state.load(task)
     duration = record['source']['duration']
     intervals = [[0, duration]] if intervals is None else intervals
@@ -237,6 +267,8 @@ def overview(task, intervals=None, reason='full continuous source scan', *, forc
         survey.setdefault('scan_history',[]).append(dict(scan))
         scan.update(complete=False,frames_observed=0,completed_intervals=[],cursor=0,segments=[],policy_version=SCAN_POLICY_VERSION)
         survey['candidates']=[]
+        retained_bytes = 0
+        scan.pop('progress', None)
         record.pop('freeze',None)
     # Recover previously published zero-frame success claims through the public
     # operation. Only actual decoded segments may contribute coverage.
@@ -259,6 +291,33 @@ def overview(task, intervals=None, reason='full continuous source scan', *, forc
     scan['completed_intervals']=merged
     request = {'intervals':intervals, 'reason':reason, 'new_candidates':[], 'unresolved':[]}
     survey['resamples'].append(request)
+    prior_progress = scan.get('progress', {})
+    checkpoint_writes = prior_progress.get('checkpoint_writes', 0)
+    last_checkpoint = started
+    timings = dict(prior_progress.get('timings', {}))
+    for name in ('change_detection_seconds', 'image_save_seconds', 'record_save_seconds'):
+        timings.setdefault(name, 0.0)
+
+    def checkpoint():
+        nonlocal checkpoint_writes, last_checkpoint
+        now = time.monotonic()
+        checkpoint_writes += 1
+        scan['progress'] = {
+            'frames_observed': scan['frames_observed'],
+            'candidates_retained': len(survey['candidates']),
+            'candidate_bytes': retained_bytes,
+            'candidate_ratio': len(survey['candidates']) / max(1, scan['frames_observed']),
+            'wall_seconds': prior_progress.get('wall_seconds', 0) + now - started,
+            'checkpoint_writes': checkpoint_writes,
+            'cursor_seconds': scan.get('cursor', 0),
+            'source_seconds': duration,
+            'timings': timings,
+        }
+        before_save = time.monotonic()
+        state.save(task, record)
+        timings['record_save_seconds'] += time.monotonic() - before_save
+        last_checkpoint = time.monotonic()
+
     previous = None
     if survey['candidates']:
         with Image.open(state.artifact(task, survey['candidates'][-1])) as image:
@@ -303,8 +362,10 @@ def overview(task, intervals=None, reason='full continuous source scan', *, forc
                         segment['first']=pts
                     segment['last']=pts
                     segment['frames']+=1
+                    before_change = time.monotonic()
                     mask = _signature(image)
                     changed = previous is None or not _same(previous,mask)
+                    timings['change_detection_seconds'] += time.monotonic() - before_change
                     scan['frames_observed'] += 1
                     scan['cursor'] = max(scan.get('cursor',0), pts['timestamp'])
                     if changed and not any(c['pts']==pts['pts'] and c['time_base']==pts['time_base'] for c in survey['candidates']):
@@ -313,7 +374,9 @@ def overview(task, intervals=None, reason='full continuous source scan', *, forc
                         identifier = f'capture-{len(record["captures"])+1:04d}'
                         path = state.write_path(task,Path('captures')/(identifier+'-'+uuid.uuid4().hex+'.png'))
                         path.parent.mkdir(exist_ok=True)
+                        before_image = time.monotonic()
                         image.save(path)
+                        timings['image_save_seconds'] += time.monotonic() - before_image
                         retained_bytes+=path.stat().st_size
                         if retained_bytes>MAX_NATIVE_BYTES:
                             raise state.ReconstructionError('原生证据达到资源字节上限，保留进度。')
@@ -324,8 +387,11 @@ def overview(task, intervals=None, reason='full continuous source scan', *, forc
                         survey['candidates'].append(shot)
                         request['new_candidates'].append(identifier)
                         previous=mask
-                    # Every frame checkpoint is resumable, including static dwell.
-                    state.save(task, record)
+                        if len(request['new_candidates']) >= max_new_candidates:
+                            raise ConversionError('candidate_budget', '单次候选预算已用尽，保留已观察前缀。')
+                    # Checkpoint at most once per second; finally preserves SIGTERM progress.
+                    if time.monotonic() - last_checkpoint >= 1:
+                        checkpoint()
                 finally:
                     image.close()
             segment['complete']=True
@@ -352,8 +418,20 @@ def overview(task, intervals=None, reason='full continuous source scan', *, forc
         record['metrics']['native_retained']=len(record['captures'])
         survey['candidates'].sort(key=lambda c:c['timestamp'])
         survey['panels']=_panels(task,survey['candidates'])
-        state.save(task,record)
+        checkpoint()
     return survey
+
+
+def scan_status(task):
+    """Read the last metadata checkpoint; this does not verify source artifacts."""
+    path = state.write_path(task, 'record.json')
+    record = json.loads(path.read_text())
+    if record.get('schema') != 'score-reconstruction/1':
+        raise state.ReconstructionError('不是当前重构任务。')
+    scan = record.get('overview', {}).get('scan', {})
+    return {'metadata_only': True, 'complete': scan.get('complete', False),
+            'progress': scan.get('progress', {}),
+            'unresolved': (record.get('overview', {}).get('resamples') or [{}])[-1].get('unresolved', [])}
 
 
 def resample(task, intervals, reason):
@@ -386,7 +464,8 @@ def _apply_revisions(task, record, shot, regions):
             for region in regions:
                 if region['bbox']!=revision['original_bbox']:
                     continue
-                old=region['bbox']; box=revision['bbox']
+                old=region['bbox']
+                box=revision['bbox']
                 yy,xx=np.where(mask[old[1]:old[3],old[0]:old[2]]>0)
                 if len(xx) and not (box[0]<=old[0]+xx.min() and box[2]>old[0]+xx.max() and
                     box[1]<=old[1]+yy.min() and box[3]>old[1]+yy.max()):
@@ -425,7 +504,8 @@ def _partial_recovered(task, partial, atlas, captures, observations, neighbours,
             continue
         if abs(row['staff_spacing']-spacing)>1:
             continue
-        left=max(paper[0],row['bbox'][0]); right=min(paper[2],row['bbox'][2])
+        left=max(paper[0],row['bbox'][0])
+        right=min(paper[2],row['bbox'][2])
         low=max(paper[1],round(lines[0]-3*spacing))
         high=min(paper[3],round(lines[-1]+spacing))
         if high<=low or right<=left:
@@ -468,12 +548,14 @@ def _compatible_repair(task, old_rows, new_rows, risk_by_position, captures):
         with Image.open(state.artifact(task,captures[new['capture']])) as image:
             right=geometry.ink_mask(image)
         shift=round(shift)
-        x0=max(old['bbox'][0],new['bbox'][0]);x1=min(old['bbox'][2],new['bbox'][2])
+        x0=max(old['bbox'][0],new['bbox'][0])
+        x1=min(old['bbox'][2],new['bbox'][2])
         y0=max(old['bbox'][1],new['bbox'][1]-shift,0,-shift)
         y1=min(old['bbox'][3],new['bbox'][3]-shift,left.shape[0],right.shape[0]-shift)
         if x1<=x0 or y1<=y0:
             return False
-        first=left[y0:y1,x0:x1].copy();second=right[y0+shift:y1+shift,x0:x1].copy()
+        first=left[y0:y1,x0:x1].copy()
+        second=right[y0+shift:y1+shift,x0:x1].copy()
         for risk in risks:
             if risk['code']=='crop_edge':
                 continue
@@ -487,7 +569,8 @@ def _compatible_repair(task, old_rows, new_rows, risk_by_position, captures):
 
 def _native_visible_match(old, new, native, *, preserve_missing=False):
     shift=round(new['bbox'][1]+new['staff_top']-old['bbox'][1]-old['staff_top'])
-    left=native(old['capture']);right=native(new['capture'])
+    left=native(old['capture'])
+    right=native(new['capture'])
     # Compare the union of both detected bands within the visible frames.
     # Intersection alone would silently discard an added off-staff mark that
     # expands the new crop beyond the old crop. The old full native frame also
@@ -498,7 +581,8 @@ def _native_visible_match(old, new, native, *, preserve_missing=False):
     y1=min(max(old['bbox'][3],new['bbox'][3]-shift),left.shape[0],right.shape[0]-shift)
     if x1<=x0 or y1<=y0:
         return False
-    first=left[y0:y1,x0:x1];second=right[y0+shift:y1+shift,x0:x1]
+    first=left[y0:y1,x0:x1]
+    second=right[y0+shift:y1+shift,x0:x1]
     if _same(first,second):
         return True
     kernel=np.ones((3,3),np.uint8)
@@ -509,7 +593,9 @@ def _native_visible_match(old, new, native, *, preserve_missing=False):
     if preserve_missing and not np.any(new_unmatched):
         return True
     def clipped(row):
-        paper=row['evidence']['paper_bbox'];box=row['bbox'];spacing=row['staff_spacing']
+        paper=row['evidence']['paper_bbox']
+        box=row['bbox']
+        spacing=row['staff_spacing']
         return box[1]<=paper[1]+spacing or box[3]>=paper[3]-spacing
     # A viewport fragment can lose formerly visible ink. It must introduce no
     # ink absent from the complete source; tiny additions have no tolerance.
@@ -557,7 +643,7 @@ def _spatial_continuation(old_rows, new_rows, old_cores, new_cores, native):
 def auto_freeze(task, title=None):
     record=state.load(task)
     survey=record.get('overview')
-    if not survey or not survey['scan']['complete']:
+    if not survey:
         overview(task)
         record=state.load(task)
         survey=record['overview']
@@ -672,7 +758,8 @@ def auto_freeze(task, title=None):
                 unmatched=((first>0)&(cv2.dilate(second,kernel)==0))|((second>0)&(cv2.dilate(first,kernel)==0))
                 yy,xx=np.where(unmatched)
                 if len(xx)==1:
-                    row=systems[index];old=previous[index]
+                    row=systems[index]
+                    old=previous[index]
                     source=next((r for r in chosen if r.get('position')==old['position']),old)
                     edge=any(r['code']=='crop_edge' and r['bbox'][1]<row['bbox'][3] and
                         r['bbox'][3]>row['bbox'][1] for r in risks)
