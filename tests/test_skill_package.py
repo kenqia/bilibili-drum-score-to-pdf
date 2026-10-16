@@ -1,5 +1,6 @@
 """The public Skill must run without its source repository."""
 import importlib.util
+import json
 from pathlib import Path
 import re
 import shutil
@@ -41,6 +42,12 @@ class SkillPackageTests(unittest.TestCase):
             shutil.copytree(SKILL, detached, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
             subprocess.run([sys.executable, str(detached / 'scripts/convert.py'), '--help'],
                            cwd=base, check=True, capture_output=True, timeout=30)
+            host = subprocess.run([sys.executable, str(detached / 'scripts/host_check.py'),
+                                   '--skills-root', str(detached.parent)],
+                                  cwd=base, check=True, capture_output=True, text=True, timeout=30)
+            readiness = json.loads(host.stdout)
+            self.assertTrue(readiness['protocol_present'])
+            self.assertEqual(readiness['discovery'][0]['entries'], [str(detached / 'SKILL.md')])
             # Reuse the existing synthetic acceptance harness against only the
             # copied package scripts. No source-repository imports are allowed.
             replay = (ROOT / 'ci/verify_agent_replay.py').read_text()

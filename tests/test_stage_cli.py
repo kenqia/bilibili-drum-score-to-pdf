@@ -37,6 +37,51 @@ class RevisionCLI(unittest.TestCase):
         self.assertEqual(restored[0]['status'],'calling')
         self.assertEqual(restored[0]['attempts'][0]['request'],pending['request'])
 
+    def test_batch_requests_include_new_prepared_and_legacy_calling_groups(self):
+        rows = self.selection()
+        self.cli('redraw-inputs', groups=[[0], [1], [2]])
+        legacy = self.cli('begin-redraw', identifier='page-2', viewed_notes='Controlled legacy dispatch.')
+        first = self.cli('redraw-requests', viewed_notes='Controlled review of every input.')
+        self.assertEqual(first['group_count'], 3)
+        self.assertEqual([h['group'] for h in first['handoffs']], ['page-1', 'page-2', 'page-3'])
+        self.assertEqual([h['status'] for h in first['handoffs']],
+                         ['ready_to_dispatch', 'recover_existing_call', 'ready_to_dispatch'])
+        self.assertEqual(first['handoffs'][1]['request']['request'], legacy['request'])
+        again = self.cli('redraw-requests')
+        self.assertEqual(again['handoffs'], first['handoffs'])
+        pending = first['handoffs'][0]['request']['request']
+        self.cli('cancel-redraw', identifier='page-1', request=pending,
+                 notes='Controlled crop correction before host submission.')
+        cancelled = self.cli('resume')['redraw_pages'][0]
+        self.assertEqual(cancelled['attempts'][0]['status'], 'cancelled')
+        self.assertEqual(cancelled['corrections_used'], 0)
+        fresh = self.cli('redraw-requests', viewed_notes='Controlled repaired input.')
+        replacement = fresh['handoffs'][0]['request']['request']
+        self.assertNotEqual(replacement, pending)
+        self.cli('dispatch-redraw', identifier='page-1', request=replacement)
+        resumed = self.cli('redraw-requests')
+        self.assertEqual(resumed['handoffs'][0]['status'], 'recover_existing_call')
+        import score_workflow
+        with self.assertRaises(score_workflow.ReconstructionError):
+            score_workflow.cancel_redraw(self.task, 'page-1', replacement, 'Cannot cancel an unknown call.')
+        self.assertEqual(self.cli('resume')['redraw_pages'][0]['attempts'][-1]['status'], 'calling')
+
+    def test_crop_change_cancels_only_unsubmitted_history(self):
+        rows = self.selection()
+        self.cli('redraw-inputs', groups=[[0], [1], [2]])
+        batch = self.cli('redraw-requests', viewed_notes='Controlled original input review.')
+        request = batch['handoffs'][0]['request']['request']
+        rows[0]['bbox'][0] += 1
+        self.cli('assemble', title='Revision', regions=rows,
+                 review=self.review)
+        record = self.cli('resume')
+        old = record['generation_history'][batch['handoffs'][0]['input_identity']]
+        self.assertEqual(old['attempts'][-1]['request'], request)
+        self.assertEqual(old['attempts'][-1]['status'], 'cancelled')
+        self.assertEqual(old['status'], 'needs_generation')
+        unchanged = record['generation_history'][batch['handoffs'][1]['input_identity']]
+        self.assertEqual(unchanged['status'], 'prepared')
+
     def test_layout_reuses_materials_and_renders_every_revision_page(self):
         self.selection()
         groups=self.cli('redraw-inputs',groups=[[0,1],[2]])
@@ -61,7 +106,10 @@ class RevisionCLI(unittest.TestCase):
         self.assertEqual(first['status'],'pending')
         second=self.cli('stage')
         self.assertEqual(first['handoffs'][0]['request']['request'],second['handoffs'][0]['request']['request'])
-        self.assertEqual(second['handoffs'][0]['status'],'recover_existing_call')
+        self.assertEqual(second['handoffs'][0]['status'], 'ready_to_dispatch')
+        self.cli('dispatch-redraw', identifier=second['handoffs'][0]['group'],
+                 request=second['handoffs'][0]['request']['request'])
+        self.assertEqual(self.cli('stage')['handoffs'][0]['status'], 'recover_existing_call')
         for group in self.cli('redraw-inputs'):
             self.cli('fail-redraw',identifier=group['id'],notes='Controlled unavailable host.')
         printed=self.cli('stage')

@@ -6,7 +6,11 @@
 
 准备任务后，调用 `stage`（可传 `title`）。程序完成当前可自动执行的采集、来源检查、粗拼冻结和排版，然后返回下一项宿主或实际审阅操作。`phase` 为 `source`、`generation`、`pdf_review` 或 `complete`；`status` 为 `blocked`、`pending` 或 `complete`。响应包含产物引用、检查、未决项和 `next`。只有最终每页实际审阅已保存，才能返回 `complete`。
 
-程序冻结的正常输入直接准备宿主请求，预算先保存。Agent 使用 `handoffs[].request.input` 调用宿主生图，再以同一 request 回填 `finish-redraw`。重复 `stage` 返回 `recover_existing_call`，先恢复已有调用结果，不重新发送请求。无法恢复时用 `fail-redraw` 和具体原因转矢量。生成图返回后，实际查看并调用 `review-redraw`；拒绝后最多一次定向修正。手动冻结的任务返回 `needs_input_review`，Agent 实际查看粗拼后通过 `begin-redraw` 提供 `viewed_notes`。阶段入口不创建看图备注。
+程序冻结的正常输入由 `stage` 或 `redraw-requests` 批量预留为 `prepared`，返回 `ready_to_dispatch`。使用每个 handoff 的 `group`、`request.request` 调用 `dispatch-redraw(identifier, request)`，保存 `calling` 后立即执行宿主生图，再以同一 request 回填 `finish-redraw`。重复读取已预留请求会返回相同 ID。重复 `stage` 遇到 `calling` 返回 `recover_existing_call`，先恢复已有结果，不能重新发送。无法恢复时用 `fail-redraw` 和具体原因转矢量。生成图返回后，实际查看并调用 `review-redraw`；拒绝后最多一次定向修正。
+
+手动冻结的任务返回 `needs_input_review`。Agent 实际查看粗拼，运行 `crop-checks`，再通过 `redraw-requests(viewed_notes=...)` 批量预留。`begin-redraw` 保留单组入口，传 `reserve=true` 仅预留；省略时沿用旧行为，直接登记为 `calling`，按已提交处理。阶段入口不会创建看图备注。
+
+尚未提交的 `prepared` 请求可以通过 `cancel-redraw(identifier, request, notes)` 作废为 `cancelled`，保留 ID、hash 和原因。修改选行或组成员时，失效输入的预留请求也作废；已提交的 `calling` 保留未知结果保护。作废初次预留后可重新预留新 ID；作废修正预留仍保留已占用修正额度并转矢量。旧 `calling` 不能仅凭没有结果降格为未提交。
 
 有效历史手动冻结沿用其来源审阅，不重新扫描视频。历史新版任务若缺少 freeze，可通过 `assemble` 提交原相同选行和原审阅恢复；这是历史决定恢复，不是新的视觉审阅。保留原精确生图分组，即使其大小超过当前默认分组上限。旧程序扫描规则需要重新检查，不能凭旧 `complete` 标记继续。
 

@@ -50,12 +50,12 @@ class AutomaticScoreTests(unittest.TestCase):
         groups = self.call('redraw-inputs')
         self.assertEqual(groups[0]['freeze_id'], result['freeze']['id'])
 
-    def sequence(self, images, fps=4):
+    def sequence(self, images, fps=4, crf=0):
         for index,image in enumerate(images):
             image.save(self.base/f'frame-{index:03d}.png')
         video=self.base/'sequence.mp4'
         subprocess.run(['ffmpeg','-v','error','-y','-framerate',str(fps),'-i',str(self.base/'frame-%03d.png'),
-            '-c:v','libx264','-crf','0','-pix_fmt','yuv420p',str(video)],check=True)
+            '-c:v','libx264','-crf',str(crf),'-pix_fmt','yuv420p',str(video)],check=True)
         run=subprocess.run([sys.executable,str(CLI),str(video),'--output',str(self.task)],capture_output=True,text=True)
         self.assertEqual(run.returncode,0,run.stderr)
 
@@ -302,6 +302,77 @@ class AutomaticScoreTests(unittest.TestCase):
         self.assertEqual(result['status'],'frozen')
         self.assertEqual(len([r for r in result['regions'] if r['kind']=='system']),3)
 
+    def test_moving_cursor_retains_bounded_candidates_and_reports_progress(self):
+        from PIL import ImageDraw
+        frames = []
+        for x in range(300, 480, 9):
+            image = score_frame()
+            ImageDraw.Draw(image).line((x, 180, x, 350), fill='#488cc2', width=5)
+            frames.append(image)
+        self.sequence(frames, fps=25, crf=0)
+        result = self.call('overview')
+        self.assertTrue(result['scan']['complete'])
+        self.assertLessEqual(len(result['candidates']), 4)
+        progress = result['scan']['progress']
+        self.assertEqual(progress['frames_observed'], 20)
+        self.assertEqual(progress['candidates_retained'], len(result['candidates']))
+        self.assertGreater(progress['candidate_bytes'], 0)
+        self.assertGreaterEqual(progress['wall_seconds'], 0)
+        self.assertGreater(progress['timings']['change_detection_seconds'], 0)
+        self.assertGreater(progress['timings']['image_save_seconds'], 0)
+        status = self.call('scan-status')
+        self.assertTrue(status['metadata_only'])
+        self.assertEqual(status['progress']['candidates_retained'], len(result['candidates']))
+        self.assertLess(progress['checkpoint_writes'], 20)
+
+    def test_lossy_moving_cursor_retains_bounded_candidates(self):
+        from PIL import ImageDraw
+        frames = []
+        for x in range(300, 480, 9):
+            image = score_frame()
+            ImageDraw.Draw(image).line((x, 180, x, 350), fill='#488cc2', width=7)
+            frames.append(image)
+        self.sequence(frames, fps=25, crf=24)
+        result = self.call('overview')
+        self.assertTrue(result['scan']['complete'])
+        self.assertLessEqual(len(result['candidates']), 4)
+
+    def test_overlapping_cursor_does_not_hide_an_added_small_mark(self):
+        from PIL import ImageDraw
+        frames = []
+        for index, x in enumerate(range(300, 320, 2)):
+            image = score_frame()
+            draw = ImageDraw.Draw(image)
+            draw.line((x, 180, x, 350), fill='#488cc2', width=7)
+            if index >= 5:
+                draw.ellipse((400, 251, 403, 254), fill='black')
+            frames.append(image)
+        self.sequence(frames, fps=25)
+        result = self.call('overview')
+        self.assertTrue(result['scan']['complete'])
+        self.assertLessEqual(len(result['candidates']), 4)
+        self.assertTrue(any(c['timestamp'] == .2 for c in result['candidates']))
+
+    def test_lossy_ambiguous_changes_stop_at_candidate_budget_without_freezing(self):
+        from PIL import ImageDraw
+        frames = []
+        for x in range(300, 480, 9):
+            image = score_frame()
+            draw = ImageDraw.Draw(image)
+            draw.line((x, 180, x, 350), fill='#488cc2', width=7)
+            draw.ellipse((x + 300, 251, x + 303, 254), fill='black')
+            frames.append(image)
+        self.sequence(frames, fps=25, crf=24)
+        result = self.call('overview', {'max_new_candidates': 4})
+        self.assertFalse(result['scan']['complete'])
+        self.assertEqual(len(result['candidates']), 4)
+        self.assertEqual(result['resamples'][-1]['unresolved'][0]['code'], 'candidate_budget')
+        self.assertGreater(result['scan']['progress']['candidate_ratio'], .5)
+        frozen = self.call('auto-freeze')
+        self.assertEqual(frozen['status'], 'blocked')
+        self.call('redraw-inputs', success=False)
+        self.call('overview', {'max_new_candidates': 0}, success=False)
+
     def test_unrelated_pure_staff_fragment_cannot_reuse_earlier_full_system(self):
         from PIL import Image, ImageDraw
         a=Image.new('RGB',(1280,960),'#303030');draw=ImageDraw.Draw(a)
@@ -338,6 +409,17 @@ class AutomaticScoreTests(unittest.TestCase):
         result=self.call('auto-freeze')
         self.assertEqual(result['status'],'frozen')
         self.assertEqual(len([r for r in result['regions'] if r['kind']=='system']),9)
+
+    def test_lossy_small_notation_and_later_return_remain_candidates(self):
+        from PIL import ImageDraw
+        a = score_frame()
+        b = a.copy()
+        ImageDraw.Draw(b).ellipse((238, 251, 241, 254), fill='black')
+        self.sequence([a, b, a], crf=24)
+        result = self.call('overview')
+        self.assertTrue(result['scan']['complete'])
+        self.assertEqual(len(result['candidates']), 3)
+        self.assertEqual([c['timestamp'] for c in result['candidates']], [0, .25, .5])
 
     def test_unclassified_single_pixel_change_blocks_without_reprinting_the_viewport(self):
         from PIL import ImageDraw

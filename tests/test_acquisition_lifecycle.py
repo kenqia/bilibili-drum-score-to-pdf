@@ -12,7 +12,7 @@ from score_fixtures import CLI, score_frame, video_from_image
 
 
 LAUNCHER = '''
-import contextlib, io, os, runpy, socket, sys, time
+import contextlib, io, multiprocessing, os, runpy, socket, sys, time
 from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0, sys.argv.pop(1))
@@ -26,7 +26,17 @@ def stall(*args, **kwargs):
     time.sleep(60)
 def copy_stall(*args, **kwargs):
     marker.with_name('copy-pid').write_text(str(os.getpid()))
+    copy_ready.set()
     stall()
+def copy_fixture(origin, staging):
+    # Other cases cover the real backend. This case isolates destination copying.
+    import shutil
+    shutil.copyfile(os.environ['FIXTURE_VIDEO'], Path(staging) / 'video.mp4')
+    return {'backend': 'controlled-copy-fixture'}
+def start_copy_worker(process):
+    real_start(process)
+    if not copy_ready.wait(10):
+        raise RuntimeError('copy fixture did not reach its phase barrier')
 def dns(*args, **kwargs):
     if mode == 'dns': stall()
     return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]
@@ -44,7 +54,20 @@ def response(*args, **kwargs):
     if mode == 'connection': stall()
     marker.write_text(str(os.getpid()))
     return Body(Path(os.environ['FIXTURE_VIDEO']).read_bytes() if mode == 'copy' else b'invalid-video')
-with patch.object(YoutubeDL, 'extract_info', side_effect=extract), patch('socket.getaddrinfo', side_effect=dns), patch('urllib.request.OpenerDirector.open', side_effect=response), (patch('shutil.copyfileobj', side_effect=copy_stall) if mode == 'copy' else contextlib.nullcontext()):
+# Preload the controlled backend before starting the production deadline.
+import anonymous_backend
+copy_ready = multiprocessing.get_context('fork').Event()
+real_start = multiprocessing.process.BaseProcess.start
+with contextlib.ExitStack() as stack:
+    stack.enter_context(patch.object(YoutubeDL, 'extract_info', side_effect=extract))
+    stack.enter_context(patch('socket.getaddrinfo', side_effect=dns))
+    stack.enter_context(patch('urllib.request.OpenerDirector.open', side_effect=response))
+    if mode == 'copy':
+        stack.enter_context(patch('anonymous_backend.download', side_effect=copy_fixture))
+        stack.enter_context(patch('shutil.copyfileobj', side_effect=copy_stall))
+        # The real parent/worker deadline still includes start and copy. Waiting
+        # for readiness prevents a slow startup from testing an earlier phase.
+        stack.enter_context(patch.object(multiprocessing.process.BaseProcess, 'start', start_copy_worker))
     runpy.run_path(sys.argv[0], run_name='__main__')
 '''
 
@@ -151,12 +174,25 @@ class AcquisitionLifecycleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             base = Path(scratch)
             video = video_from_image(score_frame(), base)
-            process = self.start(base, 'copy', timeout='2', env={**os.environ, 'FIXTURE_VIDEO': str(video)})
-            stdout, stderr = process.communicate(timeout=6)
-            self.assertTrue((base / 'copy-pid').exists(), 'fixture must reach destination copying')
-            self.assertEqual(json.loads(stdout)['error']['code'], 'network_timeout', stderr)
-            self.assertEqual({p.name for p in (base / 'result').iterdir()}, {'manifest.json'})
-            self.assertFalse([p for p in base.iterdir() if p.is_dir() and p.name not in {'result', 'tools'}])
+            process = self.start(base, 'copy', timeout='0.8', env={**os.environ, 'FIXTURE_VIDEO': str(video)})
+            try:
+                deadline = time.monotonic() + 12
+                while not (base / 'copy-pid').exists() and process.poll() is None and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertTrue((base / 'copy-pid').exists(), 'fixture must reach destination copying')
+                copying = time.monotonic()
+                stdout, stderr = process.communicate(timeout=5)
+                self.assertEqual(process.returncode, 2, stderr)
+                self.assertEqual(json.loads(stdout)['error']['code'], 'network_timeout', stderr)
+                self.assertLess(time.monotonic() - copying, 4)
+                self.assertEqual({p.name for p in (base / 'result').iterdir()}, {'manifest.json'})
+                self.assertFalse([p for p in base.iterdir() if p.is_dir() and p.name not in {'result', 'tools'}])
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(int((base / 'copy-pid').read_text()), 0)
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.communicate()
 
 
 if __name__ == '__main__':

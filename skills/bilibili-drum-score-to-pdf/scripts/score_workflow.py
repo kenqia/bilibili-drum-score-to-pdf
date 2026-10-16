@@ -16,7 +16,8 @@ from video_seek import VideoReader
 
 from score_task import (ReconstructionError, load, review_pdf, redraw_inputs,
                         begin_redraw, finish_redraw, fail_redraw, review_redraw,
-                        reject_accepted_redraw, generation_materials)
+                        reject_accepted_redraw, generation_materials, crop_checks,
+                        redraw_requests, dispatch_redraw, cancel_redraw)
 
 
 def prepare(source, task, acquisition_timeout=ACQUISITION_SECONDS):
@@ -196,7 +197,7 @@ def _render_pdf(task, record):
     output = {'pdf': str(pdf.relative_to(task)), 'sha256': score_task.digest(pdf), 'page_count': count, 'placements': placements, 'routes': routes, 'method': 'reviewed_host_images_and_vector_fallback', 'layout_version': 2, 'status': 'needs_pdf_review', 'vector': {'path': str(manifest.relative_to(task)), 'sha256': score_task.digest(manifest)}}
     return score_task.finalize_output(task, output, blocks, layout_options, record)
 
-from automatic_score import overview, resample, auto_freeze, revise_crop
+from automatic_score import overview, resample, auto_freeze, revise_crop, scan_status
 
 
 from score_task import layout
@@ -226,8 +227,14 @@ def stage(task, title=None):
             return {'phase':'source','status':'blocked','artifacts':{**artifacts,
                 'rough':result.get('rough'),'regions':result.get('regions')},
                 'checks':result['checks'],'unresolved':result['checks'].get('unresolved',[]),
-                'next':{'operations':['resample','revise-crop','auto-freeze','assemble'], 'instruction':result.get('resume')}}
-    groups = redraw_inputs(task)
+                'scan_progress':record.get('overview', {}).get('scan', {}).get('progress', {}),
+                'next':{'operations':['overview','scan-status','resample','revise-crop','auto-freeze','assemble'], 'instruction':result.get('resume')}}
+    checks = crop_checks(task)
+    if checks['status'] != 'passed':
+        return {'phase': 'source', 'status': 'blocked', 'artifacts': artifacts,
+                'checks': checks, 'unresolved': checks['issues'],
+                'next': {'operations': ['crop-checks', 'revise-crop', 'assemble']}}
+    batch = redraw_requests(task)
     record = load(task)
     if record.get('output'):
         try:
@@ -242,28 +249,10 @@ def stage(task, title=None):
             'next':None if output['status']=='reviewed' else {'operation':'review-pdf',
                 'pages':list(range(1,output['page_count']+1)),'output_revision':output['output_revision'],
                 'instruction':'实际查看全部有序预览并记录标题、顺序、首尾和关键记号。'}}
-    handoffs=[]
-    for group in groups:
-        status=group['status']
-        if status=='needs_generation':
-            if record['freeze']['producer']=='agent':
-                handoffs.append({'group':group['id'],'status':'needs_input_review', 'input':group['input'],
-                    'next':'begin-redraw with actual viewed_notes, or fail-redraw'})
-            else:
-                request=begin_redraw(task,group['id'])
-                handoffs.append({'group':group['id'],'status':'host_required','request':request})
-        elif status=='calling':
-            handoffs.append({'group':group['id'],'status':'recover_existing_call','request':group['attempts'][-1],
-                'input':str(score_task.artifact(task,group['input']))})
-        elif status in ('needs_image_review','needs_correction'):
-            handoffs.append({'group':group['id'],'status':status,'output':group.get('output'),
-                'next':'review-redraw' if status=='needs_image_review' else 'begin-redraw correction=true or fail-redraw'})
-    for handoff in handoffs:
-        group = next(g for g in groups if g['id'] == handoff['group'])
-        handoff['input_identity'] = group.get('input_identity') or score_task.input_identity(record, group['regions'])
+    handoffs = [h for h in batch['handoffs'] if h['status'] not in ('accepted', 'vector')]
     if handoffs:
         return {'phase':'generation','status':'pending','artifacts':artifacts,'checks':record.get('program_checks',{}),
-            'unresolved':[],'handoffs':handoffs,'next':{'operations':['finish-redraw','review-redraw','fail-redraw'],
+            'unresolved':[],'handoffs':handoffs,'next':{'operations':['redraw-requests','dispatch-redraw','cancel-redraw','finish-redraw','review-redraw','fail-redraw'],
                 'instruction':'宿主执行或实际视觉审阅尚未完成；未知调用先恢复，不重新发送。'}}
     export(task)
     return stage(task,title)

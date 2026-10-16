@@ -19,6 +19,25 @@ Skill 默认处理 PDF。需要特定保存位置时，在同条消息补充路�
 
 宿主需要文件读写、脚本运行、原生图片查看与 PDF 页面查看能力。环境需要 Python 3.12+、uv、ffmpeg、ffprobe 和 Poppler 的 pdftoppm。普通 PDF 不依赖 Mido。项目不要求 B站 Cookie，不读取模型认证。
 
+## 发现宿主与检查依赖
+
+先运行不依赖第三方包的检查命令：
+
+```sh
+python skills/bilibili-drum-score-to-pdf/scripts/host_check.py
+```
+
+默认只检查 `~/.agents/skills`、`~/.codex/skills`、`~/.claude/skills` 的直接子目录 `SKILL.md`。宿主使用其他目录时传 `--skills-root /absolute/skills`，可重复指定。检查不读取宿主配置或凭证，也不修改安装。输出 JSON 包含匹配入口、同一根的重复入口、运行时工具、固定依赖版本和正常流程文档是否存在。文件存在不能证明宿主已经加载；实际工具清单和图片查看、生图能力仍须在宿主确认。
+
+在实际隔离依赖环境中检查运行条件：
+
+```sh
+uv run --quiet --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
+  python skills/bilibili-drum-score-to-pdf/scripts/host_check.py
+```
+
+安装副本使用根 `scripts/host_check.py` 和 `scripts/requirements.txt`。`--quiet` 减少依赖解析输出，命令失败时保留错误。依赖准备只运行一次检查，不反复编写探测脚本。扫描等待与进度见[程序检查](agents/automatic-source-checks.md#扫描预算进度与人工裁剪)。
+
 ## 使用仓库安装工具
 
 需要可校验的提交版本、更新备份和任务保留时，在源码仓库执行：

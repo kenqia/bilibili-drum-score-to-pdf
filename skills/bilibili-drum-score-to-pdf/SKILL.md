@@ -9,6 +9,8 @@ description: 将 B站链接或本地视频中的白底多行鼓谱粗拼、清�
 
 正常流程先读 `references/stage-recovery-layout.md`，调用参数见 `references/reconstruction-entry.md`。来源异常或需人工导航时，再读 `references/reconstruction-workflow.md`、`references/reconstruction-local.md` 和 `references/reconstruction-navigation.md`。
 
+宿主发现或依赖检查运行 `scripts/host_check.py`；在隔离环境中使用 `uv run --quiet --isolated --with-requirements scripts/requirements.txt python scripts/host_check.py`。检查公开 Skill 入口、工具和依赖版本，宿主实际看图与生图能力另行确认。
+
 需要 Python 3.12+、uv、ffmpeg、ffprobe、原生图片查看能力以及 PDF 页面渲染工具，项目使用 Poppler。依赖在隔离 uv 环境中运行，不读取 B站 Cookie、登录态或模型认证。
 
 ```sh
@@ -20,7 +22,7 @@ uv run --isolated --with-requirements "/absolute/skill/scripts/requirements.txt"
 把 `/absolute/skill` 换成本文件所在目录的绝对路径。省略 `--operation` 使用新版 `prepare`；本地视频使用同一入口。链接支持 `?p=2`。准备只创建待审阅任务，不表示已交付。后续操作使用 `--task` 与 Agent 编写的 `--request` JSON，用户无需填写 JSON。完整操作列表和请求规则见 `references/reconstruction-entry.md`。
 
 1. 准备任务后调用 `stage`，按响应的 `phase`、产物、检查、未决和 `next` 继续。正常来源自动采集、检查与冻结，生图前无需 Agent 复看。音乐、接续或裁剪未决时补采；未解决保留 blocked。
-2. 按 `handoffs` 执行真实宿主生图或恢复已有 request。实际查看每个生成结果，核对音乐记号，提交完整行边界。每个输入版本最多一次定向修正；工具缺失、失败或修正后仍不合格时转矢量，轮廓转描不称为音乐识别。
+2. 按 `handoffs` 执行真实宿主生图或恢复已有 request。`ready_to_dispatch` 先执行 `dispatch-redraw` 再调用宿主；`recover_existing_call` 先恢复结果。批量与作废规则见 `references/stage-recovery-layout.md`。实际查看每个生成结果，核对音乐记号，提交完整行边界。每个输入版本最多一次定向修正；工具缺失、失败或修正后仍不合格时转矢量，轮廓转描不称为音乐识别。
 3. 再调用 `stage` 导出 A4 和全部有序预览。实际查看最终每页，检查标题、顺序、首尾、关键记号、裁断、重叠和留白，用当前 output_revision 调用 `review-pdf`。只有 complete 才交付。
 
 局部裁剪、A→B→A 额度恢复、重新分组、未知调用与仅改布局时，读取 `references/stage-recovery-layout.md`。低层来源异常操作读取 `references/automatic-source-checks.md` 和 `references/reconstruction-workflow.md`。

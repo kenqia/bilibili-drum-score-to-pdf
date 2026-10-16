@@ -37,6 +37,10 @@ jobs:
       - name: Install pinned Python dependencies
         id: dependencies
         run: python -m pip install -r skills/bilibili-drum-score-to-pdf/scripts/requirements.txt
+      - name: Check request and scan entry syntax
+        run: |
+          python -m pip install --quiet ruff==0.14.14
+          ruff check --select E701,E702 skills/bilibili-drum-score-to-pdf/scripts/score_task.py skills/bilibili-drum-score-to-pdf/scripts/score_workflow.py skills/bilibili-drum-score-to-pdf/scripts/automatic_score.py skills/bilibili-drum-score-to-pdf/scripts/convert.py skills/bilibili-drum-score-to-pdf/scripts/host_check.py
       - name: Run offline regression shard
         run: python ci/run_unittest_shard.py --index ${{ matrix.shard }} --count 2
 
