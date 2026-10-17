@@ -204,14 +204,23 @@ from score_task import layout
 
 
 
-def stage(task, title=None, mode='sparse'):
+def stage(task, title=None, mode='sparse', max_observations=128):
     """Advance automatic work to the next genuine host or visual decision."""
     import automatic_score as automatic
     if mode not in ('sparse', 'strict'):
         raise ReconstructionError('导航模式必须为 sparse 或 strict。')
+    if type(max_observations) is not int or not 1 <= max_observations <= 8192:
+        raise ReconstructionError('单次导航预算必须为 1–8192 的整数。')
     record = load(task)
     artifacts = {}
     survey = record.get('overview', {})
+    if mode == 'strict' and (survey.get('mode') == 'sparse' or not survey.get('scan', {}).get('complete')):
+        if survey:
+            survey['mode'] = 'strict'
+        record.pop('freeze', None)
+        score_task.save(task, record)
+        survey = overview(task)
+        record = load(task)
     try:
         automatic.require_frozen(record)
         already_frozen = True
@@ -220,7 +229,7 @@ def stage(task, title=None, mode='sparse'):
     if not already_frozen:
         if mode == 'sparse':
             import sparse_navigation
-            sparse_navigation.collect(task)
+            sparse_navigation.collect(task, max_observations)
             survey = load(task)['overview']
         elif not survey.get('scan', {}).get('complete'):
             survey = overview(task)
@@ -231,11 +240,13 @@ def stage(task, title=None, mode='sparse'):
     except ReconstructionError:
         result = auto_freeze(task, title)
         if result['status'] != 'frozen':
-            return {'phase':'source','status':'blocked','artifacts':{**artifacts,
+            current = load(task)
+            return {'phase':'source','status':'pending' if current.get('navigation', {}).get('status') == 'pending' else 'blocked','artifacts':{**artifacts,
                 'rough':result.get('rough'),'regions':result.get('regions')},
                 'checks':result['checks'],'unresolved':result['checks'].get('unresolved',[]),
+                'navigation': current.get('navigation'), 'row_manifest': current.get('row_manifest'),
                 'scan_progress':record.get('overview', {}).get('scan', {}).get('progress', {}),
-                'next':{'operations':['overview','scan-status','resample','revise-crop','auto-freeze','assemble'], 'instruction':result.get('resume')}}
+                'next':{'operations':['stage','row-manifest','review-continuity','resample','revise-crop','auto-freeze','assemble'], 'instruction':result.get('resume')}}
     checks = crop_checks(task)
     if checks['status'] != 'passed':
         return {'phase': 'source', 'status': 'blocked', 'artifacts': artifacts,

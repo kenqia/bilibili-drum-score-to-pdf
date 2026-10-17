@@ -27,8 +27,10 @@ SIGNATURE_PIXELS = 512 * 1024 * 1024
 def _fingerprint(record):
     material = {'source': record['source']['sha256'], 'regions': record['regions'],
         'rough_chunks': record.get('rough_chunks'), 'review': record.get('source_review'),
-        'checks': record.get('program_checks'), 'row_manifest': record.get('row_manifest'),
+        'checks': record.get('program_checks'),
         'overview_candidates': [c['sha256'] for c in record.get('overview',{}).get('candidates',[])]}
+    if 'row_manifest' in record:
+        material['row_manifest'] = record['row_manifest']
     return hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()
 
 
@@ -45,6 +47,13 @@ def freeze(record, producer):
 
 def require_frozen(record):
     frozen = record.get('freeze')
+    if frozen and frozen.get('producer') == 'program' and record.get('overview', {}).get('mode') == 'sparse':
+        from sparse_navigation import POLICY
+        navigation = record.get('navigation', {})
+        if (navigation.get('policy_version') != POLICY or navigation.get('status') != 'observed' or
+                not all(navigation.get('endpoints', {}).get(name) for name in ('first', 'last')) or
+                record.get('row_manifest', {}).get('continuity_complete') is not True):
+            raise state.ReconstructionError('稀疏导航或谱行接续证据尚未完成。')
     if frozen and frozen.get('producer')=='program' and (
             frozen.get('policy_version')!=PROGRAM_CHECK_VERSION or
             record.get('program_checks',{}).get('policy_version')!=PROGRAM_CHECK_VERSION or
@@ -902,14 +911,22 @@ def auto_freeze(task, title=None):
             'fixed_prefix_rows':prefix,'overlap_rows':overlap,'positions':[r['position'] for r in systems]})
     unresolved.extend(risk for risks in risk_by_position.values() for risk in risks)
     if sparse:
+        from sparse_navigation import covered, numbered_evidence
         prior = None
         for event in events:
             if event['kind'] != 'systems':
                 continue
-            if prior and not (event.get('spatial_continuation') or event.get('overlap_rows') or
-                              event.get('replacement_of_damaged_observation')):
-                unresolved.append({'code': 'unproved_row_continuation', 'capture': event['capture'],
-                                   'previous_capture': prior['capture'], 'resume': 'stage'})
+            if prior:
+                first, last = captures[prior['capture']], captures[event['capture']]
+                numbered = numbered_evidence(record, first, last)
+                if numbered:
+                    event['numbered_continuation'] = numbered
+                elif covered(record, first, last):
+                    event['continuous_transition'] = [first['timestamp'], last['timestamp']]
+                elif not (event.get('spatial_continuation') or event.get('overlap_rows') or
+                          event.get('replacement_of_damaged_observation')):
+                    unresolved.append({'code': 'unproved_row_continuation', 'capture': event['capture'],
+                                       'previous_capture': prior['capture'], 'resume': 'stage'})
             prior = event
     if not any(r['kind']=='system' for r in chosen):
         unresolved.append({'code':'no_complete_system'})

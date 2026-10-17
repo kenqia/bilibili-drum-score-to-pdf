@@ -3,6 +3,17 @@ import copy
 import uuid
 
 
+def observe(record, shot, regions, risks, partial):
+    manifest = record.setdefault('row_manifest', {'version': 'score-rows/1',
+        'source_sha256': record['source']['sha256'], 'rows': [], 'source_positions': {},
+        'continuity_complete': False, 'unresolved': []})
+    manifest.setdefault('observations', {})[shot['id']] = {
+        'capture': shot['id'], 'pts': shot['pts'], 'time_base': shot['time_base'],
+        'timestamp': shot['timestamp'], 'regions': regions, 'risks': risks, 'partial': partial,
+        'complete_rows': sum(row['kind'] == 'system' for row in regions)}
+    manifest['continuity_complete'] = False
+
+
 def source_key(row):
     anchor = round(row['bbox'][1] + row['staff_top'], 3) if row['kind'] == 'system' else 'header'
     return f"{row['capture']}:{anchor}"
@@ -58,6 +69,7 @@ def update(record, chosen, observations, events, unresolved):
                                if row['id'] in event.get('positions', [])]
     manifest = {'version': 'score-rows/1', 'source_sha256': record['source']['sha256'],
                 'rows': rows, 'source_positions': source_positions,
+                'observations': previous.get('observations', {}),
                 'continuity_complete': not unresolved and bool(rows), 'unresolved': copy.deepcopy(unresolved)}
     record['row_manifest'] = manifest
     return manifest
