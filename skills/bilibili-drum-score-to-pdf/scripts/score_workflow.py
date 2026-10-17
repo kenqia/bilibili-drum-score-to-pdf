@@ -204,9 +204,11 @@ from score_task import layout
 
 
 
-def stage(task, title=None):
+def stage(task, title=None, mode='sparse'):
     """Advance automatic work to the next genuine host or visual decision."""
     import automatic_score as automatic
+    if mode not in ('sparse', 'strict'):
+        raise ReconstructionError('导航模式必须为 sparse 或 strict。')
     record = load(task)
     artifacts = {}
     survey = record.get('overview', {})
@@ -215,8 +217,13 @@ def stage(task, title=None):
         already_frozen = True
     except ReconstructionError:
         already_frozen = False
-    if not already_frozen and survey.get('scan', {}).get('policy_version') != automatic.SCAN_POLICY_VERSION:
-        survey = overview(task)
+    if not already_frozen:
+        if mode == 'sparse':
+            import sparse_navigation
+            sparse_navigation.collect(task)
+            survey = load(task)['overview']
+        elif not survey.get('scan', {}).get('complete'):
+            survey = overview(task)
     artifacts['overview'] = survey.get('panels', [])
     record = load(task)
     try:

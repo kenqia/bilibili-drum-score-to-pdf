@@ -27,7 +27,7 @@ SIGNATURE_PIXELS = 512 * 1024 * 1024
 def _fingerprint(record):
     material = {'source': record['source']['sha256'], 'regions': record['regions'],
         'rough_chunks': record.get('rough_chunks'), 'review': record.get('source_review'),
-        'checks': record.get('program_checks'),
+        'checks': record.get('program_checks'), 'row_manifest': record.get('row_manifest'),
         'overview_candidates': [c['sha256'] for c in record.get('overview',{}).get('candidates',[])]}
     return hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()
 
@@ -659,7 +659,12 @@ def auto_freeze(task, title=None):
     def native_mask(identifier):
         with Image.open(state.artifact(task,captures[identifier])) as image:
             return geometry.ink_mask(image)
-    unresolved=[] if survey['scan']['complete'] else [{'code':'unobserved_interval','resume':'overview'}]
+    sparse = survey.get('mode') == 'sparse'
+    if sparse:
+        unresolved = [] if record.get('navigation', {}).get('status') == 'observed' else [
+            {'code': 'navigation_incomplete', 'resume': 'stage'}]
+    else:
+        unresolved=[] if survey['scan']['complete'] else [{'code':'unobserved_interval','resume':'overview'}]
     if survey['scan'].get('policy_version')!=SCAN_POLICY_VERSION:
         unresolved.append({'code':'scan_policy_changed','resume':'overview or prepare a new independent task'})
     chosen, previous, previous_signatures=[],[],[]
@@ -896,9 +901,22 @@ def auto_freeze(task, title=None):
         events.append({'capture':shot['id'],'pts':shot['pts'],'kind':'systems',
             'fixed_prefix_rows':prefix,'overlap_rows':overlap,'positions':[r['position'] for r in systems]})
     unresolved.extend(risk for risks in risk_by_position.values() for risk in risks)
+    if sparse:
+        prior = None
+        for event in events:
+            if event['kind'] != 'systems':
+                continue
+            if prior and not (event.get('spatial_continuation') or event.get('overlap_rows') or
+                              event.get('replacement_of_damaged_observation')):
+                unresolved.append({'code': 'unproved_row_continuation', 'capture': event['capture'],
+                                   'previous_capture': prior['capture'], 'resume': 'stage'})
+            prior = event
     if not any(r['kind']=='system' for r in chosen):
         unresolved.append({'code':'no_complete_system'})
-    checks={'producer':'program','policy_version':PROGRAM_CHECK_VERSION,'method':'five_line_geometry_and_continuous_temporal_observation',
+    import row_manifest
+    row_manifest.update(record, chosen, observations, events, unresolved)
+    checks={'producer':'program','policy_version':PROGRAM_CHECK_VERSION,'method':
+        'five_line_geometry_and_sparse_continuation' if sparse else 'five_line_geometry_and_continuous_temporal_observation',
         'source_sha256':record['source']['sha256'],'scan':survey['scan'], 'events':events,
         'first':next((e for e in events if e['kind']=='systems'),None),
         'last':next((e for e in reversed(events) if e['kind']=='systems'),None),
@@ -914,7 +932,7 @@ def auto_freeze(task, title=None):
         frontier=hashlib.sha256(json.dumps({'unresolved':unresolved,
             'candidates':[c['sha256'] for c in survey['candidates']]},sort_keys=True).encode()).hexdigest()
         attempted=record.setdefault('automatic_resampling',[])
-        if not any(item['frontier']==frontier for item in attempted):
+        if not sparse and not any(item['frontier']==frontier for item in attempted):
             points={captures[r['capture']]['timestamp'] for r in unresolved if r.get('capture') in captures}
             if points:
                 intervals=[[max(0,t-.5),min(record['source']['duration'],t+.5)] for t in sorted(points)]
