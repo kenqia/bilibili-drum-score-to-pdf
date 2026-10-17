@@ -666,19 +666,50 @@ def auto_freeze(task, title=None):
     except state.ReconstructionError:
         pass
     captures={c['id']:c for c in record['captures']}
+    from sparse_navigation import numbered_conflicts, numbered_evidence
+    reviews = record.get('continuity_reviews', [])
+    # Keep the actual frames the Agent reviewed in both navigation modes.
+    for review in reviews:
+        for identifier in (review['previous_capture'], review['capture']):
+            if not any(shot['id'] == identifier for shot in survey['candidates']):
+                survey['candidates'].append(captures[identifier])
+    survey['candidates'].sort(key=lambda shot: shot['timestamp'])
+    reconciliation = []
+    for review in reviews:
+        first, last = captures[review['previous_capture']], captures[review['capture']]
+        if any(first['timestamp'] < shot['timestamp'] < last['timestamp'] for shot in survey['candidates']):
+            reconciliation.append({'code': 'numbered_anchor_requires_reconciliation',
+                'previous_capture': first['id'], 'capture': last['id'],
+                'reason': 'New observations between reviewed anchors need original-position review.'})
+    if reconciliation:
+        # Continuous coverage adds evidence; it cannot erase an established
+        # later occurrence just because its music has the same pixels.
+        checks = {'producer': 'program', 'policy_version': PROGRAM_CHECK_VERSION,
+            'method': 'numbered_anchor_revalidation_required', 'source_sha256': record['source']['sha256'],
+            'scan': survey['scan'], 'unresolved': reconciliation + numbered_conflicts(record)}
+        record.update(program_checks=checks, status='needs_source_review',
+            source_review={'producer': 'program', 'complete': False, 'unresolved': checks['unresolved']})
+        if 'row_manifest' in record:
+            record['row_manifest'].update(continuity_complete=False, unresolved=checks['unresolved'])
+            for row in record['row_manifest']['rows']:
+                row.update(status='unresolved', issues=checks['unresolved'])
+        record.pop('freeze', None)
+        state.save(task, record)
+        return {'status': 'blocked', 'checks': checks,
+            **{key: record[key] for key in ('regions', 'rough', 'rough_chunks') if key in record},
+            'resume': 'Review new observations and assemble confirmed original positions; existing materials are preserved.'}
     @lru_cache(maxsize=4)
     def native_mask(identifier):
         with Image.open(state.artifact(task,captures[identifier])) as image:
             return geometry.ink_mask(image)
     sparse = survey.get('mode') == 'sparse'
     if sparse:
-        from sparse_navigation import numbered_conflicts, numbered_evidence
         unresolved = [] if record.get('navigation', {}).get('status') == 'observed' else [
             {'code': 'navigation_incomplete', 'resume': 'stage'}]
         unresolved.extend(record.get('navigation', {}).get('unresolved', []))
-        unresolved.extend(numbered_conflicts(record))
     else:
         unresolved=[] if survey['scan']['complete'] else [{'code':'unobserved_interval','resume':'overview'}]
+    unresolved.extend(numbered_conflicts(record))
     if survey['scan'].get('policy_version')!=SCAN_POLICY_VERSION:
         unresolved.append({'code':'scan_policy_changed','resume':'overview or prepare a new independent task'})
     chosen, previous, previous_signatures=[],[],[]
@@ -764,7 +795,7 @@ def auto_freeze(task, title=None):
         unresolved.extend({'capture':shot['id'],**risk} for risk in risks if not any(
             risk['bbox'][1]<row['bbox'][3] and risk['bbox'][3]>row['bbox'][1] for row in systems))
         signatures=list(signatures)
-        numbered_join = sparse and previous and numbered_evidence(record, captures[previous[0]['capture']], shot)
+        numbered_join = previous and numbered_evidence(record, captures[previous[0]['capture']], shot)
         ambiguous_change=False
         stationary=(not numbered_join and len(previous)==len(systems) and len(systems)>=3 and
             all(abs(new['bbox'][1]+new['staff_top']-old['bbox'][1]-old['staff_top'])<=2

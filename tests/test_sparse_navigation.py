@@ -214,6 +214,13 @@ class SparseNavigationTests(unittest.TestCase):
         rows = self.call('row-manifest')['rows']
         self.assertEqual(len(rows), 6)
         self.assertEqual(len({r['position'] for r in rows}), 6)
+        strict_result = self.call('stage', {'mode': 'strict'})
+        strict = self.call('row-manifest')['rows']
+        self.assertEqual(len(strict), 6)
+        self.assertTrue(self.call('resume')['overview']['scan']['complete'])
+        self.assertEqual(strict_result['phase'], 'source')
+        self.assertIn('numbered_anchor_requires_reconciliation', [issue['code'] for issue in strict_result['unresolved']])
+        self.assertFalse(self.call('row-manifest')['continuity_complete'])
 
     def test_one_pixel_header_is_preserved_without_opencv_scalar_ambiguity(self):
         from PIL import ImageDraw
