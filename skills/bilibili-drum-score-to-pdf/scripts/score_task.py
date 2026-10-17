@@ -194,6 +194,8 @@ def assemble(task, title, regions, review, *, positioned=False):
         # Re-confirming identical valid source material is recovery, not a new
         # request. Preserve accepted outputs and persisted correction budgets.
         previous['source_review'] = review
+        import row_manifest
+        row_manifest.from_selection(previous)
         from automatic_score import freeze
         freeze(previous, 'agent')
         if review.get('complete') is not True or review.get('unresolved'):
@@ -211,6 +213,8 @@ def assemble(task, title, regions, review, *, positioned=False):
     previous.update(**materials, title=title.strip(), source_review=review,
         status='ready_to_redraw' if review.get('complete') is True and not review.get('unresolved') else 'needs_source_review')
     invalidate_selection(previous)
+    import row_manifest
+    row_manifest.from_selection(previous)
     previous['metrics']['presented_capture_ids'] = list(dict.fromkeys(viewed))
     from automatic_score import freeze
     freeze(previous, 'agent')

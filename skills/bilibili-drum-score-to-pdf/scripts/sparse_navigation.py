@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image
+import cv2
 import automatic_score as automatic
 import native_cache
 import score_task as state
@@ -23,9 +24,10 @@ def covered(record, first, last):
 
 
 def numbered_evidence(record, first, last):
-    return next((decision for decision in record.get('continuity_reviews', [])
+    return next((decision for decision in reversed(record.get('continuity_reviews', []))
                  if decision['previous_capture'] == first['id'] and decision['capture'] == last['id']
-                 and decision['source_sha256'] == record['source']['sha256']), None)
+                 and decision['source_sha256'] == record['source']['sha256']
+                 and decision['previous_sha256'] == first['sha256'] and decision['sha256'] == last['sha256']), None)
 
 
 def compare(task, record, first, last):
@@ -50,6 +52,14 @@ def compare(task, record, first, last):
         if len(overlaps) == 1:
             return {'proved': True, 'new_complete_rows': len(new_rows) - overlaps[0],
                     'overlap_rows': overlaps[0], 'reason': 'unique_row_overlap'}
+        if len(old_rows) == len(new_rows) and all(automatic._same(
+                cv2.resize(a, (480, 128), interpolation=cv2.INTER_AREA),
+                cv2.resize(b, (480, 128), interpolation=cv2.INTER_AREA))
+                for a, b in zip(old_signatures, new_signatures)):
+            # Navigation may ignore raster detail to choose a jump, but this
+            # must never approve notation or invent a native row identity.
+            return {'proved': False, 'new_complete_rows': 0, 'overlap_rows': 0,
+                    'reason': 'similar_rows_need_review', 'visual_review_needed': True}
         masks = {first['id']: automatic._signature(old_image), last['id']: automatic._signature(new_image)}
         mapping = automatic._spatial_continuation(old_rows, new_rows,
             [automatic._row_signature(old_image, r, core=True, spacing=spacing) for r in old_rows],
@@ -59,11 +69,16 @@ def compare(task, record, first, last):
 
 
 def collect(task, max_observations=128):
+    began = time.monotonic()
     record = state.load(task)
     survey = record.setdefault('overview', {'candidates': [], 'panels': [], 'resamples': [],
         'scan': {'complete': False, 'frames_observed': 0, 'completed_intervals': [],
                  'cursor': 0, 'policy_version': automatic.SCAN_POLICY_VERSION}})
     survey['mode'] = 'sparse'
+    if survey['scan'].get('policy_version') != automatic.SCAN_POLICY_VERSION:
+        survey.setdefault('scan_history', []).append(dict(survey['scan']))
+        survey['scan'] = {'complete': False, 'frames_observed': 0, 'completed_intervals': [],
+                          'cursor': 0, 'policy_version': automatic.SCAN_POLICY_VERSION}
     duration = record['source']['duration']
     frame = record['source'].get('frame_duration', .04)
     end = max(0, duration - frame - 1e-6)
@@ -72,16 +87,17 @@ def collect(task, max_observations=128):
         'status': 'pending', 'unresolved': []})
     if navigation['policy_version'] != POLICY:
         raise state.ReconstructionError('导航版本已改变；保留原任务并建立新任务。')
+    previous_wall = navigation.get('wall_seconds', 0)
     state.save(task, record)
 
     def observe(seconds, reason):
-        before = state.load(task)
-        candidates = before['overview']['candidates']
+        nonlocal record
+        candidates = record['overview']['candidates']
         if (len(candidates) >= automatic.MAX_EVENTS or
                 sum((Path(task) / c['path']).stat().st_size for c in candidates) >= automatic.MAX_NATIVE_BYTES):
             raise state.ReconstructionError('导航来源达到资源上限；保留进度。')
         shot = native_cache.capture(task, seconds)
-        current = state.load(task)
+        current = record = state.load(task)
         current_survey = current['overview']
         if not any(c['id'] == shot['id'] for c in current_survey['candidates']):
             current_survey['candidates'].append(shot)
@@ -97,10 +113,8 @@ def collect(task, max_observations=128):
         return shot
 
     for name, seconds in (('first', 0), ('last', end)):
-        record = state.load(task)
         if name not in record['navigation']['endpoints']:
             shot = observe(seconds, name + '_endpoint_and_layout')
-            record = state.load(task)
             with Image.open(state.artifact(task, shot)) as image:
                 regions, risks, partial = automatic.detect(image)
             record['navigation']['endpoints'][name] = {'capture': shot['id'],
@@ -108,9 +122,7 @@ def collect(task, max_observations=128):
                 'complete_rows': sum(r['kind'] == 'system' for r in regions),
                 'risks': risks, 'partial': partial}
             state.save(task, record)
-    began = time.monotonic()
     for _ in range(max_observations):
-        record = state.load(task)
         navigation = record['navigation']
         if navigation['cursor'] >= end:
             break
@@ -118,11 +130,10 @@ def collect(task, max_observations=128):
         previous = next(c for c in record['overview']['candidates'] if c['id'] == previous_id)
         target = min(end, navigation['cursor'] + navigation['step'])
         shot = observe(target, 'forward_search')
-        record = state.load(task)
         comparison = compare(task, record, previous, shot)
         navigation = record['navigation']
         old_step = navigation['step']
-        if comparison['new_complete_rows'] == 0 and comparison['proved']:
+        if comparison['new_complete_rows'] == 0 and (comparison['proved'] or comparison.get('visual_review_needed')):
             next_step = min(30, old_step * 1.7)
         elif comparison['proved']:
             next_step = min(30, old_step * 1.2) if comparison['new_complete_rows'] == 1 else max(.5, old_step / 1.4)
@@ -136,13 +147,13 @@ def collect(task, max_observations=128):
     record = state.load(task)
     navigation = record['navigation']
     navigation['status'] = 'observed' if navigation['cursor'] >= end else 'pending'
-    navigation['wall_seconds'] = navigation.get('wall_seconds', 0) + time.monotonic() - began
     state.save(task, record)
     if navigation['status'] == 'observed':
         refine(task, observe, max_observations)
         record = state.load(task)
         navigation = record['navigation']
     record['overview']['panels'] = automatic._panels(task, record['overview']['candidates'])
+    navigation['wall_seconds'] = previous_wall + time.monotonic() - began
     state.save(task, record)
     return navigation
 
@@ -151,7 +162,6 @@ def refine(task, observe, budget):
     """Return to missing joins; continuous decoding stays inside a risk interval."""
     @lru_cache(maxsize=256)
     def comparison(first_id, last_id):
-        record = state.load(task)
         captures = {shot['id']: shot for shot in record['captures']}
         return compare(task, record, captures[first_id], captures[last_id])
 
@@ -160,9 +170,16 @@ def refine(task, observe, budget):
         candidates = record['overview']['candidates']
         gap = next(((first, last) for first, last in zip(candidates, candidates[1:])
                     if not covered(record, first, last) and not numbered_evidence(record, first, last)
-                    and not comparison(first['id'], last['id'])['proved']), None)
+                    and not comparison(first['id'], last['id'])['proved']
+                    and not comparison(first['id'], last['id']).get('visual_review_needed')), None)
         if gap is None:
             record['navigation']['status'] = 'observed'
+            record['navigation']['unresolved'] = [
+                {'code': 'native_difference_needs_visual_review', 'previous_capture': first['id'],
+                 'capture': last['id'], 'reason': 'Navigation-scale similarity is not native notation evidence.'}
+                for first, last in zip(candidates, candidates[1:])
+                if not covered(record, first, last) and not numbered_evidence(record, first, last)
+                and comparison(first['id'], last['id']).get('visual_review_needed')]
             state.save(task, record)
             return
         first, last = gap

@@ -19,6 +19,7 @@ GROUP_ENTRIES = ('cli', 'workflow', 'task')
 CROP_ENTRIES = ('cli', 'workflow', 'task')
 REQUEST_ENTRIES = ('cli', 'workflow', 'task')
 SCAN_ENTRIES = ('cli', 'workflow', 'automatic')
+NAVIGATION_ENTRIES = ('cli', 'workflow')
 
 
 class PublicContracts(unittest.TestCase):
@@ -54,6 +55,32 @@ class PublicContracts(unittest.TestCase):
             return self.cli('redraw-inputs', {} if groups is None else {'groups': groups})
         owner = {'workflow': score_workflow, 'task': score_task}[entry]
         return owner.redraw_inputs(self.task, groups=groups)
+
+    def test_navigation_entries_validate_budget_and_do_not_bypass_source_integrity(self):
+        self.select()
+        baseline = score_task.load(self.task)
+        for entry in NAVIGATION_ENTRIES:
+            with self.subTest(entry=entry):
+                def call(operation, payload):
+                    if entry == 'cli':
+                        return self.cli(operation, payload)
+                    return getattr(score_workflow, operation.replace('-', '_'))(self.task, **payload)
+                for payload in ({'mode': 'fast'}, {'max_observations': 0}, {'max_observations': True}):
+                    with self.assertRaises(score_task.ReconstructionError):
+                        call('stage', payload)
+                with self.assertRaises(score_task.ReconstructionError):
+                    call('review-continuity', {'previous_capture': 'missing', 'capture': 'missing',
+                        'previous_bars': [1, 4], 'bars': [5, 8], 'viewed_captures': [],
+                        'complete_rows': True, 'first_last': 'Controlled.', 'notes': 'Controlled.'})
+                self.assertEqual(score_task.load(self.task), baseline)
+                self.assertTrue(call('row-manifest', {})['continuity_complete'])
+        self.video.write_bytes(b'Controlled damaged source.')
+        for entry in NAVIGATION_ENTRIES:
+            with self.subTest(entry=entry), self.assertRaises(score_task.ReconstructionError):
+                if entry == 'cli':
+                    self.cli('row-manifest', {})
+                else:
+                    score_workflow.row_manifest(self.task)
 
     def test_scan_status_is_explicitly_metadata_only_at_every_entry(self):
         self.select()

@@ -31,6 +31,8 @@ def _fingerprint(record):
         'overview_candidates': [c['sha256'] for c in record.get('overview',{}).get('candidates',[])]}
     if 'row_manifest' in record:
         material['row_manifest'] = record['row_manifest']
+    if 'continuity_reviews' in record:
+        material['continuity_reviews'] = record['continuity_reviews']
     return hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()
 
 
@@ -672,6 +674,7 @@ def auto_freeze(task, title=None):
     if sparse:
         unresolved = [] if record.get('navigation', {}).get('status') == 'observed' else [
             {'code': 'navigation_incomplete', 'resume': 'stage'}]
+        unresolved.extend(record.get('navigation', {}).get('unresolved', []))
     else:
         unresolved=[] if survey['scan']['complete'] else [{'code':'unobserved_interval','resume':'overview'}]
     if survey['scan'].get('policy_version')!=SCAN_POLICY_VERSION:
@@ -931,7 +934,7 @@ def auto_freeze(task, title=None):
     if not any(r['kind']=='system' for r in chosen):
         unresolved.append({'code':'no_complete_system'})
     import row_manifest
-    row_manifest.update(record, chosen, observations, events, unresolved)
+    row_manifest.update(task, record, chosen, observations, events, unresolved)
     checks={'producer':'program','policy_version':PROGRAM_CHECK_VERSION,'method':
         'five_line_geometry_and_sparse_continuation' if sparse else 'five_line_geometry_and_continuous_temporal_observation',
         'source_sha256':record['source']['sha256'],'scan':survey['scan'], 'events':events,
@@ -985,6 +988,7 @@ def auto_freeze(task, title=None):
                 checks['material_error']=str(error)
         record.update(program_checks=checks,source_review={'producer':'program','complete':False,'unresolved':unresolved},
             status='needs_source_review')
+        row_manifest.bind(record)
         record.pop('freeze',None)
         state.save(task,record)
         return {'status':'blocked','checks':checks,
@@ -998,6 +1002,7 @@ def auto_freeze(task, title=None):
     record.update(**materials,title=(title or record.get('title') or 'Score').strip(),
         program_checks=checks,source_review={'producer':'program','complete':True,'unresolved':[]},
         status='ready_to_redraw')
+    row_manifest.bind(record)
     freeze(record,'program')
     state.save(task,record)
     return {'status':'frozen','freeze':record['freeze'],'checks':checks,**materials,
@@ -1022,5 +1027,7 @@ def revise_crop(task, index, bbox):
     state.invalidate_output(record, 'crop_revision')
     record.setdefault('crop_revisions',[]).append({'index':index,'capture':old['capture'],
         'original_bbox':original_box,'bbox':bbox,'source_sha256':old['source_sha256']})
+    import row_manifest
+    row_manifest.from_selection(record)
     state.save(task,record)
     return record

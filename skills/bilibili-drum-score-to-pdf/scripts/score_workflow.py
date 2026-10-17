@@ -124,6 +124,47 @@ def cache_limits(task, max_entries=64, max_bytes=268435456):
     return native_cache.report(record)
 
 
+def row_manifest(task):
+    """Read the verified row inventory, never metadata-only approval."""
+    record = load(task)
+    return record.get('row_manifest', {'version': 'score-rows/1', 'rows': [],
+        'source_sha256': record['source']['sha256'], 'continuity_complete': False,
+        'unresolved': [{'code': 'no_row_observations'}]})
+
+
+def review_continuity(task, previous_capture, capture, previous_bars, bars,
+                      viewed_captures, complete_rows, first_last, notes):
+    """Record an Agent's actual numbered join; this is not program OCR."""
+    record = load(task)
+    shots = {shot['id']: shot for shot in record['captures']}
+    if (previous_capture not in shots or capture not in shots or
+            not isinstance(viewed_captures, list) or
+            not {previous_capture, capture}.issubset(viewed_captures) or
+            not set(viewed_captures).issubset(shots) or complete_rows is not True or
+            not isinstance(first_last, str) or not first_last.strip() or
+            not isinstance(notes, str) or not notes.strip()):
+        raise ReconstructionError('需要实际查看的两张来源、完整谱行和首尾接续依据。')
+    for limits in (previous_bars, bars):
+        if (not isinstance(limits, list) or len(limits) != 2 or
+                any(type(value) is not int or value < 1 for value in limits) or limits[0] > limits[1]):
+            raise ReconstructionError('小节范围必须为已实际读取的正整数起止。')
+    if (bars[0] != previous_bars[1] + 1 or
+            shots[previous_capture]['timestamp'] >= shots[capture]['timestamp']):
+        raise ReconstructionError('小节或来源顺序不连续；请局部回查。')
+    evidence = {'producer': 'agent', 'method': 'numbered_complete_rows_and_boundary_marks',
+        'source_sha256': record['source']['sha256'], 'previous_capture': previous_capture,
+        'capture': capture, 'previous_sha256': shots[previous_capture]['sha256'],
+        'sha256': shots[capture]['sha256'], 'previous_bars': previous_bars, 'bars': bars,
+        'viewed_captures': viewed_captures, 'complete_rows': True,
+        'first_last': first_last.strip(), 'notes': notes.strip()}
+    reviews = record.setdefault('continuity_reviews', [])
+    if evidence not in reviews:
+        reviews.append(evidence)
+        record.pop('freeze', None)
+    score_task.save(task, record)
+    return evidence
+
+
 def present(task, identifiers, notes):
     """Receipt of images actually shown, distinct from retained or decoded frames."""
     record = load(task)
@@ -214,7 +255,8 @@ def stage(task, title=None, mode='sparse', max_observations=128):
     record = load(task)
     artifacts = {}
     survey = record.get('overview', {})
-    if mode == 'strict' and (survey.get('mode') == 'sparse' or not survey.get('scan', {}).get('complete')):
+    if mode == 'strict' and (survey.get('mode') == 'sparse' or not survey.get('scan', {}).get('complete') or
+                            survey.get('scan', {}).get('policy_version') != automatic.SCAN_POLICY_VERSION):
         if survey:
             survey['mode'] = 'strict'
         record.pop('freeze', None)
