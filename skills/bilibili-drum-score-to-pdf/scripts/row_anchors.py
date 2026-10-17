@@ -75,7 +75,7 @@ def readings(record, shot, image, regions, *, task=None):
                 if anchor['row'] < len(result) and anchor['bbox'] == result[anchor['row']]['bbox']:
                     result[anchor['row']] = anchor
     if task is not None and any(a['start_bar'] is None for a in result):
-        import score_geometry as observed
+        import score_geometry
         import score_task as state
         from PIL import Image
         captures = {s['id']: s for s in record['captures']}
@@ -88,7 +88,7 @@ def readings(record, shot, image, regions, *, task=None):
                     any(a['start_bar'] is not None and a['start_bar'] != b['start_bar'] for a, b in zip(result, prior))):
                 continue
             with Image.open(state.artifact(task, captures[identifier])) as original:
-                same = observed.same_observation(original, image)
+                same = score_geometry.same_observation(original, image)
                 if not same:
                     old_regions = observation['regions']
                     old_rows = [r for r in old_regions if r['kind'] == 'system']
@@ -98,9 +98,9 @@ def readings(record, shot, image, regions, *, task=None):
                     new_headers = [r for r in regions if r['kind'] == 'header']
                     same = (len(old_rows) == len(new_rows) and len(old_headers) == len(new_headers) and
                         all(abs(a['bbox'][1]+a['staff_top']-b['bbox'][1]-b['staff_top']) <= 2 and
-                            observed.same_row(original, a, image, b, spacing) for a, b in zip(old_rows, new_rows)) and
-                        all(observed.same_ink(observed.signature(original.crop(a['bbox'])),
-                            observed.signature(image.crop(b['bbox']))) for a, b in zip(old_headers, new_headers)))
+                            score_geometry.same_row(original, a, image, b, spacing) for a, b in zip(old_rows, new_rows)) and
+                        all(score_geometry.same_ink(score_geometry.signature(original.crop(a['bbox'])),
+                            score_geometry.signature(image.crop(b['bbox']))) for a, b in zip(old_headers, new_headers)))
             if same:
                 for index, anchor in enumerate(result):
                     if anchor['start_bar'] is None:
@@ -136,7 +136,7 @@ def missing(record, shot, anchors):
 
 def review(task, capture, anchors, viewed_captures, notes, fallback_interval=None):
     import score_task as state
-    import score_geometry as observed
+    import score_geometry
     from PIL import Image
     record = state.load(task)
     shots = {s['id']: s for s in record['captures']}
@@ -146,7 +146,7 @@ def review(task, capture, anchors, viewed_captures, notes, fallback_interval=Non
             not isinstance(notes, str) or not notes.strip() or not isinstance(anchors, list)):
         raise state.ReconstructionError('需要实际查看的来源、逐行读数和具体依据。')
     with Image.open(state.artifact(task, shots[capture])) as image:
-        systems = [r for r in observed.detect(image)[0] if r['kind'] == 'system']
+        systems = [r for r in score_geometry.detect(image)[0] if r['kind'] == 'system']
     saved = []
     for anchor in anchors:
         if (not isinstance(anchor, dict) or type(anchor.get('row')) is not int or

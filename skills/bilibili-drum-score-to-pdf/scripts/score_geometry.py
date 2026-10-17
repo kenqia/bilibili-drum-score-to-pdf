@@ -370,3 +370,9 @@ def spatial_continuation(old_rows, new_rows, old_cores, new_cores, native):
             mapping[j]=possible[0]
     return mapping
 
+
+
+def overlap_sizes(previous, current):
+    """Return every matching tail/head size, retaining ambiguity for callers."""
+    return [size for size in range(1, min(len(previous), len(current)) + 1)
+            if all(same_ink(a, b) for a, b in zip(previous[-size:], current[:size]))]

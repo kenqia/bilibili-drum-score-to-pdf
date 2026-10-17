@@ -12,7 +12,8 @@ import numpy as np
 from PIL import Image, ImageDraw
 import reconstruction as geometry
 import score_task as state
-import score_geometry as observed
+import score_geometry
+import score_continuity as continuity
 from score_geometry import detect  # Existing geometry entry.
 
 from video_seek import VideoReader, ConversionError
@@ -52,9 +53,8 @@ def freeze(record, producer):
 def require_frozen(record):
     frozen = record.get('freeze')
     if frozen and frozen.get('producer') == 'program' and record.get('overview', {}).get('mode') == 'sparse':
-        from sparse_navigation import POLICY
         navigation = record.get('navigation', {})
-        if (navigation.get('policy_version') != POLICY or navigation.get('status') != 'observed' or
+        if (navigation.get('policy_version') != continuity.NAVIGATION_POLICY or navigation.get('status') != 'observed' or
                 not all(navigation.get('endpoints', {}).get(name) for name in ('first', 'last')) or
                 record.get('row_manifest', {}).get('continuity_complete') is not True):
             raise state.ReconstructionError('稀疏导航或谱行接续证据尚未完成。')
@@ -168,7 +168,7 @@ def overview(task, intervals=None, reason='full continuous source scan', *, forc
     previous = None
     if survey['candidates']:
         with Image.open(state.artifact(task, survey['candidates'][-1])) as image:
-            previous = observed.signature(image)
+            previous = score_geometry.signature(image)
     reader = VideoReader(record['source']['path'], record['source'], record['metrics'])
     stream = None
     observed_start = observed_end = None
@@ -210,8 +210,8 @@ def overview(task, intervals=None, reason='full continuous source scan', *, forc
                     segment['last']=pts
                     segment['frames']+=1
                     before_change = time.monotonic()
-                    mask = observed.signature(image)
-                    changed = previous is None or not observed.same_ink(previous,mask)
+                    mask = score_geometry.signature(image)
+                    changed = previous is None or not score_geometry.same_ink(previous,mask)
                     timings['change_detection_seconds'] += time.monotonic() - before_change
                     scan['frames_observed'] += 1
                     scan['cursor'] = max(scan.get('cursor',0), pts['timestamp'])
@@ -320,10 +320,9 @@ def _partial_recovered(task, partial, atlas, captures, observations, neighbours,
     own=observations[index]
     anchors={}
     for neighbour in neighbours:
-        mapping=observed.spatial_continuation(own[3],neighbour[3],own[6],neighbour[6],native)
+        mapping=score_geometry.spatial_continuation(own[3],neighbour[3],own[6],neighbour[6],native)
         if record is not None:
-            from sparse_navigation import compare
-            comparison = compare(task, record, shot, neighbour[1])
+            comparison = continuity.compare(task, record, shot, neighbour[1])
             if comparison.get('reason') == 'printed_bar_overlap':
                 mapping = comparison['matches']
         shifts=[neighbour[3][j]['bbox'][1]+neighbour[3][j]['staff_top']-
@@ -398,7 +397,7 @@ def _compatible_repair(task, old_rows, new_rows, risk_by_position, captures):
             bx0,by0,bx1,by1=risk['bbox']
             first[max(0,by0-y0):max(0,by1-y0),max(0,bx0-x0):max(0,bx1-x0)]=0
             second[max(0,by0-y0):max(0,by1-y0),max(0,bx0-x0):max(0,bx1-x0)]=0
-        if not observed.same_ink(first,second):
+        if not score_geometry.same_ink(first,second):
             return False
     return True
 
@@ -418,7 +417,6 @@ def auto_freeze(task, title=None):
     except state.ReconstructionError:
         pass
     captures={c['id']:c for c in record['captures']}
-    from sparse_navigation import numbered_conflicts, numbered_evidence
     reviews = record.get('continuity_reviews', [])
     # Keep the actual frames the Agent reviewed in both navigation modes.
     for review in reviews:
@@ -438,7 +436,7 @@ def auto_freeze(task, title=None):
         # later occurrence just because its music has the same pixels.
         checks = {'producer': 'program', 'policy_version': PROGRAM_CHECK_VERSION,
             'method': 'numbered_anchor_revalidation_required', 'source_sha256': record['source']['sha256'],
-            'scan': survey['scan'], 'unresolved': reconciliation + numbered_conflicts(record)}
+            'scan': survey['scan'], 'unresolved': reconciliation + continuity.numbered_conflicts(record)}
         record.update(program_checks=checks, status='needs_source_review',
             source_review={'producer': 'program', 'complete': False, 'unresolved': checks['unresolved']})
         if 'row_manifest' in record:
@@ -461,7 +459,7 @@ def auto_freeze(task, title=None):
         unresolved.extend(record.get('navigation', {}).get('unresolved', []))
     else:
         unresolved=[] if survey['scan']['complete'] else [{'code':'unobserved_interval','resume':'overview'}]
-    unresolved.extend(numbered_conflicts(record))
+    unresolved.extend(continuity.numbered_conflicts(record))
     if survey['scan'].get('policy_version')!=SCAN_POLICY_VERSION:
         unresolved.append({'code':'scan_policy_changed','resume':'overview or prepare a new independent task'})
     chosen, previous, previous_signatures=[],[],[]
@@ -480,8 +478,8 @@ def auto_freeze(task, title=None):
             systems=[{**r,'capture':shot['id']} for r in regions if r['kind']=='system']
             if systems and canonical_spacing is None:
                 canonical_spacing=max(1,round(float(np.median([r['staff_spacing'] for r in systems]))))
-            signatures=[observed.row_signature(image,r,spacing=canonical_spacing) for r in systems]
-            cores=[observed.row_signature(image,r,core=True,spacing=canonical_spacing) for r in systems]
+            signatures=[score_geometry.row_signature(image,r,spacing=canonical_spacing) for r in systems]
+            cores=[score_geometry.row_signature(image,r,core=True,spacing=canonical_spacing) for r in systems]
             header_signatures=[geometry.ink_mask(image.crop(r['bbox']))
                 for r in regions if r['kind']=='header']
             if sparse:
@@ -511,13 +509,13 @@ def auto_freeze(task, title=None):
         if groups:
             prior=observations[groups[-1][-1]]
             stable=(len(item[3])==len(prior[3]) and len(item[3])>=2 and
-                sum(observed.same_ink(a,b) for a,b in zip(item[4],prior[4]))>=2)
+                sum(score_geometry.same_ink(a,b) for a,b in zip(item[4],prior[4]))>=2)
             if (not stable and len(item[3]) == len(prior[3]) and len(item[3]) >= 2 and
                     all(abs(a['bbox'][1]+a['staff_top']-b['bbox'][1]-b['staff_top']) <= 2
                         for a, b in zip(prior[3], item[3]))):
                 with Image.open(state.artifact(task, prior[1])) as before, \
                         Image.open(state.artifact(task, item[1])) as after:
-                    stable = all(observed.same_row(before, a, after, b, canonical_spacing)
+                    stable = all(score_geometry.same_row(before, a, after, b, canonical_spacing)
                                  for a, b in zip(prior[3], item[3]))
         if stable:
             groups[-1].append(index)
@@ -559,11 +557,10 @@ def auto_freeze(task, title=None):
         unresolved.extend({'capture':shot['id'],**risk} for risk in risks if not any(
             risk['bbox'][1]<row['bbox'][3] and risk['bbox'][3]>row['bbox'][1] for row in systems))
         signatures=list(signatures)
-        numbered_join = previous and numbered_evidence(record, captures[previous[0]['capture']], shot)
+        numbered_join = previous and continuity.numbered_evidence(record, captures[previous[0]['capture']], shot)
         anchor_comparison = None
         if sparse and previous and not numbered_join:
-            from sparse_navigation import compare
-            anchor_comparison = compare(task, record, captures[previous[0]['capture']], shot)
+            anchor_comparison = continuity.compare(task, record, captures[previous[0]['capture']], shot)
             if anchor_comparison.get('reason') in ('printed_bar_gap_needs_continuation', 'printed_bar_content_conflict'):
                 numbered_join = True
         if (not numbered_join and previous and len(previous) == len(systems) and
@@ -571,16 +568,16 @@ def auto_freeze(task, title=None):
                     for old, new in zip(previous, systems))):
             with Image.open(state.artifact(task, captures[previous[0]['capture']])) as old_image, \
                     Image.open(state.artifact(task, shot)) as new_image:
-                if observed.same_observation(old_image, new_image):
+                if score_geometry.same_observation(old_image, new_image):
                     signatures, cores = list(previous_signatures), list(previous_cores)
         ambiguous_change=False
         stationary=(not numbered_join and len(previous)==len(systems) and len(systems)>=3 and
             all(abs(new['bbox'][1]+new['staff_top']-old['bbox'][1]-old['staff_top'])<=2
                 for old,new in zip(previous,systems)) and
-            sum(observed.same_ink(a,b) for a,b in zip(previous_signatures,signatures))>=2)
+            sum(score_geometry.same_ink(a,b) for a,b in zip(previous_signatures,signatures))>=2)
         if stationary:
             for index,(first,second) in enumerate(zip(previous_signatures,signatures)):
-                if observed.same_ink(first,second):
+                if score_geometry.same_ink(first,second):
                     continue
                 kernel=np.ones((3,3),np.uint8)
                 unmatched=((first>0)&(cv2.dilate(second,kernel)==0))|((second>0)&(cv2.dilate(first,kernel)==0))
@@ -591,7 +588,7 @@ def auto_freeze(task, title=None):
                     source=next((r for r in chosen if r.get('position')==old['position']),old)
                     edge=any(r['code']=='crop_edge' and r['bbox'][1]<row['bbox'][3] and
                         r['bbox'][3]>row['bbox'][1] for r in risks)
-                    if edge and not risk_by_position.get(old['position']) and observed.native_visible_match(source,row,native_mask):
+                    if edge and not risk_by_position.get(old['position']) and score_geometry.native_visible_match(source,row,native_mask):
                         continue
                     ambiguous_change=True
                     top=round(systems[index]['bbox'][1]+systems[index]['staff_top'])-8*canonical_spacing
@@ -607,7 +604,7 @@ def auto_freeze(task, title=None):
             previous,previous_signatures,previous_cores=systems,signatures,cores
             previous_header_signatures=header_signatures
             continue
-        spatial={} if numbered_join else observed.spatial_continuation(previous,systems,previous_cores,cores,native_mask)
+        spatial={} if numbered_join else score_geometry.spatial_continuation(previous,systems,previous_cores,cores,native_mask)
         if anchor_comparison and anchor_comparison.get('reason') == 'printed_bar_overlap':
             spatial = anchor_comparison['matches']
         if spatial:
@@ -618,11 +615,11 @@ def auto_freeze(task, title=None):
             for index,header in enumerate(r for r in regions if r['kind']=='header'):
                 x0,y0,x1,y1=header['bbox']
                 recovered=(0<=y0-shift<y1-shift<=old_native.shape[0] and
-                    observed.same_ink(old_native[y0-shift:y1-shift,x0:x1],new_native[y0:y1,x0:x1]))
+                    score_geometry.same_ink(old_native[y0-shift:y1-shift,x0:x1],new_native[y0:y1,x0:x1]))
                 if recovered:
                     unresolved=[r for r in unresolved if not (r.get('capture')==shot['id'] and
                         r.get('bbox')==header['bbox'])]
-                elif not any(observed.same_ink(header_signatures[index],signature) for signature in previous_header_signatures):
+                elif not any(score_geometry.same_ink(header_signatures[index],signature) for signature in previous_header_signatures):
                     chosen.append({**header,'capture':shot['id'],'position':f'event-{occurrence}-header'})
             for index,row in enumerate(systems):
                 row_risks=[{'capture':shot['id'],**risk} for risk in risks if
@@ -631,7 +628,7 @@ def auto_freeze(task, title=None):
                     old=previous[spatial[index]]
                     row['position']=old['position']
                     old_risks=risk_by_position.get(old['position'],[])
-                    if old_risks and not row_risks and observed.native_visible_match(old,row,native_mask):
+                    if old_risks and not row_risks and score_geometry.native_visible_match(old,row,native_mask):
                         chosen=[row if r.get('position')==old['position'] else r for r in chosen]
                         risk_by_position[old['position']]=[]
                     elif not old_risks and all(r['code']=='crop_edge' for r in row_risks):
@@ -654,10 +651,10 @@ def auto_freeze(task, title=None):
                 continue
             for old_index,old in enumerate(previous):
                 source=next((r for r in chosen if r.get('position')==old['position']),old)
-                if risk_by_position.get(old['position']) or not observed.native_visible_match(source,row,native_mask):
+                if risk_by_position.get(old['position']) or not score_geometry.native_visible_match(source,row,native_mask):
                     continue
                 shift=row['bbox'][1]+row['staff_top']-old['bbox'][1]-old['staff_top']
-                anchored_other=any(observed.same_ink(previous_signatures[i],signatures[j]) and
+                anchored_other=any(score_geometry.same_ink(previous_signatures[i],signatures[j]) and
                     abs((new['bbox'][1]+new['staff_top']-prior['bbox'][1]-prior['staff_top'])-shift)<=2
                     for i,prior in enumerate(previous) for j,new in enumerate(systems) if i!=old_index and j!=index)
                 if anchored_other:
@@ -667,9 +664,9 @@ def auto_freeze(task, title=None):
         # A damaged observation may be replaced only with spatially anchored
         # clean evidence. Matching surrounding systems establish its position.
         anchored=(not numbered_join and len(systems)==len(previous) and len(systems)>=2 and
-            any(observed.same_ink(a,b) for a,b in zip(previous_signatures,signatures)) and
+            any(score_geometry.same_ink(a,b) for a,b in zip(previous_signatures,signatures)) and
             any(risk_by_position.get(r['position']) for r in previous))
-        if anchored and not risks and all(observed.same_ink(a,b) for a,b in zip(previous_cores,cores)) and _compatible_repair(task,previous,systems,risk_by_position,captures):
+        if anchored and not risks and all(score_geometry.same_ink(a,b) for a,b in zip(previous_cores,cores)) and _compatible_repair(task,previous,systems,risk_by_position,captures):
             positions=[r['position'] for r in previous]
             for index,row in enumerate(systems):
                 row['position']=positions[index]
@@ -680,20 +677,15 @@ def auto_freeze(task, title=None):
             events.append({'capture':shot['id'],'pts':shot['pts'],'kind':'systems',
                 'replacement_of_damaged_observation':True,'positions':positions})
             continue
-        overlaps=[]
-        for size in range(1, min(len(previous),len(systems))+1 if not numbered_join else 1):
-            if all(observed.same_ink(a,b) for a,b in zip(previous_signatures[-size:],signatures[:size])):
-                overlaps.append(size)
+        overlaps=[] if numbered_join else score_geometry.overlap_sizes(previous_signatures, signatures)
         prefix=0
         # Fixed upper systems are anchors only when a lower row visibly moves
         # upwards into the old suffix. Equal prefixes alone do not dedup pages.
-        while not numbered_join and prefix<min(len(previous),len(systems)) and observed.same_ink(previous_signatures[prefix],signatures[prefix]):
+        while not numbered_join and prefix<min(len(previous),len(systems)) and score_geometry.same_ink(previous_signatures[prefix],signatures[prefix]):
             prefix+=1
         moving=[]
         if prefix and prefix<min(len(previous),len(systems)):
-            for size in range(1,min(len(previous)-prefix,len(systems)-prefix)+1):
-                if all(observed.same_ink(a,b) for a,b in zip(previous_signatures[-size:],signatures[prefix:prefix+size])):
-                    moving.append(size)
+            moving=score_geometry.overlap_sizes(previous_signatures[prefix:], signatures[prefix:])
         if moving:
             overlaps=moving
         else:
@@ -705,7 +697,7 @@ def auto_freeze(task, title=None):
             overlap=overlaps[0] if overlaps else 0
         headers=[r for r in regions if r['kind']=='header']
         for index,header in enumerate(headers):
-            if not any(observed.same_ink(header_signatures[index],signature) for signature in previous_header_signatures):
+            if not any(score_geometry.same_ink(header_signatures[index],signature) for signature in previous_header_signatures):
                 chosen.append({**header,'capture':shot['id'],'position':f'event-{occurrence}-header'})
         for index,row in enumerate(systems):
             if index<prefix:
@@ -727,17 +719,16 @@ def auto_freeze(task, title=None):
             'fixed_prefix_rows':prefix,'overlap_rows':overlap,'positions':[r['position'] for r in systems]})
     unresolved.extend(risk for risks in risk_by_position.values() for risk in risks)
     if sparse:
-        from sparse_navigation import covered, numbered_evidence
         prior = None
         for event in events:
             if event['kind'] != 'systems':
                 continue
             if prior:
                 first, last = captures[prior['capture']], captures[event['capture']]
-                numbered = numbered_evidence(record, first, last)
+                numbered = continuity.numbered_evidence(record, first, last)
                 if numbered:
                     event['numbered_continuation'] = numbered
-                elif covered(record, first, last):
+                elif continuity.covered(record, first, last):
                     event['continuous_transition'] = [first['timestamp'], last['timestamp']]
                 elif not (event.get('spatial_continuation') or event.get('overlap_rows') or
                           event.get('replacement_of_damaged_observation')):

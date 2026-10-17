@@ -245,6 +245,40 @@ class NavigationRepairTests(unittest.TestCase):
         overlap = next(d for d in decisions if d.get('reason') == 'printed_bar_overlap')
         self.assertEqual(overlap['new_complete_rows'], 0)
 
+    def test_source_freezing_rebuilds_without_loading_navigation(self):
+        from unittest.mock import patch
+        self.prepare(self.numbered())
+        self.assertEqual(self.call('stage')['phase'], 'generation')
+        record = score_task.load(self.task)
+        positions = [row['position'] for row in record['regions']]
+        record.pop('freeze')
+        score_task.save(self.task, record)
+        with patch.dict(sys.modules, {'sparse_navigation': None}):
+            result = automatic_score.auto_freeze(self.task)
+            self.assertEqual(result['status'], 'frozen')
+            automatic_score.require_frozen(score_task.load(self.task))
+        self.assertEqual([row['position'] for row in result['regions']], positions)
+
+    def test_same_printed_bars_with_changed_ink_do_not_approve_source(self):
+        import score_continuity
+        first = self.numbered()
+        second = first.copy()
+        ImageDraw.Draw(second).rectangle((1070, 680, 1075, 686), fill='black')
+        self.sequence([first] * 4 + [second] * 4)
+        result = self.call('stage')
+        self.assertEqual((result['phase'], result['status']), ('source', 'blocked'))
+        record = score_task.load(self.task)
+        shots = {shot['id']: shot for shot in record['captures']}
+        endpoints = record['navigation']['endpoints']
+        comparison = score_continuity.compare(self.task, record,
+            shots[endpoints['first']['capture']], shots[endpoints['last']['capture']])
+        self.assertEqual(comparison['reason'], 'printed_bar_content_conflict')
+        self.assertFalse(comparison['proved'])
+        self.assertIsNone(comparison['new_complete_rows'])
+        with self.assertRaises(score_task.ReconstructionError):
+            automatic_score.require_frozen(record)
+        self.assertEqual(self.call('auto-freeze')['status'], 'blocked')
+
 
 if __name__ == '__main__':
     unittest.main()

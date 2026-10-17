@@ -1,0 +1,339 @@
+{
+  "baseline": "9e54276fcf0b1e3ef37f8ce762dfd1bb814d27b7",
+  "method": "read-only saved native-frame differential; no fresh source approval or video decoding",
+  "tasks": {
+    "killkiss": {
+      "task": "/home/kenqia/issue61-context/replay64-final/killkiss",
+      "capture_count": 10,
+      "adjacent_pairs": 9,
+      "equal": true,
+      "record_unchanged": true,
+      "record_sha256": "e34f9345f3f4ee7e330d574309d489953ff7a907dc2305ccb5404ec3fb1fd97b",
+      "reasons": [
+        "unique_row_overlap",
+        "unproved_row_continuation",
+        "unique_scroll",
+        "unproved_row_continuation",
+        "unproved_row_continuation",
+        "unproved_row_continuation",
+        "unique_scroll",
+        "unproved_row_continuation",
+        "unproved_row_continuation"
+      ],
+      "positions": [
+        {
+          "id": "capture-0001",
+          "pts": 0,
+          "sha256": "d0013fdd3426e5394252afda99571adcce59cefa5cb799e8c148035cb6f1f5e5",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 0.0
+        },
+        {
+          "id": "capture-0002",
+          "pts": 1056000,
+          "sha256": "a38b3a0e4c954b244f151074c75baf8a6b882e1f561cfee3b9ad10599aa7306c",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 66.0
+        },
+        {
+          "id": "capture-0010",
+          "pts": 1248000,
+          "sha256": "322c3143847df557ed45bb47a8c606072b9f8f5b8ef1b9a3fbc70032de028fbc",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 78.0
+        },
+        {
+          "id": "capture-0003",
+          "pts": 1376000,
+          "sha256": "f328bf3967d31897f10a7bd914758d12e93e370e2d3e84fc0d05c1f2ae94e6a1",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 86.0
+        },
+        {
+          "id": "capture-0004",
+          "pts": 1712000,
+          "sha256": "eb532ce2c2eb5c23050ff9161733cddc1350ebcbac28d3bf9587a510e13630ce",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 107.0
+        },
+        {
+          "id": "capture-0005",
+          "pts": 2064000,
+          "sha256": "feb4fe003db23a4184df69673066bebabc19ba0eb1af6f705cd6ce3d8d7cce79",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 129.0
+        },
+        {
+          "id": "capture-0009",
+          "pts": 2240000,
+          "sha256": "40614a2a3062c7c53aaf616f86beed0e76e30a2ed24e055e8fac7ddc350d10e4",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 140.0
+        },
+        {
+          "id": "capture-0006",
+          "pts": 2416000,
+          "sha256": "26389cea9292a21763ed223346d04619614da29edd2b560ae7313eb79d506a65",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 151.0
+        },
+        {
+          "id": "capture-0007",
+          "pts": 2736000,
+          "sha256": "f78367a347fb71d05e42a3e69b3adc362ca66c5e6a9ac71105750d263b38c979",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 171.0
+        },
+        {
+          "id": "capture-0008",
+          "pts": 3056000,
+          "sha256": "faf430cfa2e3d299cdd51a7639cc5646b33d816c1174878e8d031dff2d4dadef",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 191.0
+        }
+      ],
+      "source_sha256": "3137c5881ec628872d5424ed42991f9156a1808964616a8d391e376e9132c2eb"
+    },
+    "standard": {
+      "task": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-issue58-recovered/standard/task",
+      "capture_count": 5,
+      "adjacent_pairs": 4,
+      "equal": true,
+      "record_unchanged": true,
+      "record_sha256": "30657fde4ca5c9cf4e336f9578ce0622487de0c15b2ec30ecc8450b45daff8b4",
+      "reasons": [
+        "unique_row_overlap",
+        "unique_scroll",
+        "unproved_row_continuation",
+        "unique_scroll"
+      ],
+      "positions": [
+        {
+          "id": "capture-0001",
+          "pts": 0,
+          "sha256": "aae42e392171645342e353b30910deacd9b9674e26043929f1cd27e14f09de11",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 0.0
+        },
+        {
+          "id": "capture-0002",
+          "pts": 2240000,
+          "sha256": "359a0bfee0467e8f0b1419d3d6be24eda0500cf1fee7a0315089ab6c1178f2be",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 140.0
+        },
+        {
+          "id": "capture-0004",
+          "pts": 2800000,
+          "sha256": "d8ce207859c2652c72e8261bf35e0c7441feebc426ba195c9442c0c7cebac176",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 175.0
+        },
+        {
+          "id": "capture-0003",
+          "pts": 3280000,
+          "sha256": "422633048b441b1408dcd801ea51d5fb59cbc411df2e401a3057900900c61ae5",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 205.0
+        },
+        {
+          "id": "capture-0005",
+          "pts": 4720000,
+          "sha256": "ae7161ca1c2b9eaa12b21741ce119657d8301559a4429c34a2004cc3e7289b19",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 295.0
+        }
+      ],
+      "source_sha256": "80f9a8d19515cf624d7d13c27ea758e88118fddb4341fa06deaad040272877fe"
+    },
+    "other": {
+      "task": "/home/kenqia/my_folder/bilibili-drum-score-to-pdf/experiments/2026-10-13-issue58-recovered/other",
+      "capture_count": 1,
+      "adjacent_pairs": 0,
+      "equal": true,
+      "record_unchanged": true,
+      "record_sha256": "4a20d886606a8a9c7d31bff79515873d719688b4317f55f2ec4560e7bb655382",
+      "reasons": [],
+      "positions": [
+        {
+          "id": "capture-0001",
+          "pts": 736,
+          "sha256": "b668108e7ddc10c3306d6f82de5c93625a325467deba1a6f184b1d870b8a5cf3",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 0.046
+        }
+      ],
+      "source_sha256": "5f9ca93dd01b857562bcc25fe30e7570340b28a80a64565869ae5995bf99d79b"
+    },
+    "xianhua": {
+      "task": "/home/kenqia/my_folder/bilibili-drum-score-sparse-navigation/work/navigation-repair/xianhua-anchors-v1",
+      "capture_count": 10,
+      "adjacent_pairs": 9,
+      "equal": true,
+      "record_unchanged": true,
+      "record_sha256": "a4dec9d0df4775901f11aaef6d3fdb44f834f5549cf9b6ac92f8c41a66f6d34c",
+      "reasons": [
+        "printed_bar_overlap",
+        "repeated_rows",
+        "printed_bar_overlap",
+        "printed_bar_overlap",
+        "printed_bar_overlap",
+        "printed_bar_overlap",
+        "printed_bar_overlap",
+        "printed_bar_content_conflict",
+        "layout_or_endpoint_gap"
+      ],
+      "positions": [
+        {
+          "id": "capture-0001",
+          "pts": 0,
+          "sha256": "fe68155faebbbcb4cc53457d0e1031a516ac70a009d7eda3f28887343f8b570a",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 0.0
+        },
+        {
+          "id": "capture-0003",
+          "pts": 167680,
+          "sha256": "3b7622028f2da9a79d6f90429f51f13c21fb195f839558a3f6fbe9d60997dfc0",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 10.48
+        },
+        {
+          "id": "capture-0004",
+          "pts": 453120,
+          "sha256": "69de9db638fdab3be316ac47393aaed497775d8508084622dc650244ff6ea11a",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 28.32
+        },
+        {
+          "id": "capture-0005",
+          "pts": 933120,
+          "sha256": "137a8a3fcfabb28de0c14ea70a83d7513a8b242aa50fd9f7f8cd33b20b5483bf",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 58.32
+        },
+        {
+          "id": "capture-0006",
+          "pts": 1276160,
+          "sha256": "9383a420bb42bb93b0b35b8d391393b9b281a2103d3e6d5ad86694be44839eb9",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 79.76
+        },
+        {
+          "id": "capture-0007",
+          "pts": 1687040,
+          "sha256": "00ba78de77e14a2738968dbcfc83a5066e39d44ab6ea24e41060753e9e20c320",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 105.44
+        },
+        {
+          "id": "capture-0008",
+          "pts": 1981440,
+          "sha256": "d33abc201e8f67f11277587ca495e1bbec7fdcd8aeaa738fdd7576dc316c6a4f",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 123.84
+        },
+        {
+          "id": "capture-0009",
+          "pts": 2334080,
+          "sha256": "40b3a1abfa896f0a0a3ae97235534d7d27cb7569db07f33bbb581aca5705b3dc",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 145.88
+        },
+        {
+          "id": "capture-0010",
+          "pts": 2757120,
+          "sha256": "62f9b2850c3aafd5c896383861d7d780602ddd78e2fe3c50a68e1307ea6be565",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 172.32
+        },
+        {
+          "id": "capture-0002",
+          "pts": 5364480,
+          "sha256": "871b34dc13ef3587575d7f68d15aed715f3a156c9b998426d4ec87b3c43ff2bb",
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 335.28
+        }
+      ],
+      "source_sha256": "9f948b7c4eca5c4e981baa2ca37563108393b37b1323b7008eafa8468b19947d"
+    }
+  }
+}
