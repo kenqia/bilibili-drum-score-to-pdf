@@ -1,0 +1,72 @@
+{
+  "policy": "geometry-temporal/10",
+  "source_sha256": "9f948b7c4eca5c4e981baa2ca37563108393b37b1323b7008eafa8468b19947d",
+  "frames": [
+    {
+      "id": "capture-0003",
+      "timestamp": 10.48,
+      "pts": 167680,
+      "time_base": [
+        1,
+        16000
+      ],
+      "sha256": "3b7622028f2da9a79d6f90429f51f13c21fb195f839558a3f6fbe9d60997dfc0"
+    },
+    {
+      "id": "capture-0004",
+      "timestamp": 23.08,
+      "pts": 369280,
+      "time_base": [
+        1,
+        16000
+      ],
+      "sha256": "f3d2bd8de67000bf9a04789032162ff11156641d5511f5d6614b99319b4f4cd5"
+    }
+  ],
+  "native_row_matches": [
+    true,
+    true,
+    true
+  ],
+  "rows": 3,
+  "associated_lines": [
+    [],
+    [],
+    [
+      722
+    ]
+  ],
+  "partials": [
+    {
+      "code": "partial_staff",
+      "lines": [
+        1061,
+        1078
+      ],
+      "spacing": 17.0,
+      "paper_bbox": [
+        0,
+        0,
+        1920,
+        1080
+      ],
+      "bbox": [
+        91,
+        1010,
+        1825,
+        1080
+      ]
+    }
+  ],
+  "comparison": {
+    "proved": true,
+    "new_complete_rows": 0,
+    "overlap_rows": 3,
+    "reason": "repeated_rows",
+    "matches": {
+      "0": 0,
+      "1": 1,
+      "2": 2
+    }
+  }
+}

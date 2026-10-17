@@ -17,6 +17,7 @@ uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/
 | prepare / resume | prepare / load |
 | stage / layout | stage / layout，稀疏导航阶段推进与打印参数 |
 | row-manifest / review-continuity | 持久谱行清单 / Agent 实际编号接续判断 |
+| review-row-anchors | Agent 逐行小节号与有界替代证据授权 |
 | scan-status / crop-checks | 扫描元数据进度 / 当前选行边缘检查 |
 | redraw-requests / dispatch-redraw / cancel-redraw | 完整批量预留 / 提交前登记 / 未提交作废 |
 | overview / resample / auto-freeze / revise-crop | 同名函数（横线转下划线） |
@@ -75,4 +76,21 @@ Agent 实际看过相邻截图后，编号接续请求示例为：
 }
 ```
 
-通过 `review-continuity` 提交；上例是字段说明，不是本曲的实际观察记录。程序验证来源引用及编号连续性，但不会读取编号或代替 Agent 看图。接着调用 stage 或 auto-freeze 重新检查，登记判断本身不批准来源，也不产生严格时间覆盖。
+通过 `review-continuity` 提交；上例是字段说明，不是本曲的实际观察记录。程序验证来源引用及编号连续性，但不会代替 Agent 看图；逐行自动 OCR 与本接口的截图区间判断分别记录。接着调用 stage 或 auto-freeze 重新检查，登记判断本身不批准来源，也不产生严格时间覆盖。
+
+## 逐行锚点与缺号恢复
+
+缺号或冲突时查看 `row-manifest.observations` 和 stage 返回的原生来源。Agent 实际看图后，使用 `review-row-anchors`，例如：
+
+```json
+{
+  "capture": "capture-0001",
+  "anchors": [{"row": 0, "start_bar": 1}],
+  "viewed_captures": ["capture-0001"],
+  "notes": "实际查看并确认该行起始小节的依据"
+}
+```
+
+`row` 是该截图内 system 从上到下的零基索引，不包含 header。只提交实际确认的行，其余保留程序读数或未决。原谱首行未印数字时须在 notes 说明起点判断，不能称为 OCR 读数。原图、截图 hash 和行 bbox 由程序验证并绑定。
+
+若 Agent 确认没有可用编号，但有其他充分接续证据，可提交 `anchors: []` 和 `fallback_interval: [开始秒数, 结束秒数]`，并提供至少两张实际查看的 `viewed_captures` 和具体 notes。区间必须位于视频内且包含 capture；它只解除该范围的缺号暂停，几何、记谱、裁剪和接续检查仍执行，编号冲突不能由该授权掩盖。然后再运行 stage。上例仅说明参数，不是实际审阅回执。

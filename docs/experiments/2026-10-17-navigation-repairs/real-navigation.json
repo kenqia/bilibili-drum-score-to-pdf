@@ -1,0 +1,228 @@
+{
+  "experiment": "iterative development task; not a frozen-code clean benchmark",
+  "task_path": "/home/kenqia/my_folder/bilibili-drum-score-sparse-navigation/work/navigation-repair/xianhua-anchors-v1",
+  "source_sha256": "9f948b7c4eca5c4e981baa2ca37563108393b37b1323b7008eafa8468b19947d",
+  "source_duration": 335.32,
+  "navigation_policy": "adaptive-score-rows/2",
+  "status": "blocked",
+  "cursor": 145.84364540816327,
+  "sampling_counts": {
+    "forward_requests": 8,
+    "backtrack_requests": 0,
+    "endpoint_requests": 2,
+    "local_scan_attempts": 0,
+    "span_adjustment_events": 7
+  },
+  "retained_captures": 10,
+  "captures": [
+    {
+      "id": "capture-0001",
+      "timestamp": 0.0,
+      "pts": 0,
+      "time_base": [
+        1,
+        16000
+      ],
+      "sha256": "fe68155faebbbcb4cc53457d0e1031a516ac70a009d7eda3f28887343f8b570a"
+    },
+    {
+      "id": "capture-0002",
+      "timestamp": 335.28,
+      "pts": 5364480,
+      "time_base": [
+        1,
+        16000
+      ],
+      "sha256": "871b34dc13ef3587575d7f68d15aed715f3a156c9b998426d4ec87b3c43ff2bb"
+    },
+    {
+      "id": "capture-0003",
+      "timestamp": 10.48,
+      "pts": 167680,
+      "time_base": [
+        1,
+        16000
+      ],
+      "sha256": "3b7622028f2da9a79d6f90429f51f13c21fb195f839558a3f6fbe9d60997dfc0"
+    },
+    {
+      "id": "capture-0004",
+      "timestamp": 28.32,
+      "pts": 453120,
+      "time_base": [
+        1,
+        16000
+      ],
+      "sha256": "69de9db638fdab3be316ac47393aaed497775d8508084622dc650244ff6ea11a"
+    },
+    {
+      "id": "capture-0005",
+      "timestamp": 58.32,
+      "pts": 933120,
+      "time_base": [
+        1,
+        16000
+      ],
+      "sha256": "137a8a3fcfabb28de0c14ea70a83d7513a8b242aa50fd9f7f8cd33b20b5483bf"
+    },
+    {
+      "id": "capture-0006",
+      "timestamp": 79.76,
+      "pts": 1276160,
+      "time_base": [
+        1,
+        16000
+      ],
+      "sha256": "9383a420bb42bb93b0b35b8d391393b9b281a2103d3e6d5ad86694be44839eb9"
+    },
+    {
+      "id": "capture-0007",
+      "timestamp": 105.44,
+      "pts": 1687040,
+      "time_base": [
+        1,
+        16000
+      ],
+      "sha256": "00ba78de77e14a2738968dbcfc83a5066e39d44ab6ea24e41060753e9e20c320"
+    },
+    {
+      "id": "capture-0008",
+      "timestamp": 123.84,
+      "pts": 1981440,
+      "time_base": [
+        1,
+        16000
+      ],
+      "sha256": "d33abc201e8f67f11277587ca495e1bbec7fdcd8aeaa738fdd7576dc316c6a4f"
+    },
+    {
+      "id": "capture-0009",
+      "timestamp": 145.88,
+      "pts": 2334080,
+      "time_base": [
+        1,
+        16000
+      ],
+      "sha256": "40b3a1abfa896f0a0a3ae97235534d7d27cb7569db07f33bbb581aca5705b3dc"
+    },
+    {
+      "id": "capture-0010",
+      "timestamp": 172.32,
+      "pts": 2757120,
+      "time_base": [
+        1,
+        16000
+      ],
+      "sha256": "62f9b2850c3aafd5c896383861d7d780602ddd78e2fe3c50a68e1307ea6be565"
+    }
+  ],
+  "agent_reviews": [
+    {
+      "producer": "agent",
+      "capture": "capture-0001",
+      "sha256": "fe68155faebbbcb4cc53457d0e1031a516ac70a009d7eda3f28887343f8b570a",
+      "source_sha256": "9f948b7c4eca5c4e981baa2ca37563108393b37b1323b7008eafa8468b19947d",
+      "anchors": [
+        {
+          "row": 0,
+          "bbox": [
+            158,
+            252,
+            1841,
+            474
+          ],
+          "start_bar": 1,
+          "producer": "agent",
+          "policy_version": "printed-row-bars/1",
+          "notes": "实际查看起始原图：标题、速度100、4/4、首个音乐谱行及后续行首7和11确认原谱起点为第1小节；首行未印数字1，此为Agent起点判断，不是OCR读数。"
+        }
+      ],
+      "viewed_captures": [
+        "capture-0001"
+      ],
+      "viewed_sha256": {
+        "capture-0001": "fe68155faebbbcb4cc53457d0e1031a516ac70a009d7eda3f28887343f8b570a"
+      },
+      "notes": "实际查看起始原图：标题、速度100、4/4、首个音乐谱行及后续行首7和11确认原谱起点为第1小节；首行未印数字1，此为Agent起点判断，不是OCR读数。",
+      "fallback_interval": null
+    },
+    {
+      "producer": "agent",
+      "capture": "capture-0007",
+      "sha256": "00ba78de77e14a2738968dbcfc83a5066e39d44ab6ea24e41060753e9e20c320",
+      "source_sha256": "9f948b7c4eca5c4e981baa2ca37563108393b37b1323b7008eafa8468b19947d",
+      "anchors": [
+        {
+          "row": 0,
+          "bbox": [
+            73,
+            0,
+            1841,
+            143
+          ],
+          "start_bar": 25,
+          "producer": "agent",
+          "policy_version": "printed-row-bars/1",
+          "notes": "实际查看79.76秒与105.44秒原图：前者行首25的完整谱行与后者顶部裁断谱行可对照，后者紧接可读行首29、33、37、41。顶部行号已离开画面，按实际来源对应补充25，不是OCR读数。"
+        }
+      ],
+      "viewed_captures": [
+        "capture-0006",
+        "capture-0007"
+      ],
+      "viewed_sha256": {
+        "capture-0006": "9383a420bb42bb93b0b35b8d391393b9b281a2103d3e6d5ad86694be44839eb9",
+        "capture-0007": "00ba78de77e14a2738968dbcfc83a5066e39d44ab6ea24e41060753e9e20c320"
+      },
+      "notes": "实际查看79.76秒与105.44秒原图：前者行首25的完整谱行与后者顶部裁断谱行可对照，后者紧接可读行首29、33、37、41。顶部行号已离开画面，按实际来源对应补充25，不是OCR读数。",
+      "fallback_interval": null
+    },
+    {
+      "producer": "agent",
+      "capture": "capture-0009",
+      "sha256": "40b3a1abfa896f0a0a3ae97235534d7d27cb7569db07f33bbb581aca5705b3dc",
+      "source_sha256": "9f948b7c4eca5c4e981baa2ca37563108393b37b1323b7008eafa8468b19947d",
+      "anchors": [
+        {
+          "row": 0,
+          "bbox": [
+            73,
+            0,
+            1841,
+            149
+          ],
+          "start_bar": 37,
+          "producer": "agent",
+          "policy_version": "printed-row-bars/1",
+          "notes": "实际查看123.84秒与145.88秒原图：行首37的谱行与后者顶部裁断行逐小节可对照，后者后续编号41、45、49、53。首行数字已离开画面，依据相邻原生来源确认37，不是OCR读数。"
+        }
+      ],
+      "viewed_captures": [
+        "capture-0008",
+        "capture-0009"
+      ],
+      "viewed_sha256": {
+        "capture-0008": "d33abc201e8f67f11277587ca495e1bbec7fdcd8aeaa738fdd7576dc316c6a4f",
+        "capture-0009": "40b3a1abfa896f0a0a3ae97235534d7d27cb7569db07f33bbb581aca5705b3dc"
+      },
+      "notes": "实际查看123.84秒与145.88秒原图：行首37的谱行与后者顶部裁断行逐小节可对照，后者后续编号41、45、49、53。首行数字已离开画面，依据相邻原生来源确认37，不是OCR读数。",
+      "fallback_interval": null
+    }
+  ],
+  "unresolved": [
+    {
+      "code": "native_difference_needs_visual_review",
+      "capture": "capture-0010",
+      "previous_capture": "capture-0009",
+      "reason": "printed_bar_content_conflict",
+      "positions": [
+        "row-ea2eb163880144a6ae58144b5547e8a6",
+        "row-d0d23bcad872408685e5afea5e2437b8"
+      ],
+      "scope": "continuation"
+    }
+  ],
+  "model_cost": null,
+  "generation_calls": 0,
+  "pdf_pages": 0
+}

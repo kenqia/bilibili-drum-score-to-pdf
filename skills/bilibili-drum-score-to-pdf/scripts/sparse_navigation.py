@@ -1,6 +1,6 @@
 """Adaptive score navigation. Sparse continuity is not strict time coverage."""
 import time
-from functools import lru_cache
+import hashlib
 from pathlib import Path
 
 from PIL import Image
@@ -9,8 +9,23 @@ import automatic_score as automatic
 import native_cache
 import score_task as state
 import row_manifest
+import row_anchors
 
-POLICY = 'adaptive-score-rows/1'
+POLICY = 'adaptive-score-rows/2'
+
+
+
+def save_navigation(task, record):
+    navigation = record['navigation']
+    decisions = navigation['decisions']
+    navigation['sampling_counts'] = {
+        'forward_requests': sum(d['action'] == 'observe' and d['reason'] == 'forward_search' for d in decisions),
+        'backtrack_requests': sum(d['action'] == 'observe' and d['reason'] == 'gap_backtrack' for d in decisions),
+        'endpoint_requests': sum(d['action'] == 'observe' and d['reason'].endswith('_endpoint_and_layout') for d in decisions),
+        'local_scan_attempts': sum(d['action'] == 'local_scan' for d in decisions),
+        'span_adjustment_events': sum(d['action'] == 'adjust_step' for d in decisions),
+    }
+    state.save(task, record)
 
 
 def covered(record, first, last):
@@ -54,24 +69,59 @@ def compare(task, record, first, last):
         old = descriptions.get(first['id'])
         new = descriptions.get(last['id'])
         old_regions = old['regions'] if old else automatic.detect(old_image)[0]
-        new_regions = new['regions'] if new else automatic.detect(new_image)[0]
+        new_detection = None if new else automatic.detect(new_image)
+        new_regions = new['regions'] if new else new_detection[0]
+        new_risks = new.get('risks', []) if new else new_detection[1]
         old_rows = [{**r, 'capture': first['id']} for r in old_regions if r['kind'] == 'system']
         new_rows = [{**r, 'capture': last['id']} for r in new_regions if r['kind'] == 'system']
+        complete_indices = {index for index, row in enumerate(new_rows) if not any(
+            risk.get('bbox') and row_manifest.intersects(risk['bbox'], row['bbox']) for risk in new_risks)}
+        old_anchors = old.get('anchors', []) if old else []
+        new_anchors = new.get('anchors', []) if new else []
+        complete_anchors = bool(old_anchors and new_anchors) and all(
+            a['start_bar'] is not None and not a.get('conflict') for a in old_anchors+new_anchors)
+        use_anchors = complete_anchors or any(a.get('conflict') for a in old_anchors+new_anchors) or (bool(old_anchors or new_anchors) and not (
+            row_anchors.fallback_allowed(record, first) and row_anchors.fallback_allowed(record, last)))
+        if use_anchors:
+            missing = row_anchors.missing(record, first, old_anchors) + row_anchors.missing(record, last, new_anchors)
+            if missing:
+                return {'proved': False, 'new_complete_rows': None, 'detected_complete_rows': len(new_rows),
+                        'overlap_rows': 0, 'reason': 'row_anchor_needs_review', 'visual_review_needed': True}
         if numbered_evidence(record, first, last):
-            return {'proved': True, 'new_complete_rows': len(new_rows), 'overlap_rows': 0,
+            return {'proved': True, 'new_complete_rows': len(complete_indices), 'overlap_rows': 0,
                     'reason': 'numbered_new_positions', 'matches': {}}
-        if automatic._same(automatic._signature(old_image), automatic._signature(new_image)):
+        same_numbers = not complete_anchors or [a['start_bar'] for a in old_anchors] == [a['start_bar'] for a in new_anchors]
+        if same_numbers and automatic.same_observation(old_image, new_image):
             return {'proved': True, 'new_complete_rows': 0, 'overlap_rows': len(new_rows),
                     'reason': 'repeated_rows', 'matches': {index: index for index in range(min(len(old_rows), len(new_rows)))}}
         if not old_rows or not new_rows:
-            return {'proved': False, 'new_complete_rows': len(new_rows), 'overlap_rows': 0, 'reason': 'layout_or_endpoint_gap'}
+            return {'proved': False, 'new_complete_rows': None, 'detected_complete_rows': len(new_rows),
+                    'overlap_rows': 0, 'reason': 'layout_or_endpoint_gap'}
         spacing = max(1, round(old_rows[0]['staff_spacing']))
         old_signatures = [automatic._row_signature(old_image, r, spacing=spacing) for r in old_rows]
         new_signatures = [automatic._row_signature(new_image, r, spacing=spacing) for r in new_rows]
+        if use_anchors and len(old_anchors) == len(old_rows) and len(new_anchors) == len(new_rows):
+            old_values = [a['start_bar'] for a in old_anchors]
+            new_values = [a['start_bar'] for a in new_anchors]
+            mapping = {j: old_values.index(value) for j, value in enumerate(new_values) if value in old_values}
+            native = {first['id']: automatic._signature(old_image), last['id']: automatic._signature(new_image)}
+            if any(not automatic.same_row(old_image, old_rows[i], new_image, new_rows[j], spacing)
+                   and not automatic._native_visible_match(old_rows[i], new_rows[j], native.__getitem__)
+                   for j, i in mapping.items()):
+                return {'proved': False, 'new_complete_rows': None, 'detected_complete_rows': len(new_rows),
+                        'overlap_rows': 0, 'reason': 'printed_bar_content_conflict', 'visual_review_needed': True}
+            if mapping and list(mapping) == list(range(len(mapping))) and list(mapping.values()) == list(
+                    range(len(old_rows)-len(mapping), len(old_rows))) and all(
+                        value > max(old_values) for value in new_values[len(mapping):]):
+                return {'proved': True, 'new_complete_rows': len(complete_indices-set(mapping)),
+                        'overlap_rows': len(mapping), 'reason': 'printed_bar_overlap', 'matches': mapping}
+            if not mapping:
+                return {'proved': False, 'new_complete_rows': None, 'detected_complete_rows': len(new_rows),
+                        'overlap_rows': 0, 'reason': 'printed_bar_gap_needs_continuation'}
         overlaps = [size for size in range(1, min(len(old_rows), len(new_rows)) + 1)
                     if all(automatic._same(a, b) for a, b in zip(old_signatures[-size:], new_signatures[:size]))]
         if len(overlaps) == 1:
-            return {'proved': True, 'new_complete_rows': len(new_rows) - overlaps[0],
+            return {'proved': True, 'new_complete_rows': len(complete_indices-set(range(overlaps[0]))),
                     'overlap_rows': overlaps[0], 'reason': 'unique_row_overlap',
                     'matches': {index: len(old_rows) - overlaps[0] + index for index in range(overlaps[0])}}
         masks = {first['id']: automatic._signature(old_image), last['id']: automatic._signature(new_image)}
@@ -79,7 +129,7 @@ def compare(task, record, first, last):
             [automatic._row_signature(old_image, r, core=True, spacing=spacing) for r in old_rows],
             [automatic._row_signature(new_image, r, core=True, spacing=spacing) for r in new_rows], masks.__getitem__)
         if mapping:
-            return {'proved': True, 'new_complete_rows': len(new_rows) - len(mapping),
+            return {'proved': True, 'new_complete_rows': len(complete_indices-set(mapping)),
                     'overlap_rows': len(mapping), 'reason': 'unique_scroll', 'matches': mapping}
         small_old = [cv2.resize(value, (480, 128), interpolation=cv2.INTER_AREA) for value in old_signatures]
         small_new = [cv2.resize(value, (480, 128), interpolation=cv2.INTER_AREA) for value in new_signatures]
@@ -88,9 +138,9 @@ def compare(task, record, first, last):
         same_layout = len(old_rows) == len(new_rows) and all(automatic._same(a, b) for a, b in zip(small_old, small_new))
         if same_layout or (len({i for i, _ in tentative}) >= 2 and len({j for _, j in tentative}) >= 2):
             # Only a search heuristic. It cannot approve symbols or row identity.
-            return {'proved': False, 'new_complete_rows': max(0, len(new_rows) - len({j for _, j in tentative})),
+            return {'proved': False, 'new_complete_rows': None, 'detected_complete_rows': len(new_rows),
                     'overlap_rows': 0, 'reason': 'similar_rows_need_review', 'visual_review_needed': True}
-        return {'proved': False, 'new_complete_rows': len(new_rows), 'overlap_rows': 0,
+        return {'proved': False, 'new_complete_rows': None, 'detected_complete_rows': len(new_rows), 'overlap_rows': 0,
                 'reason': 'unproved_row_continuation'}
 
 
@@ -114,7 +164,7 @@ def collect(task, max_observations=128):
     if navigation['policy_version'] != POLICY:
         raise state.ReconstructionError('导航版本已改变；保留原任务并建立新任务。')
     previous_wall = navigation.get('wall_seconds', 0)
-    state.save(task, record)
+    save_navigation(task, record)
 
     def observe(seconds, reason):
         nonlocal record
@@ -135,13 +185,15 @@ def collect(task, max_observations=128):
             'time_base': shot['time_base'], 'timestamp': shot['timestamp']})
         with Image.open(state.artifact(task, shot)) as image:
             regions, risks, partial = automatic.detect(image)
+            anchors = row_anchors.readings(current, shot, image, regions, task=task)
         row_manifest.observe(current, shot, regions, risks, partial)
+        current['row_manifest']['observations'][shot['id']]['anchors'] = anchors
         earlier = [candidate for candidate in current_survey['candidates'] if candidate['timestamp'] < shot['timestamp']]
         previous = earlier[-1] if earlier else None
         comparison = compare(task, current, previous, shot) if previous else {}
         row_manifest.track(current, shot, previous, comparison)
         current.pop('freeze', None)
-        state.save(task, current)
+        save_navigation(task, current)
         return shot
 
     for name, seconds in (('first', 0), ('last', end)):
@@ -153,19 +205,69 @@ def collect(task, max_observations=128):
                 'pts': shot['pts'], 'time_base': shot['time_base'],
                 'complete_rows': sum(r['kind'] == 'system' for r in regions),
                 'risks': risks, 'partial': partial}
-            state.save(task, record)
+            save_navigation(task, record)
+    def anchor_gate():
+        problems = []
+        refreshed = False
+        for shot in record['overview']['candidates']:
+            observed = record['row_manifest']['observations'].get(shot['id'])
+            if observed is None or observed.get('geometry_policy_version') != automatic.PROGRAM_CHECK_VERSION:
+                with Image.open(state.artifact(task, shot)) as image:
+                    regions, risks, partial = automatic.detect(image)
+                    anchors = row_anchors.readings(record, shot, image, regions, task=task)
+                row_manifest.observe(record, shot, regions, risks, partial)
+                observed = record['row_manifest']['observations'][shot['id']]
+                observed['anchors'] = anchors
+                refreshed = True
+            if 'anchors' not in observed or any(a['start_bar'] is None for a in observed['anchors']):
+                refreshed = True
+                with Image.open(state.artifact(task, shot)) as image:
+                    observed['anchors'] = row_anchors.readings(record, shot, image, observed['regions'], task=task)
+            problems.extend(row_anchors.missing(record, shot, observed['anchors']))
+        if problems:
+            record['navigation'].update(status='blocked', unresolved=problems)
+            record['overview']['panels'] = automatic._panels(task, record['overview']['candidates'])
+            record['navigation']['wall_seconds'] = previous_wall + time.monotonic()-began
+            save_navigation(task, record)
+        elif refreshed:
+            save_navigation(task, record)
+        return bool(problems)
+
+    if anchor_gate():
+        return record['navigation']
+    navigation = record['navigation']
+    navigation['unresolved'] = []
     for _ in range(max_observations):
         navigation = record['navigation']
         if navigation['cursor'] >= end:
             break
-        previous_id = navigation.get('cursor_capture', navigation['endpoints']['first']['capture'])
+        pending_forward = navigation.get('pending_forward')
+        previous_id = pending_forward['previous_capture'] if pending_forward else navigation.get(
+            'cursor_capture', navigation['endpoints']['first']['capture'])
         previous = next(c for c in record['overview']['candidates'] if c['id'] == previous_id)
-        target = min(end, navigation['cursor'] + navigation['step'])
-        shot = observe(target, 'forward_search')
+        target = pending_forward['target'] if pending_forward else min(end, navigation['cursor'] + navigation['step'])
+        if pending_forward:
+            shot = next(c for c in record['overview']['candidates'] if c['id'] == pending_forward['capture'])
+        else:
+            shot = observe(target, 'forward_search')
+            record['navigation']['pending_forward'] = {'previous_capture': previous_id,
+                                                      'capture': shot['id'], 'target': target}
+            save_navigation(task, record)
+        if anchor_gate():
+            return record['navigation']
         comparison = compare(task, record, previous, shot)
+        register_problem(record, previous, shot, comparison)
         navigation = record['navigation']
+        if comparison.get('visual_review_needed'):
+            navigation.update(status='blocked', unresolved=[{'code': 'native_difference_needs_visual_review',
+                'capture': shot['id'], 'previous_capture': previous['id'], 'reason': comparison['reason']}])
+            save_navigation(task, record)
+            return navigation
+        navigation.pop('pending_forward', None)
         old_step = navigation['step']
-        if comparison['new_complete_rows'] == 0 and (comparison['proved'] or comparison.get('visual_review_needed')):
+        if comparison['new_complete_rows'] is None:
+            next_step = old_step
+        elif comparison['new_complete_rows'] == 0 and comparison['proved']:
             next_step = min(30, old_step * 1.7)
         elif comparison['proved'] or comparison.get('visual_review_needed'):
             next_step = min(30, old_step * 1.2) if comparison['new_complete_rows'] == 1 else max(.5, old_step / 1.4)
@@ -175,67 +277,129 @@ def collect(task, max_observations=128):
         navigation['decisions'].append({'action': 'adjust_step', 'from_capture': previous['id'],
             'to_capture': shot['id'], 'previous_step': old_step, 'next_step': navigation['step'],
             **comparison})
-        state.save(task, record)
+        save_navigation(task, record)
     record = state.load(task)
     navigation = record['navigation']
     navigation['status'] = 'observed' if navigation['cursor'] >= end else 'pending'
-    state.save(task, record)
+    save_navigation(task, record)
     if navigation['status'] == 'observed':
         refine(task, observe, max_observations)
         record = state.load(task)
         navigation = record['navigation']
     record['overview']['panels'] = automatic._panels(task, record['overview']['candidates'])
     navigation['wall_seconds'] = previous_wall + time.monotonic() - began
-    state.save(task, record)
+    save_navigation(task, record)
     return navigation
 
 
-def refine(task, observe, budget):
-    """Return to missing joins; continuous decoding stays inside a risk interval."""
-    @lru_cache(maxsize=256)
-    def comparison(first_id, last_id):
-        captures = {shot['id']: shot for shot in record['captures']}
-        return compare(task, record, captures[first_id], captures[last_id])
+def register_problem(record, first, last, comparison):
+    if comparison['proved']:
+        return
+    problems = record['navigation'].setdefault('problems', [])
+    if any(p['start_timestamp'] <= first['timestamp'] and p['end_timestamp'] >= last['timestamp'] for p in problems):
+        return
+    identity = ':'.join(str(v) for v in (record['source']['sha256'], first['pts'], first['time_base'],
+                                       last['pts'], last['time_base']))
+    problems.append({'id': 'join-'+hashlib.sha256(identity.encode()).hexdigest()[:24],
+        'previous_capture': first['id'], 'capture': last['id'],
+        'start_timestamp': first['timestamp'], 'end_timestamp': last['timestamp'],
+        'interval': [first['timestamp'], min(record['source']['duration'],
+                     last['timestamp']+record['source'].get('frame_duration', .04))],
+        'status': 'pending', 'attempts': 0, 'no_gain_streak': 0, 'history': []})
 
-    for _ in range(budget):
+
+def problem_evidence(task, record, problem):
+    candidates = [c for c in record['overview']['candidates']
+                  if problem['start_timestamp'] <= c['timestamp'] <= problem['end_timestamp']]
+    gaps = []
+    for first, last in zip(candidates, candidates[1:]):
+        if covered(record, first, last):
+            continue
+        result = compare(task, record, first, last)
+        if not result['proved']:
+            gaps.append((first, last, result))
+    return gaps, sum(b['timestamp']-a['timestamp'] for a, b, _ in gaps)
+
+
+def refine(task, observe, budget):
+    """Measure progress against persistent original problems, not new pairs."""
+    for operation in range(budget+1):
         record = state.load(task)
         candidates = record['overview']['candidates']
-        gap = next(((first, last) for first, last in zip(candidates, candidates[1:])
-                    if not covered(record, first, last) and not numbered_evidence(record, first, last)
-                    and not comparison(first['id'], last['id'])['proved']
-                    and not comparison(first['id'], last['id']).get('visual_review_needed')), None)
-        if gap is None:
-            record['navigation']['status'] = 'observed'
-            record['navigation']['unresolved'] = [
-                {'code': 'native_difference_needs_visual_review', 'previous_capture': first['id'],
-                 'capture': last['id'], 'reason': 'Navigation-scale similarity is not native notation evidence.'}
-                for first, last in zip(candidates, candidates[1:])
-                if not covered(record, first, last) and not numbered_evidence(record, first, last)
-                and comparison(first['id'], last['id']).get('visual_review_needed')]
-            state.save(task, record)
+        anchor_issues = []
+        for shot in candidates:
+            observation = record.get('row_manifest', {}).get('observations', {}).get(shot['id'])
+            if (observation is None or 'anchors' not in observation or
+                    observation.get('geometry_policy_version') != automatic.PROGRAM_CHECK_VERSION):
+                with Image.open(state.artifact(task, shot)) as image:
+                    regions, risks, partial = automatic.detect(image)
+                    anchors = row_anchors.readings(record, shot, image, regions, task=task)
+                row_manifest.observe(record, shot, regions, risks, partial)
+                observation = record['row_manifest']['observations'][shot['id']]
+                observation['anchors'] = anchors
+            anchor_issues.extend(row_anchors.missing(record, shot, observation['anchors']))
+        if anchor_issues:
+            record['navigation'].update(status='blocked', unresolved=anchor_issues)
+            save_navigation(task, record)
             return
-        first, last = gap
-        span = last['timestamp'] - first['timestamp']
-        interval = [first['timestamp'], min(record['source']['duration'],
-                    last['timestamp'] + record['source'].get('frame_duration', .04))]
-        decisions = record['navigation']['decisions']
-        target = (first['timestamp'] + last['timestamp']) / 2
-        stalled_seek = any(d['action'] == 'observe' and d['requested_seconds'] == target for d in decisions)
-        if span <= max(.5, 2 * record['source'].get('frame_duration', .04)) or stalled_seek:
-            if any(d['action'] == 'local_scan' and d['interval'] == interval for d in decisions):
-                record['navigation']['unresolved'] = [{'code': 'local_scan_incomplete', 'interval': interval}]
-                record['navigation']['status'] = 'blocked'
-                state.save(task, record)
-                return
-            decisions.append({'action': 'local_scan', 'interval': interval,
-                              'reason': 'unproved_row_continuation'})
-            state.save(task, record)
-            automatic.overview(task, [interval], 'local continuation risk')
+        for first, last in zip(candidates, candidates[1:]):
+            if not covered(record, first, last):
+                register_problem(record, first, last, compare(task, record, first, last))
+        pending = []
+        for problem in record['navigation'].get('problems', []):
+            gaps, remaining = problem_evidence(task, record, problem)
+            if remaining < problem.get('remaining_unproved_seconds', remaining)-1e-6:
+                problem['no_gain_streak'] = 0
+            problem['remaining_unproved_seconds'] = remaining
+            if problem['history'] and problem['history'][-1]['status'] == 'started':
+                attempt = problem['history'][-1]
+                gained = remaining < attempt['remaining_before']-1e-6
+                problem['no_gain_streak'] = 0 if gained else problem['no_gain_streak']+1
+                attempt.update(status='finished', remaining_after=remaining, gained_evidence=gained)
+            if not gaps:
+                problem['status'] = 'resolved'
+                continue
+            visual = next((g for g in gaps if g[2].get('visual_review_needed')), None)
+            if problem['no_gain_streak'] >= 2:
+                problem.update(status='needs_review', stop_reason='two_attempts_without_evidence_gain')
+            elif visual:
+                problem.update(status='needs_review', stop_reason=visual[2]['reason'])
+            else:
+                problem['status'] = 'pending'
+                pending.append((problem, gaps[0]))
+        navigation = record['navigation']
+        navigation['unresolved'] = [
+            {'code': 'native_difference_needs_visual_review' if p.get('stop_reason') == 'similar_rows_need_review'
+             else 'continuation_problem_needs_review', 'problem_id': p['id'],
+             'previous_capture': p['previous_capture'], 'capture': p['capture'],
+             'interval': p['interval'], 'reason': p.get('stop_reason'), 'scope': 'continuation'}
+            for p in navigation.get('problems', []) if p['status'] == 'needs_review']
+        if not pending or operation == budget:
+            navigation['status'] = 'blocked' if navigation['unresolved'] else 'pending' if pending else 'observed'
+            save_navigation(task, record)
+            return
+        problem, (first, last, _) = pending[0]
+        span = last['timestamp']-first['timestamp']
+        target = (first['timestamp']+last['timestamp'])/2
+        interval = [first['timestamp'], min(problem['interval'][1],
+                    last['timestamp']+record['source'].get('frame_duration', .04))]
+        stalled = any(d['action'] == 'observe' and d['requested_seconds'] == target
+                      for d in navigation['decisions'])
+        local = span <= max(.5, 2*record['source'].get('frame_duration', .04)) or stalled
+        if local and any(h['action'] == 'local_scan' and h.get('interval') == interval for h in problem['history']):
+            problem.update(status='needs_review', stop_reason='local_scan_incomplete')
+            problem['no_gain_streak'] = max(2, problem['no_gain_streak'])
+            save_navigation(task, record)
+            continue
+        attempt = {'action': 'local_scan' if local else 'backtrack', 'status': 'started',
+                   'remaining_before': problem['remaining_unproved_seconds'], 'target': target, 'interval': interval}
+        problem['history'].append(attempt)
+        problem['attempts'] = len(problem['history'])
+        navigation['decisions'].append({'action': attempt['action'], 'problem_id': problem['id'],
+            'from_capture': first['id'], 'to_capture': last['id'], 'target': target,
+            'interval': interval, 'reason': 'unproved_row_continuation'})
+        save_navigation(task, record)
+        if local:
+            automatic.overview(task, [interval], 'local continuation risk: '+problem['id'])
         else:
-            decisions.append({'action': 'backtrack', 'from_capture': first['id'], 'to_capture': last['id'],
-                              'target': target, 'reason': 'unproved_row_continuation'})
-            state.save(task, record)
             observe(target, 'gap_backtrack')
-    record = state.load(task)
-    record['navigation']['status'] = 'pending'
-    state.save(task, record)

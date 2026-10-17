@@ -132,6 +132,9 @@ def row_manifest(task):
         'unresolved': [{'code': 'no_row_observations'}]})
 
 
+from row_anchors import review as review_row_anchors
+
+
 def review_continuity(task, previous_capture, capture, previous_bars, bars,
                       viewed_captures, complete_rows, first_last, notes):
     """Record an Agent's actual numbered join; this is not program OCR."""
@@ -289,9 +292,9 @@ def stage(task, title=None, mode='sparse', max_observations=128):
                 'checks':result['checks'],'unresolved':result['checks'].get('unresolved',[]),
                 'navigation': current.get('navigation'), 'row_manifest': current.get('row_manifest'),
                 'scan_progress':record.get('overview', {}).get('scan', {}).get('progress', {}),
-                'next':{'operations':['stage','row-manifest','review-continuity','resample','revise-crop','auto-freeze','assemble'],
+                'next':{'operations':['stage','row-manifest','review-row-anchors','review-continuity','resample','revise-crop','auto-freeze','assemble'],
                         'instruction': '继续 stage 恢复未完成导航，不批准完整提取。' if current.get('navigation', {}).get('status') == 'pending'
-                        else '实际查看未决来源；编号接续用 review-continuity，原谱位置或音乐判断用 assemble，保留未解决的问题。'}}
+                        else '实际查看未决来源；逐行编号或有界替代证据用 review-row-anchors，截图范围接续用 review-continuity，原谱位置或音乐判断用 assemble，保留未解决的问题。'}}
     checks = crop_checks(task)
     if checks['status'] != 'passed':
         return {'phase': 'source', 'status': 'blocked', 'artifacts': artifacts,

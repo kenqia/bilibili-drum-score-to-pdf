@@ -9,7 +9,7 @@ import signal
 from public_video import InputError, ACQUISITION_SECONDS, retryable_acquisition
 from video_seek import ConversionError
 
-OPERATIONS = ('row-manifest','review-continuity','redraw-requests','dispatch-redraw','cancel-redraw','scan-status','crop-checks','stage','layout','overview','resample','auto-freeze','revise-crop','prepare','resume','navigate','promote','cache-report','cache-limits','capture','present','assemble','redraw-inputs','generation-materials',
+OPERATIONS = ('row-manifest','review-row-anchors','review-continuity','redraw-requests','dispatch-redraw','cancel-redraw','scan-status','crop-checks','stage','layout','overview','resample','auto-freeze','revise-crop','prepare','resume','navigate','promote','cache-report','cache-limits','capture','present','assemble','redraw-inputs','generation-materials',
               'begin-redraw','finish-redraw','fail-redraw','review-redraw',
               'reject-accepted-redraw','export','review-pdf',
               'midi-request','midi-submit','midi-playable','midi-export','midi-resume')

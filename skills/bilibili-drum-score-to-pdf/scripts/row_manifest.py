@@ -6,12 +6,34 @@ import numpy as np
 from PIL import Image
 
 
+def intersects(first, second):
+    return first[0] < second[2] and first[2] > second[0] and first[1] < second[3] and first[3] > second[1]
+
+
+def affects(issue, source):
+    """A task-level doubt blocks the task without contaminating every row."""
+    if not isinstance(issue, dict):
+        return False
+    if issue.get('positions'):
+        return source.get('position') in issue['positions']
+    if issue.get('capture') != source.get('capture'):
+        return False
+    if issue.get('bbox'):
+        return intersects(issue['bbox'], source['bbox'])
+    if issue.get('lines') and issue.get('paper_bbox'):
+        paper = issue['paper_bbox']
+        return intersects([paper[0], min(issue['lines']), paper[2], max(issue['lines']) + 1], source['bbox'])
+    return bool(issue.get('capture'))
+
+
 def observe(record, shot, regions, risks, partial):
+    from automatic_score import PROGRAM_CHECK_VERSION
     manifest = record.setdefault('row_manifest', {'version': 'score-rows/1',
         'source_sha256': record['source']['sha256'], 'rows': [], 'source_positions': {},
         'continuity_complete': False, 'unresolved': []})
     manifest.setdefault('observations', {})[shot['id']] = {
         'capture': shot['id'], 'pts': shot['pts'], 'time_base': shot['time_base'],
+        'geometry_policy_version': PROGRAM_CHECK_VERSION,
         'timestamp': shot['timestamp'], 'regions': regions, 'risks': risks, 'partial': partial,
         'complete_rows': sum(row['kind'] == 'system' for row in regions)}
     manifest['continuity_complete'] = False
@@ -85,11 +107,12 @@ def from_selection(record):
         source.update(capture=region['capture'], bbox=region['bbox'])
         old = next((row for row in previous.get('rows', []) if row['position'] == position), {})
         sources = [s for s in old.get('sources', []) if s['capture'] != source['capture'] or s['bbox'] != source['bbox']]
+        row_issues = [issue for issue in issues if affects(issue, {**source, 'position': position})]
         rows.append({'id': position, 'position': position, 'order': len(rows), 'kind': 'system',
             'selected': {'capture': region['capture'], 'bbox': region['bbox']},
             'sources': sources + [source], 'status': 'complete' if complete else 'unresolved',
             'region_index': index, 'crop': {key: region[key] for key in ('path', 'sha256', 'width', 'height')},
-            'issues': issues, 'continuation': copy.deepcopy(review),
+            'issues': row_issues, 'continuation': copy.deepcopy(review),
             'selection_reason': 'explicit source selection'})
     known = dict(previous.get('source_positions', {}))
     for key, positions in explicit_positions.items():
@@ -132,6 +155,18 @@ def update(task, record, chosen, observations, events, unresolved):
     source_positions = dict(known)
     rows = []
     current_groups = {source_key(row): label for label, sources in grouped.items() for row in sources}
+    for issue in unresolved:
+        if issue.get('previous_capture') and not issue.get('bbox') and not issue.get('positions'):
+            boundary = []
+            for capture, last in ((issue['previous_capture'], True), (issue.get('capture'), False)):
+                candidates = [s for sources in grouped.values() for s in sources if s['capture'] == capture]
+                if candidates:
+                    selected = (max if last else min)(candidates, key=lambda s: s['bbox'][1])
+                    boundary.append(selected['position'])
+            issue['positions'] = boundary
+            issue['scope'] = 'continuation'
+        if issue.get('positions'):
+            issue['positions'] = [positions.get(label, label) for label in issue['positions']]
     risks_by_capture = {item[1]['id']: item[5] for item in observations}
     captures = {shot['id']: shot for shot in record['captures']}
     for row in chosen:
@@ -146,10 +181,9 @@ def update(task, record, chosen, observations, events, unresolved):
             shot = captures[candidate['capture']]
             source = {field: shot[field] for field in
                       ('pts', 'time_base', 'timestamp', 'sha256', 'source_sha256')}
-            source.update(capture=candidate['capture'], bbox=candidate['bbox'], key=key)
+            source.update(capture=candidate['capture'], bbox=candidate['bbox'], key=key, position=identifier)
             source['issues'] = [risk for risk in risks_by_capture.get(candidate['capture'], [])
-                                if risk.get('bbox') and risk['bbox'][1] < candidate['bbox'][3]
-                                and risk['bbox'][3] > candidate['bbox'][1]]
+                                if risk.get('bbox') and intersects(risk['bbox'], candidate['bbox'])]
             cached = next((s for s in sources if s['capture'] == source['capture'] and s['bbox'] == source['bbox']), None)
             if cached and 'quality' in cached:
                 source['quality'] = {**cached['quality'], 'risk_count': len(source['issues'])}
@@ -166,7 +200,7 @@ def update(task, record, chosen, observations, events, unresolved):
         if row['kind'] != 'system':
             continue
         eligible = [candidate for candidate in grouped[label] if not any(
-            risk.get('bbox') and risk['bbox'][1] < candidate['bbox'][3] and risk['bbox'][3] > candidate['bbox'][1]
+            risk.get('bbox') and intersects(risk['bbox'], candidate['bbox'])
             for risk in risks_by_capture.get(candidate['capture'], []))]
         def quality(candidate):
             return next(source['quality']['sharpness'] for source in sources
@@ -182,8 +216,7 @@ def update(task, record, chosen, observations, events, unresolved):
             best = retained
         if best is not row:
             row.update(best, position=identifier)
-        issues = [issue for issue in unresolved if issue.get('capture') in
-                  {source['capture'] for source in sources} or not issue.get('capture')]
+        issues = [issue for issue in unresolved if any(affects(issue, source) for source in sources)]
         rows.append({'id': identifier, 'position': identifier, 'order': len(rows),
                      'kind': 'system', 'selected': {'capture': row['capture'], 'bbox': row['bbox']},
                      'sources': sources, 'status': 'unresolved' if issues else 'complete',

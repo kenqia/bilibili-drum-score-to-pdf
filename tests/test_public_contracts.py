@@ -72,6 +72,16 @@ class PublicContracts(unittest.TestCase):
                     call('review-continuity', {'previous_capture': 'missing', 'capture': 'missing',
                         'previous_bars': [1, 4], 'bars': [5, 8], 'viewed_captures': [],
                         'complete_rows': True, 'first_last': 'Controlled.', 'notes': 'Controlled.'})
+                for payload in (
+                    {'capture': 'missing', 'anchors': [], 'viewed_captures': [], 'notes': 'Controlled.'},
+                    {'capture': baseline['captures'][0]['id'], 'anchors': [{'row': True, 'start_bar': 1}],
+                     'viewed_captures': [baseline['captures'][0]['id']], 'notes': 'Controlled.'},
+                    {'capture': baseline['captures'][0]['id'], 'anchors': [],
+                     'viewed_captures': [baseline['captures'][0]['id']], 'notes': 'Controlled.',
+                     'fallback_interval': [0, baseline['source']['duration']]},
+                ):
+                    with self.assertRaises(score_task.ReconstructionError):
+                        call('review-row-anchors', payload)
                 self.assertEqual(score_task.load(self.task), baseline)
                 self.assertTrue(call('row-manifest', {})['continuity_complete'])
         self.video.write_bytes(b'Controlled damaged source.')
@@ -81,6 +91,14 @@ class PublicContracts(unittest.TestCase):
                     self.cli('row-manifest', {})
                 else:
                     score_workflow.row_manifest(self.task)
+        for entry in NAVIGATION_ENTRIES:
+            with self.subTest(entry=entry), self.assertRaises(score_task.ReconstructionError):
+                payload = {'capture': baseline['captures'][0]['id'], 'anchors': [{'row': 0, 'start_bar': 1}],
+                           'viewed_captures': [baseline['captures'][0]['id']], 'notes': 'Controlled.'}
+                if entry == 'cli':
+                    self.cli('review-row-anchors', payload)
+                else:
+                    score_workflow.review_row_anchors(self.task, **payload)
 
     def test_scan_status_is_explicitly_metadata_only_at_every_entry(self):
         self.select()

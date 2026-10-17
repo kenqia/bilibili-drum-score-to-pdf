@@ -101,6 +101,15 @@ class RevisionCLI(unittest.TestCase):
 
     def test_stage_advances_synthetic_video_and_never_reissues_pending_host_call(self):
         self.cli('prepare')
+        blocked=self.cli('stage',title='Synthetic stage')
+        self.assertEqual(blocked['phase'], 'source')
+        self.assertIn('row_anchor_missing', [i['code'] for i in blocked['unresolved']])
+        record=self.cli('resume')
+        shots=record['overview']['candidates']
+        self.cli('review-row-anchors',capture=shots[0]['id'],anchors=[],
+                 viewed_captures=[s['id'] for s in shots],
+                 fallback_interval=[0,record['source']['duration']],
+                 notes='Controlled identical unnumbered fixture; explicit local continuity authorization.')
         first=self.cli('stage',title='Synthetic stage')
         self.assertEqual(first['phase'],'generation')
         self.assertEqual(first['status'],'pending')

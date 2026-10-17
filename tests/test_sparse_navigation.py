@@ -7,9 +7,24 @@ import test_automatic_score as fixtures
 class SparseNavigationTests(unittest.TestCase):
     setUp = fixtures.AutomaticScoreTests.setUp
     tearDown = fixtures.AutomaticScoreTests.tearDown
-    prepare = fixtures.AutomaticScoreTests.prepare
-    sequence = fixtures.AutomaticScoreTests.sequence
     call = fixtures.AutomaticScoreTests.call
+
+    def authorize_unnumbered_fixture(self):
+        record = self.call('resume')
+        duration = record['source']['duration']
+        shots = [self.call('capture', {'seconds': t}) for t in
+                 (0, max(0, duration-record['source'].get('frame_duration', .04)-1e-6))]
+        self.call('review-row-anchors', {'capture': shots[0]['id'], 'anchors': [],
+            'fallback_interval': [0, duration], 'viewed_captures': [s['id'] for s in shots],
+            'notes': 'Controlled unnumbered fixture: explicitly allow geometric continuation checks.'})
+
+    def prepare(self, image=None):
+        fixtures.AutomaticScoreTests.prepare(self, image)
+        self.authorize_unnumbered_fixture()
+
+    def sequence(self, images, fps=4, crf=0):
+        fixtures.AutomaticScoreTests.sequence(self, images, fps, crf)
+        self.authorize_unnumbered_fixture()
 
     def test_default_stage_observes_endpoints_without_claiming_continuous_coverage(self):
         self.prepare()

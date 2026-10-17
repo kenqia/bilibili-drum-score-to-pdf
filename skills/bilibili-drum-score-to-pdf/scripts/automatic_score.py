@@ -17,7 +17,7 @@ import score_task as state
 cv2.setNumThreads(2)
 from video_seek import VideoReader, ConversionError
 
-PROGRAM_CHECK_VERSION = "geometry-temporal/8"
+PROGRAM_CHECK_VERSION = "geometry-temporal/10"
 SCAN_POLICY_VERSION = "native-visible-ink/3"
 MAX_EVENTS = 8192
 MAX_NATIVE_BYTES = 1024 * 1024 * 1024
@@ -33,6 +33,8 @@ def _fingerprint(record):
         material['row_manifest'] = record['row_manifest']
     if 'continuity_reviews' in record:
         material['continuity_reviews'] = record['continuity_reviews']
+    if 'row_anchor_reviews' in record:
+        material['row_anchor_reviews'] = record['row_anchor_reviews']
     return hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()
 
 
@@ -107,16 +109,36 @@ def detect(image):
         i += 1
     if not groups:
         return [], [], [{'code': 'partial_staff', 'bbox': [x,y,x+w,y+h]}] if lines else []
+    # A long horizontal with a downward leg above the next staff is a local
+    # off-staff mark. Keep it with that row, not with a remote viewport fragment.
+    associated = {top: [] for top, _, _, _ in groups}
+    for line in sorted(set(lines) - used):
+        following = next((group for group in groups if group[0] > line), None)
+        if following is None:
+            continue
+        top, spacing, left, right = following
+        columns = np.flatnonzero(horizontal[line] > 0)
+        if not len(columns) or not 4*spacing < top-line <= 9*spacing:
+            continue
+        if columns[0] < left + (right-left)*.2:
+            continue
+        leg = max(2, round(spacing))
+        if any(np.count_nonzero(mask[line:min(h, line+leg+1), max(0, col-1):col+2].any(axis=1)) >= leg
+               for col in (int(columns[0]), int(columns[-1]))):
+            associated[top].append(line)
+            used.add(line)
     # Choose genuinely blank separators. Ink reaching a boundary is reported.
     separators = []
     for left, right in zip(groups, groups[1:]):
         low, high = round(left[0]+4*left[1]+left[1]), round(right[0]-3*right[1])
+        if associated[right[0]]:
+            high = min(high, min(associated[right[0]]))
         blanks = np.flatnonzero((mask[max(0,low):max(low,high)] > 0).sum(axis=1) == 0) + low
         separators.append(int(blanks[len(blanks)//2]) if len(blanks) else (low+high)//2)
     first_top = max(0, round(groups[0][0]-8*groups[0][1]))
     low,high=max(0,round(first_top-2*groups[0][1])),min(h,round(first_top+2*groups[0][1]))
     blank=np.flatnonzero((mask[low:high]>0).sum(axis=1)==0)+low
-    if len(blank):
+    if len(blank) and first_top > 0:
         first_top=int(blank[np.argmin(np.abs(blank-first_top))])
     regions, risks = [], []
     if np.any(mask[:first_top]):
@@ -146,7 +168,9 @@ def detect(image):
         region = {'kind':'system', 'bbox':box, 'staff_top': y+top-box[1],
             'staff_spacing':spacing, 'bar_range':None,
             'evidence': {'five_lines': [y+line for line in detected_lines[top]],
-                'paper_bbox':[x,y,x+w,y+h], 'spacing_margin':spacing}}
+                'paper_bbox':[x,y,x+w,y+h], 'spacing_margin':spacing,
+                'staff_left': x+left, 'staff_right': x+right,
+                'associated_horizontal_lines': [y+line for line in associated[top]]}}
         regions.append(region)
         if (np.any(band[0]) or np.any(band[-1]) or ix.min()<spacing or ix.max()>w-1-spacing or
                 (low==0 and iy.min()<spacing) or (high==h and iy.max()>h-low-1-spacing)):
@@ -172,14 +196,97 @@ def detect(image):
             if (cw > spacing*3 and ch > spacing*2 and ca/(cw*ch) > .85 and
                     low+cy < top+4*spacing and low+cy+ch > top):
                 risks.append({'code':'unreadable_music', 'bbox':[x+int(cx),y+low+int(cy),x+int(cx+cw),y+low+int(cy+ch)]})
-    deferred = [{'code':'partial_staff', 'lines':[y+v for v in lines if v not in used],
-        'spacing':groups[-1][1], 'paper_bbox':[x,y,x+w,y+h]}] if set(lines)-used else []
+    deferred = []
+    for line in sorted(set(lines) - used):
+        spacing = min(groups, key=lambda group: abs(group[0]-line))[1]
+        if (not deferred or line+y-deferred[-1]['lines'][-1] > spacing*1.5 or
+                line+y-deferred[-1]['lines'][0] > spacing*4.5):
+            deferred.append({'code': 'partial_staff', 'lines': [], 'spacing': spacing,
+                             'paper_bbox': [x,y,x+w,y+h]})
+        deferred[-1]['lines'].append(y+line)
+    for partial in deferred:
+        columns = np.flatnonzero(np.any(horizontal[[v-y for v in partial['lines']]] > 0, axis=0))
+        partial['bbox'] = [x+int(columns[0]), max(y, round(partial['lines'][0]-3*partial['spacing'])),
+                           x+int(columns[-1])+1, min(y+h, round(partial['lines'][-1]+partial['spacing']))]
     return regions, risks, deferred
 
 
 def _signature(image):
     # Ignore bright playback highlights; preserve dark notation at native size.
     return geometry.ink_mask(image)
+
+
+def playback_boxes(first, second):
+    """Identify a narrow tall coloured trace in each original frame."""
+    if first.size != second.size:
+        return []
+    boxes = []
+    for image in (first, second):
+        rgb = np.asarray(image.convert('RGB')).astype(np.int16)
+        colour = (rgb.max(axis=2) - rgb.min(axis=2) > 45) & (rgb.min(axis=2) < 150)
+        columns = np.flatnonzero(colour.sum(axis=0) >= 48)
+        runs = [run for run in np.split(columns, np.where(np.diff(columns) > 1)[0] + 1) if len(run)]
+        traces = []
+        for run in runs:
+            rows = np.flatnonzero(colour[:, run].any(axis=1))
+            if (len(run) <= max(2, image.width * .005) and len(rows) >= 48 and
+                    np.ptp(rows) >= 64 and len(rows) >= np.ptp(rows) * .7):
+                traces.append((int(run[0]), int(rows[0]), int(run[-1]) + 1, int(rows[-1]) + 1))
+        if len(traces) > 1:
+            return []
+        boxes.append(traces[0] if traces else None)
+    if boxes[0] == boxes[1]:
+        return []
+    return boxes
+
+
+def same_observation(first, second):
+    """Ignore moving cursor bounds while preserving every outside ink change."""
+    left, right = _signature(first), _signature(second)
+    if _same(left, right):
+        return True
+    boxes = playback_boxes(first, second)
+    if not boxes or any(box is None for box in boxes):
+        return False
+    left, right = left.copy(), right.copy()
+    for x0, y0, x1, y1 in boxes:
+        margin = max(2, math.ceil((x1-x0)/2))
+        left[max(0, y0-margin):y1+margin, max(0, x0-margin):x1+margin] = 0
+        right[max(0, y0-margin):y1+margin, max(0, x0-margin):x1+margin] = 0
+    return _same(left, right)
+
+
+def same_row(first, old, second, new, spacing):
+    left = _row_signature(first, old, spacing=spacing)
+    right = _row_signature(second, new, spacing=spacing)
+    if _same(left, right):
+        return True
+    boxes = playback_boxes(first, second)
+    for row, box in zip((old, new), boxes or (None, None)):
+        if box is None:
+            continue
+        x0, y0, x1, y1 = box
+        if not (y0 < row['bbox'][3] and y1 > row['bbox'][1]):
+            continue
+        top = row['bbox'][1]+row['staff_top']
+        if y0 > top-spacing or y1 < top+5*spacing:
+            return False
+        origin = round(top)-8*spacing
+        margin = max(2, math.ceil((x1-x0)/2))
+        low, high = max(0, y0-origin-margin), min(left.shape[0], y1-origin+margin)
+        left[low:high, max(0, x0-margin):x1+margin] = 0
+        right[low:high, max(0, x0-margin):x1+margin] = 0
+    if _same(left, right):
+        return True
+    def clipped(row):
+        paper = row['evidence']['paper_bbox']
+        return row['bbox'][1] <= paper[1]+row['staff_spacing'] or row['bbox'][3] >= paper[3]-row['staff_spacing']
+    kernel = np.ones((3, 3), np.uint8)
+    if clipped(old) and not clipped(new):
+        return not np.any((left > 0) & (cv2.dilate(right, kernel) == 0))
+    if clipped(new) and not clipped(old):
+        return not np.any((right > 0) & (cv2.dilate(left, kernel) == 0))
+    return False
 
 
 def _same(a,b):
@@ -487,10 +594,10 @@ def _apply_revisions(task, record, shot, regions):
     return risks
 
 
-def _partial_recovered(task, partial, atlas, captures, observations, neighbours, native):
+def _partial_recovered(task, partial, atlas, captures, observations, neighbours, native, record=None):
     shot=captures[partial['capture']]
     lines=partial.get('lines',[])
-    if not lines:
+    if not lines or not partial.get('spacing'):
         return False
     spacing=partial['spacing']
     paper=partial['paper_bbox']
@@ -499,6 +606,11 @@ def _partial_recovered(task, partial, atlas, captures, observations, neighbours,
     anchors={}
     for neighbour in neighbours:
         mapping=_spatial_continuation(own[3],neighbour[3],own[6],neighbour[6],native)
+        if record is not None:
+            from sparse_navigation import compare
+            comparison = compare(task, record, shot, neighbour[1])
+            if comparison.get('reason') == 'printed_bar_overlap':
+                mapping = comparison['matches']
         shifts=[neighbour[3][j]['bbox'][1]+neighbour[3][j]['staff_top']-
             own[3][i]['bbox'][1]-own[3][i]['staff_top'] for j,i in mapping.items()]
         if shifts:
@@ -732,6 +844,10 @@ def auto_freeze(task, title=None):
             cores=[_row_signature(image,r,core=True,spacing=canonical_spacing) for r in systems]
             header_signatures=[geometry.ink_mask(image.crop(r['bbox']))
                 for r in regions if r['kind']=='header']
+            if sparse:
+                import row_anchors
+                anchors = row_anchors.readings(record, shot, image, regions, task=task)
+                unresolved.extend(row_anchors.missing(record, shot, anchors))
         for values in (signatures,cores):
             for index,signature in enumerate(values):
                 key=(signature.shape,hashlib.sha256(signature.tobytes()).digest())
@@ -756,6 +872,13 @@ def auto_freeze(task, title=None):
             prior=observations[groups[-1][-1]]
             stable=(len(item[3])==len(prior[3]) and len(item[3])>=2 and
                 sum(_same(a,b) for a,b in zip(item[4],prior[4]))>=2)
+            if (not stable and len(item[3]) == len(prior[3]) and len(item[3]) >= 2 and
+                    all(abs(a['bbox'][1]+a['staff_top']-b['bbox'][1]-b['staff_top']) <= 2
+                        for a, b in zip(prior[3], item[3]))):
+                with Image.open(state.artifact(task, prior[1])) as before, \
+                        Image.open(state.artifact(task, item[1])) as after:
+                    stable = all(same_row(before, a, after, b, canonical_spacing)
+                                 for a, b in zip(prior[3], item[3]))
         if stable:
             groups[-1].append(index)
         else:
@@ -781,7 +904,8 @@ def auto_freeze(task, title=None):
             for row in neighbour[3]:
                 box=row['bbox']
                 atlas.append((row,native[box[1]:box[3],box[0]:box[2]].copy()))
-        partial['resolved']=_partial_recovered(task,partial,atlas,captures,observations,neighbours,native_mask)
+        partial['resolved']=_partial_recovered(task,partial,atlas,captures,observations,neighbours,native_mask,
+                                              record if sparse else None)
         if not partial['resolved']:
             unresolved.append({**partial,'code':'incomplete_system'})
     risk_by_position={}
@@ -796,6 +920,19 @@ def auto_freeze(task, title=None):
             risk['bbox'][1]<row['bbox'][3] and risk['bbox'][3]>row['bbox'][1] for row in systems))
         signatures=list(signatures)
         numbered_join = previous and numbered_evidence(record, captures[previous[0]['capture']], shot)
+        anchor_comparison = None
+        if sparse and previous and not numbered_join:
+            from sparse_navigation import compare
+            anchor_comparison = compare(task, record, captures[previous[0]['capture']], shot)
+            if anchor_comparison.get('reason') in ('printed_bar_gap_needs_continuation', 'printed_bar_content_conflict'):
+                numbered_join = True
+        if (not numbered_join and previous and len(previous) == len(systems) and
+                all(abs(new['bbox'][1]+new['staff_top']-old['bbox'][1]-old['staff_top']) <= 2
+                    for old, new in zip(previous, systems))):
+            with Image.open(state.artifact(task, captures[previous[0]['capture']])) as old_image, \
+                    Image.open(state.artifact(task, shot)) as new_image:
+                if same_observation(old_image, new_image):
+                    signatures, cores = list(previous_signatures), list(previous_cores)
         ambiguous_change=False
         stationary=(not numbered_join and len(previous)==len(systems) and len(systems)>=3 and
             all(abs(new['bbox'][1]+new['staff_top']-old['bbox'][1]-old['staff_top'])<=2
@@ -831,6 +968,8 @@ def auto_freeze(task, title=None):
             previous_header_signatures=header_signatures
             continue
         spatial={} if numbered_join else _spatial_continuation(previous,systems,previous_cores,cores,native_mask)
+        if anchor_comparison and anchor_comparison.get('reason') == 'printed_bar_overlap':
+            spatial = anchor_comparison['matches']
         if spatial:
             shift=round(float(np.median([systems[j]['bbox'][1]+systems[j]['staff_top']-
                 previous[i]['bbox'][1]-previous[i]['staff_top'] for j,i in spatial.items()])))
@@ -967,6 +1106,7 @@ def auto_freeze(task, title=None):
             prior = event
     if not any(r['kind']=='system' for r in chosen):
         unresolved.append({'code':'no_complete_system'})
+    unresolved = list({json.dumps(issue, sort_keys=True): issue for issue in unresolved}.values())
     import row_manifest
     row_manifest.update(task, record, chosen, observations, events, unresolved)
     checks={'producer':'program','policy_version':PROGRAM_CHECK_VERSION,'method':
