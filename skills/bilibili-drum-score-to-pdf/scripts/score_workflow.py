@@ -157,6 +157,9 @@ def review_continuity(task, previous_capture, capture, previous_bars, bars,
         'sha256': shots[capture]['sha256'], 'previous_bars': previous_bars, 'bars': bars,
         'viewed_captures': viewed_captures, 'complete_rows': True,
         'first_last': first_last.strip(), 'notes': notes.strip()}
+    from sparse_navigation import numbered_conflicts
+    if numbered_conflicts(record, evidence):
+        raise ReconstructionError('同一实际来源存在互相矛盾的小节范围；请核对原图并保留未决。')
     reviews = record.setdefault('continuity_reviews', [])
     if evidence not in reviews:
         reviews.append(evidence)

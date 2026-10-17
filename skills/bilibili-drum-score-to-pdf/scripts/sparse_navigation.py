@@ -23,7 +23,24 @@ def covered(record, first, last):
     return cursor >= min(end, record['source']['duration'])
 
 
+def numbered_conflicts(record, proposed=None):
+    captures = {shot['id']: shot for shot in record['captures']}
+    known, conflicts = {}, []
+    reviews = record.get('continuity_reviews', []) + ([proposed] if proposed else [])
+    for review in reviews:
+        for capture, bounds in ((review['previous_capture'], review['previous_bars']), (review['capture'], review['bars'])):
+            shot = captures[capture]
+            key = (shot['pts'], tuple(shot['time_base']), shot['sha256'])
+            if key in known and known[key] != bounds:
+                conflicts.append({'code': 'contradictory_bar_ranges', 'capture': capture,
+                                  'previous': known[key], 'proposed': bounds})
+            known[key] = bounds
+    return conflicts
+
+
 def numbered_evidence(record, first, last):
+    if numbered_conflicts(record):
+        return None
     return next((decision for decision in reversed(record.get('continuity_reviews', []))
                  if decision['previous_capture'] == first['id'] and decision['capture'] == last['id']
                  and decision['source_sha256'] == record['source']['sha256']
@@ -40,6 +57,9 @@ def compare(task, record, first, last):
         new_regions = new['regions'] if new else automatic.detect(new_image)[0]
         old_rows = [{**r, 'capture': first['id']} for r in old_regions if r['kind'] == 'system']
         new_rows = [{**r, 'capture': last['id']} for r in new_regions if r['kind'] == 'system']
+        if numbered_evidence(record, first, last):
+            return {'proved': True, 'new_complete_rows': len(new_rows), 'overlap_rows': 0,
+                    'reason': 'numbered_new_positions', 'matches': {}}
         if automatic._same(automatic._signature(old_image), automatic._signature(new_image)):
             return {'proved': True, 'new_complete_rows': 0, 'overlap_rows': len(new_rows),
                     'reason': 'repeated_rows', 'matches': {index: index for index in range(min(len(old_rows), len(new_rows)))}}

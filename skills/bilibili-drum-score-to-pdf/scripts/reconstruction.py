@@ -126,9 +126,10 @@ def ink_mask(image):
     red, green, blue = cv2.split(rgb)
     maximum = cv2.max(cv2.max(red, green), blue)
     minimum = cv2.min(cv2.min(red, green), blue)
-    saturated = cv2.bitwise_and(cv2.compare(cv2.subtract(maximum,minimum),45,cv2.CMP_GT),
-        cv2.compare(minimum,150,cv2.CMP_LT))
-    return cv2.bitwise_or(cv2.compare(gray,165,cv2.CMP_LT),saturated)
+    # OpenCV treats a 1x1 operand as a scalar, making compare(array, int)
+    # ambiguous. Array thresholds retain the same rule for every crop size.
+    saturated = ((maximum - minimum) > 45) & (minimum < 150)
+    return np.where((gray < 165) | saturated, 255, 0).astype(np.uint8)
 
 
 

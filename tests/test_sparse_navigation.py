@@ -182,6 +182,52 @@ class SparseNavigationTests(unittest.TestCase):
         self.assertEqual(len(record['row_manifest']['rows']), 6)
         self.assertTrue(any(e.get('numbered_continuation') for e in record['program_checks']['events']))
 
+    def test_contradictory_bar_ranges_for_the_same_source_are_rejected(self):
+        self.prepare()
+        shots = [self.call('capture', {'seconds': seconds}) for seconds in (0, .5, 1)]
+        payload = {'previous_capture': shots[0]['id'], 'capture': shots[1]['id'],
+                   'previous_bars': [1, 12], 'bars': [13, 24],
+                   'viewed_captures': [shot['id'] for shot in shots], 'complete_rows': True,
+                   'first_last': 'Controlled boundaries.', 'notes': 'Controlled consistent reading.'}
+        self.call('review-continuity', payload)
+        before = self.call('resume')
+        self.call('review-continuity', {**payload, 'previous_capture': shots[1]['id'],
+                  'capture': shots[2]['id'], 'previous_bars': [25, 36], 'bars': [37, 48]}, success=False)
+        self.assertEqual(self.call('resume'), before)
+
+    def test_numbered_new_positions_override_identical_row_music(self):
+        from PIL import ImageDraw
+        from score_fixtures import score_frame
+        first = score_frame()
+        second = first.copy()
+        ImageDraw.Draw(second).text((900, 75), 'NEXT PAGE', fill='black')
+        self.sequence([first] * 4 + [second] * 4)
+        left = self.call('capture', {'seconds': .5})
+        right = self.call('capture', {'seconds': 1.35})
+        self.call('review-continuity', {'previous_capture': left['id'], 'capture': right['id'],
+                  'previous_bars': [1, 12], 'bars': [13, 24],
+                  'viewed_captures': [left['id'], right['id']], 'complete_rows': True,
+                  'first_last': 'Controlled distinct score positions with repeated music.',
+                  'notes': 'Controlled page labels establish consecutive new positions.'})
+        result = self.call('stage')
+        self.assertEqual(result['phase'], 'generation', result.get('unresolved'))
+        rows = self.call('row-manifest')['rows']
+        self.assertEqual(len(rows), 6)
+        self.assertEqual(len({r['position'] for r in rows}), 6)
+
+    def test_one_pixel_header_is_preserved_without_opencv_scalar_ambiguity(self):
+        from PIL import ImageDraw
+        from score_fixtures import score_frame
+        image = score_frame()
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((70, 40, 1210, 150), fill='white')
+        draw.point((700, 100), fill='black')
+        self.prepare(image)
+        result = self.call('stage')
+        self.assertEqual(result['phase'], 'generation', result.get('unresolved'))
+        header = next(r for r in self.call('resume')['regions'] if r['kind'] == 'header')
+        self.assertEqual((header['width'], header['height']), (1, 1))
+
 
 if __name__ == '__main__':
     unittest.main()

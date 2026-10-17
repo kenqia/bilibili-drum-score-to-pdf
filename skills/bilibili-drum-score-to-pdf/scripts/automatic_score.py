@@ -672,9 +672,11 @@ def auto_freeze(task, title=None):
             return geometry.ink_mask(image)
     sparse = survey.get('mode') == 'sparse'
     if sparse:
+        from sparse_navigation import numbered_conflicts, numbered_evidence
         unresolved = [] if record.get('navigation', {}).get('status') == 'observed' else [
             {'code': 'navigation_incomplete', 'resume': 'stage'}]
         unresolved.extend(record.get('navigation', {}).get('unresolved', []))
+        unresolved.extend(numbered_conflicts(record))
     else:
         unresolved=[] if survey['scan']['complete'] else [{'code':'unobserved_interval','resume':'overview'}]
     if survey['scan'].get('policy_version')!=SCAN_POLICY_VERSION:
@@ -762,8 +764,9 @@ def auto_freeze(task, title=None):
         unresolved.extend({'capture':shot['id'],**risk} for risk in risks if not any(
             risk['bbox'][1]<row['bbox'][3] and risk['bbox'][3]>row['bbox'][1] for row in systems))
         signatures=list(signatures)
+        numbered_join = sparse and previous and numbered_evidence(record, captures[previous[0]['capture']], shot)
         ambiguous_change=False
-        stationary=(len(previous)==len(systems) and len(systems)>=3 and
+        stationary=(not numbered_join and len(previous)==len(systems) and len(systems)>=3 and
             all(abs(new['bbox'][1]+new['staff_top']-old['bbox'][1]-old['staff_top'])<=2
                 for old,new in zip(previous,systems)) and
             sum(_same(a,b) for a,b in zip(previous_signatures,signatures))>=2)
@@ -796,7 +799,7 @@ def auto_freeze(task, title=None):
             previous,previous_signatures,previous_cores=systems,signatures,cores
             previous_header_signatures=header_signatures
             continue
-        spatial=_spatial_continuation(previous,systems,previous_cores,cores,native_mask)
+        spatial={} if numbered_join else _spatial_continuation(previous,systems,previous_cores,cores,native_mask)
         if spatial:
             shift=round(float(np.median([systems[j]['bbox'][1]+systems[j]['staff_top']-
                 previous[i]['bbox'][1]-previous[i]['staff_top'] for j,i in spatial.items()])))
@@ -835,7 +838,7 @@ def auto_freeze(task, title=None):
                 'positions':[r['position'] for r in systems]})
             continue
         resolved_edges=set()
-        for index,row in enumerate(systems):
+        for index,row in enumerate(systems if not numbered_join else []):
             row_risks=[risk for risk in risks if risk['bbox'][1]<row['bbox'][3] and risk['bbox'][3]>row['bbox'][1]]
             if not row_risks or any(risk['code']!='crop_edge' for risk in row_risks):
                 continue
@@ -853,7 +856,7 @@ def auto_freeze(task, title=None):
                     break
         # A damaged observation may be replaced only with spatially anchored
         # clean evidence. Matching surrounding systems establish its position.
-        anchored=(len(systems)==len(previous) and len(systems)>=2 and
+        anchored=(not numbered_join and len(systems)==len(previous) and len(systems)>=2 and
             any(_same(a,b) for a,b in zip(previous_signatures,signatures)) and
             any(risk_by_position.get(r['position']) for r in previous))
         if anchored and not risks and all(_same(a,b) for a,b in zip(previous_cores,cores)) and _compatible_repair(task,previous,systems,risk_by_position,captures):
@@ -868,13 +871,13 @@ def auto_freeze(task, title=None):
                 'replacement_of_damaged_observation':True,'positions':positions})
             continue
         overlaps=[]
-        for size in range(1,min(len(previous),len(systems))+1):
+        for size in range(1, min(len(previous),len(systems))+1 if not numbered_join else 1):
             if all(_same(a,b) for a,b in zip(previous_signatures[-size:],signatures[:size])):
                 overlaps.append(size)
         prefix=0
         # Fixed upper systems are anchors only when a lower row visibly moves
         # upwards into the old suffix. Equal prefixes alone do not dedup pages.
-        while prefix<min(len(previous),len(systems)) and _same(previous_signatures[prefix],signatures[prefix]):
+        while not numbered_join and prefix<min(len(previous),len(systems)) and _same(previous_signatures[prefix],signatures[prefix]):
             prefix+=1
         moving=[]
         if prefix and prefix<min(len(previous),len(systems)):
