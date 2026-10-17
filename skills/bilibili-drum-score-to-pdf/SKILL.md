@@ -21,9 +21,11 @@ uv run --isolated --with-requirements "/absolute/skill/scripts/requirements.txt"
 
 把 `/absolute/skill` 换成本文件所在目录的绝对路径。省略 `--operation` 使用新版 `prepare`；本地视频使用同一入口。链接支持 `?p=2`。准备只创建待审阅任务，不表示已交付。后续操作使用 `--task` 与 Agent 编写的 `--request` JSON，用户无需填写 JSON。完整操作列表和请求规则见 `references/reconstruction-entry.md`。
 
-1. 准备任务后调用 `stage`，按响应的 `phase`、产物、检查、未决和 `next` 继续。正常来源自动采集、检查与冻结，生图前无需 Agent 复看。音乐、接续或裁剪未决时补采；未解决保留 blocked。
-2. 按 `handoffs` 执行真实宿主生图或恢复已有 request。`ready_to_dispatch` 先执行 `dispatch-redraw` 再调用宿主；`recover_existing_call` 先恢复结果。批量与作废规则见 `references/stage-recovery-layout.md`。实际查看每个生成结果，核对音乐记号，提交完整行边界。每个输入版本最多一次定向修正；工具缺失、失败或修正后仍不合格时转矢量，轮廓转描不称为音乐识别。
-3. 再调用 `stage` 导出 A4 和全部有序预览。实际查看最终每页，检查标题、顺序、首尾、关键记号、裁断、重叠和留白，用当前 output_revision 调用 `review-pdf`。只有 complete 才交付。
+1. 准备任务后调用 `stage`。默认先观察首尾及谱面布局，再根据新增完整谱行和重叠情况自适应跳转，建立持久谱行清单。按 `phase`、检查、未决和 `next` 继续；单次导航预算用尽时继续 `stage`。普通视频不先运行全曲 `overview`。
+2. 用 `row-manifest` 查看谱行顺序、来源及接续。唯一重叠和滚动关系可由程序判断；明确可读的小节顺序、完整行边界和首尾记号也可共同证明接续。实际看图后通过 `review-continuity` 登记编号依据，不伪造编号识别。接续缺口先缩小跳转或局部连续扫描；未解决的音乐、位置和裁剪问题保留 blocked。
+3. 来源检查通过后选取合格来源并冻结粗拼。接续证据完整可以推进后续流程，严格时间覆盖单独记录；稀疏观察不能证明未采样时间没有短暂换谱。显式使用 `stage` 的 `mode=strict` 或 `overview` 执行连续扫描。程序冻结无需 Agent 额外复看全部粗拼。
+4. 按 `handoffs` 执行真实宿主生图或恢复已有 request。`ready_to_dispatch` 先执行 `dispatch-redraw` 再调用宿主；`recover_existing_call` 先恢复结果。批量与作废规则见 `references/stage-recovery-layout.md`。实际查看每个生成结果，核对音乐记号，提交完整行边界。每个输入版本最多一次定向修正；工具缺失、失败或修正后仍不合格时转矢量，轮廓转描不称为音乐识别。
+5. 再调用 `stage` 导出 A4 和全部有序预览。实际查看最终每页，检查标题、顺序、首尾、关键记号、裁断、重叠和留白，用当前 output_revision 调用 `review-pdf`。只有 complete 才交付。
 
 局部裁剪、A→B→A 额度恢复、重新分组、未知调用与仅改布局时，读取 `references/stage-recovery-layout.md`。低层来源异常操作读取 `references/automatic-source-checks.md` 和 `references/reconstruction-workflow.md`。
 恢复时使用当前任务 `record.json`，验证来源和派生产物 hash 后复用有效截图、已接受生成图和修正预算。旧观察包、决定协议、auto/fast/full 模式及 `--operation convert` 已退出；不自动迁移旧任务。历史实现通过 Git history 查看，回滚使用独立 checkout 与新任务目录。

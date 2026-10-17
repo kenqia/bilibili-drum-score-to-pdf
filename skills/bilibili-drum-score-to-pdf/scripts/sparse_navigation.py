@@ -41,7 +41,8 @@ def compare(task, record, first, last):
         old_rows = [{**r, 'capture': first['id']} for r in old_regions if r['kind'] == 'system']
         new_rows = [{**r, 'capture': last['id']} for r in new_regions if r['kind'] == 'system']
         if automatic._same(automatic._signature(old_image), automatic._signature(new_image)):
-            return {'proved': True, 'new_complete_rows': 0, 'overlap_rows': len(new_rows), 'reason': 'repeated_rows'}
+            return {'proved': True, 'new_complete_rows': 0, 'overlap_rows': len(new_rows),
+                    'reason': 'repeated_rows', 'matches': {index: index for index in range(min(len(old_rows), len(new_rows)))}}
         if not old_rows or not new_rows:
             return {'proved': False, 'new_complete_rows': len(new_rows), 'overlap_rows': 0, 'reason': 'layout_or_endpoint_gap'}
         spacing = max(1, round(old_rows[0]['staff_spacing']))
@@ -51,21 +52,26 @@ def compare(task, record, first, last):
                     if all(automatic._same(a, b) for a, b in zip(old_signatures[-size:], new_signatures[:size]))]
         if len(overlaps) == 1:
             return {'proved': True, 'new_complete_rows': len(new_rows) - overlaps[0],
-                    'overlap_rows': overlaps[0], 'reason': 'unique_row_overlap'}
-        if len(old_rows) == len(new_rows) and all(automatic._same(
-                cv2.resize(a, (480, 128), interpolation=cv2.INTER_AREA),
-                cv2.resize(b, (480, 128), interpolation=cv2.INTER_AREA))
-                for a, b in zip(old_signatures, new_signatures)):
-            # Navigation may ignore raster detail to choose a jump, but this
-            # must never approve notation or invent a native row identity.
-            return {'proved': False, 'new_complete_rows': 0, 'overlap_rows': 0,
-                    'reason': 'similar_rows_need_review', 'visual_review_needed': True}
+                    'overlap_rows': overlaps[0], 'reason': 'unique_row_overlap',
+                    'matches': {index: len(old_rows) - overlaps[0] + index for index in range(overlaps[0])}}
         masks = {first['id']: automatic._signature(old_image), last['id']: automatic._signature(new_image)}
         mapping = automatic._spatial_continuation(old_rows, new_rows,
             [automatic._row_signature(old_image, r, core=True, spacing=spacing) for r in old_rows],
             [automatic._row_signature(new_image, r, core=True, spacing=spacing) for r in new_rows], masks.__getitem__)
-        return {'proved': bool(mapping), 'new_complete_rows': len(new_rows) - len(mapping),
-                'overlap_rows': len(mapping), 'reason': 'unique_scroll' if mapping else 'unproved_row_continuation'}
+        if mapping:
+            return {'proved': True, 'new_complete_rows': len(new_rows) - len(mapping),
+                    'overlap_rows': len(mapping), 'reason': 'unique_scroll', 'matches': mapping}
+        small_old = [cv2.resize(value, (480, 128), interpolation=cv2.INTER_AREA) for value in old_signatures]
+        small_new = [cv2.resize(value, (480, 128), interpolation=cv2.INTER_AREA) for value in new_signatures]
+        tentative = [(i, j) for i, a in enumerate(small_old) for j, b in enumerate(small_new)
+                     if automatic._same(a, b)]
+        same_layout = len(old_rows) == len(new_rows) and all(automatic._same(a, b) for a, b in zip(small_old, small_new))
+        if same_layout or (len({i for i, _ in tentative}) >= 2 and len({j for _, j in tentative}) >= 2):
+            # Only a search heuristic. It cannot approve symbols or row identity.
+            return {'proved': False, 'new_complete_rows': max(0, len(new_rows) - len({j for _, j in tentative})),
+                    'overlap_rows': 0, 'reason': 'similar_rows_need_review', 'visual_review_needed': True}
+        return {'proved': False, 'new_complete_rows': len(new_rows), 'overlap_rows': 0,
+                'reason': 'unproved_row_continuation'}
 
 
 def collect(task, max_observations=128):
@@ -99,6 +105,8 @@ def collect(task, max_observations=128):
         shot = native_cache.capture(task, seconds)
         current = record = state.load(task)
         current_survey = current['overview']
+        shot = next((candidate for candidate in current_survey['candidates']
+                     if candidate['pts'] == shot['pts'] and candidate['time_base'] == shot['time_base']), shot)
         if not any(c['id'] == shot['id'] for c in current_survey['candidates']):
             current_survey['candidates'].append(shot)
             current_survey['candidates'].sort(key=lambda c: c['timestamp'])
@@ -108,6 +116,10 @@ def collect(task, max_observations=128):
         with Image.open(state.artifact(task, shot)) as image:
             regions, risks, partial = automatic.detect(image)
         row_manifest.observe(current, shot, regions, risks, partial)
+        earlier = [candidate for candidate in current_survey['candidates'] if candidate['timestamp'] < shot['timestamp']]
+        previous = earlier[-1] if earlier else None
+        comparison = compare(task, current, previous, shot) if previous else {}
+        row_manifest.track(current, shot, previous, comparison)
         current.pop('freeze', None)
         state.save(task, current)
         return shot
@@ -135,7 +147,7 @@ def collect(task, max_observations=128):
         old_step = navigation['step']
         if comparison['new_complete_rows'] == 0 and (comparison['proved'] or comparison.get('visual_review_needed')):
             next_step = min(30, old_step * 1.7)
-        elif comparison['proved']:
+        elif comparison['proved'] or comparison.get('visual_review_needed'):
             next_step = min(30, old_step * 1.2) if comparison['new_complete_rows'] == 1 else max(.5, old_step / 1.4)
         else:
             next_step = max(.5, old_step / 2)
@@ -187,7 +199,9 @@ def refine(task, observe, budget):
         interval = [first['timestamp'], min(record['source']['duration'],
                     last['timestamp'] + record['source'].get('frame_duration', .04))]
         decisions = record['navigation']['decisions']
-        if span <= max(.5, 2 * record['source'].get('frame_duration', .04)):
+        target = (first['timestamp'] + last['timestamp']) / 2
+        stalled_seek = any(d['action'] == 'observe' and d['requested_seconds'] == target for d in decisions)
+        if span <= max(.5, 2 * record['source'].get('frame_duration', .04)) or stalled_seek:
             if any(d['action'] == 'local_scan' and d['interval'] == interval for d in decisions):
                 record['navigation']['unresolved'] = [{'code': 'local_scan_incomplete', 'interval': interval}]
                 record['navigation']['status'] = 'blocked'
@@ -198,7 +212,6 @@ def refine(task, observe, budget):
             state.save(task, record)
             automatic.overview(task, [interval], 'local continuation risk')
         else:
-            target = (first['timestamp'] + last['timestamp']) / 2
             decisions.append({'action': 'backtrack', 'from_capture': first['id'], 'to_capture': last['id'],
                               'target': target, 'reason': 'unproved_row_continuation'})
             state.save(task, record)

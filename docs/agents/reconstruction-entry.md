@@ -15,7 +15,8 @@ uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/
 | 操作 | 公共函数 |
 | --- | --- |
 | prepare / resume | prepare / load |
-| stage / layout | stage / layout，阶段推进与打印参数 |
+| stage / layout | stage / layout，稀疏导航阶段推进与打印参数 |
+| row-manifest / review-continuity | 持久谱行清单 / Agent 实际编号接续判断 |
 | scan-status / crop-checks | 扫描元数据进度 / 当前选行边缘检查 |
 | redraw-requests / dispatch-redraw / cancel-redraw | 完整批量预留 / 提交前登记 / 未提交作废 |
 | overview / resample / auto-freeze / revise-crop | 同名函数（横线转下划线） |
@@ -54,3 +55,24 @@ cache-limits 接受正整数 max_entries 和 max_bytes，默认 64 个候选及 
 ## 阶段入口与恢复
 
 准备后使用 `stage` 自动推进至宿主调用或实际审阅；局部来源版本、输入额度恢复、打印布局和全部页面预览见[阶段入口、局部恢复与打印布局](stage-recovery-layout.md)。`layout` 修改边距、最小行距和目标页数，复用已接受生成结果；最终审阅显式绑定当前导出回执的独立 `output_revision`，PDF hash 用于完整性校验。程序检查与实际看图分别记录。
+
+## 稀疏导航请求
+
+默认 `stage` 请求可以为 `{}`。显式严格扫描使用 `{"mode":"strict"}`；限制单次导航工作量使用 `{"max_observations":32}`。预算停止保存未完成状态，不能批准全曲完整。跳转决定和实际来源保存在 `navigation`，`row-manifest` 返回谱行清单，完整任务仍可通过 resume 恢复。
+
+Agent 实际看过相邻截图后，编号接续请求示例为：
+
+```json
+{
+  "previous_capture": "capture-0001",
+  "capture": "capture-0002",
+  "previous_bars": [17, 20],
+  "bars": [21, 24],
+  "viewed_captures": ["capture-0001", "capture-0002"],
+  "complete_rows": true,
+  "first_last": "实际确认的完整谱行边界和首尾记号",
+  "notes": "实际读取的相邻小节顺序及接续依据"
+}
+```
+
+通过 `review-continuity` 提交；上例是字段说明，不是本曲的实际观察记录。程序验证来源引用及编号连续性，但不会读取编号或代替 Agent 看图。接着调用 stage 或 auto-freeze 重新检查，登记判断本身不批准来源，也不产生严格时间覆盖。

@@ -14,7 +14,7 @@
 
 ## 程序自动检查
 
-`automatic_score.py` 提供全曲顺序解码总览、五线几何裁剪、相邻位置重叠检查与粗拼冻结。`score_task.py` 的生成和导出入口共享冻结校验。程序检查与 Agent 实际看图区分记录。使用方法和限制见[程序检查与粗拼冻结](agents/automatic-source-checks.md)。
+`sparse_navigation.py` 为默认 stage 提供首尾布局观察、自适应跳转和缺口局部回查，复用原生候选缓存。`row_manifest.py` 维护稳定谱行身份、独立顺序和可追溯来源。`automatic_score.py` 复用五线几何、相邻重叠及粗拼冻结；全曲顺序解码总览保留为显式严格路径。稀疏接续资格与严格时间覆盖分别记录。`score_task.py` 的生成和导出入口共享冻结校验。程序检查与 Agent 实际看图区分记录。使用方法和限制见[程序检查与粗拼冻结](agents/automatic-source-checks.md)。
 
 ## 来源与重绘
 

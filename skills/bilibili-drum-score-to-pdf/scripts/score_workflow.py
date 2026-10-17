@@ -273,8 +273,6 @@ def stage(task, title=None, mode='sparse', max_observations=128):
             import sparse_navigation
             sparse_navigation.collect(task, max_observations)
             survey = load(task)['overview']
-        elif not survey.get('scan', {}).get('complete'):
-            survey = overview(task)
     artifacts['overview'] = survey.get('panels', [])
     record = load(task)
     try:
@@ -288,7 +286,9 @@ def stage(task, title=None, mode='sparse', max_observations=128):
                 'checks':result['checks'],'unresolved':result['checks'].get('unresolved',[]),
                 'navigation': current.get('navigation'), 'row_manifest': current.get('row_manifest'),
                 'scan_progress':record.get('overview', {}).get('scan', {}).get('progress', {}),
-                'next':{'operations':['stage','row-manifest','review-continuity','resample','revise-crop','auto-freeze','assemble'], 'instruction':result.get('resume')}}
+                'next':{'operations':['stage','row-manifest','review-continuity','resample','revise-crop','auto-freeze','assemble'],
+                        'instruction': '继续 stage 恢复未完成导航，不批准完整提取。' if current.get('navigation', {}).get('status') == 'pending'
+                        else '实际查看未决来源；编号接续用 review-continuity，原谱位置或音乐判断用 assemble，保留未解决的问题。'}}
     checks = crop_checks(task)
     if checks['status'] != 'passed':
         return {'phase': 'source', 'status': 'blocked', 'artifacts': artifacts,

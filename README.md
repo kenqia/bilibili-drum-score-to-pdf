@@ -118,7 +118,7 @@ uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/
   /absolute/path/to/video.mp4 --output /absolute/path/to/new-task
 ```
 
-替换两个绝对路径，输出使用新的任务目录。安装目录中使用同一命令的 `scripts/` 相对路径。该命令只准备任务；Agent 随后通过 `stage` 推进宿主生图、结果审阅、导出与最终页面检查。只有阶段返回 `complete` 才交付。
+替换两个绝对路径，输出使用新的任务目录。安装目录中使用同一命令的 `scripts/` 相对路径。该命令只准备任务；Agent 随后通过 `stage` 先观察首尾、稀疏跳转并建立谱行清单，再推进宿主生图、结果审阅、导出与最终页面检查。接续疑点局部补采，显式 `mode=strict` 保留连续扫描；稀疏接续完整与严格时间覆盖分别记录。只有阶段返回 `complete` 才交付。
 
 PDF 位于任务目录的 `exports/<revision>/<谱名>.pdf`。原视频保存在相邻的独立来源目录，原截图和历史结果保留，恢复检查来源与材料 hash。操作请求见[命令入口](skills/bilibili-drum-score-to-pdf/references/reconstruction-entry.md)，正常推进与恢复见[阶段指南](skills/bilibili-drum-score-to-pdf/references/stage-recovery-layout.md)。
 

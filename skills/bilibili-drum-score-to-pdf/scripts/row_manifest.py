@@ -22,6 +22,36 @@ def source_key(row):
     return f"{row['capture']}:{anchor}"
 
 
+def track(record, shot, previous, comparison):
+    """Checkpoint provisional rows before navigation has finished the song."""
+    manifest = record['row_manifest']
+    observations = manifest['observations']
+    systems = [r for r in observations[shot['id']]['regions'] if r['kind'] == 'system']
+    old = [r for r in observations.get(previous['id'] if previous else '', {}).get('regions', [])
+           if r['kind'] == 'system']
+    known = manifest['source_positions']
+    for index, region in enumerate(systems):
+        key = source_key({**region, 'capture': shot['id']})
+        match = comparison.get('matches', {}).get(index)
+        old_key = source_key({**old[match], 'capture': previous['id']}) if match is not None else None
+        identifier = known.get(key) or known.get(old_key) or 'row-' + uuid.uuid4().hex
+        known[key] = identifier
+        row = next((item for item in manifest['rows'] if item['id'] == identifier), None)
+        if row is None:
+            row = {'id': identifier, 'position': identifier, 'order': len(manifest['rows']),
+                'kind': 'system', 'selected': {'capture': shot['id'], 'bbox': region['bbox']},
+                'sources': [], 'status': 'unresolved', 'issues': [{'code': 'navigation_not_finalized'}],
+                'continuation': [], 'selection_reason': 'provisional complete-row observation'}
+            manifest['rows'].append(row)
+        source = {field: shot[field] for field in ('pts', 'time_base', 'timestamp', 'sha256', 'source_sha256')}
+        source.update(capture=shot['id'], bbox=region['bbox'], key=key)
+        if not any(item['capture'] == source['capture'] and item['bbox'] == source['bbox'] for item in row['sources']):
+            row['sources'].append(source)
+    manifest['rows'].sort(key=lambda row: (row['sources'][0]['timestamp'], row['selected']['bbox'][1]))
+    for index, row in enumerate(manifest['rows']):
+        row['order'] = index
+
+
 def bind(record):
     """Link selected rows to the actual crop material without changing identity."""
     for row in record.get('row_manifest', {}).get('rows', []):
@@ -43,11 +73,14 @@ def from_selection(record):
     if not complete and not issues:
         issues.append({'code': 'source_review_incomplete'})
     rows = []
+    explicit_positions = {}
     for index, region in enumerate(record['regions']):
         if region['kind'] != 'system':
             continue
         shot = captures[region['capture']]
         position = region.get('position', f'local-row-{index}')
+        if region.get('position'):
+            explicit_positions.setdefault(source_key(region), set()).add(position)
         source = {key: shot[key] for key in ('pts', 'time_base', 'timestamp', 'sha256', 'source_sha256')}
         source.update(capture=region['capture'], bbox=region['bbox'])
         old = next((row for row in previous.get('rows', []) if row['position'] == position), {})
@@ -58,7 +91,13 @@ def from_selection(record):
             'region_index': index, 'crop': {key: region[key] for key in ('path', 'sha256', 'width', 'height')},
             'issues': issues, 'continuation': copy.deepcopy(review),
             'selection_reason': 'explicit source selection'})
-    record['row_manifest'] = {**previous, 'version': 'score-rows/1',
+    known = dict(previous.get('source_positions', {}))
+    for key, positions in explicit_positions.items():
+        if len(positions) == 1:
+            known[key] = next(iter(positions))
+        else:
+            known.pop(key, None)
+    record['row_manifest'] = {**previous, 'version': 'score-rows/1', 'source_positions': known,
         'source_sha256': record['source']['sha256'], 'rows': rows,
         'continuity_complete': complete and bool(rows), 'unresolved': issues}
     bind(record)
