@@ -2,7 +2,6 @@
 from pathlib import Path
 import math
 import uuid
-from PIL import Image
 import score_task as task_state
 from video_seek import VideoReader, ConversionError
 

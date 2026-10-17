@@ -6,6 +6,7 @@ from pathlib import Path
 from PIL import Image
 import cv2
 import automatic_score as automatic
+import score_geometry as observed
 import native_cache
 import score_task as state
 import row_manifest
@@ -68,8 +69,8 @@ def compare(task, record, first, last):
     with Image.open(state.artifact(task, first)) as old_image, Image.open(state.artifact(task, last)) as new_image:
         old = descriptions.get(first['id'])
         new = descriptions.get(last['id'])
-        old_regions = old['regions'] if old else automatic.detect(old_image)[0]
-        new_detection = None if new else automatic.detect(new_image)
+        old_regions = old['regions'] if old else observed.detect(old_image)[0]
+        new_detection = None if new else observed.detect(new_image)
         new_regions = new['regions'] if new else new_detection[0]
         new_risks = new.get('risks', []) if new else new_detection[1]
         old_rows = [{**r, 'capture': first['id']} for r in old_regions if r['kind'] == 'system']
@@ -91,22 +92,22 @@ def compare(task, record, first, last):
             return {'proved': True, 'new_complete_rows': len(complete_indices), 'overlap_rows': 0,
                     'reason': 'numbered_new_positions', 'matches': {}}
         same_numbers = not complete_anchors or [a['start_bar'] for a in old_anchors] == [a['start_bar'] for a in new_anchors]
-        if same_numbers and automatic.same_observation(old_image, new_image):
+        if same_numbers and observed.same_observation(old_image, new_image):
             return {'proved': True, 'new_complete_rows': 0, 'overlap_rows': len(new_rows),
                     'reason': 'repeated_rows', 'matches': {index: index for index in range(min(len(old_rows), len(new_rows)))}}
         if not old_rows or not new_rows:
             return {'proved': False, 'new_complete_rows': None, 'detected_complete_rows': len(new_rows),
                     'overlap_rows': 0, 'reason': 'layout_or_endpoint_gap'}
         spacing = max(1, round(old_rows[0]['staff_spacing']))
-        old_signatures = [automatic._row_signature(old_image, r, spacing=spacing) for r in old_rows]
-        new_signatures = [automatic._row_signature(new_image, r, spacing=spacing) for r in new_rows]
+        old_signatures = [observed.row_signature(old_image, r, spacing=spacing) for r in old_rows]
+        new_signatures = [observed.row_signature(new_image, r, spacing=spacing) for r in new_rows]
         if use_anchors and len(old_anchors) == len(old_rows) and len(new_anchors) == len(new_rows):
             old_values = [a['start_bar'] for a in old_anchors]
             new_values = [a['start_bar'] for a in new_anchors]
             mapping = {j: old_values.index(value) for j, value in enumerate(new_values) if value in old_values}
-            native = {first['id']: automatic._signature(old_image), last['id']: automatic._signature(new_image)}
-            if any(not automatic.same_row(old_image, old_rows[i], new_image, new_rows[j], spacing)
-                   and not automatic._native_visible_match(old_rows[i], new_rows[j], native.__getitem__)
+            native = {first['id']: observed.signature(old_image), last['id']: observed.signature(new_image)}
+            if any(not observed.same_row(old_image, old_rows[i], new_image, new_rows[j], spacing)
+                   and not observed.native_visible_match(old_rows[i], new_rows[j], native.__getitem__)
                    for j, i in mapping.items()):
                 return {'proved': False, 'new_complete_rows': None, 'detected_complete_rows': len(new_rows),
                         'overlap_rows': 0, 'reason': 'printed_bar_content_conflict', 'visual_review_needed': True}
@@ -119,23 +120,23 @@ def compare(task, record, first, last):
                 return {'proved': False, 'new_complete_rows': None, 'detected_complete_rows': len(new_rows),
                         'overlap_rows': 0, 'reason': 'printed_bar_gap_needs_continuation'}
         overlaps = [size for size in range(1, min(len(old_rows), len(new_rows)) + 1)
-                    if all(automatic._same(a, b) for a, b in zip(old_signatures[-size:], new_signatures[:size]))]
+                    if all(observed.same_ink(a, b) for a, b in zip(old_signatures[-size:], new_signatures[:size]))]
         if len(overlaps) == 1:
             return {'proved': True, 'new_complete_rows': len(complete_indices-set(range(overlaps[0]))),
                     'overlap_rows': overlaps[0], 'reason': 'unique_row_overlap',
                     'matches': {index: len(old_rows) - overlaps[0] + index for index in range(overlaps[0])}}
-        masks = {first['id']: automatic._signature(old_image), last['id']: automatic._signature(new_image)}
-        mapping = automatic._spatial_continuation(old_rows, new_rows,
-            [automatic._row_signature(old_image, r, core=True, spacing=spacing) for r in old_rows],
-            [automatic._row_signature(new_image, r, core=True, spacing=spacing) for r in new_rows], masks.__getitem__)
+        masks = {first['id']: observed.signature(old_image), last['id']: observed.signature(new_image)}
+        mapping = observed.spatial_continuation(old_rows, new_rows,
+            [observed.row_signature(old_image, r, core=True, spacing=spacing) for r in old_rows],
+            [observed.row_signature(new_image, r, core=True, spacing=spacing) for r in new_rows], masks.__getitem__)
         if mapping:
             return {'proved': True, 'new_complete_rows': len(complete_indices-set(mapping)),
                     'overlap_rows': len(mapping), 'reason': 'unique_scroll', 'matches': mapping}
         small_old = [cv2.resize(value, (480, 128), interpolation=cv2.INTER_AREA) for value in old_signatures]
         small_new = [cv2.resize(value, (480, 128), interpolation=cv2.INTER_AREA) for value in new_signatures]
         tentative = [(i, j) for i, a in enumerate(small_old) for j, b in enumerate(small_new)
-                     if automatic._same(a, b)]
-        same_layout = len(old_rows) == len(new_rows) and all(automatic._same(a, b) for a, b in zip(small_old, small_new))
+                     if observed.same_ink(a, b)]
+        same_layout = len(old_rows) == len(new_rows) and all(observed.same_ink(a, b) for a, b in zip(small_old, small_new))
         if same_layout or (len({i for i, _ in tentative}) >= 2 and len({j for _, j in tentative}) >= 2):
             # Only a search heuristic. It cannot approve symbols or row identity.
             return {'proved': False, 'new_complete_rows': None, 'detected_complete_rows': len(new_rows),
@@ -184,7 +185,7 @@ def collect(task, max_observations=128):
             'requested_seconds': seconds, 'capture': shot['id'], 'pts': shot['pts'],
             'time_base': shot['time_base'], 'timestamp': shot['timestamp']})
         with Image.open(state.artifact(task, shot)) as image:
-            regions, risks, partial = automatic.detect(image)
+            regions, risks, partial = observed.detect(image)
             anchors = row_anchors.readings(current, shot, image, regions, task=task)
         row_manifest.observe(current, shot, regions, risks, partial)
         current['row_manifest']['observations'][shot['id']]['anchors'] = anchors
@@ -200,7 +201,7 @@ def collect(task, max_observations=128):
         if name not in record['navigation']['endpoints']:
             shot = observe(seconds, name + '_endpoint_and_layout')
             with Image.open(state.artifact(task, shot)) as image:
-                regions, risks, partial = automatic.detect(image)
+                regions, risks, partial = observed.detect(image)
             record['navigation']['endpoints'][name] = {'capture': shot['id'],
                 'pts': shot['pts'], 'time_base': shot['time_base'],
                 'complete_rows': sum(r['kind'] == 'system' for r in regions),
@@ -213,7 +214,7 @@ def collect(task, max_observations=128):
             observed = record['row_manifest']['observations'].get(shot['id'])
             if observed is None or observed.get('geometry_policy_version') != automatic.PROGRAM_CHECK_VERSION:
                 with Image.open(state.artifact(task, shot)) as image:
-                    regions, risks, partial = automatic.detect(image)
+                    regions, risks, partial = observed.detect(image)
                     anchors = row_anchors.readings(record, shot, image, regions, task=task)
                 row_manifest.observe(record, shot, regions, risks, partial)
                 observed = record['row_manifest']['observations'][shot['id']]
@@ -332,7 +333,7 @@ def refine(task, observe, budget):
             if (observation is None or 'anchors' not in observation or
                     observation.get('geometry_policy_version') != automatic.PROGRAM_CHECK_VERSION):
                 with Image.open(state.artifact(task, shot)) as image:
-                    regions, risks, partial = automatic.detect(image)
+                    regions, risks, partial = observed.detect(image)
                     anchors = row_anchors.readings(record, shot, image, regions, task=task)
                 row_manifest.observe(record, shot, regions, risks, partial)
                 observation = record['row_manifest']['observations'][shot['id']]

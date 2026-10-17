@@ -1,6 +1,5 @@
 """Title-named primary PDF with source material kept in one directory."""
 import re
-from pathlib import Path
 from video_seek import ConversionError
 
 

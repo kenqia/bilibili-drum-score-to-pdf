@@ -12,7 +12,6 @@ from reportlab.pdfgen.canvas import Canvas
 import reconstruction as local
 import score_task
 from public_video import acquire, video_origin, ACQUISITION_SECONDS, retryable_acquisition
-from video_seek import VideoReader
 
 from score_task import (ReconstructionError, load, review_pdf, redraw_inputs,
                         begin_redraw, finish_redraw, fail_redraw, review_redraw,

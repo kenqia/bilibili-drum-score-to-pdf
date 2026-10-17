@@ -14,7 +14,7 @@ from PIL import Image
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen.canvas import Canvas
 
-from video_seek import ConversionError, VideoReader, probe_video
+from video_seek import ConversionError, probe_video
 from delivery_layout import pdf_name
 from score_task import ReconstructionError, digest, write_path, load, review_pdf
 from score_task import save, artifact
