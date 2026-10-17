@@ -1,5 +1,13 @@
 # 验证记录
 
+## 2026-10-17 稀疏导航与谱行清单
+
+分支 `codex/sparse-row-navigation` 从 main `7590af9` 实施。完整带 Mido 回归 179 项、167.647 秒，无失败、无跳过；compileall、Ruff 0.14.14 E701/E702、Skill references 同步和 diff 检查通过。未配置静态类型检查。Standards 与 Spec 独立审阅发现的问题已修复，复核均无剩余发现。
+
+默认 stage 改为首尾布局检查及自适应谱行跳转，显式 strict 保留连续扫描，新增持久 row_manifest 和实际编号接续入口。十四项导航反例及公共契约覆盖恢复、稳定身份、不同位置重复音乐、矛盾编号拒绝、严格扫描新增观察的资格撤回、原生微小差异与 1×1 header。
+
+真实鲜花新任务到达335.28秒，保留150张、局部连续68帧；程序来源仍blocked，Agent实际核对后通过公开操作恢复标题及27完整谱行、印刷小节1–113，裁剪检查通过，ready_to_redraw。严格全曲覆盖false，没有新生图或PDF验收。旧main首轮overview为128张、1590帧、到63.56秒；不同覆盖范围不证明速度或截图数量提升。实测、失败恢复、原生PTS、导航日志和对比见[本轮实验记录](experiments/2026-10-17-sparse-navigation.md)。
+
 ## 公开入口共同约束
 
 `tests/test_public_contracts.py` 用现有 unittest 的 `subTest` 注册入口矩阵。导出覆盖 CLI `export`、`score_workflow.export` 和 `reconstruction.export_vector`；审阅覆盖 CLI 与三个公开 module；分组覆盖 CLI、工作流与任务 module。新增同类公开入口时加入对应矩阵，不另建测试框架。

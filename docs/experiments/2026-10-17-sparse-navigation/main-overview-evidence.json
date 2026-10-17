@@ -1,0 +1,188 @@
+{
+  "main": "7590af91f851e41711a2b281a802a89c020aabce",
+  "sample": "BV1Yw4m1Y7YH",
+  "source_sha256": "9f948b7c4eca5c4e981baa2ca37563108393b37b1323b7008eafa8468b19947d",
+  "scan": {
+    "complete": false,
+    "frames_observed": 1590,
+    "completed_intervals": [
+      [
+        0,
+        15
+      ],
+      [
+        15,
+        30
+      ],
+      [
+        30,
+        45
+      ],
+      [
+        45,
+        60
+      ],
+      [
+        60,
+        63.56
+      ]
+    ],
+    "cursor": 63.56,
+    "segments": [
+      {
+        "requested_interval": [
+          0,
+          15
+        ],
+        "first": {
+          "pts": 0,
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 0.0
+        },
+        "last": {
+          "pts": 239360,
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 14.96
+        },
+        "frames": 375,
+        "complete": true
+      },
+      {
+        "requested_interval": [
+          15,
+          30
+        ],
+        "first": {
+          "pts": 240000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 15.0
+        },
+        "last": {
+          "pts": 479360,
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 29.96
+        },
+        "frames": 375,
+        "complete": true
+      },
+      {
+        "requested_interval": [
+          30,
+          45
+        ],
+        "first": {
+          "pts": 480000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 30.0
+        },
+        "last": {
+          "pts": 719360,
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 44.96
+        },
+        "frames": 375,
+        "complete": true
+      },
+      {
+        "requested_interval": [
+          45,
+          60
+        ],
+        "first": {
+          "pts": 720000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 45.0
+        },
+        "last": {
+          "pts": 959360,
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 59.96
+        },
+        "frames": 375,
+        "complete": true
+      },
+      {
+        "requested_interval": [
+          60,
+          75
+        ],
+        "first": {
+          "pts": 960000,
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 60.0
+        },
+        "last": {
+          "pts": 1016960,
+          "time_base": [
+            1,
+            16000
+          ],
+          "timestamp": 63.56
+        },
+        "frames": 90,
+        "complete": false
+      }
+    ],
+    "policy_version": "native-visible-ink/3",
+    "progress": {
+      "frames_observed": 1590,
+      "candidates_retained": 128,
+      "candidate_bytes": 41714088,
+      "candidate_ratio": 0.08050314465408805,
+      "wall_seconds": 28.941637996998907,
+      "checkpoint_writes": 27,
+      "cursor_seconds": 63.56,
+      "source_seconds": 335.32,
+      "timings": {
+        "change_detection_seconds": 14.464166606107028,
+        "image_save_seconds": 6.436416338008712,
+        "record_save_seconds": 0.025927430018782616
+      }
+    }
+  },
+  "metrics": {
+    "seek_count": 5,
+    "decode_elapsed": 26.450819218014658,
+    "decoded_reported_frames": 1590,
+    "peak_temp_disk": 0,
+    "presented_capture_ids": [],
+    "model_cost": null,
+    "navigation_probes": 0,
+    "native_retained": 128,
+    "presented_images": 0,
+    "stream_frames_decoded": 1590,
+    "stream_candidates_retained": 128,
+    "stream_native_bytes": 41714088
+  },
+  "captures": 128,
+  "wall_seconds": 29.15230899099697,
+  "status": "overview returned pending; not completed stage",
+  "model_cost": null
+}
