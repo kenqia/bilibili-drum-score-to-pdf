@@ -26,3 +26,6 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Reviewed PDF used by the README showcase
+!docs/media/readme/assets/xianhua/xianhua-A4.pdf

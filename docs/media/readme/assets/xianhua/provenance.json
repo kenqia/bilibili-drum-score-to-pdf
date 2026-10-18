@@ -1,0 +1,108 @@
+{
+  "source_video": "https://www.bilibili.com/video/BV1Yw4m1Y7YH",
+  "score_title": "鲜花",
+  "artist": "回春丹",
+  "uploader": "帅气迷人的小磊子",
+  "uploader_evidence": "原生首帧右上视频水印",
+  "score_credit": "JIAN磊",
+  "converted_on": "2026-10-18",
+  "skill_source_version": "9b732549e3461409426a277d7b3a69ea0e21be50",
+  "page_count": 3,
+  "score_systems": 27,
+  "bar_scope": [
+    1,
+    113
+  ],
+  "output_revision": "9754a79ca03e454683128c38d38efd46",
+  "task_status": "reviewed",
+  "pdf_sha256": "bcffe854c4bdf77cab8052f3ed0b145be79ce0a6954ab14a0b0d32755d5b0261",
+  "review": {
+    "pages": [
+      1,
+      2,
+      3
+    ],
+    "notes": "已实际按顺序查看全部三页Poppler预览。第1页标题鲜花、回春丹、JIAN磊、速度100及4/4可读，1/7/11/16/20/25/29/33/37顺序正确；第2页41/45/49/53/57/61/66/70/74连续，52底鼓双符尾与61跳房完整；第3页78/82/86/90/94/98/102/106/110，尾113休止与终止双线完整。共27系统，无漏行、重复、裁断或重叠，共同宽度与留白适合A4打印，播放竖线已清除。",
+    "output_revision": "9754a79ca03e454683128c38d38efd46",
+    "preview_hashes": [
+      "56351daa21e3b9852ad345a89dcd1625b138cc0c14ea5c3e3888736a39b8dc28",
+      "5a0f6632165b3f950b4b60212b1a752c67444b675ade8abc666b5ea048297d41",
+      "ba137f95db24692eb47e38d4a42776b185ea2962737f3138554d085893155132"
+    ]
+  },
+  "source_review": {
+    "viewed_captures": [
+      "capture-0001",
+      "capture-0002",
+      "capture-0005",
+      "capture-0006",
+      "capture-0007",
+      "capture-0008",
+      "capture-0009",
+      "capture-0010",
+      "capture-0011",
+      "capture-0012",
+      "capture-0013",
+      "capture-0014",
+      "capture-0015"
+    ],
+    "complete": true,
+    "unresolved": [],
+    "scope": "视频所展示完整原谱，第1至113小节，保留反复结构",
+    "continuity": "实际逐图核对行首1,7,11,16,20,25,29,33,37,41,45,49,53,57,61,66,70,74,78,82,86,90,94,98,102,106,110；相邻截图重复行一致，同位置去重，不同位置重复音乐保留。0008/0009的49行吻合，53在0008被截下端，在0009完整；顶部残行弃用。",
+    "first_last": "首帧标题鲜花、回春丹、JIAN磊、速度100、4/4；首行六小节休止。末110行含110至113四小节和终止双线，330秒及335.28秒为黑屏，无后续谱。",
+    "notes": "已实际查看13张原生截图，人工选择27完整行和标题，保留开镲圆圈、反复、1/2房、密集符梁、底鼓切分和结尾；使用编号和重复行证明原谱接续，未声明严格逐帧时间覆盖。自动导航的顶部残行和内容比较问题由本次手工来源选行解决。"
+  },
+  "purpose": "Actual conversion and visual review from this chat; presentation timing is not processing time.",
+  "limitation": "Sparse numbered-row continuity with manual source selection, not strict frame-by-frame temporal coverage.",
+  "assets": [
+    {
+      "asset": "assets/xianhua/source.png",
+      "source": "tasks/BV1Yw4m1Y7YH-20261018/captures/capture-0001.png",
+      "sha256": "fe68155faebbbcb4cc53457d0e1031a516ac70a009d7eda3f28887343f8b570a",
+      "byte_identical": true
+    },
+    {
+      "asset": "assets/xianhua/page-1.png",
+      "source": "tasks/BV1Yw4m1Y7YH-20261018/exports/9754a79ca03e454683128c38d38efd46/preview-1.png",
+      "sha256": "56351daa21e3b9852ad345a89dcd1625b138cc0c14ea5c3e3888736a39b8dc28",
+      "byte_identical": true
+    },
+    {
+      "asset": "assets/xianhua/page-2.png",
+      "source": "tasks/BV1Yw4m1Y7YH-20261018/exports/9754a79ca03e454683128c38d38efd46/preview-2.png",
+      "sha256": "5a0f6632165b3f950b4b60212b1a752c67444b675ade8abc666b5ea048297d41",
+      "byte_identical": true
+    },
+    {
+      "asset": "assets/xianhua/page-3.png",
+      "source": "tasks/BV1Yw4m1Y7YH-20261018/exports/9754a79ca03e454683128c38d38efd46/preview-3.png",
+      "sha256": "ba137f95db24692eb47e38d4a42776b185ea2962737f3138554d085893155132",
+      "byte_identical": true
+    },
+    {
+      "asset": "assets/xianhua/row-7.png",
+      "source": "tasks/BV1Yw4m1Y7YH-20261018/regions/6a87e0502b164cc1b89e3343a34aaea3/region-0003.png",
+      "sha256": "b39c57b2bb0afa0d474b3215ddca8b3f6a1d3a10381a279270cacce3348dbbca",
+      "byte_identical": true
+    },
+    {
+      "asset": "assets/xianhua/row-11.png",
+      "source": "tasks/BV1Yw4m1Y7YH-20261018/regions/6a87e0502b164cc1b89e3343a34aaea3/region-0004.png",
+      "sha256": "b5d97948e00cf2a8451ccb33f55e39782ae65ad722a34b668b230fa13472474b",
+      "byte_identical": true
+    },
+    {
+      "asset": "assets/xianhua/row-16.png",
+      "source": "tasks/BV1Yw4m1Y7YH-20261018/regions/6a87e0502b164cc1b89e3343a34aaea3/region-0005.png",
+      "sha256": "d6bd735eb6a2451126bd9c5cb1289595e533e32937184d471bac606df3e08457",
+      "byte_identical": true
+    },
+    {
+      "asset": "assets/xianhua/xianhua-A4.pdf",
+      "source": "tasks/BV1Yw4m1Y7YH-20261018/exports/9754a79ca03e454683128c38d38efd46/鲜花.pdf",
+      "sha256": "bcffe854c4bdf77cab8052f3ed0b145be79ce0a6954ab14a0b0d32755d5b0261",
+      "byte_identical": true
+    }
+  ]
+}

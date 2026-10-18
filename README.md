@@ -34,20 +34,20 @@
 
 ![从视频谱面、完整谱行到 A4 PDF 的流程演示](docs/images/workflow.gif)
 
-<p align="center"><sub>12 秒静音循环 · 使用已保存的真实样本 · 流程演示，非实际处理耗时</sub></p>
+<p align="center"><sub>12 秒静音循环 · 使用已保存的真实样本 · 流程演示</sub></p>
 
-示例来自《可惜没如果（新版）》的历史验收材料。原视频上传者为「看哦爱随风原创鼓谱」，谱面署名「陈老师」。[查看原视频](https://www.bilibili.com/video/BV1rH4y1R7Rk/) · [查看采集、重绘与逐页验收记录](docs/experiments/issue-58-standard-pdf.md)。音乐与谱面署名归原权利人。
+示例为实际转换并逐页检查的《鲜花》，演唱者为回春丹。原视频水印署名「帅气迷人的小磊子」，谱面署名「JIAN磊」。[查看原视频](https://www.bilibili.com/video/BV1Yw4m1Y7YH) · [下载三页 A4 PDF](docs/media/readme/assets/xianhua/xianhua-A4.pdf) · [查看来源与审阅记录](docs/media/readme/assets/xianhua/provenance.json)。音乐与谱面权利归原权利人。
 
 <details>
 <summary>查看静态流程图与实际 PDF 页面</summary>
 
 ![视频到打印谱的静态流程展示](docs/images/workflow-poster.png)
 
-下面是该样本历史 PDF 的第一页。完整谱行之间分页，整份输出为两页。
+下面是《鲜花》PDF 的第一页。整份输出共三页，包含 27 条完整谱行，覆盖第 1–113 小节并保留反复结构。
 
-<img src="docs/media/readme/assets/page-1.png" alt="可惜没如果（新版）历史验收 PDF 第一页，保留标题、速度与完整谱行" width="520">
+<img src="docs/media/readme/assets/xianhua/page-1.png" alt="鲜花 A4 PDF 第一页，保留标题、速度与完整谱行" width="520">
 
-展示使用历史已验收材料，未在本次重新转换或重新审核音乐内容。
+本次实际查看了原生来源、四组宿主重绘结果和最终全部三页。谱行接续通过小节号与重叠谱行核对。
 
 </details>
 
@@ -67,7 +67,7 @@ https://www.bilibili.com/video/BV1Yw4m1Y7YH/
 
 上面的 Skill 链接用于查看指令文件；实际选择发生在宿主输入框中，无需复制任何人的本地安装路径。只提供 Skill 和链接也可以启动默认 PDF 流程。未指定保存位置时，Agent 在当前工作目录下创建独立任务目录，交付时报告绝对路径。
 
-也可以提供本地视频的绝对路径。公开 B站链接支持 `?p=2` 分 P。采集、整理、完整谱行排版和逐页检查由 Skill 指导 Agent 执行，用户无需填写任务 JSON。此处链接仅为调用格式示例，不代表该视频已经通过验收。
+也可以提供本地视频的绝对路径。公开 B站链接支持 `?p=2` 分 P。采集、整理、完整谱行排版和逐页检查由 Skill 指导 Agent 执行，用户无需填写任务 JSON。该链接也是上方《鲜花》展示的实际来源。
 
 ### 2. 还没安装？
 
