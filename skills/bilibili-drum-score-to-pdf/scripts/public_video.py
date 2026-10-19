@@ -180,7 +180,7 @@ def retryable_acquisition(output):
         manifest = output / 'manifest.json'
         if manifest.is_symlink() or not manifest.is_file():
             return False
-        result = json.loads(manifest.read_text())
+        result = json.loads(manifest.read_text(encoding='utf-8'))
         return (result.get('schema_version') == 1 and result.get('phase') == 'acquisition'
                 and result.get('status') == 'failed' and result.get('complete') is False
                 and result.get('rows') == [] and result.get('issues') == []

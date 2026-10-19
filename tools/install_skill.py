@@ -35,7 +35,8 @@ def local_path(path):
 
 def managed_path(root, relative):
     parts = PurePosixPath(relative)
-    if parts.is_absolute() or '..' in parts.parts or not parts.parts or chr(92) in relative:
+    if (not isinstance(relative, str) or parts.is_absolute() or '..' in parts.parts or
+            not parts.parts or chr(92) in relative or ':' in relative):
         raise ValueError('安装清单包含不安全路径。')
     path = root.joinpath(*parts.parts)
     for parent in (path, *path.parents):
@@ -48,7 +49,7 @@ def managed_path(root, relative):
 
 def manifest(root):
     path = managed_path(root, MANIFEST)
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding='utf-8'))
     files = data.get('files_sha256')
     if not isinstance(files, dict) or not files or not isinstance(data.get('source_commit'), str):
         raise ValueError('安装清单缺少提交或文件 hash。')
@@ -87,7 +88,7 @@ def snapshot(repository, revision, staging, target):
     commit = subprocess.check_output(['git', '-C', str(repository), 'rev-parse',
         '--verify', revision + '^{commit}'], text=True).strip()
     with tempfile.TemporaryFile() as archive:
-        subprocess.run(['git', '-C', str(repository), 'archive', commit, str(CANONICAL)], stdout=archive, check=True)
+        subprocess.run(['git', '-C', str(repository), 'archive', commit, CANONICAL.as_posix()], stdout=archive, check=True)
         archive.seek(0)
         with tarfile.open(fileobj=archive) as source:
             for member in source:
@@ -105,12 +106,12 @@ def snapshot(repository, revision, staging, target):
                 member.name = portable.as_posix()
                 source.extract(member, staging, filter='data')
     skill = staging / 'SKILL.md'
-    text = skill.read_text().replace('/absolute/skill', str(target))
-    skill.write_text(text + '\n安装源码版本：' + commit + '。Skill 根目录：' + str(target) + '。\n')
-    files = {str(p.relative_to(staging)): digest(p) for p in sorted(staging.rglob('*')) if p.is_file()}
+    text = skill.read_text(encoding='utf-8').replace('/absolute/skill', str(target))
+    skill.write_text(text + '\n安装源码版本：' + commit + '。Skill 根目录：' + str(target) + '。\n', encoding='utf-8')
+    files = {p.relative_to(staging).as_posix(): digest(p) for p in sorted(staging.rglob('*')) if p.is_file()}
     data = {'schema': 1, 'source_commit': commit, 'installed_root': str(target),
             'installed_at': datetime.now(timezone.utc).isoformat(), 'files_sha256': files}
-    (staging / MANIFEST).write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+    (staging / MANIFEST).write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     verify(staging)
     return data
 
@@ -213,6 +214,9 @@ def rollback(target, backup):
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('operation', choices=('install', 'verify', 'rollback'))
     parser.add_argument('--target', required=True, type=Path)

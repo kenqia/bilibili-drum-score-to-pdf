@@ -14,7 +14,9 @@ from PIL import Image
 
 
 class ReconstructionError(ValueError):
-    pass
+    def __init__(self, message, code='invalid_state', field=None, action=None):
+        super().__init__(message)
+        self.code, self.field, self.action = code, field, action
 
 
 def digest(path):
@@ -46,7 +48,7 @@ def write_path(task, relative):
 def save(task, record):
     path = write_path(task, 'record.json')
     if path.exists():
-        previous = json.loads(path.read_text())
+        previous = json.loads(path.read_text(encoding='utf-8'))
         history = previous.get('generation_history', {}).copy()
         history.update(record.get('generation_history', {}))
         current = {p.get('input_identity') for p in record.get('redraw_pages', [])}
@@ -67,7 +69,7 @@ def save(task, record):
             history[key] = page
         record['generation_history'] = history
     temporary = write_path(task, 'record.tmp')
-    temporary.write_text(json.dumps(record, ensure_ascii=False, indent=2))
+    temporary.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding='utf-8')
     temporary.replace(path)
 
 
@@ -82,7 +84,10 @@ def artifact(task, reference):
 def load(task):
     for name in ('record.json','record.tmp','captures','regions','navigation','native-cache','redraw','exports'):
         write_path(task,name)
-    record = json.loads((Path(task) / 'record.json').read_text())
+    try:
+        record = json.loads((Path(task) / 'record.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError, UnicodeError):
+        raise ReconstructionError('无法读取当前任务记录。', code='invalid_state', action='prepare or resume a current task') from None
     if record.get('schema') != 'score-reconstruction/1':
         raise ReconstructionError('不是当前重构任务。')
     source = Path(record['source']['path'])
@@ -163,9 +168,12 @@ def assemble(task, title, regions, review, *, positioned=False):
     Same position is overlap, distinct positions retain later repeated music.
     Position labels are Agent statements, never inferred from pixel equality.
     """
-    if not title or not title.strip() or not review.get('notes'):
+    if (not isinstance(title, str) or not title.strip() or not isinstance(review, dict) or
+            not isinstance(regions, list) or any(not isinstance(r, dict) for r in regions) or
+            not isinstance(review.get('notes'), str) or not review['notes'].strip()):
         raise ReconstructionError('需要实际确认的谱名和原图审阅记录。')
-    if positioned:
+    previous = load(task)
+    if positioned or previous.get('agent_review_contract'):
         if not review.get('continuity') or not review.get('first_last'):
             raise ReconstructionError('需要接续和首尾实际审阅记录。')
         unique, seen = [], set()
@@ -173,6 +181,11 @@ def assemble(task, title, regions, review, *, positioned=False):
             position = region.get('position')
             if not isinstance(position, str) or not position:
                 raise ReconstructionError('每个原谱位置需要明确标签。')
+            if position in seen and previous.get('agent_review_contract'):
+                preferred = next(r for r in unique if r['position'] == position)
+                if any(preferred.get(k) != region.get(k) for k in ('capture', 'bbox', 'kind', 'staff_top', 'staff_spacing')):
+                    raise ReconstructionError('同位置有不同来源；请只提交 Agent 选定的来源，或使用 revise-selection。',
+                                              code='invalid_request', field='regions.position')
             if position not in seen:
                 unique.append(region)
                 seen.add(position)
@@ -180,12 +193,17 @@ def assemble(task, title, regions, review, *, positioned=False):
         unique = regions
     if not unique:
         raise ReconstructionError('选择或审阅引用无效。')
-    previous = load(task)
     fields = ('capture', 'bbox', 'kind', 'staff_top', 'staff_spacing', 'position')
     def selection_key(region):
         return [region.get(field, 'system' if field == 'kind' else None) for field in fields]
     same = (title.strip() == previous.get('title') and
             [selection_key(r) for r in unique] == [selection_key(r) for r in previous['regions']])
+    from agent_source_review import validate
+    review, source_issues, active_contract = validate(previous, unique, review, same=same, upgrade=True, title=title.strip())
+    if active_contract:
+        from agent_source_review import CONTRACT
+        previous['agent_review_contract'] = CONTRACT
+    previous['source_issue_history'] = source_issues
     viewed = review.get('viewed_captures', [])
     captures = {c['id'] for c in previous['captures']}
     if not review.get('notes') or not set(viewed).issubset(captures) or any(r['capture'] not in viewed for r in unique):
@@ -521,7 +539,7 @@ def fail_redraw(task, identifier, notes, outcome='failed'):
         raise ReconstructionError('需要失败记录，且不能降级已接受重绘。')
     if page['attempts'] and page['attempts'][-1]['status'] in ('prepared', 'calling'):
         page['attempts'][-1].update(status=outcome, reason=notes)
-    page.update(status='vector', fallback_reason=notes)
+    page.update(status='vector', fallback_reason=notes, fallback_outcome=outcome)
     save(task, record)
     return page
 

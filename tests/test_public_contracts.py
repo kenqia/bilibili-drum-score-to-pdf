@@ -6,7 +6,7 @@ import sys
 import unittest
 
 import test_reconstruction as fixtures
-from score_fixtures import CLI
+from score_fixtures import CLI, controlled_reselection
 from test_host_check import HOST_CHECK_ENTRIES
 import reconstruction
 import score_task
@@ -22,6 +22,8 @@ CROP_ENTRIES = ('cli', 'workflow', 'task')
 REQUEST_ENTRIES = ('cli', 'workflow', 'task')
 SCAN_ENTRIES = ('cli', 'workflow', 'automatic')
 NAVIGATION_ENTRIES = ('cli', 'workflow')
+SOURCE_ASSEMBLY_ENTRIES = ('cli', 'workflow', 'task', 'vector')
+SOURCE_RECOVERY_ENTRIES = ('cli', 'workflow')
 
 
 class PublicContracts(unittest.TestCase):
@@ -57,6 +59,22 @@ class PublicContracts(unittest.TestCase):
             return self.cli('redraw-inputs', {} if groups is None else {'groups': groups})
         owner = {'workflow': score_workflow, 'task': score_task}[entry]
         return owner.redraw_inputs(self.task, groups=groups)
+
+    def test_source_recovery_entries_refuse_corrupt_sources_without_mutation(self):
+        self.select()
+        before = (self.task / 'record.json').read_bytes()
+        self.video.write_bytes(b'Controlled damaged source.')
+        operations = {'source-issues': {}, 'include-candidate': {'identifier': 'missing', 'notes': 'Controlled.'},
+                      'revise-selection': {'changes': []}, 'review-overlap': {
+                          'position': 'missing', 'candidate': {}, 'viewed_captures': [], 'notes': 'Controlled.'}}
+        for entry in SOURCE_RECOVERY_ENTRIES:
+            for operation, payload in operations.items():
+                with self.subTest(entry=entry, operation=operation), self.assertRaises(score_task.ReconstructionError):
+                    if entry == 'cli':
+                        self.cli(operation, payload)
+                    else:
+                        getattr(score_workflow, operation.replace('-', '_'))(self.task, **payload)
+                self.assertEqual((self.task / 'record.json').read_bytes(), before)
 
     def test_navigation_entries_validate_budget_and_do_not_bypass_source_integrity(self):
         self.select()
@@ -124,7 +142,7 @@ class PublicContracts(unittest.TestCase):
         regions = copy.deepcopy(original['regions'])
         regions[1]['bbox'][1] = 90
         regions[1]['staff_top'] = 10
-        reconstruction.assemble(self.task, 'Cut stem', regions, original['source_review'])
+        controlled_reselection(self.task, 'Cut stem', regions, original['source_review'])
         group = score_task.redraw_inputs(self.task)[0]
         before = score_task.load(self.task)
         for entry in CROP_ENTRIES:
@@ -143,7 +161,7 @@ class PublicContracts(unittest.TestCase):
                 with self.assertRaises(score_task.ReconstructionError):
                     begin()
                 self.assertEqual(score_task.load(self.task), before)
-        reconstruction.assemble(self.task, 'Cut stem', original['regions'], original['source_review'])
+        controlled_reselection(self.task, 'Cut stem', original['regions'], original['source_review'])
         repaired = score_task.redraw_inputs(self.task)[0]
         self.assertEqual(score_task.crop_checks(self.task)['status'], 'passed')
         score_task.begin_redraw(self.task, repaired['id'], viewed_notes='Controlled repaired review.')
@@ -154,7 +172,7 @@ class PublicContracts(unittest.TestCase):
         regions = copy.deepcopy(original['regions'])
         regions[1]['bbox'][1] = 85
         regions[1]['staff_top'] = 15
-        reconstruction.assemble(self.task, 'Touching stem', regions, original['source_review'])
+        controlled_reselection(self.task, 'Touching stem', regions, original['source_review'])
         for entry in CROP_ENTRIES:
             with self.subTest(entry=entry):
                 if entry == 'cli':

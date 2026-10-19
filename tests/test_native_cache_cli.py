@@ -14,6 +14,10 @@ class NativeCacheCLI(unittest.TestCase):
     tearDown = fixtures.LocalScoreWorkflow.tearDown
 
     def cli(self, operation, **payload):
+        if operation == 'assemble':
+            from score_fixtures import controlled_source_review
+            payload['review'] = controlled_source_review(payload['regions'], payload['review'])
+            self.cli('present', identifiers=payload['review']['viewed_captures'], notes='Controlled synthetic presentation.')
         request = self.root / 'request.json'
         request.write_text(json.dumps(payload))
         args = [sys.executable, str(SCRIPT), '--operation', operation, '--request', str(request)]

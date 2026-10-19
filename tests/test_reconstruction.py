@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'skills/bilibili-drum-score-to-pdf/scripts'))
 import reconstruction as workflow
+from score_fixtures import controlled_reselection
 
 
 class LocalScoreWorkflow(unittest.TestCase):
@@ -142,7 +143,7 @@ class LocalScoreWorkflow(unittest.TestCase):
         regions = [initial['regions'][0]]
         regions += [{**initial['regions'][1], 'score_position': position} for position in range(16)]
         regions[-1] = {**regions[-1], 'bbox': [0, 65, 320, 180]}
-        workflow.assemble(self.task, 'Test Score', regions,
+        controlled_reselection(self.task, 'Test Score', regions,
                           {'viewed_captures': [shot['id']], 'complete': True,
                            'notes': 'Controlled score: 16 successive repeated passages and a short final system.'})
         result = workflow.export_vector(self.task)
@@ -166,7 +167,7 @@ class LocalScoreWorkflow(unittest.TestCase):
         record = workflow.load(self.task)
         corrected = [dict(region) for region in record['regions']]
         corrected[0]['bbox'] = [0, 0, 640, 60]
-        workflow.assemble(self.task, 'Test Score', corrected, record['source_review'])
+        controlled_reselection(self.task, 'Test Score', corrected, record['source_review'])
         second = workflow.export_vector(self.task)
         self.assertEqual(Path(second['pdf']).name, 'Test Score.pdf')
         self.assertNotEqual(second['pdf'], first['pdf'])

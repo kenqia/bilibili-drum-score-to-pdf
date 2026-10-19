@@ -107,6 +107,14 @@ def from_selection(record):
         source.update(capture=region['capture'], bbox=region['bbox'])
         old = next((row for row in previous.get('rows', []) if row['position'] == position), {})
         sources = [s for s in old.get('sources', []) if s['capture'] != source['capture'] or s['bbox'] != source['bbox']]
+        for overlap in review.get('overlap_reviews', []):
+            candidate = overlap['candidate']
+            if overlap['position'] == position and candidate['capture'] in captures:
+                alternative = captures[candidate['capture']]
+                alternate = {key: alternative[key] for key in ('pts', 'time_base', 'timestamp', 'sha256', 'source_sha256')}
+                alternate.update(capture=candidate['capture'], bbox=candidate['bbox'])
+                if alternate not in sources and alternate != source:
+                    sources.append(alternate)
         row_issues = [issue for issue in issues if affects(issue, {**source, 'position': position})]
         rows.append({'id': position, 'position': position, 'order': len(rows), 'kind': 'system',
             'selected': {'capture': region['capture'], 'bbox': region['bbox']},

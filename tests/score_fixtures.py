@@ -11,7 +11,10 @@ def score_frame(size=(1280, 960), row_count=3):
     frame = Image.new('RGB', size, '#303030')
     draw = ImageDraw.Draw(frame)
     draw.rectangle((70, 40, 1210, size[1] - 50), fill='white')
-    font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 28)
+    try:
+        font = ImageFont.truetype('DejaVuSans.ttf', 28)
+    except OSError:
+        font = ImageFont.load_default(size=28)
     draw.text((130, 75), 'Fixture song    tempo 96    4/4', fill='black', font=font)
     for row, top in enumerate(220 + row * 220 for row in range(row_count)):
         for line in range(5):
@@ -30,3 +33,29 @@ def video_from_image(image, directory, name='input'):
     image.save(png)
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-loop', '1', '-i', str(png), '-t', '2', '-r', '4', '-pix_fmt', 'yuv420p', str(video)], check=True)
     return video
+
+
+def controlled_source_review(regions, review):
+    """Explicitly synthetic assertions, never evidence of an actual Agent view."""
+    def ref(region):
+        return {key: region[key] for key in ('position', 'capture', 'bbox')}
+    rows = [r for r in regions if r.get('kind', 'system') == 'system']
+    def endpoint(region):
+        return {**ref(region), 'notes': 'Controlled synthetic source assertion.'}
+    return {**review, 'evidence': {
+        'title': endpoint(regions[0]), 'first': endpoint(rows[0]), 'last': endpoint(rows[-1]),
+        'joins': [{'previous': ref(a), 'current': ref(b),
+                   'method': 'same_capture' if a['capture'] == b['capture'] else 'ordered_page',
+                   'notes': 'Controlled synthetic position order.'} for a, b in zip(rows, rows[1:])]}}
+
+
+def controlled_reselection(task, title, regions, review):
+    """Supply explicit fixture receipts when a legacy test changes its sources."""
+    import score_workflow
+    import reconstruction
+    regions = [{**r, 'position': r.get('position') or str(i)} for i, r in enumerate(regions)]
+    captures = list(dict.fromkeys(r['capture'] for r in regions))
+    score_workflow.present(task, captures, 'Controlled fixture view, not real visual acceptance.')
+    review = controlled_source_review(regions, {**review, 'viewed_captures': captures,
+        'continuity': 'Controlled source order.', 'first_last': 'Controlled endpoints.'})
+    return reconstruction.assemble(task, title, regions, review)

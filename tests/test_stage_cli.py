@@ -101,7 +101,7 @@ class RevisionCLI(unittest.TestCase):
 
     def test_stage_advances_synthetic_video_and_never_reissues_pending_host_call(self):
         self.cli('prepare')
-        blocked=self.cli('stage',title='Synthetic stage')
+        blocked=self.cli('stage',title='Synthetic stage',mode='sparse')
         self.assertEqual(blocked['phase'], 'source')
         self.assertIn('row_anchor_missing', [i['code'] for i in blocked['unresolved']])
         record=self.cli('resume')
@@ -110,7 +110,7 @@ class RevisionCLI(unittest.TestCase):
                  viewed_captures=[s['id'] for s in shots],
                  fallback_interval=[0,record['source']['duration']],
                  notes='Controlled identical unnumbered fixture; explicit local continuity authorization.')
-        first=self.cli('stage',title='Synthetic stage')
+        first=self.cli('stage',title='Synthetic stage',mode='sparse')
         self.assertEqual(first['phase'],'generation')
         self.assertEqual(first['status'],'pending')
         second=self.cli('stage')
@@ -177,7 +177,8 @@ class RevisionCLI(unittest.TestCase):
         changed=copy.deepcopy(rows);changed[1]['bbox'][3]=181
         with patch('score_task.save',side_effect=OSError('Controlled publication interruption')):
             with self.assertRaises(OSError):
-                workflow.assemble(self.task,'Synthetic',changed,self.review)
+                workflow.assemble(self.task,'Synthetic',changed,
+                    __import__('score_fixtures').controlled_source_review(changed,self.review))
         self.assertEqual(self.cli('resume'),before)
         self.assertEqual(self.cli('redraw-inputs')[0]['attempts'][0]['request'],pending['request'])
 

@@ -4,7 +4,11 @@
 
 # 阶段入口、局部恢复与打印布局
 
-准备任务后，调用 `stage`（可传 `title`）。默认 `mode=sparse`，先取首尾布局，优先读取行首小节号作为位置锚点，再根据已证明的新增完整谱行及重叠调整跳转。数字不全或矛盾时暂停自动导航，交给 Agent。`max_observations` 为单次向前观察及接续回查各自的操作预算，默认 128，范围 1–8192；预算用尽保存进度，返回来源阶段 pending，继续调用 stage。程序完成当前可自动执行的采集、来源检查、粗拼冻结和排版，然后返回下一项宿主或实际审阅操作。`phase` 为 `source`、`generation`、`pdf_review` 或 `complete`；`status` 为 `blocked`、`pending` 或 `complete`。响应包含产物引用、检查、未决项和 `next`。只有最终每页实际审阅已保存，才能返回 `complete`。
+准备任务后调用 `stage`。默认 `mode=agent`，尚未冻结时只返回来源任务说明、已有原生截图、首尾采样建议和安全请求模板，不运行 sparse/strict，不生成实际看图记录。Agent 自行 `navigate`/`capture`，实际查看原生图后 `present`，再以明确原谱位置和来源审阅调用 `assemble`。合法冻结后继续 `stage` 验证来源、执行 `crop-checks`、返回重绘 handoff 或导出全部页面预览，不重新扫描。
+
+只有明确请求 `mode=sparse` 才运行首尾布局检查和自适应跳转；明确请求 `mode=strict` 才按原语义连续扫描。稀疏导航的 `max_observations` 默认 128，范围 1–8192，向前观察与接续回查分别计预算。预算用尽保存进度，不能解释为完整覆盖。Agent 审阅、稀疏接续与严格时间覆盖分别记录。
+
+阶段 `phase` 为 `source`、`generation`、`pdf_review` 或 `complete`，`status` 为 `blocked`、`pending` 或 `complete`。响应包含产物引用、检查、未决项和 `next`。只有当前版本最终每页实际审阅已保存，才能返回 `complete`。CLI 默认详细 JSON；可使用 `--summary` 或 `--output-format summary` 取得阶段、状态、疑点数和下一步，并从回执的 `details.path` 读取任务目录中完整回执。摘要不能代替看图或完整请求材料。
 
 程序冻结的正常输入由 `stage` 或 `redraw-requests` 批量预留为 `prepared`，返回 `ready_to_dispatch`。使用每个 handoff 的 `group`、`request.request` 调用 `dispatch-redraw(identifier, request)`，保存 `calling` 后立即执行宿主生图，再以同一 request 回填 `finish-redraw`。重复读取已预留请求会返回相同 ID。重复 `stage` 遇到 `calling` 返回 `recover_existing_call`，先恢复已有结果，不能重新发送。无法恢复时用 `fail-redraw` 和具体原因转矢量。生成图返回后，实际查看并调用 `review-redraw`；拒绝后最多一次定向修正。
 
@@ -13,6 +17,40 @@
 尚未提交的 `prepared` 请求可以通过 `cancel-redraw(identifier, request, notes)` 作废为 `cancelled`，保留 ID、hash 和原因。修改选行或组成员时，失效输入的预留请求也作废；已提交的 `calling` 保留未知结果保护。作废初次预留后可重新预留新 ID；作废修正预留仍保留已占用修正额度并转矢量。旧 `calling` 不能仅凭没有结果降格为未提交。
 
 有效历史手动冻结沿用其来源审阅，不重新扫描视频。历史新版任务若缺少 freeze，可通过 `assemble` 提交原相同选行和原审阅恢复；这是历史决定恢复，不是新的视觉审阅。保留原精确生图分组，即使其大小超过当前默认分组上限。旧程序扫描规则需要重新检查，不能凭旧 `complete` 标记继续。
+
+## Agent 来源审阅契约
+
+新工作流任务在 prepare 保存 `agent_review_contract=agent-source-review/1`，并记录宿主依赖检查。环境检查只证明依赖存在，不证明已解码、宿主看图或生图可用。
+
+`assemble(title, regions, review)` 中每个选区必须有明确 `position`，完整谱行保持原谱顺序。同位置只提交 Agent 选定的更好来源；完全相同的同位置项可去重，同位置不同来源拒绝含糊选择。不同原谱位置的重复音乐全部保留，不从像素相等推定为同一位置。
+
+`review` 保留 `viewed_captures`、`complete`、`unresolved`、`notes`、`continuity` 和 `first_last`。新契约只有所选原生截图已通过 `present` 登记后才接受完整来源确认；未完成的局部修订可以先保存为待审阅。呈交回执是 Agent 的实际看图声明，程序不能据此证明模型看过图；导航缩略图不能替代原生图。
+
+确认完整时增加 `evidence`，字段如下：
+
+| 字段 | 内容 |
+| --- | --- |
+| title | 标题来源的 position、capture、bbox 和具体 notes；有标题选区时引用该选区 |
+| first / last | 第一条和最后一条完整谱行的 position、capture、bbox 和分别填写的 notes |
+| joins | 每个相邻完整谱行一项，依原谱顺序排列 |
+| joins[].previous / current | 对应谱行的 position、capture、bbox |
+| joins[].method | same_capture、overlap、ordered_page 或 numbered |
+| joins[].notes | 实际观察的接续依据；没有编号时说明其他可见依据，不虚构编号 |
+
+字段示例只表示结构，不能直接作为实际审阅备注：
+
+```json
+{
+  "previous": {"position": "row-1", "capture": "capture-0001", "bbox": [100, 200, 1200, 360]},
+  "current": {"position": "row-2", "capture": "capture-0002", "bbox": [100, 400, 1200, 560]},
+  "method": "overlap",
+  "notes": "填写实际看图得到的接续依据"
+}
+```
+
+运行 `source-issues` 取得原始自动疑点的稳定 id。通过 `review.issue_dispositions` 逐项提交 `id`、`outcome`、`captures` 和具体 `notes`，outcome 为 resolved 或 unresolved；确认完整时相关疑点必须全部 resolved。原自动记录和处理依据分别保留，不能用整体 complete 抹去疑点。来源 hash、非法路径、损坏产物和实际裁剪门禁独立执行，处理备注不能覆盖这些错误；隐藏音乐仍未确认时保持未决。
+
+已有合法人工冻结且来源未变时继续恢复，不自动要求补齐新增证据，也不重置预算或当前 PDF 审阅。通过任一共享选源入口改变旧来源后采用新契约；使用局部修订时保留未变位置的依据，只补受影响位置和相邻接续。不迁移旧协议任务。
 
 ## 导航、清单与证据
 
@@ -31,6 +69,13 @@
 旧协议任务不迁移；有效历史人工冻结不重新扫描。源码升级与宿主安装分别处理，修改仓库 Skill 不自动修改安装副本。
 
 ## 局部修改
+
+- `capture(seconds)` 或 `promote(identifier)` 补采原生来源。`include-candidate(identifier, notes)` 将已有截图纳入候选，返回 present 请求字段；不增加严格扫描覆盖。新候选撤回来源冻结和当前输出批准，保留生成历史。
+- `review-overlap(position, candidate, viewed_captures, notes)` 在实际查看并 present 两处来源后确认同一原谱位置，保留备用来源和依据，保持当前所选来源。candidate 使用完整 region 字段。
+- `revise-selection(changes, review)` 按 position 局部替换来源。changes 每项包含 position 与完整 region；新位置还需 after 指定已有的前一位置。替换不改变排列顺序，同一请求同位置只改一次。
+- `revise-selection` 的 review 可只提交变化部分。evidence 的 title/first/last 分别替换，joins 按 current.position 合并；旧疑点处理仅在依赖来源未变时复用。未填写 review 时保存为待审阅；完成确认需明确 complete=true、unresolved=[] 和实际依据。输入未变的生成组与额度继续复用。
+- `revise-crop(index, bbox)` 在新 Agent 契约下保留其他来源依据，只撤回当前来源批准，随后通过局部 review 修订受影响的端点与接续。未改几何的审阅不能批准新裁剪。
+
 
 使用 `revise-crop(index, bbox)` 或 `assemble` 发布选行。程序先验证裁剪并准备新文件，再原子发布记录；无效参数或发布中断保留上个有效记录。修订后必须重新通过来源、覆盖及裁剪检查，冻结前不能调用生图。通过后调用 `redraw-inputs`，沿用原组的成员数，或显式传入完整有序 `groups` 重新分组。
 

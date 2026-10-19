@@ -75,6 +75,19 @@ def compare(task, record, first, last):
             if missing:
                 return {'proved': False, 'new_complete_rows': None, 'detected_complete_rows': len(new_rows),
                         'overlap_rows': 0, 'reason': 'row_anchor_needs_review', 'visual_review_needed': True}
+        if use_anchors and (not complete_anchors or len(old_anchors) != len(old_rows) or
+                            len(new_anchors) != len(new_rows)):
+            return {'proved': False, 'new_complete_rows': None, 'detected_complete_rows': len(new_rows),
+                    'overlap_rows': 0, 'reason': 'row_anchor_needs_review', 'visual_review_needed': True,
+                    'anchors': {'previous': [a.get('start_bar') for a in old_anchors],
+                                'current': [a.get('start_bar') for a in new_anchors]},
+                    'action': 'review-row-anchors or assemble with actual source evidence'}
+        if complete_anchors:
+            values = [[a['start_bar'] for a in anchors] for anchors in (old_anchors, new_anchors)]
+            if any(any(type(v) is not int or v < 1 for v in group) or
+                   any(a >= b for a, b in zip(group, group[1:])) for group in values):
+                return {'proved': False, 'new_complete_rows': None, 'detected_complete_rows': len(new_rows),
+                        'overlap_rows': 0, 'reason': 'row_anchor_conflict', 'visual_review_needed': True}
         if numbered_evidence(record, first, last):
             return {'proved': True, 'new_complete_rows': len(complete_indices), 'overlap_rows': 0,
                     'reason': 'numbered_new_positions', 'matches': {}}

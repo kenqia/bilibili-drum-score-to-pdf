@@ -46,6 +46,30 @@ class SkillInstallTests(unittest.TestCase):
         (self.repo / installer.CANONICAL / 'scripts/convert.py').write_text('print("new fixture CLI")\n')
         return self.commit()
 
+    def test_utf8_snapshot_portable_keys_and_strict_old_manifest_paths(self):
+        document = self.repo / installer.CANONICAL / 'references/中文.md'
+        document.write_text('鼓谱安装与回滚。\n', encoding='utf-8')
+        revision = self.commit()
+        original_read = Path.read_text
+        original_write = Path.write_text
+        def read(path, *args, **kwargs):
+            if kwargs.get('encoding') != 'utf-8':
+                raise AssertionError('Installer must specify UTF-8')
+            return original_read(path, *args, **kwargs)
+        def write(path, *args, **kwargs):
+            if kwargs.get('encoding') != 'utf-8':
+                raise AssertionError('Installer must specify UTF-8')
+            return original_write(path, *args, **kwargs)
+        with patch.object(Path, 'read_text', read), patch.object(Path, 'write_text', write):
+            installer.install(self.repo, revision, self.target)
+            data = installer.manifest(self.target)
+        self.assertIn('references/中文.md', data['files_sha256'])
+        self.assertTrue(all('\\' not in key for key in data['files_sha256']))
+        self.assertEqual((self.target / 'references/中文.md').read_text(encoding='utf-8'), '鼓谱安装与回滚。\n')
+        for relative in ('../outside', 'C:/outside', 'C:outside', 'scripts\\outside', '/outside'):
+            with self.subTest(relative=relative), self.assertRaises(ValueError):
+                installer.managed_path(self.target, relative)
+
     def test_committed_snapshot_single_entry_and_repeat_is_noop(self):
         (self.repo / installer.CANONICAL / 'scripts/convert.py').write_text('uncommitted edit')
         (self.repo / 'untracked.txt').write_text('untracked edit')
@@ -109,7 +133,7 @@ class SkillInstallTests(unittest.TestCase):
         canonical.mkdir(parents=True)
         (canonical / 'SKILL.md').write_text('legacy duplicate entry')
         data = installer.manifest(self.target)
-        data['files_sha256'][str(installer.CANONICAL / 'SKILL.md')] = installer.digest(canonical / 'SKILL.md')
+        data['files_sha256'][(installer.CANONICAL / 'SKILL.md').as_posix()] = installer.digest(canonical / 'SKILL.md')
         (self.target / installer.MANIFEST).write_text(json.dumps(data))
         updated = installer.install(self.repo, self.first, self.target)
         self.assertEqual(updated['skill_entries'], 1)

@@ -18,6 +18,17 @@ class AutomaticScoreTests(unittest.TestCase):
         self.temp.cleanup()
 
     def call(self, operation, payload=None, success=True):
+        if operation == 'assemble':
+            from score_fixtures import controlled_source_review
+            import score_workflow
+            payload = dict(payload)
+            payload['review'] = controlled_source_review(payload['regions'], payload['review'])
+            viewed = payload['review']['viewed_captures']
+            score_workflow.present(self.task, viewed, 'Controlled synthetic presentation.')
+            payload['review']['issue_dispositions'] = [
+                {'id': issue['id'], 'outcome': 'resolved', 'captures': viewed,
+                 'notes': 'Controlled synthetic resolution, not a live visual claim.'}
+                for issue in score_workflow.source_issues(self.task)['issues']]
         request = self.base / 'request.json'
         request.write_text(json.dumps(payload or {}))
         run = subprocess.run([sys.executable, str(CLI), '--operation', operation,

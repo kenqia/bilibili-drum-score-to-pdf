@@ -28,7 +28,7 @@ class NewEntryTests(unittest.TestCase):
             task=Path(d);(task/'task.json').write_text('old task');(task/'notes.txt').write_text('keep')
             p,r=self.call('--operation','resume','--task',task)
             self.assertEqual(p.returncode,2)
-            self.assertEqual(r['error']['code'],'invalid_request')
+            self.assertEqual(r['error']['code'],'invalid_state')
             self.assertEqual((task/'notes.txt').read_text(),'keep')
             p,r=self.call('--operation','convert','--task',task)
             self.assertEqual(p.returncode,2)
@@ -39,6 +39,9 @@ class NewEntryTests(unittest.TestCase):
             base=Path(d);video=video_from_image(score_frame(row_count=1),base);task=base/'task'
             self.call(video,'--output',task)
             def operation(name,payload):
+                if name == 'assemble':
+                    from score_fixtures import controlled_source_review
+                    payload['review'] = controlled_source_review(payload['regions'], payload['review'])
                 path=base/'request.json';path.write_text(json.dumps(payload))
                 p,r=self.call('--operation',name,'--task',task,'--request',path)
                 self.assertEqual(p.returncode,0,(p.stderr,r))

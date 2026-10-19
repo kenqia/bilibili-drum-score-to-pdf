@@ -54,7 +54,10 @@ def prepare(source, task, acquisition_timeout=ACQUISITION_SECONDS):
     record = local.prepare(source, task)
     if origin:
         record['origin'] = origin
-    record.update(probes=[], redraw_pages=[])
+    from agent_source_review import CONTRACT
+    import host_check
+    record.update(probes=[], redraw_pages=[], agent_review_contract=CONTRACT,
+                  environment=host_check.check([]))
     record['metrics'].update(navigation_probes=0, native_retained=0, presented_images=0)
     score_task.save(task, record)
     return record
@@ -174,7 +177,8 @@ def present(task, identifiers, notes):
     """Receipt of images actually shown, distinct from retained or decoded frames."""
     record = load(task)
     known = {r['id'] for r in record['captures'] + record.get('probes', [])}
-    if not notes or not set(identifiers).issubset(known):
+    if (not isinstance(notes, str) or not notes.strip() or not isinstance(identifiers, list) or
+            not identifiers or any(not isinstance(i, str) for i in identifiers) or not set(identifiers).issubset(known)):
         raise ReconstructionError('呈交图像引用或实际看图记录无效。')
     record.setdefault('presentations', []).append({'images': identifiers, 'notes': notes})
     record['metrics']['presented_images'] = sum(len(item['images']) for item in record['presentations'])
@@ -185,6 +189,98 @@ def present(task, identifiers, notes):
 def assemble(task, title, regions, review):
     """Select ordered original positions through the shared task lifecycle."""
     return score_task.assemble(task, title, regions, review, positioned=True)
+
+def source_issues(task):
+    """Read original source doubts and their current manual dispositions."""
+    from agent_source_review import issue_inventory
+    record = load(task)
+    return {'issues': issue_inventory(record),
+            'issue_dispositions': record.get('source_review', {}).get('issue_dispositions', []),
+            'next': {'operation': 'assemble', 'required_fields': ['title', 'regions', 'review']}}
+
+
+def include_candidate(task, identifier, notes):
+    """Include an already retained capture without claiming any time coverage."""
+    if not isinstance(notes, str) or not notes.strip():
+        raise ReconstructionError('需要纳入候选的理由。', code='invalid_request', field='notes')
+    record = load(task)
+    shot = next((c for c in record['captures'] if c['id'] == identifier), None)
+    if shot is None:
+        raise ReconstructionError('原生截图引用无效。', code='invalid_request', field='identifier')
+    survey = record.setdefault('overview', {'candidates': [], 'panels': [], 'scan': {
+        'complete': False, 'completed_intervals': [], 'frames_observed': 0}})
+    if not any(c['id'] == identifier for c in survey['candidates']):
+        survey['candidates'].append(dict(shot))
+        survey['candidates'].sort(key=lambda c: c['timestamp'])
+        record.setdefault('candidate_inclusions', []).append({'capture': identifier, 'notes': notes})
+        # A new candidate is new evidence, never implicit approval of old joins.
+        record.pop('freeze', None)
+        score_task.invalidate_output(record, 'new_source_candidate')
+        score_task.save(task, record)
+    return {'capture': shot, 'strict_time_coverage_added': False,
+            'next': {'operation': 'present', 'request': {'identifiers': [identifier], 'notes': ''}}}
+
+
+def review_overlap(task, position, candidate, viewed_captures, notes):
+    """Record a local same-position decision; source replacement remains explicit."""
+    import copy
+    record = load(task)
+    current = next((r for r in record['regions'] if r.get('position') == position), None)
+    captures = {c['id']: c for c in record['captures']}
+    presented = {i for p in record.get('presentations', []) for i in p['images']}
+    if (current is None or current['kind'] != 'system' or not isinstance(candidate, dict) or
+            candidate.get('kind', 'system') != 'system' or candidate.get('capture') not in captures or
+            not isinstance(viewed_captures, list) or not isinstance(notes, str) or not notes.strip()):
+        raise ReconstructionError('需要已有谱行、候选完整谱行与实际审阅依据。', code='invalid_request')
+    required = {current['capture'], candidate['capture']}
+    if not required.issubset(set(viewed_captures) & presented) or not set(viewed_captures).issubset(captures):
+        raise ReconstructionError('先实际查看两处原生来源并 present。', code='source_review_required')
+    candidate = {**candidate, 'position': position}
+    # Reuse canonical geometry validation. Unpublished files do not change selection.
+    local.build_selection(task, [candidate], captures)
+    review = copy.deepcopy(record['source_review'])
+    from agent_source_review import reference
+    review.setdefault('overlap_reviews', []).append({'position': position,
+        'selected': reference(current), 'candidate': reference(candidate), 'notes': notes,
+        'viewed_captures': viewed_captures, 'source_sha256': record['source']['sha256']})
+    review['viewed_captures'] = list(dict.fromkeys(review['viewed_captures'] + viewed_captures))
+    return assemble(task, record['title'], record['regions'], review)
+
+
+def revise_selection(task, changes, review=None):
+    """Patch explicit positions and merge unaffected evidence atomically via assemble."""
+    from agent_source_review import merge_review
+    import copy
+    record = load(task)
+    if not isinstance(changes, list) or not isinstance(review, (dict, type(None))):
+        raise ReconstructionError('changes 必须为列表，review 必须为对象。', code='invalid_request', field='changes')
+    regions = copy.deepcopy(record['regions'])
+    if not regions or any(not r.get('position') for r in regions):
+        raise ReconstructionError('局部修订需要已有明确原谱位置；先使用 assemble。')
+    seen = set()
+    for change in changes:
+        if not isinstance(change, dict) or change.get('position') in seen:
+            raise ReconstructionError('局部修订必须为对象，同位置每次只修改一次。', code='invalid_request', field='changes')
+        position, region = change.get('position'), change.get('region')
+        if not isinstance(position, str) or not position or not isinstance(region, dict):
+            raise ReconstructionError('局部修订需要 position 和完整 region。', code='invalid_request', field='changes')
+        seen.add(position)
+        index = next((i for i, r in enumerate(regions) if r['position'] == position), None)
+        replacement = {**region, 'position': position}
+        if index is not None:
+            if change.get('after') is not None:
+                raise ReconstructionError('替换来源不改变原谱顺序。', code='invalid_request', field='changes.after')
+            regions[index] = replacement
+        else:
+            after = change.get('after')
+            preceding = next((i for i, r in enumerate(regions) if r['position'] == after), None)
+            if preceding is None:
+                raise ReconstructionError('插入来源需要已存在的 after 位置。', code='invalid_request', field='changes.after')
+            regions.insert(preceding + 1, replacement)
+    patch = review if review is not None else {'complete': False, 'unresolved': ['局部来源已修改，等待实际审阅。']}
+    merged = merge_review(record, regions, patch)
+    return assemble(task, record['title'], regions, merged)
+
 
 def export(task):
     """Export through the shared task lifecycle and existing renderer."""
@@ -250,11 +346,11 @@ from score_task import layout
 
 
 
-def stage(task, title=None, mode='sparse', max_observations=128):
+def stage(task, title=None, mode='agent', max_observations=128):
     """Advance automatic work to the next genuine host or visual decision."""
     import automatic_score as automatic
-    if mode not in ('sparse', 'strict'):
-        raise ReconstructionError('导航模式必须为 sparse 或 strict。')
+    if mode not in ('agent', 'sparse', 'strict'):
+        raise ReconstructionError('导航模式必须为 agent、sparse 或 strict。')
     if type(max_observations) is not int or not 1 <= max_observations <= 8192:
         raise ReconstructionError('单次导航预算必须为 1–8192 的整数。')
     record = load(task)
@@ -273,6 +369,9 @@ def stage(task, title=None, mode='sparse', max_observations=128):
         already_frozen = True
     except ReconstructionError:
         already_frozen = False
+    if not already_frozen and mode == 'agent':
+        from agent_source_review import source_handoff
+        return source_handoff(record)
     if not already_frozen:
         if mode == 'sparse':
             import sparse_navigation
@@ -298,7 +397,8 @@ def stage(task, title=None, mode='sparse', max_observations=128):
     if checks['status'] != 'passed':
         return {'phase': 'source', 'status': 'blocked', 'artifacts': artifacts,
                 'checks': checks, 'unresolved': checks['issues'],
-                'next': {'operations': ['crop-checks', 'revise-crop', 'assemble']}}
+                'next': {'operations': ['crop-checks', 'revise-crop', 'revise-selection', 'assemble'],
+                         'operation': 'revise-crop', 'required_fields': ['index', 'bbox']}}
     batch = redraw_requests(task)
     record = load(task)
     if record.get('output'):
@@ -320,4 +420,4 @@ def stage(task, title=None, mode='sparse', max_observations=128):
             'unresolved':[],'handoffs':handoffs,'next':{'operations':['redraw-requests','dispatch-redraw','cancel-redraw','finish-redraw','review-redraw','fail-redraw'],
                 'instruction':'宿主执行或实际视觉审阅尚未完成；未知调用先恢复，不重新发送。'}}
     export(task)
-    return stage(task,title)
+    return stage(task, title, mode=mode, max_observations=max_observations)

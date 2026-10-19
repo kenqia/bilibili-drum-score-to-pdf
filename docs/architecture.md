@@ -14,7 +14,7 @@
 
 ## 程序自动检查
 
-`sparse_navigation.py` 为默认 stage 提供首尾布局观察、自适应跳转和缺口局部回查，复用原生候选缓存。`row_manifest.py` 维护稳定谱行身份、独立顺序和可追溯来源。`automatic_score.py` 复用五线几何、相邻重叠及粗拼冻结；全曲顺序解码总览保留为显式严格路径。稀疏接续资格与严格时间覆盖分别记录。`score_task.py` 的生成和导出入口共享冻结校验。程序检查与 Agent 实际看图区分记录。使用方法和限制见[程序检查与粗拼冻结](agents/automatic-source-checks.md)。
+`sparse_navigation.py` 为显式 stage(mode=sparse) 提供首尾布局观察、自适应跳转和缺口局部回查，复用原生候选缓存。`row_manifest.py` 维护稳定谱行身份、独立顺序和可追溯来源。`automatic_score.py` 复用五线几何、相邻重叠及粗拼冻结；全曲顺序解码总览保留为显式严格路径。稀疏接续资格与严格时间覆盖分别记录。`score_task.py` 的生成和导出入口共享冻结校验。程序检查与 Agent 实际看图区分记录。使用方法和限制见[程序检查与粗拼冻结](agents/automatic-source-checks.md)。
 
 `score_geometry.py` 集中完整谱行检测、原生记谱比较、播放光标排除和滚动位移匹配。导航、行首小节号继承与粗拼冻结共用这些规则；几何 module 不修改任务记录，不作音乐识别或实际视觉批准。
 
@@ -58,6 +58,14 @@ native_cache.py 为两个取帧入口提供有界原生候选缓存、晋升与�
 
 ## 阶段入口与恢复
 
-准备后使用 `stage` 自动推进至宿主调用或实际审阅；局部来源版本、输入额度恢复、打印布局和全部页面预览见[阶段入口、局部恢复与打印布局](agents/stage-recovery-layout.md)。`layout` 修改边距、最小行距和目标页数，复用已接受生成结果；最终审阅绑定当前 PDF hash。程序检查与实际看图分别记录。
+准备后使用 `stage` 自动推进至宿主调用或实际审阅；局部来源版本、输入额度恢复、打印布局和全部页面预览见[阶段入口、局部恢复与打印布局](agents/stage-recovery-layout.md)。`layout` 修改边距、最小行距和目标页数，复用已接受生成结果；最终审阅绑定当前独立 output_revision，PDF hash 用于完整性校验。程序检查与实际看图分别记录。
 
 生图身份与 `generation_history` 由共用任务模块维护，有序内容身份排除路径和布局。选行发布先保存新材料，再原子发布局部失效与历史；恢复按实际membership匹配并重映射行索引。布局只撤销输出批准。工作流阶段入口组织已有公开规则，宿主执行和实际审阅仍为外部决策边界；不会读取模型认证或伪造调用。
+
+## Agent 默认来源流程
+
+`stage` 默认 mode=agent。未冻结时返回已有截图、首尾采样建议和字段模板，不运行自动扫描；合法人工冻结直接进入裁剪检查与后续 handoff。`agent_source_review.py` 验证新任务的原生图 present 声明、标题首尾及相邻谱行证据、旧自动疑点的逐项处理。程序保存源 hash、PTS 和实际裁剪引用；声明不等于程序证明模型已经看图。
+
+`source-issues` 保留原问题，`include-candidate` 不增加严格覆盖，`review-overlap` 保留备用来源，`revise-selection` 通过现有 assemble 原子发布局部修改。未改位置的审阅可合并复用，实际输入变更继续由任务模块的输入身份和 generation_history 管理。已有合法人工冻结未改来源时兼容恢复；修改旧工作流来源后采用新审阅契约。
+
+FFmpeg 两个读取入口共用能力探测。只有实际二进制声明 fps_mode 时才使用 passthrough，否则保留 vsync 0；探测限时且不回显 stderr。宿主检查的 prerequisites_ready 与兼容字段 runtime_ready 只表示依赖就绪，显式 --probe-decode 提供无网络的有限时合成解码证据。CLI 意外执行异常归为 internal_error，详细请求错误和来源未决分别归类，摘要保存完整回执引用。

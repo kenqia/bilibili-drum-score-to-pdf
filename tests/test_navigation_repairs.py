@@ -137,21 +137,21 @@ class NavigationRepairTests(unittest.TestCase):
 
     def test_missing_numbers_pause_until_explicit_agent_fallback(self):
         self.prepare()
-        first = self.call('stage')
+        first = self.call('stage', {'mode': 'sparse'})
         self.assertEqual(first['phase'], 'source')
         self.assertEqual(first['status'], 'blocked')
         self.assertIn('row_anchor_missing', [i['code'] for i in first['unresolved']])
         record = self.call('resume')
         self.assertFalse(any(d.get('reason') == 'forward_search' for d in record['navigation']['decisions']))
         before = len(record['captures'])
-        self.call('stage')
+        self.call('stage', {'mode': 'sparse'})
         self.assertEqual(len(self.call('resume')['captures']), before)
         shots = record['overview']['candidates']
         self.call('review-row-anchors', {'capture': shots[0]['id'], 'anchors': [],
             'fallback_interval': [0, record['source']['duration']],
             'viewed_captures': [s['id'] for s in shots],
             'notes': 'Synthetic unnumbered score: complete identical rows establish position.'})
-        self.assertEqual(self.call('stage')['phase'], 'generation')
+        self.assertEqual(self.call('stage', {'mode': 'sparse'})['phase'], 'generation')
 
     def test_printed_bars_are_read_and_same_page_cursor_adds_no_rows(self):
         first = self.numbered()
@@ -159,7 +159,7 @@ class NavigationRepairTests(unittest.TestCase):
         ImageDraw.Draw(first).line((950, 175, 950, 300), fill='#447fbb', width=3)
         ImageDraw.Draw(second).line((1020, 395, 1020, 520), fill='#447fbb', width=3)
         self.sequence([first] * 4 + [second] * 4)
-        result = self.call('stage')
+        result = self.call('stage', {'mode': 'sparse'})
         self.assertEqual(result['phase'], 'generation', result.get('unresolved'))
         record = self.call('resume')
         readings = record['row_manifest']['observations'][record['navigation']['endpoints']['first']['capture']]['anchors']
@@ -179,7 +179,7 @@ class NavigationRepairTests(unittest.TestCase):
         self.call('review-row-anchors', {'capture': left['id'], 'anchors': [],
             'viewed_captures': [left['id'], right['id']], 'fallback_interval': [0, 2],
             'notes': 'Synthetic unnumbered geometry fallback with distinct complete observations.'})
-        self.call('stage', {'max_observations': 1})
+        self.call('stage', {'mode': 'sparse', 'max_observations': 1})
         # A stalled acquisition adapter returns an existing PTS. It supplies no
         # new picture or proof; retrying must not manufacture a new problem.
         sparse_navigation.refine(self.task, lambda seconds, reason: left, 1)
@@ -202,7 +202,7 @@ class NavigationRepairTests(unittest.TestCase):
         new_row = self.numbered((16, 20, 25))
         second.paste(new_row.crop((70, 155, 1211, 370)), (70, 595))
         self.sequence([first] * 4 + [second] * 4)
-        result = self.call('stage')
+        result = self.call('stage', {'mode': 'sparse'})
         self.assertEqual(result['phase'], 'generation', result.get('unresolved'))
         record = self.call('resume')
         self.assertEqual(len(record['row_manifest']['rows']), 4)
@@ -216,13 +216,13 @@ class NavigationRepairTests(unittest.TestCase):
         ImageDraw.Draw(first).line((950, 175, 950, 300), fill='#447fbb', width=3)
         ImageDraw.Draw(second).line((1020, 395, 1020, 520), fill='#447fbb', width=3)
         self.sequence([first] * 4 + [second] * 4)
-        blocked = self.call('stage')
+        blocked = self.call('stage', {'mode': 'sparse'})
         self.assertEqual(blocked['phase'], 'source')
         record = self.call('resume')
         capture = record['navigation']['endpoints']['first']['capture']
         self.call('review-row-anchors', {'capture': capture, 'anchors': [{'row': 0, 'start_bar': 1}],
             'viewed_captures': [capture], 'notes': 'Synthetic first music has an implicit bar-one start.'})
-        result = self.call('stage')
+        result = self.call('stage', {'mode': 'sparse'})
         self.assertEqual(result['phase'], 'generation', result.get('unresolved'))
         after = self.call('resume')
         last = after['navigation']['endpoints']['last']['capture']
@@ -240,7 +240,7 @@ class NavigationRepairTests(unittest.TestCase):
         second.paste(source.crop((70, 155, 1211, 370)), (70, 595))
         ImageDraw.Draw(second).line((1100, 860, 1100, 910), fill='black', width=3)
         self.sequence([first]*4+[second]*4)
-        self.assertEqual(self.call('stage')['phase'], 'source')
+        self.assertEqual(self.call('stage', {'mode': 'sparse'})['phase'], 'source')
         decisions = self.call('resume')['navigation']['decisions']
         overlap = next(d for d in decisions if d.get('reason') == 'printed_bar_overlap')
         self.assertEqual(overlap['new_complete_rows'], 0)
@@ -248,7 +248,7 @@ class NavigationRepairTests(unittest.TestCase):
     def test_source_freezing_rebuilds_without_loading_navigation(self):
         from unittest.mock import patch
         self.prepare(self.numbered())
-        self.assertEqual(self.call('stage')['phase'], 'generation')
+        self.assertEqual(self.call('stage', {'mode': 'sparse'})['phase'], 'generation')
         record = score_task.load(self.task)
         positions = [row['position'] for row in record['regions']]
         record.pop('freeze')
@@ -265,7 +265,7 @@ class NavigationRepairTests(unittest.TestCase):
         second = first.copy()
         ImageDraw.Draw(second).rectangle((1070, 680, 1075, 686), fill='black')
         self.sequence([first] * 4 + [second] * 4)
-        result = self.call('stage')
+        result = self.call('stage', {'mode': 'sparse'})
         self.assertEqual((result['phase'], result['status']), ('source', 'blocked'))
         record = score_task.load(self.task)
         shots = {shot['id']: shot for shot in record['captures']}

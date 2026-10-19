@@ -30,6 +30,11 @@ def _fingerprint(record):
         'rough_chunks': record.get('rough_chunks'), 'review': record.get('source_review'),
         'checks': record.get('program_checks'),
         'overview_candidates': [c['sha256'] for c in record.get('overview',{}).get('candidates',[])]}
+    if record.get('agent_review_contract'):
+        material['agent_review_contract'] = record['agent_review_contract']
+        material['source_issue_history'] = record.get('source_issue_history', [])
+        if 'legacy_source_approval' in record:
+            material['legacy_source_approval'] = record['legacy_source_approval']
     if 'row_manifest' in record:
         material['row_manifest'] = record['row_manifest']
     if 'continuity_reviews' in record:
@@ -66,7 +71,11 @@ def require_frozen(record):
     if (not frozen or frozen['fingerprint'] != _fingerprint(record) or
             record.get('source_review', {}).get('complete') is not True or
             record['source_review'].get('unresolved')):
-        raise state.ReconstructionError('材料尚未冻结或已改变；请重新检查。')
+        raise state.ReconstructionError('材料尚未冻结或已改变；请重新检查。', code='source_review_required', action='stage')
+
+    if frozen.get('producer') == 'agent' and record.get('agent_review_contract'):
+        from agent_source_review import validate
+        validate(record, record['regions'], record['source_review'], same=True)
 
 
 def _panels(task, candidates):
@@ -272,7 +281,7 @@ def overview(task, intervals=None, reason='full continuous source scan', *, forc
 def scan_status(task):
     """Read the last metadata checkpoint; this does not verify source artifacts."""
     path = state.write_path(task, 'record.json')
-    record = json.loads(path.read_text())
+    record = json.loads(path.read_text(encoding='utf-8'))
     if record.get('schema') != 'score-reconstruction/1':
         raise state.ReconstructionError('不是当前重构任务。')
     scan = record.get('overview', {}).get('scan', {})
@@ -816,6 +825,25 @@ def auto_freeze(task, title=None):
 
 def revise_crop(task, index, bbox):
     record=state.load(task)
+    if (record.get('freeze', {}).get('producer') == 'agent' or
+            record.get('agent_review_contract') and record.get('source_review', {}).get('producer') != 'program'):
+        if type(index) is not int or not 0 <= index < len(record['regions']):
+            raise state.ReconstructionError('裁剪引用无效。', code='invalid_request', field='index')
+        if any(not r.get('position') for r in record['regions']):
+            regions = [{**r, 'position': r.get('position') or str(i)} for i, r in enumerate(record['regions'])]
+            region = regions[index]
+        else:
+            regions = None
+            region = dict(record['regions'][index])
+        if region['kind'] == 'system' and isinstance(bbox, list) and len(bbox) == 4 and all(type(v) is int for v in bbox):
+            region['staff_top'] += region['bbox'][1] - bbox[1]
+        region['bbox'] = bbox
+        if regions is not None:
+            review = {**record['source_review'], 'complete': False,
+                      'unresolved': ['局部裁剪已修改，等待实际审阅。']}
+            return state.assemble(task, record['title'], regions, review)
+        from score_workflow import revise_selection
+        return revise_selection(task, [{'position': region['position'], 'region': region}])
     if type(index) is not int or not 0<=index<len(record['regions']):
         raise state.ReconstructionError('裁剪引用无效。')
     regions=[dict(r) for r in record['regions']]

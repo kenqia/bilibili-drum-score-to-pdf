@@ -26,9 +26,9 @@ class SparseNavigationTests(unittest.TestCase):
         fixtures.AutomaticScoreTests.sequence(self, images, fps, crf)
         self.authorize_unnumbered_fixture()
 
-    def test_default_stage_observes_endpoints_without_claiming_continuous_coverage(self):
+    def test_sparse_stage_observes_endpoints_without_claiming_continuous_coverage(self):
         self.prepare()
-        result = self.call('stage', {'title': 'Sparse fixture'})
+        result = self.call('stage', {'mode': 'sparse', 'title': 'Sparse fixture'})
         self.assertEqual(result['phase'], 'generation', result)
         record = self.call('resume')
         self.assertFalse(record['overview']['scan']['complete'])
@@ -39,11 +39,11 @@ class SparseNavigationTests(unittest.TestCase):
         self.assertEqual(len(record['row_manifest']['rows']), 3)
         self.assertLess(self.call('cache-report')['actual_decodes'], 8)
         self.assertFalse(record.get('presentations'))
-        self.assertEqual(self.call('stage')['handoffs'], result['handoffs'])
+        self.assertEqual(self.call('stage', {'mode': 'sparse'})['handoffs'], result['handoffs'])
 
     def test_explicit_strict_mode_scans_even_after_sparse_freeze(self):
         self.prepare()
-        self.call('stage')
+        self.call('stage', {'mode': 'sparse'})
         self.call('stage', {'mode': 'strict'})
         record = self.call('resume')
         self.assertTrue(record['overview']['scan']['complete'])
@@ -58,7 +58,7 @@ class SparseNavigationTests(unittest.TestCase):
         for top in (220, 440, 660):
             ImageDraw.Draw(second).rectangle((995, top + 20, 1005, top + 30), fill='black')
         self.sequence([first] * 4 + [second] * 4 + [first] * 4)
-        result = self.call('stage')
+        result = self.call('stage', {'mode': 'sparse'})
         self.assertEqual(result['phase'], 'generation', result.get('unresolved'))
         record = self.call('resume')
         rows = record['row_manifest']['rows']
@@ -94,23 +94,23 @@ class SparseNavigationTests(unittest.TestCase):
 
     def test_inserted_observation_keeps_row_ids_and_pending_generation_requests(self):
         self.prepare()
-        first = self.call('stage')
+        first = self.call('stage', {'mode': 'sparse'})
         rows = self.call('row-manifest')['rows']
         self.call('resample', {'intervals': [[.75, 1.25]], 'reason': 'Controlled extra observation.'})
         self.call('auto-freeze')
-        after = self.call('stage')
+        after = self.call('stage', {'mode': 'sparse'})
         self.assertEqual([r['id'] for r in self.call('row-manifest')['rows']], [r['id'] for r in rows])
         self.assertEqual(after['handoffs'], first['handoffs'])
 
     def test_partial_navigation_is_resumable_and_cannot_freeze(self):
         from score_fixtures import score_frame
         self.sequence([score_frame()] * 24)
-        first = self.call('stage', {'max_observations': 1})
+        first = self.call('stage', {'mode': 'sparse', 'max_observations': 1})
         self.assertEqual(first['phase'], 'source')
         self.assertEqual(first['status'], 'pending')
         self.assertFalse(self.call('row-manifest')['continuity_complete'])
         self.call('redraw-inputs', success=False)
-        final = self.call('stage')
+        final = self.call('stage', {'mode': 'sparse'})
         self.assertEqual(final['phase'], 'generation')
         self.assertFalse(self.call('resume')['overview']['scan']['complete'])
 
@@ -122,8 +122,8 @@ class SparseNavigationTests(unittest.TestCase):
         for top in (220, 440, 660):
             ImageDraw.Draw(second).rectangle((995, top + 20, 1005, top + 30), fill='black')
         self.sequence([first] * 16 + [second] * 16 + [first] * 16)
-        self.assertEqual(self.call('stage', {'max_observations': 1})['status'], 'pending')
-        result = self.call('stage')
+        self.assertEqual(self.call('stage', {'mode': 'sparse', 'max_observations': 1})['status'], 'pending')
+        result = self.call('stage', {'mode': 'sparse'})
         self.assertEqual(result['phase'], 'generation', result.get('unresolved'))
         rows = self.call('row-manifest')['rows']
         self.assertEqual(len(rows), 9)
@@ -135,7 +135,7 @@ class SparseNavigationTests(unittest.TestCase):
         clear = score_frame()
         blurred = clear.filter(ImageFilter.GaussianBlur(.55))
         self.sequence([blurred] * 4 + [clear] * 4)
-        result = self.call('stage')
+        result = self.call('stage', {'mode': 'sparse'})
         self.assertEqual(result['phase'], 'generation', result.get('unresolved'))
         rows = self.call('row-manifest')['rows']
         self.assertEqual(len(rows), 3)
@@ -147,7 +147,7 @@ class SparseNavigationTests(unittest.TestCase):
 
     def test_manual_selection_and_withdrawal_refresh_the_same_manifest(self):
         self.prepare()
-        self.call('stage')
+        self.call('stage', {'mode': 'sparse'})
         record = self.call('resume')
         regions = record['regions'][:2]
         review = {'viewed_captures': list({r['capture'] for r in regions}), 'complete': True,
@@ -168,7 +168,7 @@ class SparseNavigationTests(unittest.TestCase):
         changed = first.copy()
         ImageDraw.Draw(changed).point((1050, 152), fill='black')
         self.sequence([first] * 4 + [changed] * 4)
-        result = self.call('stage')
+        result = self.call('stage', {'mode': 'sparse'})
         self.assertEqual(result['phase'], 'source')
         record = self.call('resume')
         self.assertFalse(record['row_manifest']['continuity_complete'])
@@ -189,7 +189,7 @@ class SparseNavigationTests(unittest.TestCase):
                   'previous_bars': [1, 12], 'bars': [13, 24],
                   'viewed_captures': [left['id'], right['id']], 'complete_rows': True,
                   'first_last': 'Controlled full row boundaries.', 'notes': 'Controlled bar reading.'})
-        result = self.call('stage')
+        result = self.call('stage', {'mode': 'sparse'})
         self.assertEqual(result['phase'], 'generation', result.get('unresolved'))
         record = self.call('resume')
         self.assertEqual(record['overview']['scan']['frames_observed'], 0)
@@ -224,7 +224,7 @@ class SparseNavigationTests(unittest.TestCase):
                   'viewed_captures': [left['id'], right['id']], 'complete_rows': True,
                   'first_last': 'Controlled distinct score positions with repeated music.',
                   'notes': 'Controlled page labels establish consecutive new positions.'})
-        result = self.call('stage')
+        result = self.call('stage', {'mode': 'sparse'})
         self.assertEqual(result['phase'], 'generation', result.get('unresolved'))
         rows = self.call('row-manifest')['rows']
         self.assertEqual(len(rows), 6)
@@ -245,7 +245,7 @@ class SparseNavigationTests(unittest.TestCase):
         draw.rectangle((70, 40, 1210, 150), fill='white')
         draw.point((700, 100), fill='black')
         self.prepare(image)
-        result = self.call('stage')
+        result = self.call('stage', {'mode': 'sparse'})
         self.assertEqual(result['phase'], 'generation', result.get('unresolved'))
         header = next(r for r in self.call('resume')['regions'] if r['kind'] == 'header')
         self.assertEqual((header['width'], header['height']), (1, 1))

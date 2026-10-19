@@ -4,7 +4,7 @@
 
 # 新版命令入口
 
-`convert.py` 将 Agent 的操作请求转交给 `score_workflow.py`，不内嵌模型调用。省略 operation 使用 prepare。输出为 stdout JSON，成功调用退出 0，输入或来源验证失败退出 2。成功准备仍处于待审阅状态。
+`convert.py` 将 Agent 的操作请求转交给 `score_workflow.py`，不内嵌模型调用。省略 operation 使用 prepare。输出为 stdout JSON，成功调用退出 0，失败退出 2，错误使用稳定 code 区分请求、来源审阅、状态、解码与内部异常。成功准备仍处于待审阅状态。
 
 ```sh
 uv run --python 3.12 --isolated --with-requirements scripts/requirements.txt \
@@ -19,7 +19,9 @@ uv run --python 3.12 --isolated --with-requirements scripts/requirements.txt \
 | 操作 | 公共函数 |
 | --- | --- |
 | prepare / resume | prepare / load |
-| stage / layout | stage / layout，稀疏导航阶段推进与打印参数 |
+| stage / layout | stage / layout，默认 Agent 阶段推进与打印参数 |
+| source-issues | 原始来源疑点和 Agent 处理依据 |
+| include-candidate / review-overlap / revise-selection | 补采纳入候选 / 局部同位置确认 / 按位置替换或插入 |
 | row-manifest / review-continuity | 持久谱行清单 / Agent 实际编号接续判断 |
 | review-row-anchors | Agent 逐行小节号与有界替代证据授权 |
 | scan-status / crop-checks | 扫描元数据进度 / 当前选行边缘检查 |
@@ -63,9 +65,9 @@ cache-limits 接受正整数 max_entries 和 max_bytes，默认 64 个候选及 
 
 准备后使用 `stage` 自动推进至宿主调用或实际审阅；局部来源版本、输入额度恢复、打印布局和全部页面预览见[阶段入口、局部恢复与打印布局](stage-recovery-layout.md)。`layout` 修改边距、最小行距和目标页数，复用已接受生成结果；最终审阅显式绑定当前导出回执的独立 `output_revision`，PDF hash 用于完整性校验。程序检查与实际看图分别记录。
 
-## 稀疏导航请求
+## Agent 与可选扫描请求
 
-默认 `stage` 请求可以为 `{}`。显式严格扫描使用 `{"mode":"strict"}`；限制单次导航工作量使用 `{"max_observations":32}`。预算停止保存未完成状态，不能批准全曲完整。跳转决定和实际来源保存在 `navigation`，`row-manifest` 返回谱行清单，完整任务仍可通过 resume 恢复。
+默认 `stage` 请求为 `{}` 或 `{"mode":"agent"}`，未冻结时返回 Agent 来源任务，不启动扫描。显式稀疏导航使用 `{"mode":"sparse"}`。显式严格扫描使用 `{"mode":"strict"}`；限制单次导航工作量使用 `{"max_observations":32}`。预算停止保存未完成状态，不能批准全曲完整。跳转决定和实际来源保存在 `navigation`，`row-manifest` 返回谱行清单，完整任务仍可通过 resume 恢复。
 
 Agent 实际看过相邻截图后，编号接续请求示例为：
 
@@ -100,3 +102,9 @@ Agent 实际看过相邻截图后，编号接续请求示例为：
 `row` 是该截图内 system 从上到下的零基索引，不包含 header。只提交实际确认的行，其余保留程序读数或未决。原谱首行未印数字时须在 notes 说明起点判断，不能称为 OCR 读数。原图、截图 hash 和行 bbox 由程序验证并绑定。
 
 若 Agent 确认没有可用编号，但有其他充分接续证据，可提交 `anchors: []` 和 `fallback_interval: [开始秒数, 结束秒数]`，并提供至少两张实际查看的 `viewed_captures` 和具体 notes。区间必须位于视频内且包含 capture；它只解除该范围的缺号暂停，几何、记谱、裁剪和接续检查仍执行，编号冲突不能由该授权掩盖。然后再运行 stage。上例仅说明参数，不是实际审阅回执。
+
+## 摘要与错误
+
+CLI 默认仍输出完整 JSON。`--summary` 和 `--output-format summary` 返回 phase、status、complete、issue_count、next，以及成功回执的 details.path。该路径相对任务目录，保存本次完整回执；读取这个文件取得全部 handoff、证据与请求模板，resume 读取当前任务记录。文件使用新身份保存，不覆盖既有回执。失败摘要保留 error，不把输出截断当作已完成审阅。
+
+error.code 包括 invalid_request、source_review_required、invalid_state、decode_failed、internal_error 和 interrupted；来源获取与解码的已有具体错误码继续保留。operation 标识公开操作，必要时提供受控 field/action。请求字段绑定失败属于 invalid_request，执行中的意外异常属于 internal_error。错误不回显请求体、原始异常或完整私有路径。JSON 请求文件采用 UTF-8；Windows 使用 Python 3.12，建议以 `python -X utf8` 运行脚本。

@@ -1,5 +1,6 @@
 """Bounded native frame decoding with actual source PTS."""
 import json
+from functools import lru_cache
 import math
 from pathlib import Path
 import re
@@ -13,6 +14,20 @@ class ConversionError(Exception):
     def __init__(self, code, message):
         super().__init__(message)
         self.code = code
+
+
+@lru_cache(maxsize=4)
+def frame_sync_args(executable='ffmpeg'):
+    """Prefer fps_mode only when this binary advertises it; 4.4 uses vsync."""
+    try:
+        result = subprocess.run([executable, '-hide_banner', '-h', 'full'],
+                                capture_output=True, timeout=5, check=True)
+        help_text = (result.stdout + result.stderr).decode(errors='replace')
+        if re.search(r'(?m)^\s*-fps_mode(?:\s|\[)', help_text):
+            return ('-fps_mode', 'passthrough')
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return ('-vsync', '0')
 
 
 def probe_video(source):
@@ -52,7 +67,7 @@ class VideoReader:
         start = max(0, self.metadata['duration'] - 1) if tail else timestamp
         path = Path(self.scratch.name) / 'frame.png'
         command = ['ffmpeg', '-v', 'info', '-nostdin', '-copyts', '-ss', str(math.floor(start * 1_000_000) / 1_000_000),
-                   '-threads', '2', '-i', str(self.source), '-vf', 'showinfo', '-an', '-vsync', '0', '-threads', '1']
+                   '-threads', '2', '-i', str(self.source), '-vf', 'showinfo', '-an', *frame_sync_args(), '-threads', '1']
         command += ['-update', '1'] if tail else ['-frames:v', '1']
         command += ['-y', str(path)]
         began = time.monotonic()
@@ -99,10 +114,13 @@ class VideoReader:
             raise ConversionError('decode_failed', '累计解码期限已用尽。')
         command = ['ffmpeg', '-v', 'info', '-nostdin', '-copyts', '-ss', str(start),
             '-t', str(end-start), '-threads', '2', '-i', str(self.source),
-            '-vf', 'showinfo', '-an', '-vsync', '0', '-threads', '1',
+            '-vf', 'showinfo', '-an', *frame_sync_args(), '-threads', '1',
             '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1']
         began = time.monotonic()
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except OSError:
+            raise ConversionError('decode_failed', '无法启动视频解码器。') from None
         timer = threading.Timer(budget, process.kill)
         timer.start()
         positions = queue.Queue()

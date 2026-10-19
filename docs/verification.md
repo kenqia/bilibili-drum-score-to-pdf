@@ -156,3 +156,12 @@ AGENTS 与 Skill 正常流程指向 stage 文档，异常恢复按条件加载�
 CI 四个任务曾因 Python 3.14 与固定 RapidOCR 1.4.4 的 Requires-Python 不兼容而在安装阶段失败，测试未执行。三个 job 定义现统一固定 Python 3.12；宿主检查的 CLI/module 同时验证 3.11、3.12、3.13 与3.14 的支持边界。
 
 在仓库外 CPython 3.12.12 新虚拟环境中，标准 pip 安装所有固定依赖及可选 Mido 成功，pip check 无冲突，实际 host_check runtime_ready=true。完整回归204项、348.339秒，无失败或跳过；CI合成replay、原有Ruff E701/E702、compileall和包内引用同步检查通过。该结果属于本地验证，远端修复版本尚未执行。方法与日志见[CI版本修复记录](experiments/2026-10-19-ci-python312.md)。
+
+
+## 2026-10-19 Agent-first 跨宿主修复
+
+main 基线 `9cece50dcfe78affd6f8739c3221521d8bdbf55d` 上的实现工作树完整带 Mido 回归为 227 项、482.891 秒，无失败或跳过，全部通过。Agent 专项 15 项通过。新增覆盖默认 stage 无扫描、全部共享选源入口的新契约、合法旧任务局部升级、首尾角色变更拒绝、原疑点处理、局部额度恢复、无工具矢量路径、摘要与当前 PDF 版本绑定。显式 sparse/strict 原路线继续通过。
+
+UTF-8/POSIX 安装、严格旧清单校验、失败恢复、混合缺号与残行、FFmpeg 两种能力路径以及不可读无关 Skill 的测试通过。references 同步、Ruff E701/E702/F821、compileall 和 diff 检查通过。标准与规格独立复核无剩余发现；原失败和修复过程见 [本轮实验记录](experiments/2026-10-19-agent-first-cross-host.md)。本地完整日志保存在工作区 `work/agent-first-cross-host/full-final.log`。
+
+本机 Linux FFmpeg 4.4.2 的合成重放和有限时无网络解码探测通过，实际 PTS 为 0、time_base 为 [1,1000]。合成矢量 PDF 双跑字节相同，4 类拒绝检查通过。新版 fps_mode 参数路线由模拟能力矩阵验证。Windows 原生重点套件已加入 CI，尚无本轮远端运行结果。按用户确认，真实视频、实际看图与跨宿主验收由用户执行，步骤见 [Agent-first 用户验收清单](agents/agent-first-cross-host-acceptance.md)。合成测试和受控 review 声明不证明真实音乐完整或模型实际看图。本轮没有新真实视频、生图、共享 Skill 安装或远端写入。

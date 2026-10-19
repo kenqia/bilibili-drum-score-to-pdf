@@ -44,6 +44,18 @@ def fixture_video(base):
     return video
 
 
+def controlled_review(regions, review):
+    def ref(region):
+        return {key: region[key] for key in ('position', 'capture', 'bbox')}
+    systems = [r for r in regions if r['kind'] == 'system']
+    return {**review, 'evidence': {
+        'title': {**ref(regions[0]), 'notes': 'Controlled title.'},
+        'first': {**ref(systems[0]), 'notes': 'Controlled music start.'},
+        'last': {**ref(systems[-1]), 'notes': 'Controlled complete ending.'},
+        'joins': [{'previous': ref(a), 'current': ref(b), 'method': 'same_capture',
+                   'notes': 'Controlled same-image order.'} for a, b in zip(systems, systems[1:])]}}
+
+
 def refused(action, code, summary):
     try:
         action()
@@ -68,6 +80,8 @@ def verify(base, evidence, summary):
               'notes': 'Fixed controlled geometry, automated replay only; no Agent visual acceptance.',
               'continuity': 'Three fixture systems in their drawn order.',
               'first_last': 'Fixture header and all three complete systems.'}
+    review = controlled_review(regions, review)
+    workflow.present(task, [shot['id']], 'Controlled CI presentation, not a live Agent view.')
     record_path = task / 'record.json'
     original = record_path.read_bytes()
     state = json.loads(original)
@@ -102,8 +116,9 @@ def verify(base, evidence, summary):
     workflow.prepare(video, replay_task)
     replay_shot = workflow.capture(replay_task, 0)
     replay_regions = [{**r, 'capture': replay_shot['id']} for r in regions]
+    workflow.present(replay_task, [replay_shot['id']], 'Controlled CI presentation.')
     workflow.assemble(replay_task, 'Fixture song', replay_regions,
-                      {**review, 'viewed_captures': [replay_shot['id']]})
+                      controlled_review(replay_regions, {**review, 'viewed_captures': [replay_shot['id']]}))
     for page in workflow.redraw_inputs(replay_task):
         workflow.fail_redraw(replay_task, page['id'], 'Offline CI explicitly forces vector; no host tool call.')
     replay = workflow.export(replay_task)

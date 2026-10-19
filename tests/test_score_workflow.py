@@ -11,16 +11,29 @@ class ScoreWorkflow(unittest.TestCase):
     setUp = fixtures.LocalScoreWorkflow.setUp
     tearDown = fixtures.LocalScoreWorkflow.tearDown
     select = fixtures.LocalScoreWorkflow.select
+    def assemble(self, task, title, regions, review, owner=workflow):
+        from score_fixtures import controlled_source_review
+        from agent_source_review import issue_inventory
+        record = workflow.load(task)
+        viewed = review['viewed_captures']
+        if not set(viewed).issubset({i for p in record.get('presentations', []) for i in p['images']}):
+            workflow.present(task, viewed, 'Controlled synthetic presentation.')
+        review = controlled_source_review(regions, review)
+        review['issue_dispositions'] = [{'id': issue['id'], 'outcome': 'resolved',
+            'captures': viewed, 'notes': 'Controlled synthetic recovery assertion.'}
+            for issue in issue_inventory(record)]
+        return owner.assemble(task, title, regions, review)
+
     def test_resolved_source_review_restores_same_selection_export(self):
         self.select()
         source=workflow.load(self.task)
         regions=[{**r,'position':str(i)} for i,r in enumerate(source['regions'])]
         review={**source['source_review'],'continuity':'Complete fixture.','first_last':'Whole fixture.'}
-        blocked=workflow.assemble(self.task,source['title'],regions,{**review,'unresolved':['Hidden note needs review.']})
+        blocked=self.assemble(self.task,source['title'],regions,{**review,'unresolved':['Hidden note needs review.']})
         self.assertEqual(blocked['status'],'needs_source_review')
         with self.assertRaises(workflow.ReconstructionError):
             workflow.redraw_inputs(self.task)
-        resolved=workflow.assemble(self.task,source['title'],regions,{**review,'unresolved':[]})
+        resolved=self.assemble(self.task,source['title'],regions,{**review,'unresolved':[]})
         self.assertEqual(resolved['status'],'ready_to_redraw')
         page=workflow.redraw_inputs(self.task)[0]
         workflow.fail_redraw(self.task,page['id'],'No host tool in fixture.')
@@ -30,16 +43,16 @@ class ScoreWorkflow(unittest.TestCase):
         self.select();record=workflow.load(self.task)
         regions=[{**r,'position':str(i)} for i,r in enumerate(record['regions'])]
         review={**record['source_review'],'continuity':'Static source.','first_last':'Whole fixture.'}
-        workflow.assemble(self.task,record['title'],regions,review)
+        self.assemble(self.task,record['title'],regions,review)
         page=workflow.redraw_inputs(self.task)[0]
         for correction in (False,True):
             req=workflow.begin_redraw(self.task,page['id'],'Controlled reviewed input.',correction=correction)
             workflow.finish_redraw(self.task,page['id'],req['request'],self.root/'score.png','host-imagegen','fixture')
             workflow.review_redraw(self.task,page['id'],False,'Controlled refusal.')
         before=workflow.load(self.task)['redraw_pages']
-        workflow.assemble(self.task,record['title'],regions,{**review,'unresolved':['New source question.']})
+        self.assemble(self.task,record['title'],regions,{**review,'unresolved':['New source question.']})
         with self.assertRaises(workflow.ReconstructionError):workflow.export(self.task)
-        workflow.assemble(self.task,record['title'],regions,review)
+        self.assemble(self.task,record['title'],regions,review)
         after=workflow.redraw_inputs(self.task)
         self.assertEqual(after,before)
         self.assertEqual(after[0]['corrections_used'],1)
@@ -52,7 +65,7 @@ class ScoreWorkflow(unittest.TestCase):
         regions = [{**r, 'position': str(i)} for i, r in enumerate(selected['regions'])]
         review = {**selected['source_review'], 'continuity': 'Synthetic full systems.',
                   'first_last': 'Synthetic start and ending.'}
-        workflow.assemble(self.task, selected['title'], regions, review)
+        self.assemble(self.task, selected['title'], regions, review)
         page = workflow.redraw_inputs(self.task)[0]
         for correction in (False, True):
             request = workflow.begin_redraw(self.task, page['id'], 'Synthetic input viewed.',
@@ -62,12 +75,12 @@ class ScoreWorkflow(unittest.TestCase):
             workflow.review_redraw(self.task, page['id'], False, 'Synthetic rejection.')
         output = workflow.export(self.task)
         workflow.review_pdf(self.task, [1], 'Synthetic PDF reviewed.', output_revision=output['output_revision'])
-        same = workflow.local.assemble(self.task, selected['title'], regions, review)
+        same = self.assemble(self.task, selected['title'], regions, review, owner=workflow.local)
         self.assertEqual(same['output']['sha256'], output['sha256'])
         self.assertEqual(same['output']['status'], 'reviewed')
         self.assertEqual(same['redraw_pages'][0]['corrections_used'], 1)
         changed = [{**regions[0], 'bbox': [0, 0, 640, 60]}, regions[1]]
-        revised = workflow.local.assemble(self.task, selected['title'], changed, review)
+        revised = self.assemble(self.task, selected['title'], changed, review, owner=workflow.local)
         self.assertNotIn('output', revised)
         self.assertEqual(revised['redraw_pages'], [])
         refreshed = workflow.redraw_inputs(self.task)[0]
@@ -83,7 +96,7 @@ class ScoreWorkflow(unittest.TestCase):
         review = {**record['source_review'], 'continuity': 'Ordered synthetic rows.',
             'first_last': 'Synthetic whole source.'}
         regions[0] = {**regions[0], 'position': 'title'}
-        workflow.assemble(self.task, record['title'], regions, review)
+        self.assemble(self.task, record['title'], regions, review)
         groups = workflow.redraw_inputs(self.task)
         self.assertEqual([p['regions'] for p in groups],
             [list(range(9)), list(range(9, 13))])
@@ -94,9 +107,9 @@ class ScoreWorkflow(unittest.TestCase):
         regions = [{**r, 'position': str(i)} for i,r in enumerate(record['regions'])]
         review = {**record['source_review'], 'continuity': 'Synthetic source.',
             'first_last': 'Whole source.'}
-        workflow.assemble(self.task, record['title'], regions, review)
+        self.assemble(self.task, record['title'], regions, review)
         page = workflow.redraw_inputs(self.task)[0]
-        workflow.assemble(self.task, record['title'], regions,
+        self.assemble(self.task, record['title'], regions,
             {**review, 'unresolved': ['Hidden symbol.']})
         with self.assertRaises(workflow.ReconstructionError):
             workflow.begin_redraw(self.task, page['id'], 'Must not call tool.')
@@ -128,7 +141,7 @@ class ScoreWorkflow(unittest.TestCase):
         regions=[{**region,'position':str(i)} for i in range(4)]
         review={**record['source_review'],'continuity':'Repeated fixture.','first_last':'All systems.'}
         with patch.object(workflow.local,'ROUGH_PIXELS',100000):
-            workflow.assemble(self.task,record['title'],regions,review)
+            self.assemble(self.task,record['title'],regions,review)
             with self.assertRaises(workflow.ReconstructionError):
                 workflow.redraw_inputs(self.task,[[0,1,2,3]])
             pages=workflow.redraw_inputs(self.task)
@@ -139,7 +152,7 @@ class ScoreWorkflow(unittest.TestCase):
         original = workflow.load(self.task)
         selections = [{**r, 'position': str(i)} for i, r in enumerate(original['regions'])]
         review = {**original['source_review'], 'continuity': 'Complete fixture.', 'first_last': 'Start and ending.'}
-        workflow.assemble(self.task, original['title'], selections, review)
+        self.assemble(self.task, original['title'], selections, review)
         page = workflow.redraw_inputs(self.task)[0]
         request = workflow.begin_redraw(self.task, page['id'], 'Fixture viewed.')
         workflow.finish_redraw(self.task, page['id'], request['request'], self.root / 'score.png', 'host-imagegen', 'fixture')
@@ -165,10 +178,10 @@ class ScoreWorkflow(unittest.TestCase):
         with self.assertRaises(workflow.ReconstructionError):
             workflow.review_pdf(self.task, [1], 'Cannot approve rejected output.', output_revision=output['output_revision'])
         workflow.prepare(self.video, self.task)
-        workflow.assemble(self.task, original['title'], selections, review)
+        self.assemble(self.task, original['title'], selections, review)
         correction = workflow.begin_redraw(self.task, page['id'], 'Restore crossed head.', correction=True)
         workflow.prepare(self.video, self.task)
-        workflow.assemble(self.task, original['title'], selections, review)
+        self.assemble(self.task, original['title'], selections, review)
         self.assertEqual(workflow.redraw_inputs(self.task)[0]['corrections_used'], 1)
         with self.assertRaises(workflow.ReconstructionError):
             workflow.begin_redraw(self.task, page['id'], 'Second correction forbidden.', correction=True)
@@ -212,18 +225,18 @@ class ScoreWorkflow(unittest.TestCase):
         original = workflow.load(self.task)
         selections = [{**r, 'position': str(i)} for i, r in enumerate(original['regions'])]
         review = {**original['source_review'], 'continuity': 'Complete fixture.', 'first_last': 'Start and ending.'}
-        workflow.assemble(self.task, original['title'], selections, review)
+        self.assemble(self.task, original['title'], selections, review)
         page = workflow.redraw_inputs(self.task)[0]
         request = workflow.begin_redraw(self.task, page['id'], 'Fixture viewed.')
         workflow.finish_redraw(self.task, page['id'], request['request'], self.root / 'score.png', 'host-imagegen', 'fixture')
         workflow.review_redraw(self.task, page['id'], False, 'Restore beam.')
         correction = workflow.begin_redraw(self.task, page['id'], 'Restore beam.', correction=True)
-        workflow.assemble(self.task, original['title'], selections, review)
+        self.assemble(self.task, original['title'], selections, review)
         self.assertEqual(workflow.load(self.task)['redraw_pages'][0]['corrections_used'], 1)
         workflow.finish_redraw(self.task, page['id'], correction['request'], self.root / 'score.png', 'host-imagegen', 'fixture-correction')
         workflow.review_redraw(self.task, page['id'], True, 'Accepted fixture.', [[0,0,640,65], [0,65,640,180]])
         output = workflow.export(self.task)
-        workflow.assemble(self.task, original['title'], selections, review)
+        self.assemble(self.task, original['title'], selections, review)
         self.assertEqual(workflow.export(self.task)['sha256'], output['sha256'])
         with self.assertRaises(workflow.ReconstructionError):
             workflow.fail_redraw(self.task, page['id'], 'Late failure must not downgrade accepted output.')
@@ -233,7 +246,7 @@ class ScoreWorkflow(unittest.TestCase):
         original = workflow.load(self.task)
         selections = [{**r, 'position': str(i)} for i, r in enumerate(original['regions'])]
         review = {**original['source_review'], 'continuity': 'Complete fixture.', 'first_last': 'Start and ending.'}
-        workflow.assemble(self.task, original['title'], selections, review)
+        self.assemble(self.task, original['title'], selections, review)
         page = workflow.redraw_inputs(self.task)[0]
         request = workflow.begin_redraw(self.task, page['id'], 'Fixture viewed.')
         workflow.finish_redraw(self.task, page['id'], request['request'], self.root / 'score.png', 'host-imagegen', 'controlled-fixture')
@@ -241,13 +254,13 @@ class ScoreWorkflow(unittest.TestCase):
         prior = (self.task / 'record.json').read_bytes()
         invalid = [{**selections[0], 'bbox': [0,0,641,65]}, selections[1]]
         with self.assertRaises(workflow.ReconstructionError):
-            workflow.assemble(self.task, original['title'], invalid, review)
+            self.assemble(self.task, original['title'], invalid, review)
         self.assertEqual((self.task / 'record.json').read_bytes(), prior)
         selections[0] = {**selections[0], 'bbox': [0,0,640,60]}
         with patch.object(Path, 'replace', autospec=True,
                           side_effect=RuntimeError('Interrupted record publication')):
             with self.assertRaises(RuntimeError):
-                workflow.assemble(self.task, original['title'], selections, review)
+                self.assemble(self.task, original['title'], selections, review)
         self.assertEqual((self.task / 'record.json').read_bytes(), prior)
         self.assertEqual(workflow.load(self.task)['redraw_pages'][0]['status'], 'accepted')
         replace = Path.replace
@@ -259,12 +272,12 @@ class ScoreWorkflow(unittest.TestCase):
                 raise RuntimeError('Interrupted publication')
             return replace(temporary, target)
         with patch.object(Path, 'replace', autospec=True, side_effect=interrupted_replace):
-            workflow.assemble(self.task, original['title'], selections, review)
+            self.assemble(self.task, original['title'], selections, review)
         self.assertEqual(calls, 1)
         resumed = workflow.load(self.task)
         self.assertEqual(resumed['regions'][0]['bbox'], [0,0,640,60])
         self.assertEqual(resumed['redraw_pages'], [])
-        workflow.assemble(self.task, original['title'], selections, review)
+        self.assemble(self.task, original['title'], selections, review)
         refreshed = workflow.redraw_inputs(self.task)[0]
         self.assertEqual(refreshed['status'], 'needs_generation')
         self.assertNotEqual(refreshed['input']['sha256'], page['input']['sha256'])
@@ -318,7 +331,7 @@ class ScoreWorkflow(unittest.TestCase):
         selections = [{**original['regions'][0], 'position': 'title'}] + [
             {**original['regions'][1], 'position': f'row-{i}'} for i in range(12)]
         review = {**original['source_review'], 'continuity': 'Ordered full systems.', 'first_last': 'Complete fixture.'}
-        workflow.assemble(self.task, 'Mixed score', selections, review)
+        self.assemble(self.task, 'Mixed score', selections, review)
         pages = workflow.redraw_inputs(self.task, [[0,1]] + [[i] for i in range(2,13)])
         request = workflow.begin_redraw(self.task, pages[0]['id'], 'Fixture rough viewed.')
         workflow.finish_redraw(self.task, pages[0]['id'], request['request'], self.root / 'score.png', 'host-imagegen', 'controlled-fixture')
@@ -332,7 +345,7 @@ class ScoreWorkflow(unittest.TestCase):
         self.assertLessEqual(abs(counts[0] - counts[1]), 1)
         self.assertEqual(output['routes'], ['imagegen'] + ['vector'] * 11)
         self.assertEqual([p['region'] for p in output['placements']], list(range(13)))
-        record = workflow.assemble(self.task, 'Mixed score', selections,
+        record = self.assemble(self.task, 'Mixed score', selections,
             {**review, 'complete': False, 'unresolved': ['Unconfirmed ordered page transition.']})
         self.assertEqual(len(record['redraw_pages']),len(pages))
         with self.assertRaises(workflow.ReconstructionError):
@@ -343,7 +356,7 @@ class ScoreWorkflow(unittest.TestCase):
         original = workflow.load(self.task)
         selections = [{**original['regions'][1], 'position': f'row-{i}'} for i in range(2)]
         review = {**original['source_review'], 'continuity': 'Two complete systems.', 'first_last': 'Complete fixture.'}
-        workflow.assemble(self.task, 'Resolution fixture', selections, review)
+        self.assemble(self.task, 'Resolution fixture', selections, review)
         pages = workflow.redraw_inputs(self.task, [[0], [1]])
         for page, size, box in zip(pages, [(640,320),(320,160)], [[0,65,640,180],[0,32,320,90]]):
             image = self.root / (page['id'] + '.png')
@@ -377,7 +390,7 @@ class ScoreWorkflow(unittest.TestCase):
         for i in range(4):
             selections.append({**record['regions'][1], 'position': str(i)})
         with patch.object(workflow.local, 'ROUGH_PIXELS', 100_000, create=True):
-            record = workflow.assemble(self.task, 'Long fixture', selections,
+            record = self.assemble(self.task, 'Long fixture', selections,
                 {**record['source_review'], 'continuity': 'Distinct later positions.', 'first_last': 'Entire fixture.'})
         self.assertEqual(len(record['rough_chunks']), 4)
         self.assertEqual(len(record['regions']), 4)
@@ -419,7 +432,13 @@ class ScoreWorkflow(unittest.TestCase):
             {'capture': first['id'], 'bbox': [0, 65, 640, 180], 'kind': 'system', 'staff_top': 35, 'staff_spacing': 10, 'position': 'first'},
             {'capture': last['id'], 'bbox': [0, 65, 640, 180], 'kind': 'system', 'staff_top': 35, 'staff_spacing': 10, 'position': 'first'},
             {'capture': last['id'], 'bbox': [0, 65, 640, 180], 'kind': 'system', 'staff_top': 35, 'staff_spacing': 10, 'position': 'later-repeat'}]
-        record = workflow.assemble(self.task, 'Repeated score', selections,
+        review = {'viewed_captures': [first['id'], last['id']], 'complete': True,
+                  'notes': 'Controlled overlap choice.', 'continuity': 'Controlled.', 'first_last': 'Controlled.'}
+        with self.assertRaises(workflow.ReconstructionError):
+            self.assemble(self.task, 'Repeated score', selections, review)
+        # The Agent explicitly chooses the preferred first source for this position.
+        selections = [selections[0], selections[1], selections[3]]
+        record = self.assemble(self.task, 'Repeated score', selections,
             {'viewed_captures': [first['id'], last['id']], 'complete': True,
              'notes': 'Fixture continuity statement, not actual visual evidence.',
              'continuity': 'Same-position overlap omitted; distinct later repetition retained.',

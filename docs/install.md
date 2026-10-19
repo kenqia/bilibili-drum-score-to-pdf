@@ -94,3 +94,9 @@ python tools/sync_skill_references.py --check
 安装检查通过只证明入口可用。获取失败时查看 `manifest.json` 的脱敏错误字段，区分代理 CONNECT 拒绝、来源 HTTP 拒绝与解码失败。程序只在 CONNECT403 或视频网页 HTTP412 时尝试一次公开 API 直连恢复；恢复会保留公共地址与 TLS 等保护，不持久修改代理配置。触发条件、来源完整性检查与资源限制见[输入和资源保护](architecture.md#输入和资源保护)。
 
 已取得完整视频时可以用其本地路径继续 `prepare`，无需重新下载。视频应保存在任务相邻的独立来源目录，避免只保存在易清理的 `/tmp`。下载成功仍不代表谱行接续、重绘或全部 PDF 页面已验收。
+
+## 宿主检查的证明范围
+
+`prerequisites_ready` 和兼容字段 `runtime_ready` 只表示 Python 3.12、工具、固定依赖与协议存在，不证明真实视频解码或宿主看图。无关 Skill 不可读时输出 warning，并继续发现有效目标。使用 `scripts/host_check.py --probe-decode` 显式执行有期限、无网络的合成视频编码、探测与实际 PTS 解码；结果读取 decode_probe.status。该结果仍不代表宿主视觉或整曲验收。
+
+Windows 原生命令建议使用 `python -X utf8`。安装器以 UTF-8 读写文本、以 POSIX 相对键保存清单；旧清单的路径逃逸、反斜杠、驱动器路径和符号链接仍拒绝。安装、升级和回滚保持原备份与非管理文件保护，不自动更新共享安装副本。
