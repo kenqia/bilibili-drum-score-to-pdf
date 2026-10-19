@@ -17,7 +17,7 @@ Skill 默认处理 PDF。需要特定保存位置时，在同条消息补充路�
 
 从仓库取得完整 Skill 目录，安装到当前宿主实际发现 Skill 的位置。可以让 Agent 按 README 中的安装提示完成，也可以使用宿主现有的 Skill 安装器。安装器必须同时复制 `scripts/`、`references/` 和许可证；只下载 SKILL.md 不完整。注册符号链接时，链接目标必须是保留所有内容的完整目录。
 
-宿主需要文件读写、脚本运行、原生图片查看与 PDF 页面查看能力。环境需要 Python 3.12+、uv、ffmpeg、ffprobe 和 Poppler 的 pdftoppm。普通 PDF 不依赖 Mido。项目不要求 B站 Cookie，不读取模型认证。
+宿主需要文件读写、脚本运行、原生图片查看与 PDF 页面查看能力。环境需要 Python 3.12、uv、ffmpeg、ffprobe 和 Poppler 的 pdftoppm。普通 PDF 不依赖 Mido。项目不要求 B站 Cookie，不读取模型认证。当前固定依赖 `rapidocr-onnxruntime==1.4.4` 要求 Python <3.13，因此使用 Python 3.12；3.13 及以上不在当前支持范围。示例使用 `uv run --python 3.12`，不会替换系统 Python。
 
 ## 发现宿主与检查依赖
 
@@ -27,12 +27,12 @@ Skill 默认处理 PDF。需要特定保存位置时，在同条消息补充路�
 python skills/bilibili-drum-score-to-pdf/scripts/host_check.py
 ```
 
-默认只检查 `~/.agents/skills`、`~/.codex/skills`、`~/.claude/skills` 的直接子目录 `SKILL.md`。宿主使用其他目录时传 `--skills-root /absolute/skills`，可重复指定。检查不读取宿主配置或凭证，也不修改安装。输出 JSON 包含匹配入口、同一根的重复入口、运行时工具、固定依赖版本和正常流程文档是否存在。文件存在不能证明宿主已经加载；实际工具清单和图片查看、生图能力仍须在宿主确认。
+默认只检查 `~/.agents/skills`、`~/.codex/skills`、`~/.claude/skills` 的直接子目录 `SKILL.md`。宿主使用其他目录时传 `--skills-root /absolute/skills`，可重复指定。检查不读取宿主配置或凭证，也不修改安装。输出 JSON 包含匹配入口、同一根的重复入口、运行时工具、固定依赖版本和正常流程文档是否存在。`python_supported=false` 表示当前解释器不符合 `python_requirement`，即使包版本匹配也不算运行环境就绪。文件存在不能证明宿主已经加载；实际工具清单和图片查看、生图能力仍须在宿主确认。
 
 在实际隔离依赖环境中检查运行条件：
 
 ```sh
-uv run --quiet --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
+uv run --python 3.12 --quiet --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
   python skills/bilibili-drum-score-to-pdf/scripts/host_check.py
 ```
 
@@ -60,7 +60,7 @@ python tools/install_skill.py verify --target /absolute/host/skills/bilibili-dru
 3. 在安装目录执行下列命令，同时核对宿主看图能力与外部工具。
 
 ```sh
-uv run --isolated --with-requirements scripts/requirements.txt python scripts/convert.py --help
+uv run --python 3.12 --isolated --with-requirements scripts/requirements.txt python scripts/convert.py --help
 ffmpeg -version
 ffprobe -version
 pdftoppm -v

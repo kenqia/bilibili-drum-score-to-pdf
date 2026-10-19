@@ -7,9 +7,9 @@
 `convert.py` 将 Agent 的操作请求转交给 `score_workflow.py`，不内嵌模型调用。省略 operation 使用 prepare。输出为 stdout JSON，成功调用退出 0，输入或来源验证失败退出 2。成功准备仍处于待审阅状态。
 
 ```sh
-uv run --isolated --with-requirements scripts/requirements.txt \
+uv run --python 3.12 --isolated --with-requirements scripts/requirements.txt \
   python scripts/convert.py video.mp4 --output /absolute/new-task
-uv run --isolated --with-requirements scripts/requirements.txt \
+uv run --python 3.12 --isolated --with-requirements scripts/requirements.txt \
   python scripts/convert.py --operation capture \
   --task /absolute/new-task --request /absolute/capture-request.json
 ```

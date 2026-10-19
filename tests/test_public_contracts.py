@@ -7,6 +7,7 @@ import unittest
 
 import test_reconstruction as fixtures
 from score_fixtures import CLI
+from test_host_check import HOST_CHECK_ENTRIES
 import reconstruction
 import score_task
 import score_workflow

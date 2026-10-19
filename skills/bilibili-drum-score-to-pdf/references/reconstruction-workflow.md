@@ -61,7 +61,7 @@
 ## 验证边界
 
 ```sh
-uv run --with-requirements scripts/requirements.txt \
+uv run --python 3.12 --with-requirements scripts/requirements.txt \
   python -m unittest discover -s tests -p test_score_workflow.py -v
 ```
 

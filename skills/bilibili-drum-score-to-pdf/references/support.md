@@ -2,7 +2,7 @@
 
 本 Skill 自包含 `SKILL.md`、`scripts/` 和 `references/`。从 SKILL.md 的实际位置定位根目录，在宿主可发现的目录安装整个 Skill 文件夹。读取 SKILL.md 不等于宿主已经完成持久安装。显式选择本 Skill 后提供链接即可启动默认 PDF 流程。
 
-安装后确认宿主技能列表或选择器可以找到本 Skill，脚本及本文档同目录的阶段协议可读，并运行 `scripts/convert.py --help`。宿主必须能读写文件、运行 Python 脚本、实际查看原生图片和 PDF 页面；Python 3.12+、uv、ffmpeg、ffprobe、Poppler 是独立环境依赖。普通 PDF 无需 Mido。
+安装后确认宿主技能列表或选择器可以找到本 Skill，脚本及本文档同目录的阶段协议可读，并运行 `scripts/convert.py --help`。宿主必须能读写文件、运行 Python 脚本、实际查看原生图片和 PDF 页面；Python 3.12、uv、ffmpeg、ffprobe、Poppler 是独立环境依赖。普通 PDF 无需 Mido。
 
 公开获取只接受规范 HTTPS B站 BV URL 及合法分 P。匿名获取不加载用户配置、Cookie、netrc、插件或模型认证。保留公共 DNS/TLS 校验、协议和重定向限制；签名媒体地址和后端原始异常不写入公开日志。不能为了完成任务绕过这些保护。
 
