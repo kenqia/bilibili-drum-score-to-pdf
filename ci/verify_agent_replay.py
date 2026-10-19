@@ -123,12 +123,14 @@ def verify(base, evidence, summary):
         workflow.fail_redraw(replay_task, page['id'], 'Offline CI explicitly forces vector; no host tool call.')
     replay = workflow.export(replay_task)
     require((replay_task / replay['pdf']).read_bytes() == pdf, 'independent_replay_pdf_changed')
+    # Native tools may encode localized dates with the Windows code page.
+    # These checks need only ASCII fields, so retain bytes throughout.
     info = subprocess.run(['pdfinfo', str(pdf_path)], capture_output=True,
-                          text=True, check=True, timeout=20).stdout
-    require(re.search(r'^Pages:\s+1\s*$', info, re.MULTILINE), 'incorrect_pdf_pages')
-    require(re.search(r'^Page size:\s+595\.\d+ x 841\.\d+ pts \(A4\)', info, re.MULTILINE), 'incorrect_page_size')
+                          check=True, timeout=20).stdout
+    require(re.search(rb'^Pages:\s+1\s*$', info, re.MULTILINE), 'incorrect_pdf_pages')
+    require(re.search(rb'^Page size:\s+595\.\d+ x 841\.\d+ pts \(A4\)', info, re.MULTILINE), 'incorrect_page_size')
     listing = subprocess.run(['pdfimages', '-list', str(pdf_path)], capture_output=True,
-                             text=True, check=True, timeout=20).stdout.splitlines()
+                             check=True, timeout=20).stdout.splitlines()
     require(len(listing) == 2, 'bitmap_in_vector_pdf')
     summary.update(system_count=3, replay_pdf_equal=True, pdf_pages=1,
                    pdf_name=pdf_path.name, embedded_images=0, model_cost=None,

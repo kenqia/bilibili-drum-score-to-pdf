@@ -174,3 +174,13 @@ UTF-8/POSIX 安装、严格旧清单校验、失败恢复、混合缺号与残�
 本机 Windows Python 3.12.1 已实际复现同一目录的短路径没有 symlink/junction、但旧安装器拒绝的情况。修复改为逐级检查真实链接，再规范化路径完成包含关系和备份身份校验。回滚兼容旧清单的大小写与短路径，仍拒绝其他目标的备份。
 
 Windows 原生安装 12 项、15.926 秒全部通过，无跳过；Linux 安装 10 项通过，2 项 Windows 专属检查仅在 Linux 跳过。覆盖短路径安装、升级、旧清单回滚、任务保留和目录联接拒绝。提交链接测试通过 Git index 的真实 120000 类型构造快照，不需要改变 Windows 开发者模式或管理员权限。Ruff、compileall、引用同步和两轴复核通过。日志保存在工作区 `work/agent-first-cross-host/windows-repair/`；完整新版远端 CI 结果继续单独核对。
+
+## 2026-10-19 Windows CI 原生工具安装
+
+提交 `4954fcc` 的 [第二轮 CI](https://github.com/kenqia/bilibili-drum-score-to-pdf/actions/runs/39275775744) 中，Linux 两个分片、MIDI 和合成重放通过。Windows 安装测试 12 项通过，随后合成解码探测失败。Chocolatey 包源返回 503/504，报告安装零个包但退出码为 0，旧步骤错误地继续运行测试。
+
+Windows CI 现在运行 `python ci/install_windows_tools.py`。脚本逐个检查 `ffmpeg -version`、`ffprobe -version` 和 Poppler 的 `pdftoppm -v`、`pdfinfo -v`、`pdfimages -v`；缺失或执行失败时按包最多尝试安装 3 次，间隔 10 秒。工具探测限时 15 秒，每次安装限时 90 秒，整个 CI 步骤限时 10 分钟。安装命令返回 0 不能替代实际工具检查，尝试耗尽仍不可用时明确失败。已有可用工具直接复用。
+
+新增 6 项回归覆盖零退出码但工具缺失、临时故障恢复、安装超时和每个工具的执行失败。Linux 本地测试、Ruff、compileall、引用同步及两轴只读复核通过。真实视频、音乐完整性与逐页看图仍由用户验收；依赖安装检查不替代实际合成解码和 PDF 重放。
+
+本机 Windows Python 3.12.1 独立虚拟环境安装固定依赖后，`pip check` 无冲突，CI 同组 69 项测试全部通过，无跳过。Windows 实际合成视频解码和矢量 PDF 独立双跑通过，4 类拒绝检查通过；Linux 合成重放同样通过。Windows 重放还复现了 `pdfinfo` 本地代码页日期输出与 Python UTF-8 文本解码不兼容的问题。CI 重放现保留工具输出字节，仅对 ASCII 页数、A4 尺寸和图像列表执行原有断言。没有修改宿主代码页、全局依赖或配置。证据保存在工作区 `work/agent-first-cross-host/windows-repair/windows-core-*.log`、`windows-replay-final.log` 和 `linux-replay-bootstrap.log`。

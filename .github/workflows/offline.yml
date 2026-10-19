@@ -106,16 +106,14 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install native video and PDF tools
-        shell: pwsh
-        run: |
-          choco install ffmpeg poppler --no-progress -y
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        timeout-minutes: 10
+        run: python ci/install_windows_tools.py
       - name: Install pinned Python dependencies
         run: python -m pip install -r skills/bilibili-drum-score-to-pdf/scripts/requirements.txt
       - name: Verify native installation, Agent flow and shared contracts
         shell: pwsh
         run: |
-          $patterns = @('test_skill_install.py', 'test_host_check.py', 'test_cross_host.py', 'test_agent_source.py', 'test_public_contracts.py', 'test_stage_cli.py')
+          $patterns = @('test_ci_windows_tools.py', 'test_skill_install.py', 'test_host_check.py', 'test_cross_host.py', 'test_agent_source.py', 'test_public_contracts.py', 'test_stage_cli.py')
           foreach ($pattern in $patterns) {
             python -m unittest discover -s tests -p $pattern -v
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
