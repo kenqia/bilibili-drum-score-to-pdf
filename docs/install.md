@@ -100,3 +100,5 @@ python tools/sync_skill_references.py --check
 `prerequisites_ready` 和兼容字段 `runtime_ready` 只表示 Python 3.12、工具、固定依赖与协议存在，不证明真实视频解码或宿主看图。无关 Skill 不可读时输出 warning，并继续发现有效目标。使用 `scripts/host_check.py --probe-decode` 显式执行有期限、无网络的合成视频编码、探测与实际 PTS 解码；结果读取 decode_probe.status。该结果仍不代表宿主视觉或整曲验收。
 
 Windows 原生命令建议使用 `python -X utf8`。安装器以 UTF-8 读写文本、以 POSIX 相对键保存清单；旧清单的路径逃逸、反斜杠、驱动器路径和符号链接仍拒绝。安装、升级和回滚保持原备份与非管理文件保护，不自动更新共享安装副本。
+
+Windows 的 8.3 短路径与大小写差异会先规范化，再执行源码、安装和备份位置检查。真实符号链接与目录联接在根目录、祖先目录和受管理路径中仍被拒绝。旧合法备份使用不同大小写或短路径时，可按相同安全校验回滚。

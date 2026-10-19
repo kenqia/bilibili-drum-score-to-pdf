@@ -28,9 +28,11 @@ def digest(path):
 
 def local_path(path):
     path = Path(path).absolute()
-    if path.is_symlink() or path.resolve() != path:
-        raise ValueError('安装和备份路径不能包含符号链接。')
-    return path
+    # Windows resolve() also expands ordinary 8.3 names (RUNNER~1). Inspect
+    # components for actual links before canonicalizing aliases for containment.
+    if any(part.is_symlink() or part.is_junction() for part in (path, *path.parents)):
+        raise ValueError('安装和备份路径不能包含符号链接或目录联接。')
+    return path.resolve()
 
 
 def managed_path(root, relative):
@@ -42,7 +44,7 @@ def managed_path(root, relative):
     for parent in (path, *path.parents):
         if parent == root:
             break
-        if parent.is_symlink():
+        if parent.is_symlink() or parent.is_junction():
             raise ValueError('受管理文件不能是符号链接。')
     return path
 
@@ -206,7 +208,8 @@ def rollback(target, backup):
     if target == backup or target.is_relative_to(backup) or backup.is_relative_to(target):
         raise ValueError('回滚路径不能重叠。')
     verify(backup)
-    if manifest(backup).get('installed_root') != str(target):
+    installed_root = manifest(backup).get('installed_root')
+    if not isinstance(installed_root, str) or local_path(installed_root) != target:
         raise ValueError('备份属于另一安装目标。')
     current_backup = backup_path(target)
     publish(target, backup, current_backup)

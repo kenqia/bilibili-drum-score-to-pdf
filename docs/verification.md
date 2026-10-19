@@ -165,3 +165,12 @@ main 基线 `9cece50dcfe78affd6f8739c3221521d8bdbf55d` 上的实现工作树完�
 UTF-8/POSIX 安装、严格旧清单校验、失败恢复、混合缺号与残行、FFmpeg 两种能力路径以及不可读无关 Skill 的测试通过。references 同步、Ruff E701/E702/F821、compileall 和 diff 检查通过。标准与规格独立复核无剩余发现；原失败和修复过程见 [本轮实验记录](experiments/2026-10-19-agent-first-cross-host.md)。本地完整日志保存在工作区 `work/agent-first-cross-host/full-final.log`。
 
 本机 Linux FFmpeg 4.4.2 的合成重放和有限时无网络解码探测通过，实际 PTS 为 0、time_base 为 [1,1000]。合成矢量 PDF 双跑字节相同，4 类拒绝检查通过。新版 fps_mode 参数路线由模拟能力矩阵验证。Windows 原生重点套件已加入 CI，尚无本轮远端运行结果。按用户确认，真实视频、实际看图与跨宿主验收由用户执行，步骤见 [Agent-first 用户验收清单](agents/agent-first-cross-host-acceptance.md)。合成测试和受控 review 声明不证明真实音乐完整或模型实际看图。本轮没有新真实视频、生图、共享 Skill 安装或远端写入。
+
+
+## 2026-10-19 Windows 安装路径修复
+
+提交 `42c4288` 的 [首次 CI](https://github.com/kenqia/bilibili-drum-score-to-pdf/actions/runs/39273139112) 中，Linux 两个分片、MIDI 和合成重放通过；Windows 安装 10 项在路径校验入口失败。原因是 `Path.resolve()` 会展开正常的 8.3 短路径，旧检查将字符串形式变化误当作链接。
+
+本机 Windows Python 3.12.1 已实际复现同一目录的短路径没有 symlink/junction、但旧安装器拒绝的情况。修复改为逐级检查真实链接，再规范化路径完成包含关系和备份身份校验。回滚兼容旧清单的大小写与短路径，仍拒绝其他目标的备份。
+
+Windows 原生安装 12 项、15.926 秒全部通过，无跳过；Linux 安装 10 项通过，2 项 Windows 专属检查仅在 Linux 跳过。覆盖短路径安装、升级、旧清单回滚、任务保留和目录联接拒绝。提交链接测试通过 Git index 的真实 120000 类型构造快照，不需要改变 Windows 开发者模式或管理员权限。Ruff、compileall、引用同步和两轴复核通过。日志保存在工作区 `work/agent-first-cross-host/windows-repair/`；完整新版远端 CI 结果继续单独核对。

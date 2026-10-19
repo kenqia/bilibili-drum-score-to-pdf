@@ -1,6 +1,7 @@
 """Committed snapshot installation, failure recovery and task preservation."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -18,7 +19,7 @@ class SkillInstallTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        root = Path(self.temp.name)
+        root = Path(self.temp.name).resolve()
         self.repo = root / 'source'
         self.repo.mkdir()
         self.target = root / 'host/skills/drum-score'
@@ -46,6 +47,13 @@ class SkillInstallTests(unittest.TestCase):
         (self.repo / installer.CANONICAL / 'scripts/convert.py').write_text('print("new fixture CLI")\n')
         return self.commit()
 
+    def directory_link(self, link, target):
+        if os.name == 'nt':
+            subprocess.run(['cmd', '/d', '/c', 'mklink', '/J', str(link), str(target)],
+                           check=True, capture_output=True)
+        else:
+            link.symlink_to(target, target_is_directory=True)
+
     def test_utf8_snapshot_portable_keys_and_strict_old_manifest_paths(self):
         document = self.repo / installer.CANONICAL / 'references/中文.md'
         document.write_text('鼓谱安装与回滚。\n', encoding='utf-8')
@@ -70,6 +78,53 @@ class SkillInstallTests(unittest.TestCase):
             with self.subTest(relative=relative), self.assertRaises(ValueError):
                 installer.managed_path(self.target, relative)
 
+    @unittest.skipUnless(os.name == 'nt', 'Windows short paths require Windows')
+    def test_windows_short_paths_install_upgrade_and_rollback(self):
+        import ctypes
+        long_repo = self.repo.parent / 'long installation repository name'
+        self.repo.rename(long_repo)
+        self.repo = long_repo
+        def short_path(path):
+            buffer = ctypes.create_unicode_buffer(32768)
+            length = ctypes.windll.kernel32.GetShortPathNameW(str(path), buffer, len(buffer))
+            self.assertTrue(0 < length < len(buffer))
+            return Path(buffer.value)
+        short_repo = short_path(self.repo)
+        if short_repo == self.repo:
+            self.skipTest('Filesystem does not expose 8.3 aliases')
+        self.target.parent.mkdir(parents=True)
+        short_target = short_path(self.target.parent) / self.target.name
+        self.assertEqual(installer.local_path(short_repo), self.repo)
+        first = installer.install(short_repo, self.first, short_target)
+        self.assertEqual(first['status'], 'installed')
+        task = self.target / 'work/record.json'
+        task.parent.mkdir()
+        task.write_text('controlled task', encoding='utf-8')
+        inode = task.stat().st_ino
+        updated = installer.install(short_repo, self.change(), short_target)
+        backup = Path(updated['backup'])
+        data = installer.manifest(backup)
+        # Earlier installers preserved user casing and short names verbatim.
+        data['installed_root'] = str(short_target).swapcase()
+        (backup / installer.MANIFEST).write_text(json.dumps(data), encoding='utf-8')
+        installer.rollback(short_target, backup)
+        self.assertEqual(installer.verify(short_target)['source_commit'], self.first)
+        self.assertEqual(task.read_text(encoding='utf-8'), 'controlled task')
+        self.assertEqual(task.stat().st_ino, inode)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows junctions require Windows')
+    def test_windows_junctions_are_rejected_at_root_ancestor_and_managed_directory(self):
+        installer.install(self.repo, self.first, self.target)
+        linked = self.repo.parent / 'junction'
+        self.directory_link(linked, self.target)
+        self.assertTrue(linked.is_junction())
+        with self.assertRaises(ValueError):
+            installer.verify(linked)
+        with self.assertRaises(ValueError):
+            installer.local_path(linked / 'new-child')
+        with self.assertRaises(ValueError):
+            installer.managed_path(self.repo.parent, 'junction/SKILL.md')
+
     def test_committed_snapshot_single_entry_and_repeat_is_noop(self):
         (self.repo / installer.CANONICAL / 'scripts/convert.py').write_text('uncommitted edit')
         (self.repo / 'untracked.txt').write_text('untracked edit')
@@ -88,10 +143,16 @@ class SkillInstallTests(unittest.TestCase):
 
     def test_source_symlink_rejected_without_replacing_valid_install(self):
         installer.install(self.repo, self.first, self.target)
-        link = self.repo / installer.CANONICAL / 'references/linked.md'
-        link.symlink_to('stage-recovery-layout.md')
+        # Exercise the committed symlink type without requiring Windows admin
+        # rights or changing the user's Developer Mode setting.
+        blob = subprocess.check_output(['git', '-C', str(self.repo), 'hash-object', '-w', '--stdin'],
+                                       input=b'stage-recovery-layout.md').decode().strip()
+        relative = (installer.CANONICAL / 'references/linked.md').as_posix()
+        self.git('update-index', '--add', '--cacheinfo', '120000', blob, relative)
+        self.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                 'commit', '-qm', 'Controlled symlink snapshot')
         with self.assertRaisesRegex(ValueError, '不支持的文件类型'):
-            installer.install(self.repo, self.commit(), self.target)
+            installer.install(self.repo, self.git('rev-parse', 'HEAD'), self.target)
         self.assertEqual(installer.verify(self.target)['source_commit'], self.first)
 
     def test_update_preserves_tasks_and_rollback_restores_old_version(self):
@@ -181,7 +242,7 @@ class SkillInstallTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             installer.managed_path(self.target, '../outside')
         external = self.target.parent / 'linked'
-        external.symlink_to(self.target, target_is_directory=True)
+        self.directory_link(external, self.target)
         with self.assertRaises(ValueError):
             installer.verify(external)
         (self.target / 'future.txt').write_text('user file')
