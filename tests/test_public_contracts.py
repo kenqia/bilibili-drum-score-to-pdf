@@ -13,6 +13,7 @@ import score_workflow
 import automatic_score
 
 
+ACQUISITION_ENTRIES = ('cli', 'workflow', 'acquire')
 EXPORT_ENTRIES = ('cli', 'workflow', 'vector')
 REVIEW_ENTRIES = ('cli', 'workflow', 'vector', 'task')
 GROUP_ENTRIES = ('cli', 'workflow', 'task')

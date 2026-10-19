@@ -13,6 +13,8 @@ description: 将 B站链接或本地视频中的白底多行鼓谱粗拼、清�
 
 需要 Python 3.12+、uv、ffmpeg、ffprobe、原生图片查看能力以及 PDF 页面渲染工具，项目使用 Poppler。依赖在隔离 uv 环境中运行，不读取 B站 Cookie、登录态或模型认证。
 
+匿名下载遇到代理 CONNECT 403 或视频网页 HTTP 412 时，程序会在原期限内尝试一次公开 API 直连恢复，不修改宿主代理配置。恢复仍失败时读取脱敏诊断；不要自行加载 Cookie、改代理或重复编写下载补丁。具体边界见 `references/support.md`。
+
 ```sh
 uv run --isolated --with-requirements "/absolute/skill/scripts/requirements.txt" \
   python "/absolute/skill/scripts/convert.py" \

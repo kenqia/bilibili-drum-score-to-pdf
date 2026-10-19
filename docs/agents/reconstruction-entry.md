@@ -35,6 +35,8 @@ MIDI 参数见[独立转换流程](midi-conversion.md)，仅在用户明确要�
 
 公开 URL 使用匿名获取，支持分 P。失败写入只有获取诊断的 manifest.json 时可以在同目录重试或改用本地输入；新增用户文件后不再视为可重试空任务。原视频保存在相邻 `<task>-source-<id>` 目录，并通过 record.json 记录 hash。中断保留现有完整证据；不要删除来源目录，否则恢复会拒绝。
 
+匿名获取仅在代理 CONNECT403 或视频网页 HTTP412 时尝试一次公开 API 直连恢复，仍共享原下载总期限。成功在 origin 中记录 `acquisition_route=public_api_direct` 与脱敏 `fallback_trigger`；恢复失败在 error 中保留原触发诊断。代理配置不持久改变，详细边界见 Skill 的 `references/support.md`。
+
 旧 task.json/observation.json 格式和旧操作不兼容。另建新版任务，保留历史文件。恢复已有新版任务时使用 resume，或重新 prepare 同一来源，不重复下载。回滚用先前 Git 提交的独立 checkout，转换使用新目录。
 
 ## 原生缓存与生图组
