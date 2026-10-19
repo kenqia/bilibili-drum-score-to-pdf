@@ -22,7 +22,7 @@
 可选依赖仅为 Mido 1.3.3，MIT，放到独立 uv 环境。完整 MIDI 工作流的安全文件名复用 PDF 基础模块，因此独立验证同时加载现有 `requirements.txt`，不新增 OMR 或音源依赖，不读取真实模型认证。
 
 ```sh
-uv run --isolated --with-requirements scripts/requirements.txt \
+uv run --python 3.12 --isolated --with-requirements scripts/requirements.txt \
   --with mido==1.3.3 python -m unittest discover -s tests -p 'test_midi*.py' -v
 ```
 

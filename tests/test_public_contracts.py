@@ -7,12 +7,14 @@ import unittest
 
 import test_reconstruction as fixtures
 from score_fixtures import CLI
+from test_host_check import HOST_CHECK_ENTRIES
 import reconstruction
 import score_task
 import score_workflow
 import automatic_score
 
 
+ACQUISITION_ENTRIES = ('cli', 'workflow', 'acquire')
 EXPORT_ENTRIES = ('cli', 'workflow', 'vector')
 REVIEW_ENTRIES = ('cli', 'workflow', 'vector', 'task')
 GROUP_ENTRIES = ('cli', 'workflow', 'task')

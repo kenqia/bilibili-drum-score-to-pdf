@@ -66,7 +66,7 @@ PDF 只使用路径和直线，不把粗拼图嵌入成位图。所有系统采�
 重构基线为 `51aa468`。新工作流在独立工单 worktree 开发，原实验保留；#59 已将新版设为默认入口。运行以下聚焦验证。
 
 ```sh
-uv run --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
+uv run --python 3.12 --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
   python -m unittest discover -s tests -p test_reconstruction.py -v
 ```
 

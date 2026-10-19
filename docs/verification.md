@@ -26,6 +26,10 @@ KiLLKiSS、标准曲、小星星及鲜花保存材料共26张原生截图、22�
 
 ## 公开入口共同约束
 
+宿主检查矩阵为 CLI 和 `host_check.check`，由 `tests/test_host_check.py` 验证版本边界；`tests/test_public_contracts.py` 同步导出该矩阵。CI 的所有解释器声明须符合此支持范围。
+
+`tests/test_public_contracts.py` 注册获取矩阵 CLI、`score_workflow.prepare` 与 `public_video.acquire`；`tests/test_api_acquisition.py` 对三者共用真实 HTTP 解析、代理拒绝和媒体 fixture，检查 API 恢复、来源身份与脱敏。
+
 `tests/test_public_contracts.py` 用现有 unittest 的 `subTest` 注册入口矩阵。导出覆盖 CLI `export`、`score_workflow.export` 和 `reconstruction.export_vector`；审阅覆盖 CLI 与三个公开 module；分组覆盖 CLI、工作流与任务 module。新增同类公开入口时加入对应矩阵，不另建测试框架。
 
 新增裁剪、批量请求生命周期及 scan-status 的 CLI/module 入口也注册共同矩阵；scan-status 明确只读元数据，损坏来源仍由正常 load 拒绝。
@@ -63,7 +67,7 @@ Root 通过公开操作对三曲四路线历史材料重新排版，并实际查
 完整入口为以下命令。Mido 是独立可选依赖，此命令显式加入以验证 MIDI；普通 PDF 不需要它。
 
 ```sh
-uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
+uv run --python 3.12 --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
   --with mido==1.3.3 python -m unittest discover -s tests -v
 ```
 
@@ -140,3 +144,15 @@ AGENTS 与 Skill 正常流程指向 stage 文档，异常恢复按条件加载�
 在独立工作区将 `codex/retro-environment-fixes` 合入远端 `main` 的 `68b53c8`。保留自包含 Skill 分发、便携 references 与安装恢复保护，合入五项反馈修复、交接规则和共同契约矩阵。`host_check` 同时支持包内 references 与旧仓库 docs；仓库外复制包测试覆盖发现与协议检查。
 
 完整带 Mido 回归 164 项、137.268 秒、无跳过，全部通过。包测试单独运行 11 项通过。references 同步检查、Ruff E701/E702、compileall 和暂存 diff 检查通过；冲突解决经两轴独立复核，无新增发现。完整日志保存在原工作区 `work/retro-five/merge-full-suite.log`。本轮没有新视频、生图、页面验收或宿主安装更新；原工作区用户修改保持。
+
+## 2026-10-19 匿名 API 恢复
+
+完整带Mido回归202项、353.780秒，无失败或跳过；使用本页完整回归命令并增加 `--quiet`。新增获取矩阵覆盖CLI、工作流与acquire，检查CONNECT403/网页412的一次API直连恢复、分P、试看与实测时长、私有媒体DNS、脱敏和既有总期限。包内引用、compileall与diff检查通过；协议引用缩短后另跑包内协议及链接检查通过。
+
+正式CLI在本地受控代理返回CONNECT403后，通过真实API和CDN取得鲜花及BV1yGGN6XE1B的完整1080p来源。用户另外回传豆包临时脚本下载鲜花成功；新通用版本尚未安装到豆包，尚无豆包完整PDF和逐页审阅证据。没有修改导航、裁剪、重绘或排版。首轮真实DNS失败保留，未添加DNS例外。详见[豆包诊断记录](experiments/2026-10-19-doubao-anonymous-acquisition.md)。
+
+## 2026-10-19 CI 解释器兼容性
+
+CI 四个任务曾因 Python 3.14 与固定 RapidOCR 1.4.4 的 Requires-Python 不兼容而在安装阶段失败，测试未执行。三个 job 定义现统一固定 Python 3.12；宿主检查的 CLI/module 同时验证 3.11、3.12、3.13 与3.14 的支持边界。
+
+在仓库外 CPython 3.12.12 新虚拟环境中，标准 pip 安装所有固定依赖及可选 Mido 成功，pip check 无冲突，实际 host_check runtime_ready=true。完整回归204项、348.339秒，无失败或跳过；CI合成replay、原有Ruff E701/E702、compileall和包内引用同步检查通过。该结果属于本地验证，远端修复版本尚未执行。方法与日志见[CI版本修复记录](experiments/2026-10-19-ci-python312.md)。

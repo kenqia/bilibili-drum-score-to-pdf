@@ -11,7 +11,7 @@
 运行仓库验证：
 
 ```sh
-uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt --with mido==1.3.3 python -m unittest discover -s tests -v
+uv run --python 3.12 --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt --with mido==1.3.3 python -m unittest discover -s tests -v
 ```
 
 修改正常流程先运行针对性合成测试，再按变更风险验收真实来源和全部页面。#58保存 KiLLKiSS、BV1rH4y1R7Rk 与第三作者的实际证据，包含强制矢量与遮挡修复。记录实际 PTS、导航、原生保留和呈交数量、来源、修正、分页、保存决定恢复与耗时。未知成本保留 null。真实样本失败先检查 seek、几何、检测和原始内容，不新增样本颜色或 codec 例外。固定决定检查只证明确定性执行，不能冒充新的视觉判断。

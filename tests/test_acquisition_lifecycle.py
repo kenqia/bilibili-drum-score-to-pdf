@@ -37,6 +37,13 @@ def start_copy_worker(process):
     real_start(process)
     if not copy_ready.wait(10):
         raise RuntimeError('copy fixture did not reach its phase barrier')
+def recovery_route(origin, staging, public_api=False):
+    if public_api:
+        stall()
+    from public_video import InputError
+    error = InputError('public_api_unavailable', 'Controlled proxy refusal')
+    error.diagnostics = {'failure_stage': 'webpage', 'proxy_connect_status': 403}
+    raise error
 def dns(*args, **kwargs):
     if mode == 'dns': stall()
     return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]
@@ -62,6 +69,8 @@ with contextlib.ExitStack() as stack:
     stack.enter_context(patch.object(YoutubeDL, 'extract_info', side_effect=extract))
     stack.enter_context(patch('socket.getaddrinfo', side_effect=dns))
     stack.enter_context(patch('urllib.request.OpenerDirector.open', side_effect=response))
+    if mode == 'recovery':
+        stack.enter_context(patch('anonymous_backend._download_route', side_effect=recovery_route))
     if mode == 'copy':
         stack.enter_context(patch('anonymous_backend.download', side_effect=copy_fixture))
         stack.enter_context(patch('shutil.copyfileobj', side_effect=copy_stall))
@@ -118,7 +127,7 @@ class AcquisitionLifecycleTests(unittest.TestCase):
                     process.communicate()
 
     def test_connections_download_retries_and_process_exit_share_deadline(self):
-        for mode in ('extract', 'connection', 'download', 'exit'):
+        for mode in ('extract', 'connection', 'download', 'exit', 'recovery'):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as scratch:
                 base = Path(scratch)
                 started = time.monotonic()

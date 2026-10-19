@@ -45,9 +45,11 @@ def check(roots):
     tools = {name: shutil.which(name) for name in ('uv', 'git', 'ffmpeg', 'ffprobe', 'pdftoppm')}
     protocol = ((script_dir.parent / 'references/stage-recovery-layout.md').is_file() or
                 (repository / 'docs/agents/stage-recovery-layout.md').is_file())
-    ready = sys.version_info >= (3, 12) and all(tools.values()) and protocol and all(
+    python_supported = sys.version_info[:2] == (3, 12)
+    ready = python_supported and all(tools.values()) and protocol and all(
         item['status'] == 'passed' for item in dependencies)
     return {'runtime_ready': ready, 'python': sys.version.split()[0],
+            'python_supported': python_supported, 'python_requirement': '3.12',
             'python_executable': sys.executable, 'tools': tools, 'dependencies': dependencies,
             'protocol_present': protocol, 'discovery': discoveries,
             'host_image_view': 'unverified', 'host_imagegen': 'unverified',

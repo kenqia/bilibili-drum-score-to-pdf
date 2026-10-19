@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/kenqia/bilibili-drum-score-to-pdf/actions/workflows/offline.yml"><img src="https://github.com/kenqia/bilibili-drum-score-to-pdf/actions/workflows/offline.yml/badge.svg" alt="离线验证状态"></a>
-  <img src="https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square" alt="Python 3.12 及以上">
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square" alt="Python 3.12">
   <img src="https://img.shields.io/badge/output-A4%20PDF-D5A45B?style=flat-square" alt="输出 A4 PDF">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-B9BDB4?style=flat-square" alt="代码使用 MIT 许可证"></a>
 </p>
@@ -86,7 +86,7 @@ https://github.com/kenqia/bilibili-drum-score-to-pdf
 并报告安装位置、源码版本和验证结果。
 ```
 
-对外 Skill 是自包含目录，执行所需协议随 `references/` 一起分发，运行时无需源码仓库的 `docs/`。依赖 Python 3.12+、uv、FFmpeg、ffprobe 和 Poppler；宿主需要实际查看原生图片及 PDF 页面。代码开源，宿主 AI 服务可能收费。
+对外 Skill 是自包含目录，执行所需协议随 `references/` 一起分发，运行时无需源码仓库的 `docs/`。依赖 Python 3.12、uv、FFmpeg、ffprobe 和 Poppler；宿主需要实际查看原生图片及 PDF 页面。代码开源，宿主 AI 服务可能收费。
 
 手动安装、受管理安装与回滚见[安装指南](docs/install.md)。不同宿主的发现位置和调用界面不同，其他宿主尚未完成整曲验收。
 
@@ -99,7 +99,7 @@ https://github.com/kenqia/bilibili-drum-score-to-pdf
 - 在安装目录中运行下面的帮助命令，退出成功并显示 `stage`、`export`、`review-pdf` 等操作；同时核对 FFmpeg、ffprobe、Poppler 与宿主看图能力。
 
 ```sh
-uv run --isolated --with-requirements scripts/requirements.txt \
+uv run --python 3.12 --isolated --with-requirements scripts/requirements.txt \
   python scripts/convert.py --help
 ```
 
@@ -113,7 +113,7 @@ uv run --isolated --with-requirements scripts/requirements.txt \
 在源码仓库根目录执行：
 
 ```sh
-uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
+uv run --python 3.12 --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
   python skills/bilibili-drum-score-to-pdf/scripts/convert.py \
   /absolute/path/to/video.mp4 --output /absolute/path/to/new-task
 ```
@@ -158,7 +158,7 @@ PDF 位于任务目录的 `exports/<revision>/<谱名>.pdf`。原视频保存在
 运行仓库验证：
 
 ```sh
-uv run --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
+uv run --python 3.12 --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
   --with mido==1.3.3 python -m unittest discover -s tests -v
 ```
 

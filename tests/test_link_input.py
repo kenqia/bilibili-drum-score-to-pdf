@@ -296,6 +296,8 @@ class LinkInputTests(unittest.TestCase):
                     if data.startswith(b'CONNECT '):
                         if not data.startswith(b'CONNECT 8.8.8.8:443 '):
                             raise AssertionError('proxy must not resolve origin again')
+                        if b'Host: 8.8.8.8:443\r\n' not in data:
+                            raise AssertionError('CONNECT Host must match its pinned target')
                     elif b'Proxy-Authorization' in data:
                         raise AssertionError('proxy credentials reached origin')
                 def close(self): pass
@@ -314,6 +316,45 @@ class LinkInputTests(unittest.TestCase):
                 code, result, logs = self.invoke(base / 'result', video, real_transport=True)
             self.assertEqual(code, 0, result)
             self.assertNotIn('DO_NOT_SAVE_TEST_SENTINEL', logs)
+
+    def test_pinned_connect_host_handles_ipv6_retry_and_restores_headers(self):
+        from anonymous_network import PublicHTTPSConnection
+        ipv4 = (socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))
+        ipv6 = (socket.AF_INET6, socket.SOCK_STREAM, 6, '', ('2606:4700:4700::1111', 443, 0, 0))
+        for addresses in ([ipv4], [ipv6], [ipv6, ipv4]):
+            with self.subTest(addresses=len(addresses), family=addresses[0][0]):
+                packets = []
+                closed = []
+                class WireSocket:
+                    def sendall(self, packet):
+                        packets.append(packet)
+                    def close(self):
+                        closed.append(self)
+                    def makefile(self, *args):
+                        refused = len(addresses) == 2 and len(packets) == 1
+                        return io.BytesIO(b'HTTP/1.1 403 Refused\r\n\r\n' if refused
+                                          else b'HTTP/1.1 200 Connected\r\n\r\n')
+                connection = PublicHTTPSConnection('proxy.example', 8888)
+                connection.set_tunnel('cdn.bilivideo.com', 443, {
+                    'hOsT': 'cdn.bilivideo.com:443', 'Proxy-Authorization': 'TEST_ONLY'})
+                original = dict(connection._tunnel_headers)
+                with patch('anonymous_network.public_addresses', return_value=addresses), patch.object(
+                    connection, '_create_connection', side_effect=lambda *a, **kw: WireSocket()), patch.object(
+                        connection._context, 'wrap_socket', side_effect=lambda sock, **kw: sock) as tls:
+                    connection.connect()
+                for packet, address in zip(packets, addresses):
+                    ip = address[4][0]
+                    authority = (f'[{ip}]' if ':' in ip else ip) + ':443'
+                    self.assertTrue(packet.startswith(f'CONNECT {authority} '.encode()))
+                    self.assertIn(f'Host: {authority}\r\n'.encode(), packet)
+                    self.assertNotIn(b'hOsT:', packet)
+                    self.assertIn(b'Proxy-Authorization: TEST_ONLY', packet)
+                self.assertEqual(len(packets), len(addresses))
+                self.assertEqual(len(closed), len(addresses) - 1)
+                self.assertEqual(connection._tunnel_headers, original)
+                self.assertEqual(connection._tunnel_host, 'cdn.bilivideo.com')
+                self.assertEqual(tls.call_args.kwargs['server_hostname'], 'cdn.bilivideo.com')
+                connection.close()
 
     def test_wrong_page_and_undecodable_video_stop_without_publication(self):
         with tempfile.TemporaryDirectory() as scratch:

@@ -9,12 +9,14 @@ description: 将 B站链接或本地视频中的白底多行鼓谱粗拼、清�
 
 正常流程先读 `references/stage-recovery-layout.md`，调用参数见 `references/reconstruction-entry.md`。来源异常或需人工导航时，再读 `references/reconstruction-workflow.md`、`references/reconstruction-local.md` 和 `references/reconstruction-navigation.md`。
 
-宿主发现或依赖检查运行 `scripts/host_check.py`；在隔离环境中使用 `uv run --quiet --isolated --with-requirements scripts/requirements.txt python scripts/host_check.py`。检查公开 Skill 入口、工具和依赖版本，宿主实际看图与生图能力另行确认。
+宿主发现或依赖检查运行 `scripts/host_check.py`；在隔离环境中使用 `uv run --python 3.12 --quiet --isolated --with-requirements scripts/requirements.txt python scripts/host_check.py`。检查公开 Skill 入口、工具和依赖版本，宿主实际看图与生图能力另行确认。
 
-需要 Python 3.12+、uv、ffmpeg、ffprobe、原生图片查看能力以及 PDF 页面渲染工具，项目使用 Poppler。依赖在隔离 uv 环境中运行，不读取 B站 Cookie、登录态或模型认证。
+需要 Python 3.12、uv、ffmpeg、ffprobe、原生图片查看能力以及 PDF 页面渲染工具，项目使用 Poppler。依赖在隔离 uv 环境中运行，不读取 B站 Cookie、登录态或模型认证。
+
+匿名下载遇到代理 CONNECT 403 或视频网页 HTTP 412 时，程序会在原期限内尝试一次公开 API 直连恢复，不修改宿主代理配置。恢复仍失败时读取脱敏诊断；不要自行加载 Cookie、改代理或重复编写下载补丁。具体边界见 `references/support.md`。
 
 ```sh
-uv run --isolated --with-requirements "/absolute/skill/scripts/requirements.txt" \
+uv run --python 3.12 --isolated --with-requirements "/absolute/skill/scripts/requirements.txt" \
   python "/absolute/skill/scripts/convert.py" \
   'https://www.bilibili.com/video/BV1rH4y1R7Rk' --output /absolute/path/to/new-task
 ```

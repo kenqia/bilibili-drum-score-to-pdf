@@ -1,6 +1,7 @@
 """HTTPS-only urllib transport; pin the validated origin IP at connect time."""
 import http.client
 import ipaddress
+import re
 import socket
 import ssl
 from urllib.parse import urlsplit
@@ -32,6 +33,7 @@ class PublicHTTPSConnection(http.client.HTTPSConnection):
         # Each attempt uses an already validated numeric IP. An unavailable
         # IPv6 route must not prevent trying a reachable public IPv4 address.
         tunnel_host = self._tunnel_host
+        tunnel_headers = self._tunnel_headers
         last_error = None
         for item in addresses:
             address = item[4][0]
@@ -39,6 +41,12 @@ class PublicHTTPSConnection(http.client.HTTPSConnection):
                 if tunnel_host:
                     self.sock = self._create_connection((self.host, self.port), self.timeout, self.source_address)
                     self._tunnel_host = address
+                    # Python 3.12+ generates Host in set_tunnel(), before we pin
+                    # the target. CONNECT and its Host must use the same authority.
+                    self._tunnel_headers = {key: value for key, value in tunnel_headers.items()
+                                            if key.lower() != 'host'}
+                    authority = f'[{address}]' if ':' in address else address
+                    self._tunnel_headers['Host'] = f'{authority}:{self._tunnel_port}'
                     self._tunnel()
                 else:
                     self.sock = self._create_connection((address, self.port), self.timeout, self.source_address)
@@ -51,6 +59,7 @@ class PublicHTTPSConnection(http.client.HTTPSConnection):
                     self.sock = None
             finally:
                 self._tunnel_host = tunnel_host
+                self._tunnel_headers = tunnel_headers
         raise last_error
 
 
@@ -73,15 +82,19 @@ class PublicRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class PublicTransport:
-    def __init__(self):
+    def __init__(self, *, direct=False):
         # ProxyHandler follows the environment without persisting or logging it.
-        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler(), PublicHTTPSHandler(context=ssl.create_default_context()), PublicRedirect())
+        proxy = urllib.request.ProxyHandler({}) if direct else urllib.request.ProxyHandler()
+        self.opener = urllib.request.build_opener(proxy, PublicHTTPSHandler(context=ssl.create_default_context()), PublicRedirect())
         self.http_status = None
+        self.proxy_connect_status = None
         self.failure = None
         self.stage = 'webpage'
         self.backend_error_type = None
 
     def open(self, url, headers=None, data=None):
+        self.proxy_connect_status = None
+        self.http_status = None
         parsed = urlsplit(url)
         self.stage = ('media' if parsed.hostname and 'bilivideo' in parsed.hostname
                       else 'playurl' if 'playurl' in parsed.path
@@ -93,7 +106,13 @@ class PublicTransport:
             clean['Accept-Encoding'] = 'identity'
             return self.opener.open(urllib.request.Request(url, data=data, headers=clean), timeout=20)
         except Exception as error:
-            self.backend_error_type = type(getattr(error, 'reason', error)).__name__
+            self.backend_error_type = (type(error).__name__ if isinstance(error, urllib.error.HTTPError)
+                                       else type(getattr(error, 'reason', error)).__name__)
+            reason = getattr(error, 'reason', error)
+            if not isinstance(error, urllib.error.HTTPError) and isinstance(reason, OSError):
+                match = re.match(r'^Tunnel connection failed: ([0-9]{3})(?:\s|$)', str(reason))
+                if match:
+                    self.proxy_connect_status = int(match[1])
             if isinstance(error, InputError):
                 self.failure = error
             raise
