@@ -787,13 +787,21 @@ def generation_materials(task):
     return rows
 
 
-def layout(task, margin=24, minimum_gap=6, target_pages=None):
+def layout(task, margin=24, minimum_gap=6, target_pages=None, page_breaks=None):
     record = load(task)
     if (type(margin) not in (int,float) or not math.isfinite(margin) or not 0 <= margin <= 144 or
             type(minimum_gap) not in (int,float) or not math.isfinite(minimum_gap) or not 0 <= minimum_gap <= 144 or
             (target_pages is not None and (type(target_pages) is not int or not 1 <= target_pages <= 512))):
         raise ReconstructionError('布局需要有限边距、行距及可选正整数页数目标。')
+    if page_breaks is not None:
+        if delivery_route(record) != 'original' or not record.get('longshot'):
+            raise ReconstructionError('连续分页切口只用于已生成长图的原图路线。', code='invalid_request', field='page_breaks')
+        from longshot import _continuous_pages
+        _continuous_pages(task, record, margin=margin, page_breaks=page_breaks)
     value = {'margin': margin, 'minimum_gap': minimum_gap, 'target_pages': target_pages}
+    if page_breaks is not None:
+        value['page_breaks'] = page_breaks
+        value['page_breaks_source_sha256'] = record['longshot']['image']['sha256']
     if value != record.get('layout'):
         invalidate_output(record, 'layout_revision')
         record['layout'] = value
@@ -847,7 +855,7 @@ def _preview_and_check(task, output, blocks, options):
         raise ReconstructionError('PDF 自动几何检查未通过。')
     return previews, {'producer':'program','status':'passed','issues':issues,'warnings':warnings,
         'scope':'placement geometry only; not music proofreading',
-        'ordered_source_regions':[b['source_region'] for b in blocks]}
+        'ordered_source_regions':[i for b in blocks for i in b.get('source_regions', [b.get('source_region')])]}
 
 
 def finalize_output(task, output, blocks, options, record):
@@ -858,6 +866,11 @@ def finalize_output(task, output, blocks, options, record):
             NOTICE if 'imagegen' in output.get('routes', []) else VECTOR_NOTICE)
         output.update(notice=notice, reliable=False)
     output['previews'], output['checks'] = _preview_and_check(task, output, blocks, options)
+    if output.get('render_route') == 'original':
+        output['checks']['scope'] = 'continuous page geometry only; not notation ownership or music proofreading'
+        output['continuous_layout_version'] = 1
+        output['checks']['warnings'].append({'code': 'page_cuts_need_visual_review',
+            'cuts': [strip['bbox'][3] for strip in output['page_strips'][:-1]]})
     target = options.get('target_pages')
     count = output['page_count']
     output['layout_version'] = 2
@@ -874,6 +887,14 @@ def require_output_previews(task, output, record):
         source = record.get('watermark_cleanup', {}).get('image', record.get('longshot', {}).get('image', {}))
         if not source.get('sha256') or output.get('print_source_sha256') != source['sha256']:
             raise ReconstructionError('直排终稿材料已改变，需要重新导出。')
+        strips = output.get('page_strips', [])
+        if (output.get('continuous_layout_version') != 1 or len(strips) != output['page_count'] or
+                [s.get('page') for s in strips] != list(range(1, output['page_count'] + 1)) or
+                not strips or strips[0]['bbox'][1] != 0 or strips[-1]['bbox'][3] != source['height'] or
+                any(s['bbox'][0] != 0 or s['bbox'][2] != source['width'] or s['bbox'][1] >= s['bbox'][3] for s in strips) or
+                any(a['bbox'][3] != b['bbox'][1] for a, b in zip(strips, strips[1:])) or
+                [i for s in strips for i in s.get('source_regions', [])] != list(range(len(record['regions'])))):
+            raise ReconstructionError('原图终稿缺少连续分页证据；重新导出并查看全部页面与切口。')
     if (not output or not output.get('output_revision') or
             output['output_revision'] != Path(output['pdf']).parent.name or
             output.get('freeze_id') != record.get('freeze', {}).get('id') or

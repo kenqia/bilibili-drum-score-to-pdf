@@ -25,6 +25,7 @@ SOURCE_RECOVERY_ENTRIES = ('cli', 'workflow')
 LONGSHOT_ENTRIES = ('cli', 'workflow')
 DIRECT_EXPORT_ENTRIES = ('cli', 'workflow')
 PRINT_MUTATION_ENTRIES = ('cli', 'workflow', 'module')
+LAYOUT_ENTRIES = ('cli', 'workflow', 'task')
 
 
 class PublicContracts(unittest.TestCase):
@@ -354,6 +355,35 @@ class PublicContracts(unittest.TestCase):
         self.cli('layout', {'margin': 32, 'minimum_gap': 40})
         self.check_exports_and_reviews(EXPORT_ENTRIES)
 
+    def test_continuous_layout_entries_refuse_invalid_cuts_without_revoking_output(self):
+        score_workflow.prepare(self.video, self.task)
+        score_workflow.stitch(self.task)
+        score_workflow.review_longshot(self.task, 'Seam fixture', 'Controlled source review.')
+        score_workflow.stage(self.task)
+        record = score_task.load(self.task)
+        height = record['longshot']['image']['height']
+        ink = round(record['regions'][0]['bbox'][1] + record['regions'][0]['staff_top'])
+        baseline = (self.task / 'record.json').read_bytes()
+        for entry in LAYOUT_ENTRIES:
+            for cuts in ([True], [0], [height], [height + 1], [1.5], [ink],
+                         [1, 1], [height - 1, 1], 'bad'):
+                with self.subTest(entry=entry, cuts=cuts), self.assertRaises(score_task.ReconstructionError):
+                    if entry == 'cli':
+                        self.cli('layout', {'page_breaks': cuts})
+                    else:
+                        owner = score_workflow if entry == 'workflow' else score_task
+                        owner.layout(self.task, page_breaks=cuts)
+                self.assertEqual((self.task / 'record.json').read_bytes(), baseline)
+            if entry == 'cli':
+                self.cli('layout', {'page_breaks': []})
+            else:
+                owner = score_workflow if entry == 'workflow' else score_task
+                owner.layout(self.task, page_breaks=[])
+            output = score_workflow.stage(self.task)['artifacts']['output']
+            self.assertEqual(output['page_count'], 1)
+            self.assertEqual(output['page_strips'][0]['bbox'][3], height)
+            score_task.save(self.task, record)
+
     def test_direct_exports_share_layout_and_current_page_review_contracts(self):
         score_workflow.prepare(self.video, self.task)
         score_workflow.stitch(self.task)
@@ -381,8 +411,10 @@ class PublicContracts(unittest.TestCase):
             valid = {'pages': list(range(1, fresh['page_count'] + 1)),
                 'notes': 'Controlled offline page review.', 'output_revision': fresh['output_revision']}
             for review_entry in REVIEW_ENTRIES:
-                for fault in ('omitted', 'old', 'hash', 'missing-page', 'missing-previews',
-                              'missing-checks', 'corrupt-preview'):
+                faults = ['omitted', 'old', 'hash', 'missing-page', 'missing-previews', 'missing-checks', 'corrupt-preview']
+                if score_task.delivery_route(pristine) == 'original':
+                    faults.extend(['missing-strips', 'strip-gap', 'strip-duplicate'])
+                for fault in faults:
                     with self.subTest(export=export_entry, review=review_entry, fault=fault):
                         record, payload = copy.deepcopy(pristine), dict(valid)
                         if fault == 'omitted':
@@ -393,6 +425,12 @@ class PublicContracts(unittest.TestCase):
                             payload['pages'] = []
                         elif fault in ('missing-previews', 'missing-checks'):
                             record['output'].pop(fault.removeprefix('missing-'))
+                        elif fault == 'missing-strips':
+                            record['output'].pop('page_strips')
+                        elif fault == 'strip-gap':
+                            record['output']['page_strips'][0]['bbox'][1] = 1
+                        elif fault == 'strip-duplicate':
+                            record['output']['page_strips'][0]['source_regions'].append(0)
                         else:
                             record['output']['previews'][0]['sha256'] = '0' * 64
                         score_task.save(self.task, record)

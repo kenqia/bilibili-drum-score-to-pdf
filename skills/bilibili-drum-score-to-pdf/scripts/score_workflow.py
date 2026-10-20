@@ -189,18 +189,13 @@ def _render_pdf(task, record):
     pages = record['redraw_pages']
     blocks, vectors, routes = [], [], []
     route = score_task.delivery_route(record)
-    if route in ('original', 'vector'):
+    if route == 'vector':
         routes = [route]
         for index, original in enumerate(record['regions']):
-            if route == 'original':
-                image = record.get('watermark_cleanup', {}).get('image', record['longshot']['image'])
-                blocks.append({**original, 'source_region': index, 'image': image, 'crop_bbox': original['bbox']})
-                vectors.append(None)
-            else:
-                blocks.append({**original, 'source_region': index})
-                vectors.append(local.trace_region(task, original))
+            blocks.append({**original, 'source_region': index})
+            vectors.append(local.trace_region(task, original))
         pages = []
-    for page in pages:
+    for page in (pages if route == 'redraw' else []):
         routes.append('imagegen' if page['status'] == 'accepted' else 'vector')
         for offset, index in enumerate(page['regions']):
             original = record['regions'][index]
@@ -212,7 +207,17 @@ def _render_pdf(task, record):
                 blocks.append({**original, 'source_region': index})
                 vectors.append(local.trace_region(task, original))
     layout_options = record.get('layout', {})
-    placements, count = local.paginate(blocks, margin=layout_options.get('margin',24), minimum_gap=layout_options.get('minimum_gap',6))
+    if route == 'original':
+        from longshot import _continuous_pages
+        if ('page_breaks' in layout_options and
+                layout_options.get('page_breaks_source_sha256') != record['longshot']['image']['sha256']):
+            raise ReconstructionError('分页切口属于旧长图；重新查看并调用layout。', action='layout')
+        blocks, placements = _continuous_pages(task, record, margin=layout_options.get('margin', 24),
+                                              page_breaks=layout_options.get('page_breaks'))
+        vectors, routes = [None] * len(blocks), [route]
+        count = len(blocks)
+    else:
+        placements, count = local.paginate(blocks, margin=layout_options.get('margin',24), minimum_gap=layout_options.get('minimum_gap',6))
     if (Path(task) / 'exports').is_symlink():
         raise ReconstructionError('导出目录不能指向任务外。')
     revision = score_task.write_path(task, Path('exports') / uuid.uuid4().hex)
@@ -247,9 +252,11 @@ def _render_pdf(task, record):
     manifest.write_text(json.dumps({'blocks': blocks, 'vectors': vectors, 'inputs': [r['sha256'] for r in record['regions']],
         'source_review':record.get('source_review'), 'program_checks':record.get('program_checks'), 'layout':layout_options,
         'render_route': route, 'watermark_cleanup': record.get('watermark_cleanup') if route == 'original' else None}))
-    output = {'pdf': str(pdf.relative_to(task)), 'sha256': score_task.digest(pdf), 'page_count': count, 'placements': placements, 'routes': routes, 'render_route': route, 'method': 'original_rows' if route == 'original' else 'reviewed_host_images_and_vector_fallback', 'layout_version': 2, 'status': 'needs_pdf_review', 'vector': {'path': str(manifest.relative_to(task)), 'sha256': score_task.digest(manifest)}}
+    output = {'pdf': str(pdf.relative_to(task)), 'sha256': score_task.digest(pdf), 'page_count': count, 'placements': placements, 'routes': routes, 'render_route': route, 'method': 'original_continuous_pages' if route == 'original' else 'reviewed_host_images_and_vector_fallback', 'layout_version': 2, 'status': 'needs_pdf_review', 'vector': {'path': str(manifest.relative_to(task)), 'sha256': score_task.digest(manifest)}}
     if route == 'original':
         output['print_source_sha256'] = blocks[0]['image']['sha256']
+        output['page_strips'] = [{'page': i + 1, 'bbox': b['crop_bbox'], 'source_regions': b['source_regions']}
+                                 for i, b in enumerate(blocks)]
     return score_task.finalize_output(task, output, blocks, layout_options, record)
 
 
@@ -302,7 +309,7 @@ def stage(task):
             'artifacts':{**artifacts,'output':output},'checks':output.get('checks',{}),'unresolved':[],
             'next':None if output['status']=='reviewed' else {'operation':'review-pdf',
                 'pages':list(range(1,output['page_count']+1)),'output_revision':output['output_revision'],
-                'instruction':'实际查看全部有序预览并记录标题、顺序、首尾和关键记号。'}}
+                'instruction':('实际查看全部有序预览及每个分页切口两侧，核对渐强、圆圈、重音等与所属谱行的关系；有疑问用layout(page_breaks)整组移到同页，再重新导出。' if route == 'original' else '实际查看全部有序预览并记录标题、顺序、首尾和关键记号。')}}
     export(task)
     return stage(task)
 

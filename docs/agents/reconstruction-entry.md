@@ -24,7 +24,7 @@ uv run --python 3.12 --quiet --isolated --with-requirements skills/bilibili-drum
 | capture | seconds | 局部补采真实原帧，保存实际 PTS/time_base/hash |
 | repair-longshot | capture、bbox、target_bbox、source_sha256、notes | 从真实帧等尺寸替换长图局部，重新整体审阅 |
 | pdf-route | route、notes | 明确请求后选择 original、redraw 或 vector |
-| layout | 可选 margin、minimum_gap、target_pages | 等比整行 A4 重排，复用当前材料 |
+| layout | 可选 margin、minimum_gap、target_pages、page_breaks | 原图连续分页，切口绑定长图hash，复用当前材料 |
 
 正常任务无需 present、assemble 或逐行选框。新任务记录 pdf_route=original，长图通过整体审阅后，stage 直接导出原图 PDF，不预留生图请求。rectangles 使用长图整数坐标，source_sha256 绑定当前 longshot.image.sha256，去水印需要实际确认区域不含记谱、标题和署名。修复用帧内 bbox 和长图 target_bbox，两个矩形必须同尺寸；source_sha256 同样绑定当前长图。
 
@@ -86,3 +86,7 @@ uv run --python 3.12 --quiet --isolated --with-requirements skills/bilibili-drum
 `--summary` 返回阶段、状态和完整回执的 `details.path`，路径相对任务目录。读取该文件取得全部 handoff 和请求；摘要不能替代实际看图。
 
 任务以 `record.json` 为准，原视频保存在获取回执指定的独立来源目录。已有同名文件和历史版本保留。旧扫描任务继续使用备份旧版，不将程序扫描结果自动当作新版来源批准。
+
+## 连续原图分页
+
+layout可选page_breaks为原长图中的递增整数纵坐标列表，不含首尾。省略恢复自动分页，空列表请求一页。程序检查墨迹、五线与页高，实际记号归属仍需看图。切口绑定长图hash；来源变化后重新设置。minimum_gap只影响重绘/矢量。字段与恢复见[阶段指南](stage-recovery-layout.md)。

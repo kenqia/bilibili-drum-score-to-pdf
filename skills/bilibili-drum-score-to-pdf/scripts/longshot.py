@@ -104,6 +104,60 @@ def system_boxes(image):
             for top, bottom, staff in zip(splits, splits[1:], groups)]
 
 
+def _continuous_pages(task, record, margin=24, page_breaks=None):
+    """Keep page interiors continuous; blank cuts remain visual candidates."""
+    from reportlab.lib.pagesizes import A4
+    from reconstruction import paginate
+    source = record.get('watermark_cleanup', {}).get('image', record['longshot']['image'])
+    regions = record['regions']
+    width, height = source['width'], source['height']
+    scale = (A4[0] - 2 * margin) / width
+    capacity = (A4[1] - 2 * margin) / scale
+    if page_breaks is None:
+        # Reuse complete-unit balancing, then discard its artificial row gaps.
+        placements, _ = paginate(regions, margin=margin, minimum_gap=0)
+        page_breaks = [regions[a['region']]['bbox'][3] for a, b in zip(placements, placements[1:])
+                       if a['page'] != b['page']]
+    if (not isinstance(page_breaks, list) or len(page_breaks) > 511 or
+            any(type(y) is not int or not 0 < y < height for y in page_breaks) or
+            page_breaks != sorted(set(page_breaks))):
+        raise ReconstructionError('分页切口需要按顺序、不重复的长图整数纵坐标。',
+                                  code='invalid_request', field='page_breaks')
+    bounds = [0, *page_breaks, height]
+    if any(bottom - top > capacity + .00001 for top, bottom in zip(bounds, bounds[1:])):
+        raise ReconstructionError('连续谱面超出可打印高度；增加安全切口或调整边距。',
+                                  code='invalid_request', field='page_breaks', action='layout')
+    with Image.open(score_task.artifact(task, source)) as image:
+        gray = np.asarray(image.convert('L'))
+        for cut in page_breaks:
+            # A geometric guard, not a claim about which staff owns a mark.
+            if np.any(gray[max(0, cut - 1):min(height, cut + 2)] < 165):
+                raise ReconstructionError('分页切口穿过可见记号；移到空隙并实际查看两侧。',
+                                          code='invalid_request', field='page_breaks')
+    strips, placements = [], []
+    for index, (top, bottom) in enumerate(zip(bounds, bounds[1:])):
+        # Navigation crops are not semantic ownership boundaries. Assign them
+        # by their staff anchor while pixel coverage is checked independently.
+        indices = [i for i, row in enumerate(regions)
+                   if top <= row['bbox'][1] + row.get('staff_top', 0) < bottom]
+        for i in indices:
+            row = regions[i]
+            for staff in row.get('staves', [{'top': row.get('staff_top', 0), 'spacing': row.get('staff_spacing', 0)}]):
+                y = row['bbox'][1] + staff['top']
+                if not top <= y or y + 4 * staff['spacing'] >= bottom:
+                    raise ReconstructionError('分页切口不能拆开五线组或连续行组。',
+                                              code='invalid_request', field='page_breaks')
+        if not indices:
+            raise ReconstructionError('分页不能产生没有谱行的空白页。', code='invalid_request', field='page_breaks')
+        box = [0, top, width, bottom]
+        strips.append({'kind': 'continuous_page', 'width': width, 'height': bottom - top,
+                       'image': source, 'crop_bbox': box, 'source_regions': indices})
+        placements.append({'page': index + 1, 'region': index, 'scale': scale,
+                           'bbox': [margin, A4[1] - margin - (bottom - top) * scale,
+                                    A4[0] - margin, A4[1] - margin]})
+    return strips, placements
+
+
 def redraw_boxes(image, originals):
     """Keep input groups when removing a marker opens a gap between staffs."""
     rows = system_boxes(image)

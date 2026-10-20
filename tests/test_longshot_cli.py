@@ -117,6 +117,15 @@ class LongshotCLI(unittest.TestCase):
         self.assertEqual(output['checks']['ordered_source_regions'], list(range(7)))
         self.assertEqual(output['page_count'], 2)
         self.assertEqual(len({p['scale'] for p in output['placements']}), 1)
+        self.assertEqual(output['method'], 'original_continuous_pages')
+        # One continuous strip per page: detached marks retain their distance
+        # to every staff, even where the navigation row cuts assign them wrong.
+        self.assertEqual(len(output['placements']), output['page_count'])
+        boxes = output['page_strips']
+        self.assertEqual(boxes[0]['bbox'][1], 0)
+        self.assertEqual(boxes[-1]['bbox'][3], first['image']['height'])
+        self.assertTrue(all(a['bbox'][3] == b['bbox'][1] for a, b in zip(boxes, boxes[1:])))
+        self.assertEqual(output['checks']['scope'], 'continuous page geometry only; not notation ownership or music proofreading')
         self.assertNotIn('推测', output['notice'])
         record = self.call('resume')
         self.assertEqual(record['redraw_pages'], [])
@@ -133,6 +142,67 @@ class LongshotCLI(unittest.TestCase):
         self.call('review-pdf', pages=result['next']['pages'], output_revision=output['output_revision'],
                   notes='Controlled full page review.')
         self.assertEqual(self.call('stage')['phase'], 'complete')
+
+    def test_rendered_continuous_page_preserves_gray_background_and_detached_marks(self):
+        # Deliberately separated circles/hairpin sit far above the next staff.
+        # A row-cut based layout can retain their pixels but change the relation.
+        sheet = self.sheet.point(lambda value: min(value, 249))
+        draw = ImageDraw.Draw(sheet)
+        draw.ellipse((380, 400, 390, 410), outline='black', width=2)
+        draw.line((360, 440, 500, 430), fill='black', width=2)
+        draw.line((360, 440, 500, 450), fill='black', width=2)
+        self.video = video_from_image(sheet, self.root, 'detached')
+        self.call('prepare')
+        source = self.call('stage')['artifacts']['longshot']['image']
+        self.call('review-longshot', title='Detached marks', notes='Controlled source, not musical acceptance.')
+        self.call('layout', page_breaks=[620])
+        output = self.call('stage')['artifacts']['output']
+        prefix = self.root / 'raster'
+        subprocess.run(['pdftoppm', '-f', '1', '-l', '1', '-r', '144', '-png', '-singlefile',
+                        str(self.task / output['pdf']), str(prefix)], check=True, capture_output=True)
+        scale = output['placements'][0]['scale'] * 2
+        with Image.open(prefix.with_suffix('.png')) as page, Image.open(self.task / source['path']) as native:
+            # Sample blank source pixels through the entire page. A white row
+            # gap would fail, even though extracted PDF image bytes still match.
+            for y in range(20, 610, 10):
+                x = round(48 + 5 * scale)
+                py = round(48 + y * scale)
+                self.assertLess(max(page.convert('RGB').getpixel((x, py))), 253, y)
+            # Assert marks and their target staff keep the original distances
+            # by checking darkness around independently known source locations.
+            for x, y in [(380, 405), (450, 434), (450, 446), (450, 500)]:
+                px, py = round(48 + x * scale), round(48 + y * scale)
+                patch = page.convert('L').crop((px-3, py-3, px+4, py+4))
+                self.assertLess(patch.getextrema()[0], 120, (x, y))
+            self.assertEqual(native.size, sheet.size)
+        sheet.close()
+
+    def test_explicit_page_breaks_change_only_pages_and_legacy_output_is_upgraded(self):
+        self.call('prepare')
+        source = self.call('stage')['artifacts']['longshot']['image']
+        self.call('review-longshot', title='Continuous source', notes='Controlled source review.')
+        first = self.call('stage')['artifacts']['output']
+        self.call('review-pdf', pages=list(range(1, first['page_count'] + 1)),
+                  output_revision=first['output_revision'], notes='Controlled candidate seam view.')
+        self.call('layout', margin=24, minimum_gap=100, page_breaks=[620])
+        fresh = self.call('stage')['artifacts']['output']
+        self.assertEqual([s['bbox'] for s in fresh['page_strips']], [[0, 0, 640, 620], [0, 620, 640, 1420]])
+        self.assertEqual(first['print_source_sha256'], fresh['print_source_sha256'])
+        self.assertTrue((self.task / first['pdf']).is_file())
+        self.assertEqual(fresh['status'], 'needs_pdf_review')
+        self.assertEqual(fresh['layout_options']['minimum_gap'], 100)
+        self.assertEqual(self.call('resume')['redraw_pages'], [])
+        # Old approved row-layout PDFs must not be silently reused by stage.
+        path = self.task / 'record.json'
+        record = json.loads(path.read_text())
+        record['output'].pop('continuous_layout_version')
+        record['output']['method'] = 'original_rows'
+        path.write_text(json.dumps(record))
+        upgraded = self.call('stage')['artifacts']['output']
+        self.assertNotEqual(fresh['output_revision'], upgraded['output_revision'])
+        self.assertEqual(upgraded['method'], 'original_continuous_pages')
+        self.assertEqual(upgraded['print_source_sha256'], source['sha256'])
+        self.assertTrue((self.task / fresh['pdf']).is_file())
 
     def test_explicit_vector_route_and_return_to_original_preserve_prior_outputs(self):
         self.call('prepare')
@@ -187,6 +257,7 @@ class LongshotCLI(unittest.TestCase):
         self.call('prepare')
         first = self.call('stage')['artifacts']['longshot']['image']
         self.call('review-longshot', title='Source repair', notes='Controlled source with a local obstruction.')
+        self.call('layout', page_breaks=[620])
         old = self.call('stage')['artifacts']['output']
         shot = self.call('capture', seconds=0)
         result = self.call('repair-longshot', capture=shot['id'], bbox=[560, 30, 583, 43],
@@ -202,6 +273,11 @@ class LongshotCLI(unittest.TestCase):
         self.assertNotIn('output', self.call('resume'))
         self.assertEqual(self.call('stage')['phase'], 'longshot_review')
         self.call('review-longshot', title='Source repair', notes='Controlled recheck after replacement.')
+        refused = subprocess.run([sys.executable, str(CLI), '--operation', 'stage', '--task', str(self.task)],
+                                 capture_output=True, text=True)
+        self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
+        self.assertEqual(json.loads(refused.stdout)['error']['action'], 'layout')
+        self.call('layout')
         self.assertEqual(self.call('stage')['phase'], 'pdf_review')
 
     def test_generation_resumes_one_call_and_auto_cuts_accepted_image_after_one_correction(self):
