@@ -56,7 +56,7 @@ def prepare(source, task, acquisition_timeout=ACQUISITION_SECONDS):
         record['origin'] = origin
     from agent_source_review import CONTRACT
     import host_check
-    record.update(probes=[], redraw_pages=[], agent_review_contract=CONTRACT,
+    record.update(probes=[], redraw_pages=[], agent_review_contract=CONTRACT, workflow='longshot/1',
                   environment=host_check.check([]))
     record['metrics'].update(navigation_probes=0, native_retained=0, presented_images=0)
     score_task.save(task, record)
@@ -243,6 +243,13 @@ from score_task import layout
 def stage(task):
     """Advance to the next source, host-generation or final-page review."""
     record = load(task)
+    if record.get('workflow') == 'longshot/1':
+        import longshot
+        if not record.get('longshot') and not record['regions'] and not record['captures']:
+            longshot.stitch(task)
+            record = load(task)
+        if longshot.is_longshot(record) and not (record['longshot'].get('review') or {}).get('accepted'):
+            return longshot.handoff(record)
     artifacts = {}
     try:
         score_task.require_frozen(record)

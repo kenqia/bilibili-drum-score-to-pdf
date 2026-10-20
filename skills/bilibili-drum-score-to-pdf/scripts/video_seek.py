@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import threading
 import time
 from PIL import Image
 
@@ -57,6 +58,69 @@ class VideoReader:
 
     def close(self):
         self.scratch.cleanup()
+
+    def sample_records(self, interval, consume):
+        """Stream native RGB samples and return actual source PTS, without caching video frames."""
+        if not math.isfinite(interval) or interval <= 0 or self.metadata['duration'] / interval > 4096:
+            raise ConversionError('invalid_request', '采样间隔无效或采样数量超出资源限制。')
+        width, height = self.metadata['width'], self.metadata['height']
+        if not 1 <= width * height <= 20_000_000:
+            raise ConversionError('resource_limit', '视频画面超出解码资源限制。')
+        budget = min(60, 600 - self.metrics['decode_elapsed'])
+        if budget <= 0:
+            raise ConversionError('decode_failed', '视频解码期限已耗尽。')
+        command = ['ffmpeg', '-v', 'info', '-nostdin', '-copyts', '-threads', '2',
+                   '-i', str(self.source), '-vf',
+                   f"select='isnan(prev_selected_t)+gte(t-prev_selected_t,{interval:.9f})',showinfo",
+                   '-an', *frame_sync_args(), '-threads', '1', '-pix_fmt', 'rgb24',
+                   '-f', 'rawvideo', 'pipe:1']
+        began = time.monotonic()
+        self.metrics['seek_count'] += 1
+        count = 0
+        try:
+            with tempfile.TemporaryFile() as diagnostic:
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=diagnostic)
+                timer = threading.Timer(budget, process.kill)
+                timer.daemon = True
+                timer.start()
+                try:
+                    size = width * height * 3
+                    while True:
+                        data = bytearray()
+                        while len(data) < size:
+                            chunk = process.stdout.read(size - len(data))
+                            if not chunk:
+                                break
+                            data.extend(chunk)
+                        if not data:
+                            break
+                        if len(data) != size or count >= 4097:
+                            raise ValueError('incomplete or excessive frame stream')
+                        with Image.frombytes('RGB', (width, height), bytes(data)) as image:
+                            consume(count, image)
+                        count += 1
+                    if process.wait() != 0:
+                        raise ValueError('decoder failed or exceeded deadline')
+                finally:
+                    timer.cancel()
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait()
+                    process.stdout.close()
+                diagnostic.seek(0)
+                text = diagnostic.read().decode(errors='replace')
+            base = re.search(r'config in time_base:\s*(\d+)/(\d+)', text)
+            pts = [int(v) for v in re.findall(r'\bpts:\s*(-?\d+)', text)]
+            if not base or int(base[2]) == 0 or len(pts) != count or not pts:
+                raise ValueError('missing timestamps')
+            time_base = [int(base[1]), int(base[2])]
+            self.metrics['decoded_reported_frames'] += count
+            return [{'pts': value, 'time_base': time_base,
+                     'timestamp': value * time_base[0] / time_base[1]} for value in pts]
+        except (subprocess.SubprocessError, ValueError, OSError):
+            raise ConversionError('decode_failed', '连续采样解码失败或超时；未发布长截图。') from None
+        finally:
+            self.metrics['decode_elapsed'] += time.monotonic() - began
 
     def read(self, timestamp=None):
         record, image = self.read_record(timestamp)
