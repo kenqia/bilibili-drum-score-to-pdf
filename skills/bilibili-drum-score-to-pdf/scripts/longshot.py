@@ -104,6 +104,52 @@ def system_boxes(image):
             for top, bottom, staff in zip(splits, splits[1:], groups)]
 
 
+def _compact_breaks(regions, gray, scale, capacity, baseline):
+    """Reduce page count within 10%, keeping at least four PDF points per space.
+
+    Only existing blank system boundaries are candidates. Greedy feasibility
+    plus integer bisection minimizes the tallest strip at the reduced count.
+    These geometric candidates still require visual notation-ownership review.
+    """
+    spacings = [staff['spacing'] for row in regions
+                for staff in row.get('staves', [{'spacing': row.get('staff_spacing', 0)}])]
+    if not spacings or min(spacings) <= 0 or not baseline:
+        return baseline, scale
+    lower_scale = max(scale * .9, 4 / min(spacings))
+    if lower_scale >= scale:
+        return baseline, scale
+    ends = [row['bbox'][3] for row in regions[:-1]
+            if not np.any(gray[row['bbox'][3] - 1:row['bbox'][3] + 2] < 165)]
+    ends.append(len(gray))
+
+    def split(limit):
+        cuts, top, previous = [], 0, 0
+        for end in ends:
+            if end - top > limit:
+                if previous == top or end - previous > limit:
+                    return None
+                cuts.append(previous)
+                top = previous
+            previous = end
+        return cuts
+
+    upper = math.floor(capacity * scale / lower_scale + 1e-8)
+    cuts = split(upper)
+    if cuts is None or len(cuts) >= len(baseline):
+        return baseline, scale
+    target = len(cuts)
+    low = math.ceil(len(gray) / (target + 1))
+    while low < upper:
+        middle = (low + upper) // 2
+        candidate = split(middle)
+        if candidate is not None and len(candidate) <= target:
+            upper = middle
+        else:
+            low = middle + 1
+    cuts = split(upper)
+    return cuts, min(scale, capacity * scale / upper)
+
+
 def _continuous_pages(task, record, margin=24, page_breaks=None):
     """Keep page interiors continuous; blank cuts remain visual candidates."""
     from reportlab.lib.pagesizes import A4
@@ -111,9 +157,10 @@ def _continuous_pages(task, record, margin=24, page_breaks=None):
     source = record.get('watermark_cleanup', {}).get('image', record['longshot']['image'])
     regions = record['regions']
     width, height = source['width'], source['height']
-    scale = (A4[0] - 2 * margin) / width
+    scale = base_scale = (A4[0] - 2 * margin) / width
     capacity = (A4[1] - 2 * margin) / scale
-    if page_breaks is None:
+    automatic = page_breaks is None
+    if automatic:
         # Reuse complete-unit balancing, then discard its artificial row gaps.
         placements, _ = paginate(regions, margin=margin, minimum_gap=0)
         page_breaks = [regions[a['region']]['bbox'][3] for a, b in zip(placements, placements[1:])
@@ -123,17 +170,20 @@ def _continuous_pages(task, record, margin=24, page_breaks=None):
             page_breaks != sorted(set(page_breaks))):
         raise ReconstructionError('分页切口需要按顺序、不重复的长图整数纵坐标。',
                                   code='invalid_request', field='page_breaks')
-    bounds = [0, *page_breaks, height]
-    if any(bottom - top > capacity + .00001 for top, bottom in zip(bounds, bounds[1:])):
-        raise ReconstructionError('连续谱面超出可打印高度；增加安全切口或调整边距。',
-                                  code='invalid_request', field='page_breaks', action='layout')
     with Image.open(score_task.artifact(task, source)) as image:
         gray = np.asarray(image.convert('L'))
+        if automatic:
+            page_breaks, scale = _compact_breaks(regions, gray, scale, capacity, page_breaks)
         for cut in page_breaks:
             # A geometric guard, not a claim about which staff owns a mark.
             if np.any(gray[max(0, cut - 1):min(height, cut + 2)] < 165):
                 raise ReconstructionError('分页切口穿过可见记号；移到空隙并实际查看两侧。',
                                           code='invalid_request', field='page_breaks')
+    bounds = [0, *page_breaks, height]
+    capacity = (A4[1] - 2 * margin) / scale
+    if any(bottom - top > capacity + .00001 for top, bottom in zip(bounds, bounds[1:])):
+        raise ReconstructionError('连续谱面超出可打印高度；增加安全切口或调整边距。',
+                                  code='invalid_request', field='page_breaks', action='layout')
     strips, placements = [], []
     for index, (top, bottom) in enumerate(zip(bounds, bounds[1:])):
         # Navigation crops are not semantic ownership boundaries. Assign them
@@ -152,9 +202,10 @@ def _continuous_pages(task, record, margin=24, page_breaks=None):
         box = [0, top, width, bottom]
         strips.append({'kind': 'continuous_page', 'width': width, 'height': bottom - top,
                        'image': source, 'crop_bbox': box, 'source_regions': indices})
+        left = margin if scale == base_scale else (A4[0] - width * scale) / 2
         placements.append({'page': index + 1, 'region': index, 'scale': scale,
-                           'bbox': [margin, A4[1] - margin - (bottom - top) * scale,
-                                    A4[0] - margin, A4[1] - margin]})
+                           'bbox': [left, A4[1] - margin - (bottom - top) * scale,
+                                    left + width * scale, A4[1] - margin]})
     return strips, placements
 
 

@@ -20,8 +20,8 @@ uv run --python 3.12 --quiet --isolated --with-requirements "<skill-root>/script
 
 1. 准备后调用 `stage`，程序生成长截图和完整谱行切分。查看长图及原生首尾，检查明显漏行、重复和裁断，用 `review-longshot(title, notes)` 记录一次整体审阅。轻微模糊、底色、水印和播放标记可保留，不逐符号校对或逐行填写来源。
 2. 如需去水印，只对实际确认没有音符、五线、标题或署名的区域调用 `clean-watermark`，提交当前长图 hash、矩形及安全确认。无法确认安全或水印与谱面重叠时保留。查看清理结果，原长图保持独立保存。
-3. 再调用 `stage`，直接取得 A4 PDF 和全部有序预览。每页一块连续条带，统一比例并保持页内原行距，不逐行插入白色间隔。允许留白或增加页数以保留记号与谱行的关系。
-4. 实际查看全部页面，核对谱名、首尾、明显漏行或重复、裁断和打印观感，特别查看每个分页切口两侧的渐强、圆圈及重音。有疑问时通过`layout(page_breaks)`把相关行留在同页，再导出并重看全部页面。以当前 `output_revision` 调用 `review-pdf`。`stage.phase=complete` 后交付，使用实际输出的 `notice`，说明未经逐符号校对。
+3. 再调用 `stage`，直接取得 A4 PDF 和全部有序预览。每页一块连续条带，统一比例并保持页内原行距。自动试算最多缩小 10% 的紧凑分页，仅在能减少页数且满足几何与字号门槛时采用；否则保留原尺寸。具体门槛见阶段指南。
+4. 实际查看全部页面，核对谱名、首尾、明显漏行或重复、裁断及打印字号，特别查看每个分页切口两侧的渐强、圆圈及重音。紧凑版需确认稍小的音符仍可读。有疑问时通过 `layout(page_breaks)` 按原尺寸把相关行留在同页，再导出并重看全部页面。以当前 `output_revision` 调用 `review-pdf`。`stage.phase=complete` 后交付，使用实际输出的 `notice`，说明未经逐符号校对。
 
 明显漏行或重复先用 `stitch` 修复拼接；严重遮挡优先 `capture` 查找原视频清楚画面，再用 `repair-longshot` 等尺寸替换局部，重新整体查看。仍无法恢复时说明限制，不猜隐藏符号，也不把已知缺段称为完整谱。恢复与清理字段读取 [stage-recovery-layout.md](references/stage-recovery-layout.md) 和 [reconstruction-entry.md](references/reconstruction-entry.md)。
 

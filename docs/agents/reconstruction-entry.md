@@ -89,4 +89,4 @@ uv run --python 3.12 --quiet --isolated --with-requirements skills/bilibili-drum
 
 ## 连续原图分页
 
-layout可选page_breaks为原长图中的递增整数纵坐标列表，不含首尾。省略恢复自动分页，空列表请求一页。程序检查墨迹、五线与页高，实际记号归属仍需看图。切口绑定长图hash；来源变化后重新设置。minimum_gap只影响重绘/矢量。字段与恢复见[阶段指南](stage-recovery-layout.md)。
+layout可选page_breaks为原长图中的递增整数纵坐标列表，不含首尾。显式切口使用当前边距的原始满宽比例；省略恢复自动紧凑试算，最多缩小10%且仅在减少页数时采用。空列表按原尺寸请求一页。程序检查墨迹、五线与页高，实际记号归属仍需看图。切口绑定长图hash；来源变化后重新设置。minimum_gap只影响重绘/矢量。字段与恢复见[阶段指南](stage-recovery-layout.md)。

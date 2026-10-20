@@ -868,7 +868,13 @@ def finalize_output(task, output, blocks, options, record):
     output['previews'], output['checks'] = _preview_and_check(task, output, blocks, options)
     if output.get('render_route') == 'original':
         output['checks']['scope'] = 'continuous page geometry only; not notation ownership or music proofreading'
-        output['continuous_layout_version'] = 1
+        from reportlab.lib.pagesizes import A4
+        output['continuous_layout_version'] = 2
+        base_scale = (A4[0] - 2 * options.get('margin', 24)) / blocks[0]['width']
+        output['print_scale_ratio'] = output['placements'][0]['scale'] / base_scale
+        if output['print_scale_ratio'] < 1 - 1e-8:
+            output['checks']['warnings'].append({'code': 'compact_print_size_needs_visual_review',
+                'print_scale_ratio': output['print_scale_ratio']})
         output['checks']['warnings'].append({'code': 'page_cuts_need_visual_review',
             'cuts': [strip['bbox'][3] for strip in output['page_strips'][:-1]]})
     target = options.get('target_pages')
@@ -888,7 +894,7 @@ def require_output_previews(task, output, record):
         if not source.get('sha256') or output.get('print_source_sha256') != source['sha256']:
             raise ReconstructionError('直排终稿材料已改变，需要重新导出。')
         strips = output.get('page_strips', [])
-        if (output.get('continuous_layout_version') != 1 or len(strips) != output['page_count'] or
+        if (output.get('continuous_layout_version') != 2 or len(strips) != output['page_count'] or
                 [s.get('page') for s in strips] != list(range(1, output['page_count'] + 1)) or
                 not strips or strips[0]['bbox'][1] != 0 or strips[-1]['bbox'][3] != source['height'] or
                 any(s['bbox'][0] != 0 or s['bbox'][2] != source['width'] or s['bbox'][1] >= s['bbox'][3] for s in strips) or

@@ -309,7 +309,7 @@ def stage(task):
             'artifacts':{**artifacts,'output':output},'checks':output.get('checks',{}),'unresolved':[],
             'next':None if output['status']=='reviewed' else {'operation':'review-pdf',
                 'pages':list(range(1,output['page_count']+1)),'output_revision':output['output_revision'],
-                'instruction':('实际查看全部有序预览及每个分页切口两侧，核对渐强、圆圈、重音等与所属谱行的关系；有疑问用layout(page_breaks)整组移到同页，再重新导出。' if route == 'original' else '实际查看全部有序预览并记录标题、顺序、首尾和关键记号。')}}
+                'instruction':('实际查看全部有序预览、打印字号及每个分页切口两侧，核对渐强、圆圈、重音等与所属谱行的关系；紧凑版需确认稍小的音符仍可读。有疑问用layout(page_breaks)按原尺寸把相关行留在同页，再重新导出。' if route == 'original' else '实际查看全部有序预览并记录标题、顺序、首尾和关键记号。')}}
     export(task)
     return stage(task)
 

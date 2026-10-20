@@ -7,6 +7,7 @@ import unittest
 
 import test_reconstruction as fixtures
 from score_fixtures import CLI, controlled_reselection
+from test_compact_layout import compact_fixture
 from test_host_check import HOST_CHECK_ENTRIES
 import reconstruction
 import longshot
@@ -391,6 +392,62 @@ class PublicContracts(unittest.TestCase):
         self.cli('layout', {'margin': 32, 'minimum_gap': 40})
         self.check_exports_and_reviews(DIRECT_EXPORT_ENTRIES)
         self.assertEqual(score_task.load(self.task)['redraw_pages'], [])
+
+    def test_direct_export_entries_compact_without_resampling_or_moving_detached_marks(self):
+        from PIL import Image, ImageDraw
+        from score_fixtures import video_from_image
+        fixture = compact_fixture(self.root)
+        with Image.open(self.root / fixture['longshot']['image']['path']) as source:
+            sheet = source.copy()
+        draw = ImageDraw.Draw(sheet)
+        draw.ellipse((380, 395, 390, 405), outline=0, width=2)
+        draw.line((360, 440, 500, 430), fill=0, width=2)
+        draw.line((360, 440, 500, 450), fill=0, width=2)
+        video = video_from_image(sheet, self.root, 'compact')
+        sheet.close()
+        score_workflow.prepare(video, self.task)
+        score_workflow.stitch(self.task)
+        score_workflow.review_longshot(self.task, 'Compact fixture', 'Controlled source, not music acceptance.')
+        baseline = score_task.load(self.task)
+        for entry in DIRECT_EXPORT_ENTRIES:
+            with self.subTest(entry=entry):
+                score_task.save(self.task, copy.deepcopy(baseline))
+                output = self.export(entry)
+                self.assertEqual(output['page_count'], 2)
+                self.assertGreaterEqual(output['print_scale_ratio'], .9)
+                self.assertLess(output['print_scale_ratio'], 1)
+                self.assertEqual(len({p['scale'] for p in output['placements']}), 1)
+                self.assertIn('compact_print_size_needs_visual_review',
+                              [w['code'] for w in output['checks']['warnings']])
+                self.assertEqual(output['checks']['ordered_source_regions'], list(range(10)))
+                self.assertEqual(score_task.load(self.task)['redraw_pages'], [])
+                prefix = self.root / ('embedded-' + entry)
+                subprocess.run(['pdfimages', '-f', '1', '-l', '1', '-png',
+                                str(self.task / output['pdf']), str(prefix)], check=True, capture_output=True)
+                native = baseline['longshot']['image']
+                with Image.open(self.task / native['path']) as source, Image.open(str(prefix) + '-000.png') as embedded:
+                    self.assertEqual(source.convert('L').tobytes(), embedded.convert('L').tobytes())
+                    self.assertEqual(source.size, embedded.size)
+                raster = self.root / ('raster-' + entry)
+                subprocess.run(['pdftoppm', '-f', '1', '-l', '1', '-r', '144', '-png', '-singlefile',
+                                str(self.task / output['pdf']), str(raster)], check=True, capture_output=True)
+                placement = output['placements'][0]
+                scale, left = placement['scale'] * 2, placement['bbox'][0] * 2
+                with Image.open(raster.with_suffix('.png')) as page:
+                    gray = page.convert('L')
+                    for x, y in [(380, 400), (450, 434), (450, 446), (450, 480)]:
+                        px, py = round(left + x * scale), round(48 + y * scale)
+                        self.assertLess(gray.crop((px-3, py-3, px+4, py+4)).getextrema()[0], 120)
+                    for y in range(20, 900, 20):
+                        self.assertLess(gray.getpixel((round(left + 5 * scale), round(48 + y * scale))), 253)
+                # v1 continuous PDFs must be retained and replaced, then reviewed again.
+                record = score_task.load(self.task)
+                record['output']['continuous_layout_version'] = 1
+                score_task.save(self.task, record)
+                fresh = score_workflow.stage(self.task)['artifacts']['output']
+                self.assertNotEqual(fresh['output_revision'], output['output_revision'])
+                self.assertEqual(fresh['status'], 'needs_pdf_review')
+                self.assertTrue((self.task / output['pdf']).is_file())
 
     def check_exports_and_reviews(self, entries):
         baseline = score_task.load(self.task)

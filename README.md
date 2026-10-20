@@ -118,7 +118,7 @@ uv run --python 3.12 --isolated --with-requirements skills/bilibili-drum-score-t
   /absolute/path/to/video.mp4 --output /absolute/path/to/new-task
 ```
 
-替换两个绝对路径，输出使用新的任务目录。安装目录中使用同一命令的 `scripts/` 相对路径。该命令准备任务；随后 `stage` 自动生成长截图。Agent 整体查看长图及首尾，通过 `review-longshot` 记录谱名和一份备注，再按连续条带原图分页、A4 导出及全部页面与切口检查，保持页内原行距。蓝标、水印和局部模糊不阻止交付。只有阶段返回 `complete` 才交付。
+替换两个绝对路径，输出使用新的任务目录。安装目录中使用同一命令的 `scripts/` 相对路径。该命令准备任务；随后 `stage` 自动生成长截图。Agent 整体查看长图及首尾，通过 `review-longshot` 记录谱名和一份备注，再按连续条带原图分页、A4 导出及全部页面与切口检查，保持页内原行距。自动分页在最多缩小 10% 且字号符合门槛时尝试减少页数，仍需查看实际打印字号和分页切口；手动指定切口可保留原尺寸。蓝标、水印和局部模糊不阻止交付。只有阶段返回 `complete` 才交付。
 
 PDF 位于任务目录的 `exports/<revision>/<谱名>.pdf`。原视频保存在相邻的独立来源目录，原截图和历史结果保留，恢复检查来源与材料 hash。操作请求见[命令入口](skills/bilibili-drum-score-to-pdf/references/reconstruction-entry.md)，正常推进与恢复见[阶段指南](skills/bilibili-drum-score-to-pdf/references/stage-recovery-layout.md)。
 
