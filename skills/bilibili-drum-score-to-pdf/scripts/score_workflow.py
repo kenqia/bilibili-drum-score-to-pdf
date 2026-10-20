@@ -126,53 +126,6 @@ def cache_limits(task, max_entries=64, max_bytes=268435456):
     return native_cache.report(record)
 
 
-def row_manifest(task):
-    """Read the verified row inventory, never metadata-only approval."""
-    record = load(task)
-    return record.get('row_manifest', {'version': 'score-rows/1', 'rows': [],
-        'source_sha256': record['source']['sha256'], 'continuity_complete': False,
-        'unresolved': [{'code': 'no_row_observations'}]})
-
-
-from row_anchors import review as review_row_anchors
-
-
-def review_continuity(task, previous_capture, capture, previous_bars, bars,
-                      viewed_captures, complete_rows, first_last, notes):
-    """Record an Agent's actual numbered join; this is not program OCR."""
-    record = load(task)
-    shots = {shot['id']: shot for shot in record['captures']}
-    if (previous_capture not in shots or capture not in shots or
-            not isinstance(viewed_captures, list) or
-            not {previous_capture, capture}.issubset(viewed_captures) or
-            not set(viewed_captures).issubset(shots) or complete_rows is not True or
-            not isinstance(first_last, str) or not first_last.strip() or
-            not isinstance(notes, str) or not notes.strip()):
-        raise ReconstructionError('需要实际查看的两张来源、完整谱行和首尾接续依据。')
-    for limits in (previous_bars, bars):
-        if (not isinstance(limits, list) or len(limits) != 2 or
-                any(type(value) is not int or value < 1 for value in limits) or limits[0] > limits[1]):
-            raise ReconstructionError('小节范围必须为已实际读取的正整数起止。')
-    if (bars[0] != previous_bars[1] + 1 or
-            shots[previous_capture]['timestamp'] >= shots[capture]['timestamp']):
-        raise ReconstructionError('小节或来源顺序不连续；请局部回查。')
-    evidence = {'producer': 'agent', 'method': 'numbered_complete_rows_and_boundary_marks',
-        'source_sha256': record['source']['sha256'], 'previous_capture': previous_capture,
-        'capture': capture, 'previous_sha256': shots[previous_capture]['sha256'],
-        'sha256': shots[capture]['sha256'], 'previous_bars': previous_bars, 'bars': bars,
-        'viewed_captures': viewed_captures, 'complete_rows': True,
-        'first_last': first_last.strip(), 'notes': notes.strip()}
-    from score_continuity import numbered_conflicts
-    if numbered_conflicts(record, evidence):
-        raise ReconstructionError('同一实际来源存在互相矛盾的小节范围；请核对原图并保留未决。')
-    reviews = record.setdefault('continuity_reviews', [])
-    if evidence not in reviews:
-        reviews.append(evidence)
-        record.pop('freeze', None)
-    score_task.save(task, record)
-    return evidence
-
-
 def present(task, identifiers, notes):
     """Receipt of images actually shown, distinct from retained or decoded frames."""
     record = load(task)
@@ -189,62 +142,6 @@ def present(task, identifiers, notes):
 def assemble(task, title, regions, review):
     """Select ordered original positions through the shared task lifecycle."""
     return score_task.assemble(task, title, regions, review, positioned=True)
-
-def source_issues(task):
-    """Read original source doubts and their current manual dispositions."""
-    from agent_source_review import issue_inventory
-    record = load(task)
-    return {'issues': issue_inventory(record),
-            'issue_dispositions': record.get('source_review', {}).get('issue_dispositions', []),
-            'next': {'operation': 'assemble', 'required_fields': ['title', 'regions', 'review']}}
-
-
-def include_candidate(task, identifier, notes):
-    """Include an already retained capture without claiming any time coverage."""
-    if not isinstance(notes, str) or not notes.strip():
-        raise ReconstructionError('需要纳入候选的理由。', code='invalid_request', field='notes')
-    record = load(task)
-    shot = next((c for c in record['captures'] if c['id'] == identifier), None)
-    if shot is None:
-        raise ReconstructionError('原生截图引用无效。', code='invalid_request', field='identifier')
-    survey = record.setdefault('overview', {'candidates': [], 'panels': [], 'scan': {
-        'complete': False, 'completed_intervals': [], 'frames_observed': 0}})
-    if not any(c['id'] == identifier for c in survey['candidates']):
-        survey['candidates'].append(dict(shot))
-        survey['candidates'].sort(key=lambda c: c['timestamp'])
-        record.setdefault('candidate_inclusions', []).append({'capture': identifier, 'notes': notes})
-        # A new candidate is new evidence, never implicit approval of old joins.
-        record.pop('freeze', None)
-        score_task.invalidate_output(record, 'new_source_candidate')
-        score_task.save(task, record)
-    return {'capture': shot, 'strict_time_coverage_added': False,
-            'next': {'operation': 'present', 'request': {'identifiers': [identifier], 'notes': ''}}}
-
-
-def review_overlap(task, position, candidate, viewed_captures, notes):
-    """Record a local same-position decision; source replacement remains explicit."""
-    import copy
-    record = load(task)
-    current = next((r for r in record['regions'] if r.get('position') == position), None)
-    captures = {c['id']: c for c in record['captures']}
-    presented = {i for p in record.get('presentations', []) for i in p['images']}
-    if (current is None or current['kind'] != 'system' or not isinstance(candidate, dict) or
-            candidate.get('kind', 'system') != 'system' or candidate.get('capture') not in captures or
-            not isinstance(viewed_captures, list) or not isinstance(notes, str) or not notes.strip()):
-        raise ReconstructionError('需要已有谱行、候选完整谱行与实际审阅依据。', code='invalid_request')
-    required = {current['capture'], candidate['capture']}
-    if not required.issubset(set(viewed_captures) & presented) or not set(viewed_captures).issubset(captures):
-        raise ReconstructionError('先实际查看两处原生来源并 present。', code='source_review_required')
-    candidate = {**candidate, 'position': position}
-    # Reuse canonical geometry validation. Unpublished files do not change selection.
-    local.build_selection(task, [candidate], captures)
-    review = copy.deepcopy(record['source_review'])
-    from agent_source_review import reference
-    review.setdefault('overlap_reviews', []).append({'position': position,
-        'selected': reference(current), 'candidate': reference(candidate), 'notes': notes,
-        'viewed_captures': viewed_captures, 'source_sha256': record['source']['sha256']})
-    review['viewed_captures'] = list(dict.fromkeys(review['viewed_captures'] + viewed_captures))
-    return assemble(task, record['title'], record['regions'], review)
 
 
 def revise_selection(task, changes, review=None):
@@ -339,60 +236,19 @@ def _render_pdf(task, record):
     output = {'pdf': str(pdf.relative_to(task)), 'sha256': score_task.digest(pdf), 'page_count': count, 'placements': placements, 'routes': routes, 'method': 'reviewed_host_images_and_vector_fallback', 'layout_version': 2, 'status': 'needs_pdf_review', 'vector': {'path': str(manifest.relative_to(task)), 'sha256': score_task.digest(manifest)}}
     return score_task.finalize_output(task, output, blocks, layout_options, record)
 
-from automatic_score import overview, resample, auto_freeze, revise_crop, scan_status
-
 
 from score_task import layout
 
 
-
-def stage(task, title=None, mode='agent', max_observations=128):
-    """Advance automatic work to the next genuine host or visual decision."""
-    import automatic_score as automatic
-    if mode not in ('agent', 'sparse', 'strict'):
-        raise ReconstructionError('导航模式必须为 agent、sparse 或 strict。')
-    if type(max_observations) is not int or not 1 <= max_observations <= 8192:
-        raise ReconstructionError('单次导航预算必须为 1–8192 的整数。')
+def stage(task):
+    """Advance to the next source, host-generation or final-page review."""
     record = load(task)
     artifacts = {}
-    survey = record.get('overview', {})
-    if mode == 'strict' and (survey.get('mode') == 'sparse' or not survey.get('scan', {}).get('complete') or
-                            survey.get('scan', {}).get('policy_version') != automatic.SCAN_POLICY_VERSION):
-        if survey:
-            survey['mode'] = 'strict'
-        record.pop('freeze', None)
-        score_task.save(task, record)
-        survey = overview(task)
-        record = load(task)
     try:
-        automatic.require_frozen(record)
-        already_frozen = True
+        score_task.require_frozen(record)
     except ReconstructionError:
-        already_frozen = False
-    if not already_frozen and mode == 'agent':
         from agent_source_review import source_handoff
         return source_handoff(record)
-    if not already_frozen:
-        if mode == 'sparse':
-            import sparse_navigation
-            sparse_navigation.collect(task, max_observations)
-            survey = load(task)['overview']
-    artifacts['overview'] = survey.get('panels', [])
-    record = load(task)
-    try:
-        automatic.require_frozen(record)
-    except ReconstructionError:
-        result = auto_freeze(task, title)
-        if result['status'] != 'frozen':
-            current = load(task)
-            return {'phase':'source','status':'pending' if current.get('navigation', {}).get('status') == 'pending' else 'blocked','artifacts':{**artifacts,
-                'rough':result.get('rough'),'regions':result.get('regions')},
-                'checks':result['checks'],'unresolved':result['checks'].get('unresolved',[]),
-                'navigation': current.get('navigation'), 'row_manifest': current.get('row_manifest'),
-                'scan_progress':record.get('overview', {}).get('scan', {}).get('progress', {}),
-                'next':{'operations':['stage','row-manifest','review-row-anchors','review-continuity','resample','revise-crop','auto-freeze','assemble'],
-                        'instruction': '继续 stage 恢复未完成导航，不批准完整提取。' if current.get('navigation', {}).get('status') == 'pending'
-                        else '实际查看未决来源；逐行编号或有界替代证据用 review-row-anchors，截图范围接续用 review-continuity，原谱位置或音乐判断用 assemble，保留未解决的问题。'}}
     checks = crop_checks(task)
     if checks['status'] != 'passed':
         return {'phase': 'source', 'status': 'blocked', 'artifacts': artifacts,
@@ -420,4 +276,20 @@ def stage(task, title=None, mode='agent', max_observations=128):
             'unresolved':[],'handoffs':handoffs,'next':{'operations':['redraw-requests','dispatch-redraw','cancel-redraw','finish-redraw','review-redraw','fail-redraw'],
                 'instruction':'宿主执行或实际视觉审阅尚未完成；未知调用先恢复，不重新发送。'}}
     export(task)
-    return stage(task, title, mode=mode, max_observations=max_observations)
+    return stage(task)
+
+
+def revise_crop(task, index, bbox):
+    record = load(task)
+    if type(index) is not int or not 0 <= index < len(record['regions']):
+        raise ReconstructionError('裁剪引用无效。', code='invalid_request', field='index')
+    regions = [{**r, 'position': r.get('position') or str(i)}
+               for i, r in enumerate(record['regions'])]
+    region = regions[index]
+    if (region['kind'] == 'system' and isinstance(bbox, list) and len(bbox) == 4
+            and all(type(v) is int for v in bbox)):
+        region['staff_top'] += region['bbox'][1] - bbox[1]
+    region['bbox'] = bbox
+    review = {**record['source_review'], 'complete': False,
+              'unresolved': ['局部裁剪已修改，等待实际审阅。']}
+    return score_task.assemble(task, record['title'], regions, review, positioned=True)

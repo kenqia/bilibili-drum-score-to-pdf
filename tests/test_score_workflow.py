@@ -13,15 +13,11 @@ class ScoreWorkflow(unittest.TestCase):
     select = fixtures.LocalScoreWorkflow.select
     def assemble(self, task, title, regions, review, owner=workflow):
         from score_fixtures import controlled_source_review
-        from agent_source_review import issue_inventory
         record = workflow.load(task)
         viewed = review['viewed_captures']
         if not set(viewed).issubset({i for p in record.get('presentations', []) for i in p['images']}):
             workflow.present(task, viewed, 'Controlled synthetic presentation.')
         review = controlled_source_review(regions, review)
-        review['issue_dispositions'] = [{'id': issue['id'], 'outcome': 'resolved',
-            'captures': viewed, 'notes': 'Controlled synthetic recovery assertion.'}
-            for issue in issue_inventory(record)]
         return owner.assemble(task, title, regions, review)
 
     def test_resolved_source_review_restores_same_selection_export(self):

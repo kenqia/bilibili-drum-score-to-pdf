@@ -17,7 +17,7 @@ Skill 默认处理 PDF。需要特定保存位置时，在同条消息补充路�
 
 从仓库取得完整 Skill 目录，安装到当前宿主实际发现 Skill 的位置。可以让 Agent 按 README 中的安装提示完成，也可以使用宿主现有的 Skill 安装器。安装器必须同时复制 `scripts/`、`references/` 和许可证；只下载 SKILL.md 不完整。注册符号链接时，链接目标必须是保留所有内容的完整目录。
 
-宿主需要文件读写、脚本运行、原生图片查看与 PDF 页面查看能力。环境需要 Python 3.12、uv、ffmpeg、ffprobe 和 Poppler 的 pdftoppm。普通 PDF 不依赖 Mido。项目不要求 B站 Cookie，不读取模型认证。当前固定依赖 `rapidocr-onnxruntime==1.4.4` 要求 Python <3.13，因此使用 Python 3.12；3.13 及以上不在当前支持范围。示例使用 `uv run --python 3.12`，不会替换系统 Python。
+宿主需要文件读写、脚本运行、原生图片查看与 PDF 页面查看能力。环境需要 Python 3.12、uv、ffmpeg、ffprobe 和 Poppler 的 pdftoppm。项目不要求 B站 Cookie，不读取模型认证。当前验证的解释器为 Python 3.12。示例使用 `uv run --python 3.12`，不会替换系统 Python。
 
 ## 发现宿主与检查依赖
 
@@ -36,7 +36,7 @@ uv run --python 3.12 --quiet --isolated --with-requirements skills/bilibili-drum
   python skills/bilibili-drum-score-to-pdf/scripts/host_check.py
 ```
 
-安装副本使用根 `scripts/host_check.py` 和 `scripts/requirements.txt`。`--quiet` 减少依赖解析输出，命令失败时保留错误。依赖准备只运行一次检查，不反复编写探测脚本。扫描等待与进度见[程序检查](agents/automatic-source-checks.md#扫描预算进度与人工裁剪)。
+安装副本使用根 `scripts/host_check.py` 和 `scripts/requirements.txt`。`--quiet` 减少依赖解析输出，命令失败时保留错误。依赖准备只运行一次检查，不反复编写探测脚本。任务推进与恢复见[阶段指南](agents/stage-recovery-layout.md)。
 
 ## 使用仓库安装工具
 

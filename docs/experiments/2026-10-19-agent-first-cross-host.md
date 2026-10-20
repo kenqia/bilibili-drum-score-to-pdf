@@ -1,6 +1,6 @@
 # Agent-first 跨宿主修复验证
 
-本轮从 main `9cece50dcfe78affd6f8739c3221521d8bdbf55d` 实施。用户接受全部采访决定，并负责真实视频和跨宿主验收。实施规格见 [Agent-first 修复规格](../agents/agent-first-cross-host-spec.md)，实际验收步骤见 [用户验收清单](../agents/agent-first-cross-host-acceptance.md)。
+本轮从 main `9cece50dcfe78affd6f8739c3221521d8bdbf55d` 实施。用户接受全部采访决定，并负责真实视频和跨宿主验收。实施规格见 [Agent-first 修复规格](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/332922000d088803f4d74e8d7a4a7ebf93f26fc8/docs/agents/agent-first-cross-host-spec.md)，实际验收步骤见 [用户验收清单](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/332922000d088803f4d74e8d7a4a7ebf93f26fc8/docs/agents/agent-first-cross-host-acceptance.md)。
 
 ## 变更与证据边界
 

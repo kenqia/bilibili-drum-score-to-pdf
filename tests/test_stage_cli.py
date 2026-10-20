@@ -100,17 +100,9 @@ class RevisionCLI(unittest.TestCase):
         self.assertGreaterEqual(boxes[0][1]-boxes[1][3],60)
 
     def test_stage_advances_synthetic_video_and_never_reissues_pending_host_call(self):
-        self.cli('prepare')
-        blocked=self.cli('stage',title='Synthetic stage',mode='sparse')
-        self.assertEqual(blocked['phase'], 'source')
-        self.assertIn('row_anchor_missing', [i['code'] for i in blocked['unresolved']])
-        record=self.cli('resume')
-        shots=record['overview']['candidates']
-        self.cli('review-row-anchors',capture=shots[0]['id'],anchors=[],
-                 viewed_captures=[s['id'] for s in shots],
-                 fallback_interval=[0,record['source']['duration']],
-                 notes='Controlled identical unnumbered fixture; explicit local continuity authorization.')
-        first=self.cli('stage',title='Synthetic stage',mode='sparse')
+        self.selection()
+        first = self.cli('redraw-requests', viewed_notes='Controlled complete rough review.')
+        first = self.cli('stage')
         self.assertEqual(first['phase'],'generation')
         self.assertEqual(first['status'],'pending')
         second=self.cli('stage')

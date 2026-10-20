@@ -29,10 +29,8 @@ def report(record):
         'max_entries': cache['max_entries'], 'max_bytes': cache['max_bytes'],
         'retained_entries': len(cache['entries']),
         'retained_bytes': sum(e['bytes'] for e in cache['entries']),
-        'events': cache['events'],
-        'stream_scan': {key:record['metrics'].get(key,0) for key in
-            ('stream_frames_decoded','stream_candidates_retained','stream_native_bytes')},
-        'stream_definition':'continuous scan decoded frames and independently retained source evidence, separate from read_record cache requests'}
+        'events': cache['events']}
+
 
 def evict(task, record):
     cache = state(record)

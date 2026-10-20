@@ -22,4 +22,4 @@ Root 实际查看全部粗拼，确认标题、速度、署名、首尾终止线
 - `/home/kenqia/issue61-context/nonzero-seek-diagnosis.json` 保存非零区间零帧根因及恢复验证。
 - `/home/kenqia/issue61-context/ink-mask-equivalence.json` 保存 OpenCV 墨迹实现与原实现的完整 RGB 穷举等价结果。
 
-没有新的宿主生图、最终 PDF 审阅或 MIDI 输出。模型成本为 `null`，受控宿主请求只证明接口与冻结绑定。原生来源疑点需按[实际来源审阅与 assemble](../agents/reconstruction-workflow.md)解决；裁剪与补采操作不能替代对原谱位置的新视觉判断。
+没有新的宿主生图、最终 PDF 审阅或 MIDI 输出。模型成本为 `null`，受控宿主请求只证明接口与冻结绑定。原生来源疑点需按[实际来源审阅与 assemble](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/332922000d088803f4d74e8d7a4a7ebf93f26fc8/docs/agents/reconstruction-workflow.md)解决；裁剪与补采操作不能替代对原谱位置的新视觉判断。

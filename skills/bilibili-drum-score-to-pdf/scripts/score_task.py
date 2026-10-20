@@ -120,6 +120,46 @@ def load(task):
     return record
 
 
+
+def _fingerprint(record):
+    material = {'source': record['source']['sha256'], 'regions': record['regions'],
+        'rough_chunks': record.get('rough_chunks'), 'review': record.get('source_review'),
+        'checks': record.get('program_checks'),
+        'overview_candidates': [c['sha256'] for c in record.get('overview',{}).get('candidates',[])]}
+    if record.get('agent_review_contract'):
+        material['agent_review_contract'] = record['agent_review_contract']
+        material['source_issue_history'] = record.get('source_issue_history', [])
+        if 'legacy_source_approval' in record:
+            material['legacy_source_approval'] = record['legacy_source_approval']
+    if 'row_manifest' in record:
+        material['row_manifest'] = record['row_manifest']
+    if 'continuity_reviews' in record:
+        material['continuity_reviews'] = record['continuity_reviews']
+    if 'row_anchor_reviews' in record:
+        material['row_anchor_reviews'] = record['row_anchor_reviews']
+    return hashlib.sha256(json.dumps(material, sort_keys=True).encode()).hexdigest()
+
+
+def freeze(record, producer):
+    material_digest=hashlib.sha256(json.dumps(record['regions'],sort_keys=True).encode()).hexdigest()
+    previous=record.get('freeze',{})
+    identifier=previous['id'] if previous.get('material_digest')==material_digest else uuid.uuid4().hex
+    record['freeze'] = {'id': identifier, 'producer': producer, 'material_digest':material_digest,
+        'fingerprint': _fingerprint(record), 'source_sha256': record['source']['sha256']}
+    return record['freeze']
+
+def require_frozen(record):
+    frozen = record.get('freeze', {})
+    if (frozen.get('producer') != 'agent' or frozen.get('fingerprint') != _fingerprint(record)
+            or record.get('source_review', {}).get('complete') is not True
+            or record['source_review'].get('unresolved')):
+        raise ReconstructionError('来源尚未审阅或选行已改变；查看 stage 后重新确认。',
+                                  code='source_review_required', action='stage')
+    if record.get('agent_review_contract'):
+        from agent_source_review import validate
+        validate(record, record['regions'], record['source_review'], same=True)
+
+
 def input_identity(record, indices):
     captures = {c['id']: c for c in record['captures']}
     members = []
@@ -199,11 +239,10 @@ def assemble(task, title, regions, review, *, positioned=False):
     same = (title.strip() == previous.get('title') and
             [selection_key(r) for r in unique] == [selection_key(r) for r in previous['regions']])
     from agent_source_review import validate
-    review, source_issues, active_contract = validate(previous, unique, review, same=same, upgrade=True, title=title.strip())
+    review, active_contract = validate(previous, unique, review, same=same, upgrade=True, title=title.strip())
     if active_contract:
         from agent_source_review import CONTRACT
         previous['agent_review_contract'] = CONTRACT
-    previous['source_issue_history'] = source_issues
     viewed = review.get('viewed_captures', [])
     captures = {c['id'] for c in previous['captures']}
     if not review.get('notes') or not set(viewed).issubset(captures) or any(r['capture'] not in viewed for r in unique):
@@ -212,9 +251,6 @@ def assemble(task, title, regions, review, *, positioned=False):
         # Re-confirming identical valid source material is recovery, not a new
         # request. Preserve accepted outputs and persisted correction budgets.
         previous['source_review'] = review
-        import row_manifest
-        row_manifest.from_selection(previous)
-        from automatic_score import freeze
         freeze(previous, 'agent')
         if review.get('complete') is not True or review.get('unresolved'):
             if previous.get('output'):
@@ -231,10 +267,7 @@ def assemble(task, title, regions, review, *, positioned=False):
     previous.update(**materials, title=title.strip(), source_review=review,
         status='ready_to_redraw' if review.get('complete') is True and not review.get('unresolved') else 'needs_source_review')
     invalidate_selection(previous)
-    import row_manifest
-    row_manifest.from_selection(previous)
     previous['metrics']['presented_capture_ids'] = list(dict.fromkeys(viewed))
-    from automatic_score import freeze
     freeze(previous, 'agent')
     save(task, previous)
     return previous
@@ -244,7 +277,6 @@ def redraw_inputs(task, groups=None):
     from reconstruction import ROUGH_PIXELS
 
     record = load(task)
-    from automatic_score import require_frozen
     require_frozen(record)
     if record.get('source_review',{}).get('complete') is not True or record['source_review'].get('unresolved'):
         raise ReconstructionError('原图完整性尚未确认。')
@@ -388,7 +420,7 @@ def _crop_checks(task, record):
 
 
 def crop_checks(task):
-    """Inspect manual and automatic selections before a host request is reserved."""
+    """Inspect selected crop boundaries before a host request is reserved."""
     return _crop_checks(task, load(task))
 
 
@@ -398,8 +430,7 @@ def _require_safe_crops(task, record):
 
 
 def _reserve_redraw(record, page, viewed_notes, correction, reserve):
-    program_approved = record['freeze']['producer'] == 'program'
-    if (not viewed_notes and not program_approved) or (correction and (
+    if (not isinstance(viewed_notes, str) or not viewed_notes.strip()) or (correction and (
             page['status'] != 'needs_correction' or page['corrections_used'] >= 1)) or (
             not correction and page['status'] != 'needs_generation'):
         raise ReconstructionError('实际粗拼审阅或重绘次数无效。')
@@ -408,7 +439,7 @@ def _reserve_redraw(record, page, viewed_notes, correction, reserve):
     attempt = {'request': uuid.uuid4().hex, 'kind': 'correction' if correction else 'initial',
                'input_sha256': page['input']['sha256'], 'notes': viewed_notes,
                'status': 'prepared' if reserve else 'calling', 'cost': None,
-               'approval': {'producer': 'program' if program_approved else 'agent',
+               'approval': {'producer': 'agent',
                             'freeze_id': record['freeze']['id']}}
     page['attempts'].append(attempt)
     page['status'] = attempt['status']
@@ -423,7 +454,6 @@ def _host_request(task, page):
 def begin_redraw(task, identifier, viewed_notes=None, correction=False, reserve=False):
     """Legacy calls are conservatively dispatched; reserve=True prepares only."""
     record = load(task)
-    from automatic_score import require_frozen
     require_frozen(record)
     _require_safe_crops(task, record)
     page = _page(record, identifier)
@@ -442,8 +472,7 @@ def redraw_requests(task, viewed_notes=None):
     handoffs = []
     changed = False
     for page in record['redraw_pages']:
-        if page['status'] == 'needs_generation' and (
-                record['freeze']['producer'] == 'program' or viewed_notes):
+        if page['status'] == 'needs_generation' and viewed_notes:
             _reserve_redraw(record, page, viewed_notes, False, True)
             changed = True
         status = page['status']
@@ -475,7 +504,6 @@ def redraw_requests(task, viewed_notes=None):
 def dispatch_redraw(task, identifier, request):
     """Persist before the host call; interruption now means result unknown."""
     record = load(task)
-    from automatic_score import require_frozen
     require_frozen(record)
     _require_safe_crops(task, record)
     page = _page(record, identifier)
@@ -490,7 +518,6 @@ def dispatch_redraw(task, identifier, request):
 def cancel_redraw(task, identifier, request, notes):
     """Cancel only a known unsubmitted reservation; spent correction stays spent."""
     record = load(task)
-    from automatic_score import require_frozen
     require_frozen(record)
     page = _page(record, identifier)
     if (page['status'] != 'prepared' or not isinstance(notes, str) or not notes.strip()
@@ -509,7 +536,6 @@ def cancel_redraw(task, identifier, request, notes):
 def finish_redraw(task, identifier, request, output, tool, receipt):
     """Host passes newly generated local output and real invocation receipt."""
     record = load(task)
-    from automatic_score import require_frozen
     require_frozen(record)
     page = _page(record, identifier)
     if not page.get('attempts'):
@@ -532,7 +558,6 @@ def finish_redraw(task, identifier, request, output, tool, receipt):
 def fail_redraw(task, identifier, notes, outcome='failed'):
     """Unavailable, failed or uncertain interrupted calls route to vector."""
     record = load(task)
-    from automatic_score import require_frozen
     require_frozen(record)
     page = _page(record, identifier)
     if outcome not in ('failed', 'unavailable', 'unknown') or not notes or page['status'] == 'accepted':
@@ -547,7 +572,6 @@ def fail_redraw(task, identifier, notes, outcome='failed'):
 def review_redraw(task, identifier, accepted, notes, boundaries=None):
     """Actual image review supplies complete system boundaries on accepted output."""
     record = load(task)
-    from automatic_score import require_frozen
     require_frozen(record)
     page = _page(record, identifier)
     if page['status'] != 'needs_image_review' or type(accepted) is not bool or not notes:
@@ -584,7 +608,6 @@ def reject_accepted_redraw(task, identifier, notes):
     explicit action invalidates PDF approval without refunding correction calls.
     """
     record = load(task)
-    from automatic_score import require_frozen
     require_frozen(record)
     page = _page(record, identifier)
     if page['status'] != 'accepted' or not isinstance(notes, str) or not notes.strip():
@@ -611,7 +634,6 @@ def export(task, render, *, host_redraw=False):
     record = load(task)
     if record.get('source_review', {}).get('complete') is not True or record['source_review'].get('unresolved'):
         raise ReconstructionError('原图完整性尚未确认，停止导出。')
-    from automatic_score import require_frozen
     require_frozen(record)
     _require_safe_crops(task, record)
     output = record.get('output')
@@ -641,7 +663,6 @@ def export(task, render, *, host_redraw=False):
 def generation_materials(task):
     """Ordered complete rows from accepted groups and geometric fallback."""
     record = load(task)
-    from automatic_score import require_frozen
     require_frozen(record)
     rows = []
     pages = record.get('redraw_pages', [])

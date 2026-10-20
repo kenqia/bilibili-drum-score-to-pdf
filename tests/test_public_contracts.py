@@ -11,7 +11,6 @@ from test_host_check import HOST_CHECK_ENTRIES
 import reconstruction
 import score_task
 import score_workflow
-import automatic_score
 
 
 ACQUISITION_ENTRIES = ('cli', 'workflow', 'acquire')
@@ -20,8 +19,6 @@ REVIEW_ENTRIES = ('cli', 'workflow', 'vector', 'task')
 GROUP_ENTRIES = ('cli', 'workflow', 'task')
 CROP_ENTRIES = ('cli', 'workflow', 'task')
 REQUEST_ENTRIES = ('cli', 'workflow', 'task')
-SCAN_ENTRIES = ('cli', 'workflow', 'automatic')
-NAVIGATION_ENTRIES = ('cli', 'workflow')
 SOURCE_ASSEMBLY_ENTRIES = ('cli', 'workflow', 'task', 'vector')
 SOURCE_RECOVERY_ENTRIES = ('cli', 'workflow')
 
@@ -60,13 +57,35 @@ class PublicContracts(unittest.TestCase):
         owner = {'workflow': score_workflow, 'task': score_task}[entry]
         return owner.redraw_inputs(self.task, groups=groups)
 
+    def test_removed_routes_and_stage_modes_cannot_mutate_existing_task(self):
+        self.select()
+        before = (self.task / 'record.json').read_bytes()
+        for operation in ('overview', 'resample', 'auto-freeze', 'scan-status', 'row-manifest',
+                          'review-row-anchors', 'review-continuity', 'source-issues',
+                          'include-candidate', 'review-overlap', 'midi-request', 'midi-submit',
+                          'midi-playable', 'midi-export', 'midi-resume'):
+            with self.subTest(operation=operation), self.assertRaises(score_task.ReconstructionError):
+                self.cli(operation, {})
+            self.assertEqual((self.task / 'record.json').read_bytes(), before)
+        for mode in ('sparse', 'strict'):
+            with self.subTest(mode=mode), self.assertRaises(score_task.ReconstructionError):
+                self.cli('stage', {'mode': mode})
+            self.assertEqual((self.task / 'record.json').read_bytes(), before)
+
+    def test_windows_utf8_bom_request_uses_the_same_stage_contract(self):
+        self.select()
+        request = self.root / 'bom-request.json'
+        request.write_text('{}', encoding='utf-8-sig')
+        result = subprocess.run([sys.executable, str(CLI), '--operation', 'stage',
+            '--task', str(self.task), '--request', str(request)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)['phase'], 'generation')
+
     def test_source_recovery_entries_refuse_corrupt_sources_without_mutation(self):
         self.select()
         before = (self.task / 'record.json').read_bytes()
         self.video.write_bytes(b'Controlled damaged source.')
-        operations = {'source-issues': {}, 'include-candidate': {'identifier': 'missing', 'notes': 'Controlled.'},
-                      'revise-selection': {'changes': []}, 'review-overlap': {
-                          'position': 'missing', 'candidate': {}, 'viewed_captures': [], 'notes': 'Controlled.'}}
+        operations = {'revise-selection': {'changes': []}, 'revise-crop': {'index': 0, 'bbox': [0, 0, 10, 10]}}
         for entry in SOURCE_RECOVERY_ENTRIES:
             for operation, payload in operations.items():
                 with self.subTest(entry=entry, operation=operation), self.assertRaises(score_task.ReconstructionError):
@@ -76,65 +95,7 @@ class PublicContracts(unittest.TestCase):
                         getattr(score_workflow, operation.replace('-', '_'))(self.task, **payload)
                 self.assertEqual((self.task / 'record.json').read_bytes(), before)
 
-    def test_navigation_entries_validate_budget_and_do_not_bypass_source_integrity(self):
-        self.select()
-        baseline = score_task.load(self.task)
-        for entry in NAVIGATION_ENTRIES:
-            with self.subTest(entry=entry):
-                def call(operation, payload):
-                    if entry == 'cli':
-                        return self.cli(operation, payload)
-                    return getattr(score_workflow, operation.replace('-', '_'))(self.task, **payload)
-                for payload in ({'mode': 'fast'}, {'max_observations': 0}, {'max_observations': True}):
-                    with self.assertRaises(score_task.ReconstructionError):
-                        call('stage', payload)
-                with self.assertRaises(score_task.ReconstructionError):
-                    call('review-continuity', {'previous_capture': 'missing', 'capture': 'missing',
-                        'previous_bars': [1, 4], 'bars': [5, 8], 'viewed_captures': [],
-                        'complete_rows': True, 'first_last': 'Controlled.', 'notes': 'Controlled.'})
-                for payload in (
-                    {'capture': 'missing', 'anchors': [], 'viewed_captures': [], 'notes': 'Controlled.'},
-                    {'capture': baseline['captures'][0]['id'], 'anchors': [{'row': True, 'start_bar': 1}],
-                     'viewed_captures': [baseline['captures'][0]['id']], 'notes': 'Controlled.'},
-                    {'capture': baseline['captures'][0]['id'], 'anchors': [],
-                     'viewed_captures': [baseline['captures'][0]['id']], 'notes': 'Controlled.',
-                     'fallback_interval': [0, baseline['source']['duration']]},
-                ):
-                    with self.assertRaises(score_task.ReconstructionError):
-                        call('review-row-anchors', payload)
-                self.assertEqual(score_task.load(self.task), baseline)
-                self.assertTrue(call('row-manifest', {})['continuity_complete'])
-        self.video.write_bytes(b'Controlled damaged source.')
-        for entry in NAVIGATION_ENTRIES:
-            with self.subTest(entry=entry), self.assertRaises(score_task.ReconstructionError):
-                if entry == 'cli':
-                    self.cli('row-manifest', {})
-                else:
-                    score_workflow.row_manifest(self.task)
-        for entry in NAVIGATION_ENTRIES:
-            with self.subTest(entry=entry), self.assertRaises(score_task.ReconstructionError):
-                payload = {'capture': baseline['captures'][0]['id'], 'anchors': [{'row': 0, 'start_bar': 1}],
-                           'viewed_captures': [baseline['captures'][0]['id']], 'notes': 'Controlled.'}
-                if entry == 'cli':
-                    self.cli('review-row-anchors', payload)
-                else:
-                    score_workflow.review_row_anchors(self.task, **payload)
 
-    def test_scan_status_is_explicitly_metadata_only_at_every_entry(self):
-        self.select()
-        self.video.write_bytes(b'controlled damaged source')
-        for entry in SCAN_ENTRIES:
-            with self.subTest(entry=entry):
-                if entry == 'cli':
-                    status = self.cli('scan-status', {})
-                else:
-                    owner = {'workflow': score_workflow, 'automatic': automatic_score}[entry]
-                    status = owner.scan_status(self.task)
-                self.assertTrue(status['metadata_only'])
-                self.assertFalse(status['complete'])
-                self.assertEqual(status['progress'], {})
-        with self.assertRaises(score_task.ReconstructionError):
-            score_task.load(self.task)
 
     def test_manual_cut_stem_blocks_every_generation_entry_until_crop_is_repaired(self):
         self.select()
@@ -279,7 +240,6 @@ class PublicContracts(unittest.TestCase):
                     self.assertEqual(approved['review']['preview_hashes'], [p['sha256'] for p in fresh['previews']])
 
     def test_every_group_entry_splits_defaults_and_rejects_new_oversized_or_unreadable_groups(self):
-        import automatic_score
         self.select()
         baseline = score_task.load(self.task)
         system = baseline['regions'][1]
@@ -291,7 +251,7 @@ class PublicContracts(unittest.TestCase):
                     if 'unreadable' in case:
                         rows = [dict(system, staff_spacing=3)]
                     record['regions'] = rows
-                    automatic_score.freeze(record, 'agent')
+                    score_task.freeze(record, 'agent')
                     score_task.save(self.task, record)
                     groups = [list(range(len(rows)))] if case.startswith('explicit') else None
                     if case == 'default':

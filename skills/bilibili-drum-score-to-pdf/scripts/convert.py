@@ -12,17 +12,19 @@ import sys
 from public_video import InputError, ACQUISITION_SECONDS, retryable_acquisition
 from video_seek import ConversionError
 
-OPERATIONS = ('source-issues','review-overlap','revise-selection','include-candidate','row-manifest','review-row-anchors','review-continuity','redraw-requests','dispatch-redraw','cancel-redraw','scan-status','crop-checks','stage','layout','overview','resample','auto-freeze','revise-crop','prepare','resume','navigate','promote','cache-report','cache-limits','capture','present','assemble','redraw-inputs','generation-materials',
-              'begin-redraw','finish-redraw','fail-redraw','review-redraw',
-              'reject-accepted-redraw','export','review-pdf',
-              'midi-request','midi-submit','midi-playable','midi-export','midi-resume')
+OPERATIONS = ('prepare', 'resume', 'stage', 'navigate', 'capture', 'promote', 'present',
+              'assemble', 'revise-selection', 'revise-crop', 'crop-checks', 'layout',
+              'cache-report', 'cache-limits', 'redraw-inputs', 'redraw-requests',
+              'dispatch-redraw', 'cancel-redraw', 'begin-redraw', 'finish-redraw',
+              'fail-redraw', 'review-redraw', 'reject-accepted-redraw',
+              'generation-materials', 'export', 'review-pdf')
 
 
 def request_file(path):
     file = Path(path)
     if file.stat().st_size > 8 * 1024 * 1024:
         raise ValueError('request too large')
-    value = json.loads(file.read_text(encoding='utf-8'), parse_constant=lambda value: (_ for _ in ()).throw(ValueError('non-finite JSON')))
+    value = json.loads(file.read_text(encoding='utf-8-sig'), parse_constant=lambda value: (_ for _ in ()).throw(ValueError('non-finite JSON')))
     if not isinstance(value, dict):
         raise ValueError('request must be object')
     return value
@@ -46,7 +48,7 @@ def error_receipt(error, operation):
     else:
         code = 'internal_error'
     messages = {'invalid_request': '请求字段或参数无效，请核对操作参数。',
-                'source_review_required': '来源审阅尚未完成，请读取 stage 和 source-issues。',
+                'source_review_required': '来源审阅尚未完成，请读取 stage。',
                 'invalid_state': '当前任务状态不允许该操作，请读取 stage 或 resume。',
                 'decode_failed': '视频解码失败，请检查来源和解码工具。',
                 'internal_error': '操作发生内部错误；保留当前任务，报告操作名与错误码。',
@@ -129,27 +131,19 @@ def main():
             payload = request_file(args.request) if args.request else {}
         except (OSError, ValueError, UnicodeError):
             raise RequestError('request') from None
-        if args.operation.startswith('midi-'):
-            import midi_workflow
-            names = {'midi-request':'request_conversion','midi-submit':'submit_transcription',
-                     'midi-playable':'submit_playable_transcription','midi-export':'export_complete','midi-resume':'resume'}
+        import score_workflow
+        if args.operation == 'prepare':
+            if not args.input or not args.output:
+                raise RequestError('input/output')
+            target=Path(args.output)
+            if target.exists() and not (target/'record.json').exists() and (target.is_symlink() or not target.is_dir() or any(target.iterdir())) and not retryable_acquisition(target):
+                raise ConversionError('existing_output','目标目录已有文件。')
+            result = score_workflow.prepare(args.input,args.output,args.acquisition_timeout)
+        else:
             if not args.task:
                 raise RequestError('task')
-            result = invoke(getattr(midi_workflow,names[args.operation]),args.task,**payload)
-        else:
-            import score_workflow
-            if args.operation == 'prepare':
-                if not args.input or not args.output:
-                    raise RequestError('input/output')
-                target=Path(args.output)
-                if target.exists() and not (target/'record.json').exists() and (target.is_symlink() or not target.is_dir() or any(target.iterdir())) and not retryable_acquisition(target):
-                    raise ConversionError('existing_output','目标目录已有文件。')
-                result = score_workflow.prepare(args.input,args.output,args.acquisition_timeout)
-            else:
-                if not args.task:
-                    raise RequestError('task')
-                name = 'load' if args.operation == 'resume' else args.operation.replace('-','_')
-                result = invoke(getattr(score_workflow,name),args.task,**payload)
+            name = 'load' if args.operation == 'resume' else args.operation.replace('-','_')
+            result = invoke(getattr(score_workflow,name),args.task,**payload)
         if args.summary or args.output_format == 'summary':
             result = summary(result, args.output if args.operation == 'prepare' else args.task)
         print(json.dumps(result,ensure_ascii=False,allow_nan=False))

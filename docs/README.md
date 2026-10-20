@@ -9,9 +9,6 @@
 | [安装指南](install.md) | 安装、发现与更新自包含 Skill，验证和回滚。 |
 | [阶段、恢复与打印布局](agents/stage-recovery-layout.md) | 准备后通过 stage 推进，处理局部改动、调用恢复与全部页面审阅。 |
 | [命令入口](agents/reconstruction-entry.md) | 查询 CLI 操作和 JSON 请求字段。 |
-| [程序来源检查](agents/automatic-source-checks.md) | 理解自动检查、粗拼冻结与未决来源。 |
-| [人工恢复工作流](agents/reconstruction-workflow.md) | 来源异常、人工导航和低层操作。 |
-| [可选 MIDI](agents/midi-conversion.md) | 用户明确要求后的转写、独立验收与近似播放授权。 |
 
 ## 开发与验证
 

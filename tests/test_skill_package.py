@@ -28,7 +28,7 @@ class SkillPackageTests(unittest.TestCase):
                     self.assertTrue(path.is_relative_to(SKILL.resolve()))
                     self.assertTrue(path.is_file())
         text = (SKILL / 'SKILL.md').read_text()
-        for name in (*syncer.PROTOCOLS[:7], 'support'):
+        for name in (*syncer.PROTOCOLS, 'support'):
             self.assertIn(f'references/{name}.md', text)
             self.assertTrue((SKILL / f'references/{name}.md').is_file())
         self.assertNotIn('/absolute/repository', text)

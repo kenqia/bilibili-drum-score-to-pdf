@@ -26,7 +26,7 @@
 
 练一首歌，不该先花时间拖进度条、截屏、裁图，再把零散的谱面拼起来。
 
-这个项目把这段工作交给视觉 Agent。它优先读取行首小节号定位，沿视频收集完整谱行，去掉同一位置的重叠截图，清理谱面，再按原比例排成 A4。标题、速度、拍号和后续重复出现的音乐都需要保留。交付前，Agent 实际查看最终每一页。
+这个项目把这段工作交给视觉 Agent。它根据重叠谱行、可读小节号或有序翻页确认接续，沿视频收集完整谱行，去掉同一位置的重叠截图，清理谱面，再按原比例排成 A4。标题、速度、拍号和后续重复出现的音乐都需要保留。交付前，Agent 实际查看最终每一页。
 
 它是一个 **Agent Skill**。本地脚本处理视频、来源记录和排版，宿主 Agent 负责视觉判断与生图。已有 Codex 整曲验证记录，其他宿主尚未完成整曲验收。
 
@@ -118,7 +118,7 @@ uv run --python 3.12 --isolated --with-requirements skills/bilibili-drum-score-t
   /absolute/path/to/video.mp4 --output /absolute/path/to/new-task
 ```
 
-替换两个绝对路径，输出使用新的任务目录。安装目录中使用同一命令的 `scripts/` 相对路径。该命令只准备任务；Agent 随后读取默认 `stage(mode=agent)` 返回的来源任务，自行导航、采集和实际看图，通过 present 与 assemble 确认标题、首尾和接续，再推进宿主生图、结果审阅、导出与最终页面检查。默认不自动扫描；显式 mode=sparse/strict 保留稀疏导航与连续扫描，各自记录真实覆盖。接续疑点局部补采并逐项处理。只有阶段返回 `complete` 才交付。
+替换两个绝对路径，输出使用新的任务目录。安装目录中使用同一命令的 `scripts/` 相对路径。该命令只准备任务；Agent 随后读取`stage` 返回的来源任务，自行导航、采集和实际看图，通过 present 与 assemble 确认标题、首尾和接续，再推进宿主生图、结果审阅、导出与最终页面检查。来源审阅用一份具体说明覆盖标题、首尾和跨截图接续，疑点只针对实际问题局部补采。只有阶段返回 `complete` 才交付。
 
 PDF 位于任务目录的 `exports/<revision>/<谱名>.pdf`。原视频保存在相邻的独立来源目录，原截图和历史结果保留，恢复检查来源与材料 hash。操作请求见[命令入口](skills/bilibili-drum-score-to-pdf/references/reconstruction-entry.md)，正常推进与恢复见[阶段指南](skills/bilibili-drum-score-to-pdf/references/stage-recovery-layout.md)。
 
@@ -145,21 +145,17 @@ PDF 位于任务目录的 `exports/<revision>/<谱名>.pdf`。原视频保存在
 | 横向滚动、比例变化或无法确认接续的布局 | 不在当前验证范围内。 |
 | 只有演奏画面、没有谱面的视频 | 不支持从音频或演奏动作生成鼓谱。 |
 
-### MIDI 是独立的可选流程
-
-只有你明确要求 MIDI 时，Agent 才加载[音乐转写流程](docs/agents/midi-conversion.md)。当前没有通过可靠整曲 MIDI 的严格准确性门槛。你明确接受近似播放后，可以走近似输出分支，结果标记 `midi_playable`、`reliable=false`，并保留鼓件与节奏假设。MIDI 失败不丢弃已审核 PDF。
-
 ## 有哪些验证
 
 已有《KiLLKiSS》《可惜没如果（新版）》和《小星星》的真实 PDF 验收记录，包含宿主生图、来源证据和全部页面查看；另有 KiLLKiSS 强制矢量与遮挡修复记录。[查看验证范围与证据](docs/verification.md)。
 
-这些是指定样本的结果。新的独立标准曲扫描仍有原生单像素疑点，状态保留为 `blocked`；没有用合成测试或旧样本验收替它放行。宿主、输入布局和原始清晰度都会影响可交付结果。
+这些是历史指定样本的结果，不代表清理版本已经完成新的整曲验收。宿主、输入布局和原始清晰度都会影响可交付结果。
 
 运行仓库验证：
 
 ```sh
 uv run --python 3.12 --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
-  --with mido==1.3.3 python -m unittest discover -s tests -v
+  python -m unittest discover -s tests -v
 ```
 
 CI 验证合成与确定性产物，不调用宿主模型，不证明音乐准确率。模型成本未知时记录为 `null`。

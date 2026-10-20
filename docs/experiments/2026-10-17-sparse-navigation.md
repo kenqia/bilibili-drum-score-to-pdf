@@ -1,6 +1,6 @@
 # 稀疏导航、谱行清单与鲜花实测
 
-2026-10-17，本地分支 `codex/sparse-row-navigation` 从 GitHub main `7590af91f851e41711a2b281a802a89c020aabce` 实施三张工单。原有工作区的修改及历史任务保持原状。设计决定见[已确认规格](../agents/sparse-navigation-design.md)。没有新增运行依赖，没有更新宿主安装或执行远端写入。
+2026-10-17，本地分支 `codex/sparse-row-navigation` 从 GitHub main `7590af91f851e41711a2b281a802a89c020aabce` 实施三张工单。原有工作区的修改及历史任务保持原状。设计决定见[已确认规格](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/332922000d088803f4d74e8d7a4a7ebf93f26fc8/docs/agents/sparse-navigation-design.md)。没有新增运行依赖，没有更新宿主安装或执行远端写入。
 
 ## 实现与验证范围
 

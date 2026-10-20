@@ -45,15 +45,7 @@ def fixture_video(base):
 
 
 def controlled_review(regions, review):
-    def ref(region):
-        return {key: region[key] for key in ('position', 'capture', 'bbox')}
-    systems = [r for r in regions if r['kind'] == 'system']
-    return {**review, 'evidence': {
-        'title': {**ref(regions[0]), 'notes': 'Controlled title.'},
-        'first': {**ref(systems[0]), 'notes': 'Controlled music start.'},
-        'last': {**ref(systems[-1]), 'notes': 'Controlled complete ending.'},
-        'joins': [{'previous': ref(a), 'current': ref(b), 'method': 'same_capture',
-                   'notes': 'Controlled same-image order.'} for a, b in zip(systems, systems[1:])]}}
+    return {**review, 'unresolved': review.get('unresolved', [])}
 
 
 def refused(action, code, summary):

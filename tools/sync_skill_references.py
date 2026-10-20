@@ -7,11 +7,8 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = Path('skills/bilibili-drum-score-to-pdf')
-PROTOCOLS = (
-    'stage-recovery-layout', 'reconstruction-entry', 'reconstruction-workflow',
-    'reconstruction-local', 'reconstruction-navigation', 'automatic-source-checks',
-    'midi-conversion', 'reconstruction-implementation-status',
-)
+PROTOCOLS = ('stage-recovery-layout', 'reconstruction-entry')
+
 SOURCES = {f'docs/agents/{name}.md': f'{name}.md' for name in PROTOCOLS}
 REPOSITORY_URL = 'https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/main/'
 

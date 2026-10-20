@@ -2,109 +2,73 @@
 
 以下命令相对 Skill 根目录执行。历史证据链接仅供查阅，不是运行依赖。
 
-# 新版命令入口
+# PDF 命令入口
 
-`convert.py` 将 Agent 的操作请求转交给 `score_workflow.py`，不内嵌模型调用。省略 operation 使用 prepare。输出为 stdout JSON，成功调用退出 0，失败退出 2，错误使用稳定 code 区分请求、来源审阅、状态、解码与内部异常。成功准备仍处于待审阅状态。
+使用 `scripts/convert.py`。省略 `--operation` 为 `prepare`；其他操作使用 `--task` 指向已有任务，`--request` 指向 Agent 编写的 JSON 对象。用户无需编写请求文件。
 
 ```sh
-uv run --python 3.12 --isolated --with-requirements scripts/requirements.txt \
+uv run --python 3.12 --quiet --isolated --with-requirements scripts/requirements.txt \
   python scripts/convert.py video.mp4 --output /absolute/new-task
-uv run --python 3.12 --isolated --with-requirements scripts/requirements.txt \
+uv run --python 3.12 --quiet --isolated --with-requirements scripts/requirements.txt \
   python scripts/convert.py --operation capture \
-  --task /absolute/new-task --request /absolute/capture-request.json
+  --task /absolute/new-task --request /absolute/capture.json
 ```
 
-第二个请求文件为 `{"seconds": 12.5}`。请求对象字段对应[工作流接口](reconstruction-workflow.md)中函数除 task 外的命名参数；例如 navigate 使用 seconds/width，present 使用 identifiers/notes，assemble 使用 title/regions/review。`--request` 文件最大 8 MiB。prepare 只接受 input、output 与 acquisition-timeout；resume 和 export 不需要请求文件。
+`capture.json` 的内容为 `{"seconds":12.5}`。JSON 使用 UTF-8，也接受 Windows 写入的 UTF-8 BOM，最大 8 MiB。成功退出 0，失败退出 2；错误字段提供稳定 `code`，不会回显原始异常或请求体。
 
-| 操作 | 公共函数 |
-| --- | --- |
-| prepare / resume | prepare / load |
-| stage / layout | stage / layout，默认 Agent 阶段推进与打印参数 |
-| source-issues | 原始来源疑点和 Agent 处理依据 |
-| include-candidate / review-overlap / revise-selection | 补采纳入候选 / 局部同位置确认 / 按位置替换或插入 |
-| row-manifest / review-continuity | 持久谱行清单 / Agent 实际编号接续判断 |
-| review-row-anchors | Agent 逐行小节号与有界替代证据授权 |
-| scan-status / crop-checks | 扫描元数据进度 / 当前选行边缘检查 |
-| redraw-requests / dispatch-redraw / cancel-redraw | 完整批量预留 / 提交前登记 / 未提交作废 |
-| overview / resample / auto-freeze / revise-crop | 同名函数（横线转下划线） |
-| navigate / capture / present / assemble | 同名函数 |
-| promote | promote，参数 identifier 为导航候选 ID |
-| cache-report / cache-limits | cache_report / cache_limits |
-| redraw-inputs / generation-materials | redraw_inputs / generation_materials |
-| begin-redraw / finish-redraw / fail-redraw | begin_redraw / finish_redraw / fail_redraw |
-| review-redraw / reject-accepted-redraw | review_redraw / reject_accepted_redraw |
-| export / review-pdf | export / review_pdf |
-| midi-request / midi-submit | request_conversion / submit_transcription |
-| midi-playable / midi-export / midi-resume | submit_playable_transcription / export_complete / resume |
+## 来源操作
 
-MIDI 参数见[独立转换流程](midi-conversion.md)，仅在用户明确要求时读取。任务目录与 MIDI 任务目录分开。宿主生图调用在 begin-redraw 与 finish-redraw 之间由 Agent 实际执行。
+| 操作 | 请求字段 | 用途 |
+| --- | --- | --- |
+| prepare | 命令行 input、output；可选 acquisition-timeout | 匿名获取或读取本地视频；恢复相同来源时不重复下载 |
+| resume / stage | 无 | 校验当前任务；返回下一步或全部待审页面 |
+| capture | seconds | 保存原生截图，返回实际 PTS、time_base 和 hash |
+| navigate | seconds；可选 width | 可选低清探看，默认宽 480；细节审阅仍用原生图 |
+| promote | identifier | 将导航图对应的原生候选保存为截图，避免重复解码 |
+| present | identifiers、notes | 登记实际查看过的原生截图及具体备注 |
+| assemble | title、regions、review | 提交有序完整谱行及整份来源审阅 |
+| crop-checks | 无 | 返回碰到墨迹的边界、选区索引和 bbox |
+| revise-selection | changes；可选 review | 按原谱位置局部替换或插入选区 |
+| revise-crop | index、bbox | 修改裁剪并撤回来源批准；五线位置随上边界移动 |
+| layout | 可选 margin、minimum_gap、target_pages | 调整打印布局，复用生图结果 |
+| cache-report / cache-limits | 后者可选 max_entries、max_bytes | 查看缓存或调整默认 64 项、256 MiB 的候选缓存 |
 
-公开 URL 使用匿名获取，支持分 P。失败写入只有获取诊断的 manifest.json 时可以在同目录重试或改用本地输入；新增用户文件后不再视为可重试空任务。原视频保存在相邻 `<task>-source-<id>` 目录，并通过 record.json 记录 hash。中断保留现有完整证据；不要删除来源目录，否则恢复会拒绝。
+`regions` 按原谱顺序排列，每项包含 `capture`、整数 `bbox=[left,top,right,bottom]`、`kind` 和 `position`。`kind` 为 header 或 system；system 还需要裁剪内第一条五线的 `staff_top` 与相邻五线的 `staff_spacing`。短行保持自然宽度，完整连续行组也可以作为一个 system 选区保留。
 
-匿名获取仅在代理 CONNECT403 或视频网页 HTTP412 时尝试一次公开 API 直连恢复，仍共享原下载总期限。成功在 origin 中记录 `acquisition_route=public_api_direct` 与脱敏 `fallback_trigger`；恢复失败在 error 中保留原触发诊断。代理配置不持久改变，详细边界见 Skill 的 `references/support.md`。
-
-旧 task.json/observation.json 格式和旧操作不兼容。另建新版任务，保留历史文件。恢复已有新版任务时使用 resume，或重新 prepare 同一来源，不重复下载。回滚用先前 Git 提交的独立 checkout，转换使用新目录。
-
-## 原生缓存与生图组
-
-导航保留原生候选及低清展示图。使用 promote 并传入导航 ID，将有效候选直接复制为来源截图；capture 使用时间参数，复用相同缓存。改变 navigate 的 width 不重新解码有效原生帧。任务恢复验证视频 hash，候选缺失或损坏按未命中处理，来源截图损坏仍阻止任务继续。
-
-cache-limits 接受正整数 max_entries 和 max_bytes，默认 64 个候选及 256 MiB，按最近使用顺序淘汰候选。来源截图独立保存在 captures 中。cache-report 输出 hits、misses、promotions、evictions、actual_decodes、duplicate_decodes、容量及原因记录，每个计数附 definitions。实际成功原生读取计为 actual_decodes；返回以前已解码的来源 hash、PTS 和 time_base 计为 duplicate_decodes。seek_count 和 decoded_reported_frames 保留真实解码器计数。
-
-默认 redraw-inputs 按连续完整谱行分组，每组最多 8 个 system，标题随首组保留。分组同时检查 8000 万像素预算，以及拟合 4096 像素长边后至少 4 像素的五线间距。这些是当前实现的资源与细节保护值，不是模型准确率承诺。默认和显式新分组遵循相同限制。单行已经低于细节阈值时拒绝生图输入并提示补采更清晰来源，不能通过显式 groups 绕过。恢复相同身份的历史接受材料保留原分组及已用额度。
-
-生图组不参考 A4 分页。generation-materials 仅在全部组 accepted 或 vector 后返回按原谱排序的完整行材料。imagegen 行包含生成图片引用、crop_bbox 和来源映射；vector 行提供原裁剪引用，method 为 contour_trace_with_staff_repair、music_recognition 为 false。当前导出使用相同边界与来源比例。
-
-批量请求及 prepared/calling/cancelled 的状态规则见[阶段入口](stage-recovery-layout.md)。`redraw-requests` 返回所有组，包含已存在请求，校验组 ID、request ID 和输入 hash。以 `group_count` 和有序 `handoffs` 验证完整性，不用临时脚本逐组拼装。begin-redraw 在调用前保存 request、输入 hash、修正次数及未知 cost=null。calling 状态不可再次主生成；先用同一 request 回填已有结果。确认无法恢复时调用 fail-redraw，outcome 可以是 failed、unavailable 或 unknown，默认 failed。结果未知不能自动重新调用。实际查看输出后才提交 review-redraw，拒绝初次输出可修正一次，恢复不退还额度，第二次拒绝转矢量。受控测试回执不证明实际模型执行或音乐审阅。
-
-## 自动来源检查
-
-准备任务后可运行 `overview`、`resample`、`auto-freeze` 和 `revise-crop`。请求字段、冻结资格及检查限制见[程序检查与粗拼冻结](automatic-source-checks.md)。
-
-## 阶段入口与恢复
-
-准备后使用 `stage` 自动推进至宿主调用或实际审阅；局部来源版本、输入额度恢复、打印布局和全部页面预览见[阶段入口、局部恢复与打印布局](stage-recovery-layout.md)。`layout` 修改边距、最小行距和目标页数，复用已接受生成结果；最终审阅显式绑定当前导出回执的独立 `output_revision`，PDF hash 用于完整性校验。程序检查与实际看图分别记录。
-
-## Agent 与可选扫描请求
-
-默认 `stage` 请求为 `{}` 或 `{"mode":"agent"}`，未冻结时返回 Agent 来源任务，不启动扫描。显式稀疏导航使用 `{"mode":"sparse"}`。显式严格扫描使用 `{"mode":"strict"}`；限制单次导航工作量使用 `{"max_observations":32}`。预算停止保存未完成状态，不能批准全曲完整。跳转决定和实际来源保存在 `navigation`，`row-manifest` 返回谱行清单，完整任务仍可通过 resume 恢复。
-
-Agent 实际看过相邻截图后，编号接续请求示例为：
+`review` 只需要一份具体来源说明：
 
 ```json
 {
-  "previous_capture": "capture-0001",
-  "capture": "capture-0002",
-  "previous_bars": [17, 20],
-  "bars": [21, 24],
   "viewed_captures": ["capture-0001", "capture-0002"],
-  "complete_rows": true,
-  "first_last": "实际确认的完整谱行边界和首尾记号",
-  "notes": "实际读取的相邻小节顺序及接续依据"
+  "complete": false,
+  "unresolved": [],
+  "notes": "填写实际确认的谱名、标题记号和来源情况",
+  "continuity": "填写跨截图重叠谱行、可读小节号或有序翻页的实际接续依据",
+  "first_last": "填写音乐起点、完整末行和结束记号的实际依据"
 }
 ```
 
-通过 `review-continuity` 提交；上例是字段说明，不是本曲的实际观察记录。程序验证来源引用及编号连续性，但不会代替 Agent 看图；逐行自动 OCR 与本接口的截图区间判断分别记录。接着调用 stage 或 auto-freeze 重新检查，登记判断本身不批准来源，也不产生严格时间覆盖。
+示例只是字段说明。实际看过全部选用的原生截图并 `present` 后，在首尾及接续均能确认时提交 `complete=true`、`unresolved=[]`。没有印编号时使用其他可见依据。每对相邻谱行无需重复填表。
 
-## 逐行锚点与缺号恢复
+所有来源和产物引用均校验 hash。选行无效或发布中断保留上一个有效记录。相同选行重新确认会复用现有生成材料和修正预算。
 
-缺号或冲突时查看 `row-manifest.observations` 和 stage 返回的原生来源。Agent 实际看图后，使用 `review-row-anchors`，例如：
+## 生图与终稿操作
 
-```json
-{
-  "capture": "capture-0001",
-  "anchors": [{"row": 0, "start_bar": 1}],
-  "viewed_captures": ["capture-0001"],
-  "notes": "实际查看并确认该行起始小节的依据"
-}
-```
+| 操作 | 请求字段 |
+| --- | --- |
+| redraw-inputs | 可选 groups，完整有序的选区索引分组 |
+| redraw-requests | 可选 viewed_notes，实际查看全部粗拼后的备注 |
+| dispatch-redraw / cancel-redraw | identifier、request；cancel 另需 notes |
+| begin-redraw | identifier、viewed_notes；可选 correction、reserve |
+| finish-redraw | identifier、request、output、tool、receipt |
+| fail-redraw | identifier、notes；可选 outcome=failed/unavailable/unknown |
+| review-redraw | identifier、accepted、notes；接受时需 boundaries |
+| reject-accepted-redraw | identifier、notes |
+| generation-materials / export | 无 |
+| review-pdf | pages、notes、output_revision |
 
-`row` 是该截图内 system 从上到下的零基索引，不包含 header。只提交实际确认的行，其余保留程序读数或未决。原谱首行未印数字时须在 notes 说明起点判断，不能称为 OCR 读数。原图、截图 hash 和行 bbox 由程序验证并绑定。
+宿主生图由 Agent 在 `dispatch-redraw` 与 `finish-redraw` 之间真实执行，脚本不内嵌模型调用。`finish-redraw` 的 `tool` 固定填写 `"host-imagegen"`，`receipt` 保存实际工具调用依据，`output` 填本地结果路径。`boundaries` 按输入选区顺序列出生成图中每行的整数边界，包含标题。批量 handoff、一次修正和恢复规则见 [阶段恢复](stage-recovery-layout.md)。
 
-若 Agent 确认没有可用编号，但有其他充分接续证据，可提交 `anchors: []` 和 `fallback_interval: [开始秒数, 结束秒数]`，并提供至少两张实际查看的 `viewed_captures` 和具体 notes。区间必须位于视频内且包含 capture；它只解除该范围的缺号暂停，几何、记谱、裁剪和接续检查仍执行，编号冲突不能由该授权掩盖。然后再运行 stage。上例仅说明参数，不是实际审阅回执。
+`--summary` 返回阶段、状态和完整回执的 `details.path`，路径相对任务目录。读取该文件取得全部 handoff 和请求；摘要不能替代实际看图。
 
-## 摘要与错误
-
-CLI 默认仍输出完整 JSON。`--summary` 和 `--output-format summary` 返回 phase、status、complete、issue_count、next，以及成功回执的 details.path。该路径相对任务目录，保存本次完整回执；读取这个文件取得全部 handoff、证据与请求模板，resume 读取当前任务记录。文件使用新身份保存，不覆盖既有回执。失败摘要保留 error，不把输出截断当作已完成审阅。
-
-error.code 包括 invalid_request、source_review_required、invalid_state、decode_failed、internal_error 和 interrupted；来源获取与解码的已有具体错误码继续保留。operation 标识公开操作，必要时提供受控 field/action。请求字段绑定失败属于 invalid_request，执行中的意外异常属于 internal_error。错误不回显请求体、原始异常或完整私有路径。JSON 请求文件采用 UTF-8；Windows 使用 Python 3.12，建议以 `python -X utf8` 运行脚本。
+任务以 `record.json` 为准，原视频保存在获取回执指定的独立来源目录。已有同名文件和历史版本保留。旧扫描任务继续使用备份旧版，不将程序扫描结果自动当作新版来源批准。
