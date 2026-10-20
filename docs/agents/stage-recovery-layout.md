@@ -1,88 +1,47 @@
-# 阶段入口、局部恢复与打印布局
+# 阶段恢复与打印布局
 
-准备任务后调用 `stage`。默认 `mode=agent`，尚未冻结时只返回来源任务说明、已有原生截图、首尾采样建议和安全请求模板，不运行 sparse/strict，不生成实际看图记录。Agent 自行 `navigate`/`capture`，实际查看原生图后 `present`，再以明确原谱位置和来源审阅调用 `assemble`。合法冻结后继续 `stage` 验证来源、执行 `crop-checks`、返回重绘 handoff 或导出全部页面预览，不重新扫描。
+`stage` 推进当前任务，遇到来源审阅、宿主生图或最终逐页审阅时返回下一步。它复用已有材料，等待 Agent 作出实际视觉判断。
 
-只有明确请求 `mode=sparse` 才运行首尾布局检查和自适应跳转；明确请求 `mode=strict` 才按原语义连续扫描。稀疏导航的 `max_observations` 默认 128，范围 1–8192，向前观察与接续回查分别计预算。预算用尽保存进度，不能解释为完整覆盖。Agent 审阅、稀疏接续与严格时间覆盖分别记录。
-
-阶段 `phase` 为 `source`、`generation`、`pdf_review` 或 `complete`，`status` 为 `blocked`、`pending` 或 `complete`。响应包含产物引用、检查、未决项和 `next`。只有当前版本最终每页实际审阅已保存，才能返回 `complete`。CLI 默认详细 JSON；可使用 `--summary` 或 `--output-format summary` 取得阶段、状态、疑点数和下一步，并从回执的 `details.path` 读取任务目录中完整回执。摘要不能代替看图或完整请求材料。
-
-程序冻结的正常输入由 `stage` 或 `redraw-requests` 批量预留为 `prepared`，返回 `ready_to_dispatch`。使用每个 handoff 的 `group`、`request.request` 调用 `dispatch-redraw(identifier, request)`，保存 `calling` 后立即执行宿主生图，再以同一 request 回填 `finish-redraw`。重复读取已预留请求会返回相同 ID。重复 `stage` 遇到 `calling` 返回 `recover_existing_call`，先恢复已有结果，不能重新发送。无法恢复时用 `fail-redraw` 和具体原因转矢量。生成图返回后，实际查看并调用 `review-redraw`；拒绝后最多一次定向修正。
-
-手动冻结的任务返回 `needs_input_review`。Agent 实际查看粗拼，运行 `crop-checks`，再通过 `redraw-requests(viewed_notes=...)` 批量预留。`begin-redraw` 保留单组入口，传 `reserve=true` 仅预留；省略时沿用旧行为，直接登记为 `calling`，按已提交处理。阶段入口不会创建看图备注。
-
-尚未提交的 `prepared` 请求可以通过 `cancel-redraw(identifier, request, notes)` 作废为 `cancelled`，保留 ID、hash 和原因。修改选行或组成员时，失效输入的预留请求也作废；已提交的 `calling` 保留未知结果保护。作废初次预留后可重新预留新 ID；作废修正预留仍保留已占用修正额度并转矢量。旧 `calling` 不能仅凭没有结果降格为未提交。
-
-有效历史手动冻结沿用其来源审阅，不重新扫描视频。历史新版任务若缺少 freeze，可通过 `assemble` 提交原相同选行和原审阅恢复；这是历史决定恢复，不是新的视觉审阅。保留原精确生图分组，即使其大小超过当前默认分组上限。旧程序扫描规则需要重新检查，不能凭旧 `complete` 标记继续。
-
-## Agent 来源审阅契约
-
-新工作流任务在 prepare 保存 `agent_review_contract=agent-source-review/1`，并记录宿主依赖检查。环境检查只证明依赖存在，不证明已解码、宿主看图或生图可用。
-
-`assemble(title, regions, review)` 中每个选区必须有明确 `position`，完整谱行保持原谱顺序。同位置只提交 Agent 选定的更好来源；完全相同的同位置项可去重，同位置不同来源拒绝含糊选择。不同原谱位置的重复音乐全部保留，不从像素相等推定为同一位置。
-
-`review` 保留 `viewed_captures`、`complete`、`unresolved`、`notes`、`continuity` 和 `first_last`。新契约只有所选原生截图已通过 `present` 登记后才接受完整来源确认；未完成的局部修订可以先保存为待审阅。呈交回执是 Agent 的实际看图声明，程序不能据此证明模型看过图；导航缩略图不能替代原生图。
-
-确认完整时增加 `evidence`，字段如下：
-
-| 字段 | 内容 |
+| phase | 需要完成的工作 |
 | --- | --- |
-| title | 标题来源的 position、capture、bbox 和具体 notes；有标题选区时引用该选区 |
-| first / last | 第一条和最后一条完整谱行的 position、capture、bbox 和分别填写的 notes |
-| joins | 每个相邻完整谱行一项，依原谱顺序排列 |
-| joins[].previous / current | 对应谱行的 position、capture、bbox |
-| joins[].method | same_capture、overlap、ordered_page 或 numbered |
-| joins[].notes | 实际观察的接续依据；没有编号时说明其他可见依据，不虚构编号 |
+| source | 查看原生图、补采缺口、提交选区与具体来源审阅，修正裁剪问题 |
+| generation | 查看粗拼、执行或恢复宿主调用、审阅生成结果 |
+| pdf_review | 查看当前版本全部预览，提交 review-pdf |
+| complete | 当前 PDF 的全部页面已登记审阅，可以交付 |
 
-字段示例只表示结构，不能直接作为实际审阅备注：
+## 来源修订
 
-```json
-{
-  "previous": {"position": "row-1", "capture": "capture-0001", "bbox": [100, 200, 1200, 360]},
-  "current": {"position": "row-2", "capture": "capture-0002", "bbox": [100, 400, 1200, 560]},
-  "method": "overlap",
-  "notes": "填写实际看图得到的接续依据"
-}
-```
+`revise-selection(changes, review)` 的每项 change 包含 `position` 和完整 `region`。替换保留原排列位置；插入新位置时用 `after` 指定前一位置。`review` 可沿用未变的说明字段；实际确认变化后的来源时，显式提交 `complete=true`、`unresolved=[]`。省略 review 或 complete 会保存为待审阅。
 
-运行 `source-issues` 取得原始自动疑点的稳定 id。通过 `review.issue_dispositions` 逐项提交 `id`、`outcome`、`captures` 和具体 `notes`，outcome 为 resolved 或 unresolved；确认完整时相关疑点必须全部 resolved。原自动记录和处理依据分别保留，不能用整体 complete 抹去疑点。来源 hash、非法路径、损坏产物和实际裁剪门禁独立执行，处理备注不能覆盖这些错误；隐藏音乐仍未确认时保持未决。
+`revise-crop(index, bbox)` 修改裁剪后撤回来源批准。重新查看受影响区域，再用 `assemble` 或 `revise-selection` 确认来源。`crop-checks` 报错时读取返回的具体边界，调整该选区或选择更完整的截图。上下记号交错时可保留连续行组，避免横切符号。
 
-已有合法人工冻结且来源未变时继续恢复，不自动要求补齐新增证据，也不重置预算或当前 PDF 审阅。通过任一共享选源入口改变旧来源后采用新契约；使用局部修订时保留未变位置的依据，只补受影响位置和相邻接续。不迁移旧协议任务。
+来源 hash、选区引用和裁剪检查独立执行。审阅文字不能覆盖损坏产物、路径逃逸或不完整裁剪。
 
-## 导航、清单与证据
+## 宿主生图与恢复
 
-`row-manifest` 返回持久谱行清单。每条谱行包含稳定身份、独立排列顺序、当前来源、实际 PTS、时间基准、hash、裁剪、备用来源及接续依据。插入补采不重编号已有谱行；同位置去重，不同位置的重复音乐保留。清单元数据变化不重置生图输入额度，实际输入变化只影响对应组。
+粗拼实际查看后，调用 `redraw-requests(viewed_notes=...)`。返回有序 `handoffs`，`group_count` 是总组数，每组按当前状态处理：
 
-明确可读的小节顺序、完整行边界和首尾记号可以共同证明无重叠接续。导航缩略比较只决定跳转跨度；原生细节仍无法确认时登记 native_difference_needs_visual_review，交给 Agent 判断，不能用缩略相似度批准记谱或反复扫描同类微小差异。程序以 RapidOCR 1.4.4 随包模型在本地 CPU 读取行首小节号，两种缩放读数一致且分数均不低于 0.9 才保留纯正整数。读数绑定具体谱行、原生来源和数字区域 hash，不识别音符或节奏。新增身份未知时 `new_complete_rows=null`，当前检测行数另记，不能当作新增。Agent 实际看图后，逐行补充或修正使用 `review-row-anchors`；两个不重叠截图范围的连续性仍通过 `review-continuity` 记录。音乐、裁断或原谱位置风险仍阻止冻结，编号记录不能免除这些检查。
+| status | 操作 |
+| --- | --- |
+| needs_input_review | 查看该组粗拼，再提交 redraw-requests 的 viewed_notes |
+| ready_to_dispatch | 使用 group 和 request.request 调用 dispatch-redraw，随后真实调用宿主 |
+| recover_existing_call | 保持原 request，恢复已有结果；仍在运行则等待当前调用 |
+| needs_image_review | 查看已返回的生成图，调用 review-redraw 并提供完整行边界 |
+| needs_correction | 指出具体符号差异，用 begin-redraw(correction=true, reserve=true) 预留唯一一次修正，然后 dispatch-redraw |
+| accepted / vector | 该组材料就绪，继续处理其余组 |
 
-分别记录接续证据完整、严格时间覆盖和未决项。稀疏接续通过可以冻结，但不写成严格全曲覆盖。显式 `stage` 请求 `{"mode":"strict"}` 会连续扫描，即使此前已通过稀疏冻结。`overview`、`resample` 保留原连续扫描语义。连续扫描预算耗尽也不等同于完整覆盖。严格扫描在已审核编号连接之间增加新观察时，保留原选行和生图材料，返回 `numbered_anchor_requires_reconciliation` 并撤回来源完整资格。Agent 核对新增观察后通过 `assemble` 重新确认；程序不能将原编号连接扩展为对新增画面的批准。
+首次请求由 `prepared` 进入 `calling` 后，必须用相同 request 回填结果。`cancel-redraw` 仅用于尚未提交的请求。明确失败、工具不可用或确认无法恢复的未知结果，分别用 `fail-redraw` 的 failed、unavailable 或 unknown 转矢量。矢量结果同样需要最终逐页检查。
 
-缺号返回 `row_anchor_missing`，顺序冲突返回 `row_anchor_conflict`。通过 `review-row-anchors` 提交具体行索引和小节号，或在实际看过至少两张来源后，明确以 `fallback_interval` 授权指定范围使用几何等其他接续证据。授权只解除缺号暂停，不批准音乐或完整性。原谱首行未印数字时，Agent 可以确认音乐起点并在 notes 说明依据，不能冒称读到了数字。已有锚点只有在编号邻居、原生谱行及标题均经匹配后才继承，保留参考来源。
+每组每个输入版本最多一次定向修正；第二次拒绝转矢量。恢复不会退还次数。`redraw-inputs(groups=...)` 可以重新分组，组成员仍须按顺序覆盖全部选区。默认每组最多八个 system，并约束总像素和缩小后的五线细节。分组独立于打印分页。
 
-`navigation.problems` 保存原始接续疑点的稳定身份、区间、累计操作和无收益次数。收益以原始区间内未证明接续时长的减少计量，插入截图本身不算收益。连续两次无收益停止二分并返回 Agent，跨恢复累计。`sampling_counts` 分开记录 `forward_requests`、`backtrack_requests`、`endpoint_requests`、`local_scan_attempts` 和 `span_adjustment_events`；跨度日志不是额外截图，实际解码仍读取缓存和扫描指标。重复 stage 不重新提交等待判断的向前取样。
+来源或裁剪改变只影响对应输入组；未变组的结果和预算复用。回到先前完全相同的输入时恢复原调用、接受结果和已用额度。相同像素位于不同原谱位置时仍分别处理。
 
-当前稀疏策略为 `adaptive-score-rows/2`，程序检查为 `geometry-temporal/10`。保留旧任务，使用新目录验证新策略，不自动迁移旧导航。
+## 打印与逐页验收
 
-旧协议任务不迁移；有效历史人工冻结不重新扫描。源码升级与宿主安装分别处理，修改仓库 Skill 不自动修改安装副本。
+`layout` 的 margin 和 minimum_gap 使用 PDF 点，范围 0–144，默认分别为 24 和 6；可选 target_pages 为 1–512。目标页数不能强迫裁断完整行或缩到不符合现有比例。布局变化只撤销当前 PDF 审阅，保留生图材料。
 
-## 局部修改
+`stage` 或 `export` 在新版本目录保存 PDF、材料映射和全部有序预览。以来源宽度统一缩放，短行保持自然宽度，只在完整行或行组之间分页。Poppler 渲染每页预览，最长边最多 1200 像素。遗漏、重复、越界和重叠会阻断输出；异常留白作为提示。
 
-- `capture(seconds)` 或 `promote(identifier)` 补采原生来源。`include-candidate(identifier, notes)` 将已有截图纳入候选，返回 present 请求字段；不增加严格扫描覆盖。新候选撤回来源冻结和当前输出批准，保留生成历史。
-- `review-overlap(position, candidate, viewed_captures, notes)` 在实际查看并 present 两处来源后确认同一原谱位置，保留备用来源和依据，保持当前所选来源。candidate 使用完整 region 字段。
-- `revise-selection(changes, review)` 按 position 局部替换来源。changes 每项包含 position 与完整 region；新位置还需 after 指定已有的前一位置。替换不改变排列顺序，同一请求同位置只改一次。
-- `revise-selection` 的 review 可只提交变化部分。evidence 的 title/first/last 分别替换，joins 按 current.position 合并；旧疑点处理仅在依赖来源未变时复用。未填写 review 时保存为待审阅；完成确认需明确 complete=true、unresolved=[] 和实际依据。输入未变的生成组与额度继续复用。
-- `revise-crop(index, bbox)` 在新 Agent 契约下保留其他来源依据，只撤回当前来源批准，随后通过局部 review 修订受影响的端点与接续。未改几何的审阅不能批准新裁剪。
+实际查看每页后调用 `review-pdf`，传入全部页码、具体 notes 和导出回执中的 `output_revision`。缺页、旧版本或损坏预览拒绝批准。PDF hash 用于文件校验，不能替代版本标识；重新导出后即使字节相同，也需审核新版本。
 
-
-使用 `revise-crop(index, bbox)` 或 `assemble` 发布选行。程序先验证裁剪并准备新文件，再原子发布记录；无效参数或发布中断保留上个有效记录。修订后必须重新通过来源、覆盖及裁剪检查，冻结前不能调用生图。通过后调用 `redraw-inputs`，沿用原组的成员数，或显式传入完整有序 `groups` 重新分组。
-
-输入身份包含有序来源 hash、原生截图 hash、实际 PTS/time_base、原谱位置、裁剪 hash、bbox 和五线几何；文件路径、UUID、页码和打印布局不参与身份。只有实际成员与输入完全相同才能恢复结果。修改一行只建立相关组的新版本，其他组复用；A→B→A 恢复 A 的原调用、修正次数与接受结果，不退还额度。相同像素但不同原谱位置分别处理。所有旧版本保存在 `generation_history`，选择改变撤销当前 PDF 和批准，旧文件与元数据保存在 `output_history`。
-
-## 布局与全部页面审阅
-
-`layout` 接受 `margin`、`minimum_gap`（单位为 PDF 点，范围 0–144）和可选 `target_pages`（1–512）。默认边距 24、最小行距 6。布局调整只撤销当前 PDF 批准，保留所有生图材料、历史和额度。共同缩放以来源宽度为准，短行保留自然宽度，分页只发生于完整行之间。目标小于自然分页结果时保留更多页，响应 `layout.explanation` 说明完整行与可读比例约束。
-
-两个公开导出入口 `export` 和 `reconstruction.export_vector` 都遵循当前布局与全部预览契约，在新版本目录输出 PDF、材料映射和每页 `preview-N.png`。Poppler 逐页限时渲染，最多 512 页，每页长边最多 1200 像素。`previews` 按页序列出 hash；`checks` 检查放置中的遗漏、同位置重复、边界、比例和重叠，异常留白作为 warning。这些是几何检查，不是全曲音乐校对；未选候选依据仍在来源检查记录中。
-
-实际查看全部有序预览，检查标题、关键记号、顺序、首尾、裁断与观感，再调用 `review-pdf`，传入所有 `pages`、具体 `notes` 和当前 `output_revision`，即导出回执中的独立版本标识，不能使用 PDF sha256。缺少版本标识、缺页、过期版本或产物损坏拒绝批准。即使新旧 PDF 字节相同，新导出也需要新的版本标识和本次实际审阅。旧任务只有 hash 审阅时，调用 `stage` 或 `export` 生成新版预览，再查看全部页面并提交新标识。预览失败或发布中断不会替换已有有效输出；重新导出不覆盖旧文件。
-
-验证证据分别记录：自动检查、受控回执、历史决定重放、实际模型生成和实际看图。受控 CLI 测试不证明真实生图；历史材料重排不计新调用。未知成本保持 `null`。真实来源未决保留 `blocked`，不能用矢量消除隐藏或无法确认的音乐。
+生成回执和呈交记录保存 Agent 的声明，程序不据此证明模型看过图或理解了音乐。测试回执、旧决定重放和实际生成分开记录，未知成本保持 null。

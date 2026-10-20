@@ -8,12 +8,11 @@
 - Input: public HTTPS Bilibili BV video URLs, including ?p=2, or local video files.
 - Supported layout: fixed-scale, white-background, multi-system drum notation moving upward or changing pages in a verifiable order.
 - Output: A4 PDF named after the verified score title, source evidence, and task records. PDF files are under exports/<revision>/ in the task directory.
-- Runtime: Python 3.12+, Git, uv, ffmpeg, ffprobe, Poppler; a host agent with file access, script execution, native image viewing, and PDF page viewing.
+- Runtime: Python 3.12, Git, uv, ffmpeg, ffprobe, Poppler; a host agent with file access, script execution, native image viewing, and PDF page viewing.
 - Rendering: host image generation first, contour-vector fallback when unavailable or unsuitable. Contour tracing is not music recognition and cannot recover fully hidden symbols.
 - Authentication: anonymous public-video acquisition; no Bilibili cookies, login session, or model credentials required or read. No embedded model API.
 - Validation: real full-score PDF evidence exists in Codex for three videos. Other hosts have not completed full-score acceptance. No general accuracy, speed, or cost guarantee.
 - Limitations: horizontal scrolling, changing scale, unverifiable continuity, and performance-only videos are outside the validated scope. New unresolved source checks remain blocked.
-- MIDI: load only when the user explicitly requests it. Reliable full-score transcription has not passed the strict accuracy threshold. Approximate playable output requires explicit user acceptance and must be labeled midi_playable, reliable=false, with assumptions preserved.
 
 ## License
 
@@ -32,9 +31,6 @@ Read the canonical Skill instructions before acting. Prepare the source, then us
 
 - [Normal stages, local recovery and print layout](skills/bilibili-drum-score-to-pdf/references/stage-recovery-layout.md)
 - [CLI operations and request fields](skills/bilibili-drum-score-to-pdf/references/reconstruction-entry.md)
-- [Source checks and rough-score freezing](skills/bilibili-drum-score-to-pdf/references/automatic-source-checks.md)
-- [Manual recovery workflow](skills/bilibili-drum-score-to-pdf/references/reconstruction-workflow.md)
-- [Optional MIDI workflow](skills/bilibili-drum-score-to-pdf/references/midi-conversion.md)
 
 ## Evidence and development
 

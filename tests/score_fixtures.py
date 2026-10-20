@@ -37,16 +37,7 @@ def video_from_image(image, directory, name='input'):
 
 def controlled_source_review(regions, review):
     """Explicitly synthetic assertions, never evidence of an actual Agent view."""
-    def ref(region):
-        return {key: region[key] for key in ('position', 'capture', 'bbox')}
-    rows = [r for r in regions if r.get('kind', 'system') == 'system']
-    def endpoint(region):
-        return {**ref(region), 'notes': 'Controlled synthetic source assertion.'}
-    return {**review, 'evidence': {
-        'title': endpoint(regions[0]), 'first': endpoint(rows[0]), 'last': endpoint(rows[-1]),
-        'joins': [{'previous': ref(a), 'current': ref(b),
-                   'method': 'same_capture' if a['capture'] == b['capture'] else 'ordered_page',
-                   'notes': 'Controlled synthetic position order.'} for a, b in zip(rows, rows[1:])]}}
+    return {**review, 'unresolved': review.get('unresolved', [])}
 
 
 def controlled_reselection(task, title, regions, review):

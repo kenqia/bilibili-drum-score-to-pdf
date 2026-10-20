@@ -1,5 +1,17 @@
 # 验证记录
 
+## 2026-10-20 PDF Skill 清理
+
+从 `332922000d088803f4d74e8d7a4a7ebf93f26fc8` 建立隔离工作区，按用户确认删除 sparse/strict、MIDI、专属测试和运行协议，并移除 RapidOCR。运行包从 32 个文件减为 18 个，Python 模块从 20 个减为 12 个。来源审阅保留一份具体说明，宿主生图优先和矢量回退保持。
+
+完整离线回归 150 项、595.034 秒通过，2 项 Windows 专属测试在 WSL 跳过。该轮启动后另收紧局部改源的显式批准，并删除无用连续解码方法与缓存扫描统计；最终版本新鲜增量验证为来源审阅 9 项、单帧宿主兼容 4 项、原生缓存 7 项，全部通过。公开入口删除拒绝与 Windows UTF-8 BOM 请求已包含在完整回归内。
+
+独立只读审阅复现的局部批准继承问题已修复并补回归；生图回填文档已补充固定 `tool="host-imagegen"`。运行模块 Ruff E701/E702/F821、compileall、references 同步、Skill quick_validate 与 diff 检查通过。扩大到旧测试文件的风格扫描仍有原有 E701/E702，未把这些无关格式改动混入本次清理；现有 CI 的运行代码检查通过。没有配置或宣称静态类型检查。
+
+现有 CI 合成重放通过：三行谱面导出一页 A4 矢量 PDF、嵌入位图为 0、独立双跑字节一致；损坏图片、越界、未知版本与来源未决四类拒绝通过。
+
+验证材料为合成视频、受控宿主回执与程序拒绝测试；没有新真实视频、宿主生图或实际终稿看图验收，不据此宣称不同模型成品质量相同。旧扫描任务使用保留旧版，不自动迁成新版来源批准。
+
 ## 2026-10-17 接续判断集中与冗余清理
 
 main `9e54276` 起点上集中共享几何、编号与接续证据；冻结不再导入导航，判定阈值、策略版本、blocked 条件及证据格式保留。清理四个无用导入、一个无用赋值和一个不可达条件项。新增冻结独立重检及同号内容变化拒绝反例。
@@ -32,7 +44,7 @@ KiLLKiSS、标准曲、小星星及鲜花保存材料共26张原生截图、22�
 
 `tests/test_public_contracts.py` 用现有 unittest 的 `subTest` 注册入口矩阵。导出覆盖 CLI `export`、`score_workflow.export` 和 `reconstruction.export_vector`；审阅覆盖 CLI 与三个公开 module；分组覆盖 CLI、工作流与任务 module。新增同类公开入口时加入对应矩阵，不另建测试框架。
 
-新增裁剪、批量请求生命周期及 scan-status 的 CLI/module 入口也注册共同矩阵；scan-status 明确只读元数据，损坏来源仍由正常 load 拒绝。
+裁剪与批量请求生命周期的 CLI/module 入口也注册共同矩阵；已删除路线由 CLI 拒绝测试覆盖，损坏来源仍由正常 load 拒绝。
 
 矩阵检查布局和有序全部预览、缺失或过期审核版本、相同 PDF 字节的新版本、缺页、缺报告、损坏预览，以及默认和显式分组的行数与可读性限制。历史身份恢复继续由 `test_stage_cli.py` 验证。审阅时核对入口是否注册、共同约束是否适用于该入口；确定性的拒绝行为由 CI 验证。
 
@@ -64,16 +76,16 @@ Root 通过公开操作对三曲四路线历史材料重新排版，并实际查
 
 2026-10-14，#62 实施分支的完整带 Mido 回归为 99 项、56.478 秒，全部通过。新增统一 CLI 合成验证覆盖缓存晋升零重复解码、缩略尺寸改变、恢复、容量淘汰、候选损坏与缺失、来源改变、独立生图分组及小符号有效分辨率、未知调用恢复、一次修正与混合谱行材料。公开工作流另验证来源审阅撤回后禁止调用，以及截图发布中断后的恢复。受控生成回执只验证协议与预算；没有新的宿主生成或音乐视觉判断。日志保存在本机 `/home/kenqia/issue61-context/ticket62-final-all.log`，集成分支需另行回归。
 
-完整入口为以下命令。Mido 是独立可选依赖，此命令显式加入以验证 MIDI；普通 PDF 不需要它。
+当前 PDF 完整回归入口如下。上文旧版本的带 Mido 结果保留为历史记录；新版已移除 MIDI 入口及专属测试。
 
 ```sh
-uv run --python 3.12 --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
-  --with mido==1.3.3 python -m unittest discover -s tests -v
+uv run --python 3.12 --quiet --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
+  python -m unittest discover -s tests -v
 ```
 
 新测试保留匿名网络、真实工作进程与信号期限、分 P、公共 DNS/TLS、签名 URL 脱敏、配置与认证哨兵、资源大小、原媒体尺寸、跨文件系统独占发布、用户目录保护、实际 PTS 和临时解码清理。默认入口检查新版任务、旧任务拒绝、恢复与 PDF-only 无 MIDI。重绘测试覆盖来源损坏、完整性、重叠与重复音乐、原生输出比例、一次修正、预算恢复、矢量路由、失败选择原子发布和最终 PDF 验证。MIDI 检查完整播放顺序、精确事件、读回、用户近似授权及路径边界。
 
-CI 使用合成视频和保存的确定性选择检查矢量 PDF、A4 与来源拒绝，并另跑可选 MIDI 测试。它不调用宿主模型，不提供真实视觉或音乐准确证据。#59 实施 worktree 完整87项、43.578秒通过，日志 `/home/kenqia/issue54-recovery-evidence/issue59-full-final2.log`，包含可选 Mido。Python compileall、diff 检查和仓库外新版 help smoke 通过。最终 integration 冻结回归结果另行追加，实施 worktree 验证不冒充远端 CI。
+当前 CI 使用合成视频和保存的确定性选择检查矢量 PDF、A4 与来源拒绝。它不调用宿主模型，不提供真实视觉或音乐准确证据。#59 实施 worktree 完整87项、43.578秒通过，日志 `/home/kenqia/issue54-recovery-evidence/issue59-full-final2.log`，包含可选 Mido。Python compileall、diff 检查和仓库外新版 help smoke 通过。最终 integration 冻结回归结果另行追加，实施 worktree 验证不冒充远端 CI。
 
 ## 三视频真实验收
 
@@ -164,7 +176,7 @@ main 基线 `9cece50dcfe78affd6f8739c3221521d8bdbf55d` 上的实现工作树完�
 
 UTF-8/POSIX 安装、严格旧清单校验、失败恢复、混合缺号与残行、FFmpeg 两种能力路径以及不可读无关 Skill 的测试通过。references 同步、Ruff E701/E702/F821、compileall 和 diff 检查通过。标准与规格独立复核无剩余发现；原失败和修复过程见 [本轮实验记录](experiments/2026-10-19-agent-first-cross-host.md)。本地完整日志保存在工作区 `work/agent-first-cross-host/full-final.log`。
 
-本机 Linux FFmpeg 4.4.2 的合成重放和有限时无网络解码探测通过，实际 PTS 为 0、time_base 为 [1,1000]。合成矢量 PDF 双跑字节相同，4 类拒绝检查通过。新版 fps_mode 参数路线由模拟能力矩阵验证。Windows 原生重点套件已加入 CI，尚无本轮远端运行结果。按用户确认，真实视频、实际看图与跨宿主验收由用户执行，步骤见 [Agent-first 用户验收清单](agents/agent-first-cross-host-acceptance.md)。合成测试和受控 review 声明不证明真实音乐完整或模型实际看图。本轮没有新真实视频、生图、共享 Skill 安装或远端写入。
+本机 Linux FFmpeg 4.4.2 的合成重放和有限时无网络解码探测通过，实际 PTS 为 0、time_base 为 [1,1000]。合成矢量 PDF 双跑字节相同，4 类拒绝检查通过。新版 fps_mode 参数路线由模拟能力矩阵验证。Windows 原生重点套件已加入 CI，尚无本轮远端运行结果。按用户确认，真实视频、实际看图与跨宿主验收由用户执行，步骤见 [Agent-first 用户验收清单](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/332922000d088803f4d74e8d7a4a7ebf93f26fc8/docs/agents/agent-first-cross-host-acceptance.md)。合成测试和受控 review 声明不证明真实音乐完整或模型实际看图。本轮没有新真实视频、生图、共享 Skill 安装或远端写入。
 
 
 ## 2026-10-19 Windows 安装路径修复

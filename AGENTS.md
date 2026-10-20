@@ -1,25 +1,22 @@
 # 项目工作约定
 
-架构与支持范围读取 docs/architecture.md，验证入口和真实验收读取 docs/verification.md，领域术语见 GLOSSARY.md。项目文档使用 google-developer-docs 编写，unslop 润色。
+架构与支持范围读取 docs/architecture.md，验证入口和实际验收读取 docs/verification.md，领域术语见 GLOSSARY.md。文档使用 google-developer-docs 编写，unslop 润色。
 
-正常 PDF 任务准备后使用默认 `stage(mode=agent)`，未冻结时由 Agent 导航、实际查看、present 和 assemble，不主动扫描；显式 sparse/strict 保留原覆盖语义。新来源审阅提交标题、首尾、相邻接续的结构化依据并逐项处理旧自动疑点。先读取 docs/agents/stage-recovery-layout.md；命令参数读取 docs/agents/reconstruction-entry.md。来源检查未决或需人工恢复时读取 docs/agents/automatic-source-checks.md 和 docs/agents/reconstruction-workflow.md。同位置重叠去重，后续重复音乐保留。水印与播放标记允许进入粗拼；音乐不可读时局部补采，不猜隐藏符号。
+正常 PDF 任务使用 `prepare → stage`。Agent 查看原生首尾画面，按可见接续补采，present 后 assemble 有序完整谱行；一份具体来源审阅覆盖标题、首尾和跨截图接续。来源未决保持待审，裁剪问题只针对实际报错或看图发现的区域修正。同位置只选择一个来源，不同位置的重复音乐保留。记号交错时保留连续行组。
 
-生成调用、按输入版本计的修正预算、未知调用恢复和矢量兜底遵循 docs/agents/stage-recovery-layout.md。轮廓转描不能称为音乐识别。选行保持完整谱行及关键记号，重排保持比例；原始来源与派生产物分开，保留实际 PTS、hash、调用记录和来源验证。历史实现通过 Git history 查看，不自动迁移旧任务。
-
-只有自然语言明确要求 MIDI 时加载 docs/agents/midi-conversion.md 与可选 Mido。可靠转写不满足时拒绝可靠输出；用户明确允许近似播放才执行授权分支，保留原未决转写和假设，标记 midi_playable、reliable=false。用户调整后的 #58 门槛见 docs/agents/reconstruction-acceptance-amendment.md；准确性限制不免除安全、完整曲长和实际回读。
+命令字段读取 docs/agents/reconstruction-entry.md；局部修改、生图恢复、一次修正预算和打印布局读取 docs/agents/stage-recovery-layout.md。宿主生图优先，失败、不可用或确认无法恢复的未知调用转矢量。轮廓转描只保留可见外形。最终全部页面实际查看后，使用当前 output_revision 审核。
 
 运行仓库验证：
 
 ```sh
-uv run --python 3.12 --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt --with mido==1.3.3 python -m unittest discover -s tests -v
+uv run --python 3.12 --quiet --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt python -m unittest discover -s tests -v
+python tools/sync_skill_references.py --check
 ```
 
-修改正常流程先运行针对性合成测试，再按变更风险验收真实来源和全部页面。#58保存 KiLLKiSS、BV1rH4y1R7Rk 与第三作者的实际证据，包含强制矢量与遮挡修复。记录实际 PTS、导航、原生保留和呈交数量、来源、修正、分页、保存决定恢复与耗时。未知成本保留 null。真实样本失败先检查 seek、几何、检测和原始内容，不新增样本颜色或 codec 例外。固定决定检查只证明确定性执行，不能冒充新的视觉判断。
+修改公开入口时更新 tests/test_public_contracts.py 的共同约束。验证使用已有测试和合成重放；声明、历史决定重放、真实生图及实际看图区分记录。真实来源和跨宿主验收由用户执行，无回执不宣称通过。保留来源实际 PTS、time_base、hash、修正预算和结果历史；未知成本保持 null。
 
-匿名获取、网络公共地址校验、资源期限、解码清理、输出不覆盖和来源完整性保护不得随旧实现删除。只使用合成标记测试脱敏，不读真实凭证。GitHub Issues 位于 kenqia/bilibili-drum-score-to-pdf，远端读取核对 Git remote。写入按用户明确授权范围执行，不自动关闭工单或合并。历史实现与旧文档通过 Git history 查看。保护无关用户修改、实验及未跟踪规格。
+匿名获取、公共地址/TLS 校验、资源期限、解码清理、输出不覆盖和来源完整性保护继续执行。只用合成标记测试脱敏，不读真实凭证。仓库有其他未提交工作时使用隔离工作区，保护用户修改和实验材料。远端写入须按用户明确授权，不自动 push、合并或关闭工单。
 
-对外 Skill 为 `skills/bilibili-drum-score-to-pdf/` 自包含目录，运行协议位于随包的 `references/`。修改 `docs/agents/` 协议后运行 `python tools/sync_skill_references.py`，提交生成材料；`--check` 与 `tests/test_skill_package.py` 验证同步和仓库外运行。保留现有安装保护与任务备份，不将开发测试、实验或宣传素材加入安装包。
+对外 Skill 为 skills/bilibili-drum-score-to-pdf/ 自包含目录。修改 docs/agents 的运行协议后执行 `python tools/sync_skill_references.py`，tests/test_skill_package.py 验证同步及仓库外运行。安装工具从已提交快照发布，更新前保留可恢复副本和未管理任务。
 
-跨轮次或压缩后的工程续跑先读取当前工作交接的 CURRENT.md，再核对 Git；更新方法见 docs/agents/engineering-handoff.md。公开入口变更须加入 tests/test_public_contracts.py 的共同约束矩阵，验证与审阅规则见 docs/verification.md。
-
-2026-10-19 Agent-first 修复的真实来源与跨宿主验收由用户执行。实施方仍运行针对性测试、完整回归、公开契约与引用同步检查，提供可执行验收步骤；无实际回执不写为验收通过。
+跨轮次续跑先读取 work/engineering/CURRENT.md，再核对 Git；交接格式见 docs/agents/engineering-handoff.md。旧协议与历史实现通过 Git history 查看，不把旧设计文档作为当前操作指引。
