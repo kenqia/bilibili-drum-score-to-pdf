@@ -12,8 +12,8 @@ import sys
 from public_video import InputError, ACQUISITION_SECONDS, retryable_acquisition
 from video_seek import ConversionError
 
-OPERATIONS = ('prepare', 'resume', 'stage', 'stitch', 'review-longshot', 'navigate', 'capture', 'promote', 'present',
-              'assemble', 'revise-selection', 'revise-crop', 'crop-checks', 'layout',
+OPERATIONS = ('prepare', 'resume', 'stage', 'stitch', 'review-longshot', 'repair-longshot', 'navigate', 'capture', 'promote', 'present',
+              'assemble', 'revise-selection', 'revise-crop', 'crop-checks', 'layout', 'pdf-route', 'clean-watermark',
               'cache-report', 'cache-limits', 'redraw-inputs', 'redraw-requests',
               'dispatch-redraw', 'cancel-redraw', 'begin-redraw', 'finish-redraw',
               'fail-redraw', 'review-redraw', 'reject-accepted-redraw',

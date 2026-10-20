@@ -90,6 +90,9 @@ def load(task):
         raise ReconstructionError('无法读取当前任务记录。', code='invalid_state', action='prepare or resume a current task') from None
     if record.get('schema') != 'score-reconstruction/1':
         raise ReconstructionError('不是当前重构任务。')
+    if ('pdf_route' in record and record['pdf_route'] not in ('original', 'redraw', 'vector') or
+            record.get('pdf_route') == 'original' and record.get('workflow') != 'longshot/1'):
+        raise ReconstructionError('任务打印路线无效。')
     source = Path(record['source']['path'])
     if not source.is_file() or digest(source) != record['source']['sha256']:
         raise ReconstructionError('原视频损坏或改变，停止任务。')
@@ -103,6 +106,15 @@ def load(task):
         stitched = record['longshot']
         for reference in [stitched['image'], stitched['samples'], *stitched['endpoints']]:
             artifact(task, reference)
+        for repair in stitched.get('repairs', []):
+            artifact(task, repair['before'])
+            artifact(task, repair['source'])
+    if record.get('watermark_cleanup'):
+        cleanup = record['watermark_cleanup']
+        artifact(task, cleanup['source'])
+        artifact(task, cleanup['image'])
+        if cleanup['source'] != record.get('longshot', {}).get('image'):
+            raise ReconstructionError('水印清理不属于当前长图。')
     if record.get('output'):
         for preview in record['output'].get('previews', []):
             artifact(task, preview)
@@ -132,6 +144,8 @@ def _fingerprint(record):
         'overview_candidates': [c['sha256'] for c in record.get('overview',{}).get('candidates',[])]}
     if record.get('longshot'):
         material['longshot'] = record['longshot']
+    if record.get('watermark_cleanup'):
+        material['watermark_cleanup'] = record['watermark_cleanup']
     if record.get('agent_review_contract'):
         material['agent_review_contract'] = record['agent_review_contract']
         material['source_issue_history'] = record.get('source_issue_history', [])
@@ -228,6 +242,10 @@ def assemble(task, title, regions, review, *, positioned=False):
     # was initially prepared for automatic longshot stitching.
     previous.pop('longshot', None)
     previous.pop('workflow', None)
+    if previous.get('pdf_route') == 'original':
+        previous.pop('pdf_route')
+    if previous.get('watermark_cleanup'):
+        previous.setdefault('watermark_cleanup_history', []).append(previous.pop('watermark_cleanup'))
     if positioned or previous.get('agent_review_contract'):
         if not review.get('continuity') or not review.get('first_last'):
             raise ReconstructionError('需要接续和首尾实际审阅记录。')
@@ -293,9 +311,12 @@ def redraw_inputs(task, groups=None):
 
     record = load(task)
     require_frozen(record)
+    route_changed = _change_pdf_route(record, 'redraw', 'Explicit redraw-inputs API request.')
     if record.get('source_review',{}).get('complete') is not True or record['source_review'].get('unresolved'):
         raise ReconstructionError('原图完整性尚未确认。')
     if record.get('redraw_pages') and (groups is None or groups == [p['regions'] for p in record['redraw_pages']]):
+        if route_changed:
+            save(task, record)
         return record['redraw_pages']
     if not record.get('redraw_pages') and record['status'] != 'ready_to_redraw':
         raise ReconstructionError('原图接续或完整性未确认。')
@@ -488,6 +509,7 @@ def begin_redraw(task, identifier, viewed_notes=None, correction=False, reserve=
     page = _page(record, identifier)
     if type(correction) is not bool or type(reserve) is not bool:
         raise ReconstructionError('修正与预留参数必须是布尔值。')
+    _change_pdf_route(record, 'redraw', 'Explicit begin-redraw API request.')
     _reserve_redraw(record, page, viewed_notes, correction, reserve)
     save(task, record)
     return _host_request(task, page)
@@ -495,15 +517,20 @@ def begin_redraw(task, identifier, viewed_notes=None, correction=False, reserve=
 
 def redraw_requests(task, viewed_notes=None):
     """Return one ordered handoff for every group, including resumed requests."""
-    redraw_inputs(task)
     record = load(task)
+    recovering = delivery_route(record) != 'redraw' and any(p['status'] == 'calling' for p in record.get('redraw_pages', []))
+    if recovering:
+        require_frozen(record)
+    else:
+        redraw_inputs(task)
+        record = load(task)
     if not viewed_notes and record.get('longshot'):
         viewed_notes = (record['longshot'].get('review') or {}).get('notes')
     _require_safe_crops(task, record)
     handoffs = []
     changed = False
     for page in record['redraw_pages']:
-        if page['status'] == 'needs_generation' and viewed_notes:
+        if page['status'] == 'needs_generation' and viewed_notes and not recovering:
             _reserve_redraw(record, page, viewed_notes, False, True)
             changed = True
         status = page['status']
@@ -540,6 +567,7 @@ def dispatch_redraw(task, identifier, request):
     page = _page(record, identifier)
     if page['status'] != 'prepared' or page['attempts'][-1]['request'] != request:
         raise ReconstructionError('只能提交当前预留请求；已提交或结果未知时先恢复。')
+    _change_pdf_route(record, 'redraw', 'Explicit dispatch-redraw API request.')
     page['attempts'][-1]['status'] = 'calling'
     page['status'] = 'calling'
     save(task, record)
@@ -659,21 +687,61 @@ def reject_accepted_redraw(task, identifier, notes):
     return page
 
 
-def export(task, render, *, host_redraw=False):
+def delivery_route(record):
+    """Only newly prepared tasks default to original; old tasks keep their route."""
+    return record.get('pdf_route', 'redraw')
+
+
+def _change_pdf_route(record, route, notes):
+    previous = delivery_route(record)
+    if route != previous:
+        if any(p['status'] == 'calling' for p in record.get('redraw_pages', [])):
+            raise ReconstructionError('先恢复结果未知的生图调用，再切换路线。')
+        invalidate_output(record, 'pdf_route_revision')
+        record.setdefault('pdf_route_history', []).append({'from': previous, 'to': route, 'notes': notes})
+        record['pdf_route'] = route
+        if record.get('source_review', {}).get('complete'):
+            record['status'] = 'ready_to_redraw'
+        return True
+    return False
+
+
+def set_pdf_route(task, route, notes):
+    """Record an explicit request; route changes never dispatch model calls."""
+    record = load(task)
+    if route not in ('original', 'redraw', 'vector') or not isinstance(notes, str) or not notes.strip():
+        raise ReconstructionError('需要有效路线及用户请求说明。', code='invalid_request', field='route/notes')
+    if route == 'original' and record.get('workflow') != 'longshot/1':
+        raise ReconstructionError('原图直排需要长截图任务。')
+    if _change_pdf_route(record, route, notes):
+        save(task, record)
+    return {'route': route, 'status': record['status']}
+
+
+def output_route(output):
+    return output.get('render_route', 'redraw' if output.get('method') == 'reviewed_host_images_and_vector_fallback' else 'vector')
+
+
+def export(task, render, *, host_redraw=False, render_route=None):
     """Validate export readiness, render materials, then publish once.
 
     The two existing renderers return files and placements. Task state and PDF
     approval are owned here, independent of vector or host-image geometry.
     """
     record = load(task)
+    render_route = render_route or ('redraw' if host_redraw else 'vector')
     if record.get('source_review', {}).get('complete') is not True or record['source_review'].get('unresolved'):
         raise ReconstructionError('原图完整性尚未确认，停止导出。')
     require_frozen(record)
     _require_safe_crops(task, record)
+    if render_route == 'vector':
+        _change_pdf_route(record, 'vector', 'Explicit vector export API request.')
     output = record.get('output')
     if output:
         try:
             require_output_previews(task, output, record)
+            if output_route(output) != render_route:
+                raise ReconstructionError('输出路线已改变。')
         except ReconstructionError:
             pass
         else:
@@ -683,11 +751,12 @@ def export(task, render, *, host_redraw=False):
         if not pages or any(p['status'] not in ('accepted', 'vector') for p in pages):
             raise ReconstructionError('先完成每页重绘审阅或自动兜底。')
     else:
-        if not output and record['status'] != 'ready_to_redraw':
+        if not output and record['status'] != 'ready_to_redraw' and render_route != 'original':
             raise ReconstructionError('原图尚未确认完整，或仍有未决内容。')
     if output:
         invalidate_output(record, 'preview_layout_upgrade')
     output = render(task, record)
+    output['render_route'] = render_route
     require_output_previews(task, output, record)
     record.update(output=output, status='needs_pdf_review')
     save(task, record)
@@ -784,8 +853,10 @@ def _preview_and_check(task, output, blocks, options):
 def finalize_output(task, output, blocks, options, record):
     """Create ordered previews and geometry evidence for every public renderer."""
     if record.get('longshot'):
-        from longshot import NOTICE
-        output.update(notice=NOTICE, reliable=False)
+        from longshot import NOTICE, ORIGINAL_NOTICE, VECTOR_NOTICE
+        notice = ORIGINAL_NOTICE if output.get('render_route') == 'original' else (
+            NOTICE if 'imagegen' in output.get('routes', []) else VECTOR_NOTICE)
+        output.update(notice=notice, reliable=False)
     output['previews'], output['checks'] = _preview_and_check(task, output, blocks, options)
     target = options.get('target_pages')
     count = output['page_count']
@@ -799,6 +870,10 @@ def finalize_output(task, output, blocks, options, record):
 
 
 def require_output_previews(task, output, record):
+    if output and output_route(output) == 'original':
+        source = record.get('watermark_cleanup', {}).get('image', record.get('longshot', {}).get('image', {}))
+        if not source.get('sha256') or output.get('print_source_sha256') != source['sha256']:
+            raise ReconstructionError('直排终稿材料已改变，需要重新导出。')
     if (not output or not output.get('output_revision') or
             output['output_revision'] != Path(output['pdf']).parent.name or
             output.get('freeze_id') != record.get('freeze', {}).get('id') or

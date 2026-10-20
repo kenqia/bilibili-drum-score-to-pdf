@@ -1,11 +1,11 @@
 ---
 name: bilibili-drum-score-to-pdf
-description: 将 B站链接或本地纵向滚动鼓谱视频转成长截图，优先生图或矢量兜底，整理为允许局部推测的 A4 PDF。
+description: 将 B站链接或本地纵向滚动鼓谱视频合成长截图，直接按完整谱行等比排成 A4 PDF，可安全地局部去水印。
 ---
 
 # 鼓谱视频转 PDF
 
-交付以实际谱名命名的 A4 PDF。流程为下载视频、自动长截图、清理重绘、完整谱行排版。允许模型根据上下文推测模糊或遮挡的局部符号，交付时统一说明可能存在推测。
+交付以实际谱名命名的 A4 PDF。默认直接排版长截图中的完整谱行，保留原有记谱外观。原图直排未经逐符号校对，仍可能存在拼接、模糊或遮挡问题。
 
 显式选择本 Skill 并提供视频链接，即执行 PDF 流程。未指定输出位置时，在当前工作目录建立独立任务目录，保留已有同名文件。交付时报告 PDF 绝对路径。
 
@@ -18,11 +18,17 @@ uv run --python 3.12 --quiet --isolated --with-requirements "<skill-root>/script
 
 ## 正常流程
 
-1. 准备后调用 `stage`，程序生成长截图和整行切分。查看长图及原生首尾，检查明显漏行、重复和裁断，通过 `review-longshot(title, notes)` 记录一次整体审阅。蓝标、水印、局部模糊和轻微接缝直接进入后续处理，不逐符号校对或逐行填写来源。整小节、整行缺失修复拼接，不能凭空补写整段音乐。
-2. 再调用 `stage`，按全部 handoff 的组 ID 和 request ID 执行 `dispatch-redraw`，真实调用宿主生图，以同一 request 回填 `finish-redraw`。请求已包含清理提示词。查看生成结果，通过 `review-redraw(accepted, notes)` 判断明显增删行、裁断和整体可读性，程序自动取得行边界。每块最多一次定向修正，小疑点不阻止交付。
-3. 生图工具不可用或明确失败时，对相应组调用 `fail-redraw` 转矢量。调用结果未知时先恢复原调用；无法恢复再记录 `unknown`。轮廓转描保留可见外形，不能补出隐藏音符。
-4. `stage` 导出 A4 和全部有序预览。实际查看每页，检查谱名、首尾、明显漏行或重复、裁断和排版，通过当前 `output_revision` 调用 `review-pdf`。`stage.phase=complete` 后交付，统一说明“近似重绘，局部符号可能含模型推测，未经逐符号校对”。
+1. 准备后调用 `stage`，程序生成长截图和完整谱行切分。查看长图及原生首尾，检查明显漏行、重复和裁断，用 `review-longshot(title, notes)` 记录一次整体审阅。轻微模糊、底色、水印和播放标记可保留，不逐符号校对或逐行填写来源。
+2. 如需去水印，只对实际确认没有音符、五线、标题或署名的区域调用 `clean-watermark`，提交当前长图 hash、矩形及安全确认。无法确认安全或水印与谱面重叠时保留。查看清理结果，原长图保持独立保存。
+3. 再调用 `stage`，直接取得 A4 PDF 和全部有序预览。按完整谱行或连续行组统一比例排版，自然分页并平衡留白，允许各页行数不同。
+4. 实际查看全部页面，核对谱名、首尾、明显漏行或重复、裁断和打印观感，以当前 `output_revision` 调用 `review-pdf`。`stage.phase=complete` 后交付，使用实际输出的 `notice`，说明未经逐符号校对。
 
-长图过长时自动按完整谱行分组，生图分组与 A4 分页分别处理。需要重拼、一次修正、恢复调用或调整布局时，读取 [stage-recovery-layout.md](references/stage-recovery-layout.md)；请求字段读取 [reconstruction-entry.md](references/reconstruction-entry.md)。`--summary` 的 `details.path` 保存完整回执，读取后取得全部请求和产物。
+明显漏行或重复先用 `stitch` 修复拼接；严重遮挡优先 `capture` 查找原视频清楚画面，再用 `repair-longshot` 等尺寸替换局部，重新整体查看。仍无法恢复时说明限制，不猜隐藏符号，也不把已知缺段称为完整谱。恢复与清理字段读取 [stage-recovery-layout.md](references/stage-recovery-layout.md) 和 [reconstruction-entry.md](references/reconstruction-entry.md)。
+
+## 可选重绘与矢量
+
+用户明确要求重绘或矢量时，用 `pdf-route(route, notes)` 记录请求，route 为 redraw 或 vector。新任务不会因为外观不够干净自动切换路线。已有任务保留原路线及调用恢复；未知调用先恢复原 ID。
+
+重绘执行、一次修正及矢量兜底按上述阶段指南处理。只有真实生图的结果才披露模型局部推测；矢量只转描可见外形，不能恢复隐藏记谱。`--summary` 的 `details.path` 保存完整回执，读取后取得全部请求和产物。
 
 首版支持已有白底多行、固定比例的纵向滚谱，优先适配停驻后向上推进。缩放、横移、复杂翻页及没有谱面的演奏视频不纳入首版。无法查看图片时如实报告。匿名获取和宿主检查见 [support.md](references/support.md)。

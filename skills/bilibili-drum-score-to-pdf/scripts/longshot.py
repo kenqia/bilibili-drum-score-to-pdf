@@ -10,7 +10,7 @@ import uuid
 
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageChops
 
 import score_task
 from score_task import ReconstructionError, digest, load, save, write_path
@@ -18,6 +18,8 @@ from video_seek import VideoReader
 
 WORKFLOW = 'longshot/1'
 NOTICE = '近似重绘，局部符号可能含模型推测，未经逐符号校对。'
+ORIGINAL_NOTICE = '原图直排，未经逐符号校对；长截图可能保留拼接、模糊或遮挡问题。'
+VECTOR_NOTICE = '轮廓转描只保留可见外形，不能恢复被遮挡记谱，未经逐符号校对。'
 PROMPT = ('将输入鼓谱清理重绘为白底黑色可打印谱面，去掉播放高亮和水印。'
           '保持标题、首尾、全部谱行数量和顺序，不增删整小节或整行，不改写整段音乐。'
           '允许根据可见上下文推测模糊或遮挡的局部符号。保持每行布局和比例，'
@@ -196,6 +198,34 @@ class _Composer:
                 image.close()
 
 
+def _publish_image(task, directory, image, source_sha256):
+    boxes = system_boxes(image)
+    image_path = directory / 'score.png'
+    image.save(image_path)
+    regions = []
+    for index, box in enumerate(boxes):
+        path = directory / f'row-{index + 1:04d}.png'
+        with image.crop(box['bbox']) as crop:
+            crop.save(path)
+            regions.append({**box, 'path': str(path.relative_to(task)), 'sha256': digest(path),
+                            'width': crop.width, 'height': crop.height,
+                            'position': f"longshot:{box['bbox'][1]}:{box['bbox'][3]}",
+                            'source_kind': 'longshot', 'source_sha256': source_sha256})
+    reference = {'path': str(image_path.relative_to(task)), 'sha256': digest(image_path),
+                 'width': image.width, 'height': image.height}
+    return reference, regions
+
+
+def _retire_longshot(record):
+    score_task.invalidate_selection(record)
+    if record.get('longshot'):
+        record.setdefault('longshot_history', []).append(record['longshot'])
+    if record.get('watermark_cleanup'):
+        record.setdefault('watermark_cleanup_history', []).append(record.pop('watermark_cleanup'))
+    for key in ('agent_review_contract', 'freeze', 'source_review'):
+        record.pop(key, None)
+
+
 def stitch(task, interval=1., max_jump=400):
     """Publish versioned longshot and row crops, without registering a view."""
     if type(interval) not in (int, float) or not math.isfinite(interval) or interval <= 0 or type(max_jump) is not int or max_jump < 1:
@@ -219,20 +249,7 @@ def stitch(task, interval=1., max_jump=400):
             image.close()
         samples = [{**sample, **motion} for sample, motion in zip(samples, composer.samples)]
         with composer.image() as image:
-            boxes = system_boxes(image)
-            image_path = directory / 'score.png'
-            image.save(image_path)
-            regions = []
-            for index, box in enumerate(boxes):
-                path = directory / f'row-{index + 1:04d}.png'
-                with image.crop(box['bbox']) as crop:
-                    crop.save(path)
-                    regions.append({**box, 'path': str(path.relative_to(task)), 'sha256': digest(path),
-                                    'width': crop.width, 'height': crop.height,
-                                    'position': f"longshot:{box['bbox'][1]}:{box['bbox'][3]}",
-                                    'source_kind': 'longshot', 'source_sha256': source['sha256']})
-            reference = {'path': str(image_path.relative_to(task)), 'sha256': digest(image_path),
-                         'width': image.width, 'height': image.height}
+            reference, regions = _publish_image(task, directory, image, source['sha256'])
         sample_path = directory / 'samples.json'
         sample_path.write_text(json.dumps(samples, ensure_ascii=False), encoding='utf-8')
         endpoints = []
@@ -241,10 +258,7 @@ def stitch(task, interval=1., max_jump=400):
             image.save(path)
             endpoints.append({'path': str(path.relative_to(task)), 'sha256': digest(path),
                               **{k: sample[k] for k in ('pts', 'time_base', 'timestamp')}})
-        score_task.invalidate_selection(record)
-        record.pop('agent_review_contract', None)
-        record.pop('freeze', None)
-        record.pop('source_review', None)
+        _retire_longshot(record)
         record.update(workflow=WORKFLOW, regions=regions, rough=reference, rough_chunks=[reference],
                       status='needs_longshot_review', longshot={'image': reference,
                       'samples': {'path': str(sample_path.relative_to(task)), 'sha256': digest(sample_path)},
@@ -279,6 +293,103 @@ def review_longshot(task, title, notes, accepted=True):
     score_task.freeze(record, 'longshot')
     save(task, record)
     return record
+
+
+def clean_watermark(task, rectangles, source_sha256, notes, confirmed_safe):
+    """Whiten only Agent-reviewed empty areas; preserve the unmodified longshot."""
+    record = load(task)
+    score_task.require_frozen(record)
+    if (not is_longshot(record) or score_task.delivery_route(record) != 'original' or
+            not isinstance(notes, str) or not notes.strip() or confirmed_safe is not True or
+            source_sha256 != record['longshot']['image']['sha256'] or
+            not isinstance(rectangles, list) or len(rectangles) > 128):
+        raise ReconstructionError('需要当前长图及不含记谱、标题和署名的安全区域确认。',
+                                  code='invalid_request', field='rectangles/source_sha256/confirmed_safe')
+    source = record['longshot']['image']
+    for box in rectangles:
+        if (not isinstance(box, list) or len(box) != 4 or any(type(v) is not int for v in box) or
+                not 0 <= box[0] < box[2] <= source['width'] or
+                not 0 <= box[1] < box[3] <= source['height']):
+            raise ReconstructionError('清理矩形必须位于当前长图内。', code='invalid_request', field='rectangles')
+    previous = record.get('watermark_cleanup')
+    if previous and previous['rectangles'] == rectangles:
+        return previous
+    if not rectangles:
+        if previous:
+            record.setdefault('watermark_cleanup_history', []).append(record.pop('watermark_cleanup'))
+            score_task.invalidate_output(record, 'watermark_cleanup_revision')
+            score_task.freeze(record, 'longshot')
+            save(task, record)
+        return {'image': source, 'rectangles': [], 'outside_unchanged': True}
+    directory = write_path(task, Path('longshot') / uuid.uuid4().hex)
+    directory.mkdir(parents=True)
+    path = directory / 'cleaned.png'
+    with Image.open(score_task.artifact(task, source)) as before:
+        after = before.copy()
+        try:
+            drawing = ImageDraw.Draw(after)
+            for left, top, right, bottom in rectangles:
+                drawing.rectangle((left, top, right - 1, bottom - 1), fill='white')
+            with ImageChops.difference(before, after) as difference:
+                for box in rectangles:
+                    difference.paste(0, tuple(box))
+                if difference.getbbox() is not None:
+                    raise ReconstructionError('清理修改了选区外像素，停止发布。')
+            after.save(path)
+        finally:
+            after.close()
+    cleaned = {'source': source, 'image': {'path': str(path.relative_to(task)), 'sha256': digest(path),
+               'width': source['width'], 'height': source['height']},
+               'rectangles': rectangles, 'notes': notes, 'confirmed_safe': True,
+               'outside_unchanged': True, 'safety_producer': 'agent_visual_review'}
+    if previous:
+        record.setdefault('watermark_cleanup_history', []).append(previous)
+    record['watermark_cleanup'] = cleaned
+    score_task.invalidate_output(record, 'watermark_cleanup_revision')
+    score_task.freeze(record, 'longshot')
+    save(task, record)
+    return cleaned
+
+
+def repair_longshot(task, capture, bbox, target_bbox, source_sha256, notes):
+    """Replace a local obstruction with same-size pixels from a decoded frame."""
+    record = load(task)
+    if (not is_longshot(record) or not isinstance(notes, str) or not notes.strip() or
+            source_sha256 != record['longshot']['image']['sha256']):
+        raise ReconstructionError('需要当前长图与实际补采说明。', code='invalid_request')
+    if any(page['status'] == 'calling' for page in record.get('redraw_pages', [])):
+        raise ReconstructionError('先恢复已有生图调用，再修复来源。')
+    shot = next((item for item in record['captures'] if item['id'] == capture), None)
+    source = record['longshot']['image']
+    if shot is None:
+        raise ReconstructionError('补采引用无效。', code='invalid_request', field='capture')
+    for box, width, height in ((bbox, shot['width'], shot['height']),
+                               (target_bbox, source['width'], source['height'])):
+        if (not isinstance(box, list) or len(box) != 4 or any(type(v) is not int for v in box) or
+                not 0 <= box[0] < box[2] <= width or not 0 <= box[1] < box[3] <= height):
+            raise ReconstructionError('修复区域越界。', code='invalid_request', field='bbox/target_bbox')
+    if (bbox[2] - bbox[0], bbox[3] - bbox[1]) != (target_bbox[2] - target_bbox[0], target_bbox[3] - target_bbox[1]):
+        raise ReconstructionError('局部补采保持原比例，需要相同尺寸的区域。', code='invalid_request')
+    directory = write_path(task, Path('longshot') / uuid.uuid4().hex)
+    directory.mkdir(parents=True)
+    with Image.open(score_task.artifact(task, source)) as before, Image.open(score_task.artifact(task, shot)) as frame:
+        after = before.copy()
+        patch = frame.crop(bbox).convert(before.mode)
+        try:
+            after.paste(patch, (target_bbox[0], target_bbox[1]))
+            reference, regions = _publish_image(task, directory, after, record['source']['sha256'])
+        finally:
+            patch.close()
+            after.close()
+    previous = record['longshot']
+    _retire_longshot(record)
+    repaired = {**previous, 'image': reference, 'system_count': len(regions), 'review': None,
+                'repairs': [*previous.get('repairs', []), {'before': source, 'source': shot,
+                'bbox': bbox, 'target_bbox': target_bbox, 'notes': notes}]}
+    record.update(regions=regions, rough=reference, rough_chunks=[reference],
+                  status='needs_longshot_review', longshot=repaired)
+    save(task, record)
+    return repaired
 
 
 def handoff(record):

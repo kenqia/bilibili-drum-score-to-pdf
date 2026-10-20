@@ -9,6 +9,7 @@ import test_reconstruction as fixtures
 from score_fixtures import CLI, controlled_reselection
 from test_host_check import HOST_CHECK_ENTRIES
 import reconstruction
+import longshot
 import score_task
 import score_workflow
 
@@ -22,6 +23,8 @@ REQUEST_ENTRIES = ('cli', 'workflow', 'task')
 SOURCE_ASSEMBLY_ENTRIES = ('cli', 'workflow', 'task', 'vector')
 SOURCE_RECOVERY_ENTRIES = ('cli', 'workflow')
 LONGSHOT_ENTRIES = ('cli', 'workflow')
+DIRECT_EXPORT_ENTRIES = ('cli', 'workflow')
+PRINT_MUTATION_ENTRIES = ('cli', 'workflow', 'module')
 
 
 class PublicContracts(unittest.TestCase):
@@ -74,7 +77,7 @@ class PublicContracts(unittest.TestCase):
                 with self.assertRaises(score_task.ReconstructionError):
                     score_workflow.redraw_requests(self.task)
                 call('review-longshot', {'title': 'Fixture', 'notes': 'Controlled acceptance with local ambiguity.'})
-                self.assertEqual(score_workflow.stage(self.task)['phase'], 'generation')
+                self.assertEqual(score_workflow.stage(self.task)['phase'], 'pdf_review')
                 before = (self.task / 'record.json').read_bytes()
                 (self.task / stitched['samples']['path']).write_text('controlled corrupted source mapping')
                 with self.assertRaises(score_task.ReconstructionError):
@@ -91,11 +94,140 @@ class PublicContracts(unittest.TestCase):
             with self.subTest(operation=operation), self.assertRaises(score_task.ReconstructionError):
                 self.cli(operation, {})
             self.assertEqual((self.task / 'record.json').read_bytes(), before)
+
         for mode in ('sparse', 'strict'):
             with self.subTest(mode=mode), self.assertRaises(score_task.ReconstructionError):
                 self.cli('stage', {'mode': mode})
             self.assertEqual((self.task / 'record.json').read_bytes(), before)
 
+    def test_print_mutations_share_boundaries_and_source_integrity(self):
+        for entry in PRINT_MUTATION_ENTRIES:
+            with self.subTest(entry=entry):
+                self.task = self.root / ('print-mutation-' + entry)
+                score_workflow.prepare(self.video, self.task)
+                score_workflow.stitch(self.task)
+                record = score_workflow.review_longshot(self.task, 'Print', 'Controlled source view.')
+                shot = score_workflow.capture(self.task, 0)
+                def call(operation, payload):
+                    if entry == 'cli':
+                        return self.cli(operation, payload)
+                    if entry == 'module':
+                        function = {'clean-watermark': longshot.clean_watermark,
+                                    'repair-longshot': longshot.repair_longshot,
+                                    'pdf-route': score_task.set_pdf_route, 'export': score_workflow.export}[operation]
+                        return function(self.task, **payload)
+                    return getattr(score_workflow, operation.replace('-', '_'))(self.task, **payload)
+                source = record['longshot']['image']
+                cleanup = {'rectangles': [[580, 20, 610, 30]], 'source_sha256': source['sha256'],
+                           'notes': 'Controlled blank area.', 'confirmed_safe': True}
+                repair = {'capture': shot['id'], 'bbox': [580, 20, 610, 30],
+                          'target_bbox': [580, 20, 610, 30], 'source_sha256': source['sha256'],
+                          'notes': 'Controlled source replacement.'}
+                invalid = [
+                    ('clean-watermark', {**cleanup, 'confirmed_safe': False}),
+                    ('clean-watermark', {**cleanup, 'source_sha256': '0' * 64}),
+                    ('clean-watermark', {**cleanup, 'rectangles': [[0, 0, 641, 30]]}),
+                    ('clean-watermark', {**cleanup, 'rectangles': [[False, 0, 5, 5]]}),
+                    ('clean-watermark', {**cleanup, 'notes': ''}),
+                    ('repair-longshot', {**repair, 'capture': 'missing'}),
+                    ('repair-longshot', {**repair, 'source_sha256': '0' * 64}),
+                    ('repair-longshot', {**repair, 'bbox': [0, 0, 31, 10]}),
+                    ('repair-longshot', {**repair, 'target_bbox': [0, 0, 700, 10]}),
+                    ('pdf-route', {'route': 'unknown', 'notes': 'Controlled request.'}),
+                    ('pdf-route', {'route': 'vector', 'notes': ''}),
+                ]
+                before = (self.task / 'record.json').read_bytes()
+                for operation, payload in invalid:
+                    with self.subTest(operation=operation, payload=payload), self.assertRaises(score_task.ReconstructionError):
+                        call(operation, payload)
+                    self.assertEqual((self.task / 'record.json').read_bytes(), before)
+                cleaned = call('clean-watermark', cleanup)
+                current = (self.task / 'record.json').read_bytes()
+                (self.task / cleaned['image']['path']).write_bytes(b'controlled damaged cleanup')
+                for operation, payload in [('clean-watermark', cleanup), ('repair-longshot', repair),
+                                           ('pdf-route', {'route': 'vector', 'notes': 'Controlled request.'}),
+                                           ('export', {})]:
+                    with self.subTest(operation=operation), self.assertRaises(score_task.ReconstructionError):
+                        call(operation, payload)
+                    self.assertEqual((self.task / 'record.json').read_bytes(), current)
+
+    def test_legacy_longshot_keeps_unknown_request_and_route_changes_wait_for_recovery(self):
+        for entry in PRINT_MUTATION_ENTRIES:
+            with self.subTest(entry=entry):
+                self.task = self.root / ('legacy-route-' + entry)
+                score_workflow.prepare(self.video, self.task)
+                score_workflow.stitch(self.task)
+                record = score_workflow.review_longshot(self.task, 'Legacy', 'Controlled historic review.')
+                record.pop('pdf_route')
+                score_task.save(self.task, record)
+                first = score_workflow.stage(self.task)['handoffs'][0]
+                request = first['request']['request']
+                score_workflow.dispatch_redraw(self.task, first['group'], request)
+                before = (self.task / 'record.json').read_bytes()
+                payload = {'route': 'original', 'notes': 'Controlled request while call is unknown.'}
+                with self.assertRaises(score_task.ReconstructionError):
+                    if entry == 'cli':
+                        self.cli('pdf-route', payload)
+                    else:
+                        function = score_task.set_pdf_route if entry == 'module' else score_workflow.pdf_route
+                        function(self.task, **payload)
+                self.assertEqual((self.task / 'record.json').read_bytes(), before)
+                resumed = score_workflow.stage(self.task)['handoffs'][0]
+                self.assertEqual(resumed['status'], 'recover_existing_call')
+                self.assertEqual(resumed['request']['request'], request)
+
+    def test_explicit_redraw_entries_select_route_and_expose_unknown_calls(self):
+        for entry in REQUEST_ENTRIES:
+            with self.subTest(entry=entry):
+                self.task = self.root / ('explicit-redraw-' + entry)
+                score_workflow.prepare(self.video, self.task)
+                score_workflow.stitch(self.task)
+                score_workflow.review_longshot(self.task, 'Explicit redraw', 'Controlled source view.')
+                if entry == 'cli':
+                    first = self.cli('redraw-requests', {})['handoffs'][0]
+                else:
+                    owner = score_workflow if entry == 'workflow' else score_task
+                    first = owner.redraw_requests(self.task)['handoffs'][0]
+                self.assertEqual(score_task.load(self.task)['pdf_route'], 'redraw')
+                request = first['request']['request']
+                score_workflow.dispatch_redraw(self.task, first['group'], request)
+                resumed = score_workflow.stage(self.task)
+                self.assertEqual(resumed['phase'], 'generation')
+                self.assertEqual(resumed['handoffs'][0]['status'], 'recover_existing_call')
+                self.assertEqual(resumed['handoffs'][0]['request']['request'], request)
+                self.assertNotIn('output', score_task.load(self.task))
+                # A partially upgraded historic record may still say original.
+                record = score_task.load(self.task)
+                record['pdf_route'] = 'original'
+                score_task.save(self.task, record)
+                recovered = score_workflow.stage(self.task)
+                self.assertEqual(recovered['phase'], 'generation')
+                self.assertEqual(recovered['handoffs'][0]['request']['request'], request)
+                self.assertEqual(score_task.load(self.task)['pdf_route'], 'original')
+
+    def test_manual_source_revision_preserves_explicit_vector_route(self):
+        self.select()
+        record = score_task.load(self.task)
+        controlled_reselection(self.task, 'Vector source', record['regions'], record['source_review'])
+        score_workflow.pdf_route(self.task, 'vector', 'Controlled explicit vector request.')
+        score_workflow.revise_crop(self.task, 1, [0, 65, 640, 185])
+        revised = score_task.load(self.task)
+        self.assertEqual(revised['pdf_route'], 'vector')
+        review = {**revised['source_review'], 'complete': True, 'unresolved': []}
+        controlled_reselection(self.task, 'Vector source', revised['regions'], review)
+        output = score_workflow.stage(self.task)['artifacts']['output']
+        self.assertEqual(output['routes'], ['vector'])
+        self.assertEqual(score_task.load(self.task)['redraw_pages'], [])
+
+    def test_explicit_vector_export_selects_route_instead_of_being_replaced_by_stage(self):
+        score_workflow.prepare(self.video, self.task)
+        score_workflow.stitch(self.task)
+        score_workflow.review_longshot(self.task, 'Explicit vector', 'Controlled source view.')
+        output = reconstruction.export_vector(self.task)
+        self.assertEqual(score_task.load(self.task)['pdf_route'], 'vector')
+        staged = score_workflow.stage(self.task)['artifacts']['output']
+        self.assertEqual(staged['output_revision'], output['output_revision'])
+        self.assertEqual(staged['render_route'], 'vector')
     def test_windows_utf8_bom_request_uses_the_same_stage_contract(self):
         self.select()
         request = self.root / 'bom-request.json'
@@ -220,8 +352,19 @@ class PublicContracts(unittest.TestCase):
         for group in score_workflow.redraw_inputs(self.task):
             score_workflow.fail_redraw(self.task, group['id'], 'Controlled unavailable host.')
         self.cli('layout', {'margin': 32, 'minimum_gap': 40})
+        self.check_exports_and_reviews(EXPORT_ENTRIES)
+
+    def test_direct_exports_share_layout_and_current_page_review_contracts(self):
+        score_workflow.prepare(self.video, self.task)
+        score_workflow.stitch(self.task)
+        score_workflow.review_longshot(self.task, 'Direct fixture', 'Controlled whole-image review.')
+        self.cli('layout', {'margin': 32, 'minimum_gap': 40})
+        self.check_exports_and_reviews(DIRECT_EXPORT_ENTRIES)
+        self.assertEqual(score_task.load(self.task)['redraw_pages'], [])
+
+    def check_exports_and_reviews(self, entries):
         baseline = score_task.load(self.task)
-        for export_entry in EXPORT_ENTRIES:
+        for export_entry in entries:
             score_task.save(self.task, copy.deepcopy(baseline))
             old = self.export(export_entry)
             self.cli('layout', {'margin': 32, 'minimum_gap': 40, 'target_pages': 512})

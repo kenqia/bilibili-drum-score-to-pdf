@@ -2,9 +2,11 @@
 
 架构与支持范围读取 docs/architecture.md，验证入口和实际验收读取 docs/verification.md，领域术语见 GLOSSARY.md。文档使用 google-developer-docs 编写，unslop 润色。
 
-正常 PDF 任务使用 `prepare → stage` 自动长截图。Agent 整体查看长图和原生首尾，通过 review-longshot 提交谱名及一份备注。蓝标、水印、轻微接缝及局部模糊进入重绘；允许局部符号推测，小疑点不阻止交付，不逐符号校对或逐行填来源。整小节、整行缺失修复拼接，不凭空补写整段音乐。同位置重叠去重，不同位置重复音乐保留。
+正常 PDF 任务使用 `prepare → stage` 自动长截图，默认原图直排。Agent 整体查看长图及原生首尾，用 review-longshot 提交谱名和备注，再按完整谱行等比排版，查看最终全部页面。轻微模糊、底色、蓝标和水印可保留，不逐符号校对或逐行填来源。同位置重叠去重，不同位置重复音乐保留。
 
-命令字段读取 docs/agents/reconstruction-entry.md；重拼、生图恢复、一次修正和排版读取 docs/agents/stage-recovery-layout.md。宿主生图优先，不可用或失败转矢量，未知调用先恢复原 ID。长截图路线自动取得生成行边界，每块最多一次定向修正。最终全部页面实际查看后，用当前 output_revision 审核，交付统一披露局部推测；轮廓转描只保留可见外形。
+局部去水印仅处理实际确认没有音符、五线、标题和署名的区域，保留原图及修改记录。明显漏行或重复先重拼，严重遮挡优先 capture 后 repair-longshot，从真实原帧等尺寸替换并重新整体查看；仍无法恢复时说明限制，不猜隐藏符号，不把已知缺段称完整谱。
+
+字段读取 docs/agents/reconstruction-entry.md；清理、补采、重拼和打印布局读取 docs/agents/stage-recovery-layout.md。用户明确要求重绘或矢量时，pdf-route 选择可选路线，未知调用先恢复原 ID，每块每输入版本最多一次修正。旧任务保持原路线。最终全部页面实际查看后，用当前 output_revision 审核；交付说明对应实际路线，原图不套用模型推测，轮廓转描只保留可见外形。
 
 修改 AGENTS.md、Skill 及运行协议时使用 writing-for-agents。旧手动任务沿用其来源约定，新任务不恢复手工选框主线。
 

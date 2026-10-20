@@ -20,9 +20,13 @@ uv run --python 3.12 --quiet --isolated --with-requirements skills/bilibili-drum
 | stage / resume | 无 | 推进当前阶段或读取完整任务 |
 | stitch | 可选 interval、max_jump | 自动长图或修复明显接续问题；默认1秒、400像素 |
 | review-longshot | title、notes；可选 accepted=true | 记录一次长图整体查看，局部模糊可接受 |
-| layout | 可选 margin、minimum_gap、target_pages | 等比整行 A4 重排，复用生成结果 |
+| clean-watermark | rectangles、source_sha256、notes、confirmed_safe=true | 从原长图生成独立局部清理图；空列表恢复原图 |
+| capture | seconds | 局部补采真实原帧，保存实际 PTS/time_base/hash |
+| repair-longshot | capture、bbox、target_bbox、source_sha256、notes | 从真实帧等尺寸替换长图局部，重新整体审阅 |
+| pdf-route | route、notes | 明确请求后选择 original、redraw 或 vector |
+| layout | 可选 margin、minimum_gap、target_pages | 等比整行 A4 重排，复用当前材料 |
 
-正常任务无需 capture、present、assemble 或逐行选框。长图通过整体审阅后，stage 自动预留全部生图请求。
+正常任务无需 present、assemble 或逐行选框。新任务记录 pdf_route=original，长图通过整体审阅后，stage 直接导出原图 PDF，不预留生图请求。rectangles 使用长图整数坐标，source_sha256 绑定当前 longshot.image.sha256，去水印需要实际确认区域不含记谱、标题和署名。修复用帧内 bbox 和长图 target_bbox，两个矩形必须同尺寸；source_sha256 同样绑定当前长图。
 
 ## 旧手动任务的来源操作
 
@@ -60,7 +64,7 @@ uv run --python 3.12 --quiet --isolated --with-requirements skills/bilibili-drum
 
 所有来源和产物引用均校验 hash。选行无效或发布中断保留上一个有效记录。相同选行重新确认会复用现有生成材料和修正预算。
 
-## 生图与终稿操作
+## 可选生图与终稿操作
 
 | 操作 | 请求字段 |
 | --- | --- |
@@ -74,6 +78,8 @@ uv run --python 3.12 --quiet --isolated --with-requirements skills/bilibili-drum
 | reject-accepted-redraw | identifier、notes |
 | generation-materials / export | 无 |
 | review-pdf | pages、notes、output_revision |
+
+用户明确要求重绘时，先用 pdf-route 选择 redraw 并记录请求。vector 直接走轮廓路线，不申请生图；original 返回原图直排。旧任务没有 pdf_route 时保持原路线。
 
 宿主生图由 Agent 在 `dispatch-redraw` 与 `finish-redraw` 之间真实执行，脚本不内嵌模型调用。`finish-redraw` 的 `tool` 固定填写 `"host-imagegen"`，`receipt` 保存实际工具调用依据，`output` 填本地结果路径。新长截图任务只提交 accepted、notes，程序检测输出行边界；可选 boundaries 用于检测恢复。旧手动任务的 boundaries 按输入选区顺序列出每行整数边界。批量 handoff、一次修正和恢复规则见 [阶段恢复](stage-recovery-layout.md)。
 

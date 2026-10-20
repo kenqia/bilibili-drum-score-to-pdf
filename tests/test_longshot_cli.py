@@ -6,7 +6,7 @@ import sys
 import tempfile
 import unittest
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageChops
 from score_fixtures import CLI, video_from_image
 
 
@@ -85,6 +85,7 @@ class LongshotCLI(unittest.TestCase):
         self.call('prepare')
         first = self.call('stage')['artifacts']['longshot']
         self.call('review-longshot', title='Synthetic longshot', notes='Controlled overall view; local ambiguity accepted.')
+        self.call('pdf-route', route='redraw', notes='Fixture user explicitly requests the legacy redraw route.')
         stage = self.call('stage')
         self.assertEqual(stage['phase'], 'generation')
         for handoff in stage['handoffs']:
@@ -98,17 +99,116 @@ class LongshotCLI(unittest.TestCase):
         self.assertEqual(output['checks']['status'], 'passed')
         self.assertEqual(output['checks']['ordered_source_regions'], list(range(7)))
         self.assertEqual(len(output['previews']), output['page_count'])
-        self.assertIn('推测', output['notice'])
+        self.assertIn('轮廓', output['notice'])
         self.assertFalse(output['reliable'])
         self.call('review-pdf', pages=result['next']['pages'], output_revision=output['output_revision'],
                   notes='Controlled page review, not musical accuracy.')
         self.assertEqual(self.call('stage')['phase'], 'complete')
         self.assertEqual(self.call('resume')['longshot']['image'], first['image'])
 
+    def test_new_task_exports_original_rows_without_generation(self):
+        self.call('prepare')
+        first = self.call('stage')['artifacts']['longshot']
+        self.call('review-longshot', title='Original score', notes='Controlled complete longshot view.')
+        result = self.call('stage')
+        self.assertEqual(result['phase'], 'pdf_review')
+        output = result['artifacts']['output']
+        self.assertEqual(output['routes'], ['original'])
+        self.assertEqual(output['checks']['ordered_source_regions'], list(range(7)))
+        self.assertEqual(output['page_count'], 2)
+        self.assertEqual(len({p['scale'] for p in output['placements']}), 1)
+        self.assertNotIn('推测', output['notice'])
+        record = self.call('resume')
+        self.assertEqual(record['redraw_pages'], [])
+        self.assertEqual(record.get('generation_history', {}), {})
+        self.assertEqual(record['longshot']['image'], first['image'])
+        listing = subprocess.run(['pdfimages', '-list', str(self.task / output['pdf'])],
+                                 check=True, capture_output=True).stdout
+        self.assertIn(b'image', listing)
+        subprocess.run(['pdfimages', '-png', str(self.task / output['pdf']), str(self.root / 'embedded')],
+                       check=True, capture_output=True)
+        with Image.open(self.task / first['image']['path']) as source, Image.open(self.root / 'embedded-000.png') as embedded:
+            self.assertEqual(source.size, embedded.size)
+            self.assertEqual(source.convert('RGB').tobytes(), embedded.convert('RGB').tobytes())
+        self.call('review-pdf', pages=result['next']['pages'], output_revision=output['output_revision'],
+                  notes='Controlled full page review.')
+        self.assertEqual(self.call('stage')['phase'], 'complete')
+
+    def test_explicit_vector_route_and_return_to_original_preserve_prior_outputs(self):
+        self.call('prepare')
+        self.call('stage')
+        self.call('review-longshot', title='Optional vector', notes='Controlled complete source.')
+        first = self.call('stage')['artifacts']['output']
+        self.call('pdf-route', route='vector', notes='Fixture user explicitly requests a vector PDF.')
+        vector = self.call('stage')['artifacts']['output']
+        self.assertEqual(vector['routes'], ['vector'])
+        listing = subprocess.run(['pdfimages', '-list', str(self.task / vector['pdf'])],
+                                 check=True, capture_output=True).stdout.splitlines()
+        self.assertEqual(len(listing), 2)
+        self.assertNotIn('推测', vector['notice'])
+        self.call('pdf-route', route='original', notes='Fixture user returns to original rows.')
+        again = self.call('stage')['artifacts']['output']
+        self.assertEqual(again['routes'], ['original'])
+        self.assertNotEqual(first['output_revision'], again['output_revision'])
+        self.assertTrue((self.task / first['pdf']).is_file())
+        self.assertTrue((self.task / vector['pdf']).is_file())
+        self.assertEqual(self.call('resume')['redraw_pages'], [])
+
+    def test_local_watermark_cleanup_preserves_original_and_pixels_outside_selection(self):
+        self.call('prepare')
+        first = self.call('stage')['artifacts']['longshot']['image']
+        self.call('review-longshot', title='Local cleanup', notes='Controlled full source view.')
+        old = self.call('stage')['artifacts']['output']
+        self.call('review-pdf', pages=list(range(1, old['page_count'] + 1)),
+                  output_revision=old['output_revision'], notes='Controlled original pages.')
+        original_bytes = (self.task / first['path']).read_bytes()
+        cleaned = self.call('clean-watermark', rectangles=[[589, 14, 612, 27]],
+                            source_sha256=first['sha256'], confirmed_safe=True,
+                            notes='Controlled top-right watermark does not touch notation or credits.')
+        self.assertTrue(cleaned['outside_unchanged'])
+        with Image.open(self.task / first['path']) as before, Image.open(self.task / cleaned['image']['path']) as after:
+            self.assertLess(before.getpixel((600, 20)), 80)
+            self.assertEqual(after.getpixel((600, 20)), 255)
+            difference = ImageChops.difference(before, after)
+            difference.paste(0, (589, 14, 612, 27))
+            self.assertIsNone(difference.getbbox())
+        self.assertEqual((self.task / first['path']).read_bytes(), original_bytes)
+        self.assertNotIn('output', self.call('resume'))
+        fresh = self.call('stage')['artifacts']['output']
+        self.assertNotEqual(old['output_revision'], fresh['output_revision'])
+        self.assertEqual(fresh['print_source_sha256'], cleaned['image']['sha256'])
+        self.assertTrue((self.task / old['pdf']).exists())
+        self.call('clean-watermark', rectangles=[], source_sha256=first['sha256'],
+                  confirmed_safe=True, notes='Controlled return to unmodified longshot.')
+        restored = self.call('stage')['artifacts']['output']
+        self.assertEqual(restored['print_source_sha256'], first['sha256'])
+
+    def test_local_source_repair_retains_frame_provenance_and_requires_new_review(self):
+        self.call('prepare')
+        first = self.call('stage')['artifacts']['longshot']['image']
+        self.call('review-longshot', title='Source repair', notes='Controlled source with a local obstruction.')
+        old = self.call('stage')['artifacts']['output']
+        shot = self.call('capture', seconds=0)
+        result = self.call('repair-longshot', capture=shot['id'], bbox=[560, 30, 583, 43],
+                           target_bbox=[589, 14, 612, 27], source_sha256=first['sha256'],
+                           notes='Controlled replacement from a real decoded frame; no generated pixels.')
+        self.assertIsNone(result['review'])
+        self.assertEqual(result['repairs'][-1]['source']['pts'], shot['pts'])
+        self.assertEqual(result['repairs'][-1]['source']['time_base'], shot['time_base'])
+        with Image.open(self.task / result['image']['path']) as repaired, Image.open(self.task / shot['path']) as frame:
+            self.assertEqual(repaired.crop((589, 14, 612, 27)).tobytes(),
+                             frame.convert('L').crop((560, 30, 583, 43)).tobytes())
+        self.assertTrue((self.task / old['pdf']).exists())
+        self.assertNotIn('output', self.call('resume'))
+        self.assertEqual(self.call('stage')['phase'], 'longshot_review')
+        self.call('review-longshot', title='Source repair', notes='Controlled recheck after replacement.')
+        self.assertEqual(self.call('stage')['phase'], 'pdf_review')
+
     def test_generation_resumes_one_call_and_auto_cuts_accepted_image_after_one_correction(self):
         self.call('prepare')
         self.call('stage')
         self.call('review-longshot', title='Synthetic generated score', notes='Controlled overall review.')
+        self.call('pdf-route', route='redraw', notes='Fixture user explicitly requests redraw.')
         initial = self.call('stage')['handoffs'][0]
         request = initial['request']['request']
         self.call('dispatch-redraw', identifier=initial['group'], request=request)
@@ -174,6 +274,7 @@ class LongshotCLI(unittest.TestCase):
         self.call('prepare')
         self.call('stage')
         self.call('review-longshot', title='Pale short ending', notes='Controlled full and short pale staffs.')
+        self.call('pdf-route', route='redraw', notes='Fixture user explicitly requests redraw with vector fallback.')
         for handoff in self.call('stage')['handoffs']:
             self.call('fail-redraw', identifier=handoff['group'], outcome='unavailable', notes='Controlled no tool.')
         output = self.call('stage')['artifacts']['output']
@@ -195,6 +296,7 @@ class LongshotCLI(unittest.TestCase):
         self.call('prepare')
         self.assertEqual(self.call('stage')['artifacts']['longshot']['system_count'], 1)
         self.call('review-longshot', title='Joined systems', notes='Controlled two staffs joined by a marker.')
+        self.call('pdf-route', route='redraw', notes='Fixture user explicitly requests redraw.')
         handoff = self.call('stage')['handoffs'][0]
         request = handoff['request']['request']
         self.call('dispatch-redraw', identifier=handoff['group'], request=request)

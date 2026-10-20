@@ -56,7 +56,7 @@ def prepare(source, task, acquisition_timeout=ACQUISITION_SECONDS):
         record['origin'] = origin
     from agent_source_review import CONTRACT
     import host_check
-    record.update(probes=[], redraw_pages=[], agent_review_contract=CONTRACT, workflow='longshot/1',
+    record.update(probes=[], redraw_pages=[], agent_review_contract=CONTRACT, workflow='longshot/1', pdf_route='original',
                   environment=host_check.check([]))
     record['metrics'].update(navigation_probes=0, native_retained=0, presented_images=0)
     score_task.save(task, record)
@@ -181,12 +181,25 @@ def revise_selection(task, changes, review=None):
 
 def export(task):
     """Export through the shared task lifecycle and existing renderer."""
-    return score_task.export(task, _render_pdf, host_redraw=True)
+    route = score_task.delivery_route(load(task))
+    return score_task.export(task, _render_pdf, host_redraw=route == 'redraw', render_route=route)
 
 
 def _render_pdf(task, record):
     pages = record['redraw_pages']
     blocks, vectors, routes = [], [], []
+    route = score_task.delivery_route(record)
+    if route in ('original', 'vector'):
+        routes = [route]
+        for index, original in enumerate(record['regions']):
+            if route == 'original':
+                image = record.get('watermark_cleanup', {}).get('image', record['longshot']['image'])
+                blocks.append({**original, 'source_region': index, 'image': image, 'crop_bbox': original['bbox']})
+                vectors.append(None)
+            else:
+                blocks.append({**original, 'source_region': index})
+                vectors.append(local.trace_region(task, original))
+        pages = []
     for page in pages:
         routes.append('imagegen' if page['status'] == 'accepted' else 'vector')
         for offset, index in enumerate(page['regions']):
@@ -232,13 +245,16 @@ def _render_pdf(task, record):
     manifest = revision / 'materials.json'
     import json
     manifest.write_text(json.dumps({'blocks': blocks, 'vectors': vectors, 'inputs': [r['sha256'] for r in record['regions']],
-        'source_review':record.get('source_review'), 'program_checks':record.get('program_checks'), 'layout':layout_options}))
-    output = {'pdf': str(pdf.relative_to(task)), 'sha256': score_task.digest(pdf), 'page_count': count, 'placements': placements, 'routes': routes, 'method': 'reviewed_host_images_and_vector_fallback', 'layout_version': 2, 'status': 'needs_pdf_review', 'vector': {'path': str(manifest.relative_to(task)), 'sha256': score_task.digest(manifest)}}
+        'source_review':record.get('source_review'), 'program_checks':record.get('program_checks'), 'layout':layout_options,
+        'render_route': route, 'watermark_cleanup': record.get('watermark_cleanup') if route == 'original' else None}))
+    output = {'pdf': str(pdf.relative_to(task)), 'sha256': score_task.digest(pdf), 'page_count': count, 'placements': placements, 'routes': routes, 'render_route': route, 'method': 'original_rows' if route == 'original' else 'reviewed_host_images_and_vector_fallback', 'layout_version': 2, 'status': 'needs_pdf_review', 'vector': {'path': str(manifest.relative_to(task)), 'sha256': score_task.digest(manifest)}}
+    if route == 'original':
+        output['print_source_sha256'] = blocks[0]['image']['sha256']
     return score_task.finalize_output(task, output, blocks, layout_options, record)
 
 
-from score_task import layout
-from longshot import stitch, review_longshot
+from score_task import layout, set_pdf_route as pdf_route
+from longshot import stitch, review_longshot, clean_watermark, repair_longshot
 
 
 def stage(task):
@@ -263,11 +279,20 @@ def stage(task):
                 'checks': checks, 'unresolved': checks['issues'],
                 'next': {'operations': ['crop-checks', 'revise-crop', 'revise-selection', 'assemble'],
                          'operation': 'revise-crop', 'required_fields': ['index', 'bbox']}}
-    batch = redraw_requests(task)
+    route = score_task.delivery_route(record)
+    calling = any(p['status'] == 'calling' for p in record.get('redraw_pages', []))
+    batch = redraw_requests(task) if route == 'redraw' or calling else {'handoffs': []}
     record = load(task)
+    handoffs = [h for h in batch['handoffs'] if h['status'] not in ('accepted', 'vector')]
+    if handoffs:
+        return {'phase':'generation','status':'pending','artifacts':artifacts,'checks':record.get('program_checks',{}),
+            'unresolved':[],'handoffs':handoffs,'next':{'operations':['redraw-requests','dispatch-redraw','cancel-redraw','finish-redraw','review-redraw','fail-redraw'],
+                'instruction':'宿主执行或实际视觉审阅尚未完成；未知调用先恢复，不重新发送。'}}
     if record.get('output'):
         try:
             score_task.require_output_previews(task, record['output'], record)
+            if score_task.output_route(record['output']) != route:
+                raise ReconstructionError('输出路线已改变。')
         except ReconstructionError:
             export(task)
             record = load(task)
@@ -278,11 +303,6 @@ def stage(task):
             'next':None if output['status']=='reviewed' else {'operation':'review-pdf',
                 'pages':list(range(1,output['page_count']+1)),'output_revision':output['output_revision'],
                 'instruction':'实际查看全部有序预览并记录标题、顺序、首尾和关键记号。'}}
-    handoffs = [h for h in batch['handoffs'] if h['status'] not in ('accepted', 'vector')]
-    if handoffs:
-        return {'phase':'generation','status':'pending','artifacts':artifacts,'checks':record.get('program_checks',{}),
-            'unresolved':[],'handoffs':handoffs,'next':{'operations':['redraw-requests','dispatch-redraw','cancel-redraw','finish-redraw','review-redraw','fail-redraw'],
-                'instruction':'宿主执行或实际视觉审阅尚未完成；未知调用先恢复，不重新发送。'}}
     export(task)
     return stage(task)
 

@@ -59,6 +59,18 @@ def refused(action, code, summary):
 
 def verify(base, evidence, summary):
     video = fixture_video(base)
+    direct_task = base / 'direct'
+    workflow.prepare(video, direct_task)
+    require(workflow.stage(direct_task)['phase'] == 'longshot_review', 'missing_longshot_review')
+    workflow.review_longshot(direct_task, 'Original fixture', 'Controlled CI whole-image assertion; not an actual visual review.')
+    direct = workflow.stage(direct_task)
+    require(direct['phase'] == 'pdf_review', 'default_requested_generation')
+    direct_output = direct['artifacts']['output']
+    require(direct_output['routes'] == ['original'], 'default_not_original')
+    require(direct_output['checks']['ordered_source_regions'] == [0, 1, 2], 'direct_lost_systems')
+    require(workflow.load(direct_task)['redraw_pages'] == [], 'direct_reserved_generation')
+    require(workflow.export(direct_task) == direct_output, 'direct_resume_changed')
+    summary['direct_route'] = {'pages': direct_output['page_count'], 'systems': 3, 'generation_requests': 0}
     task = base / 'task'
     workflow.prepare(video, task)
     shot = workflow.capture(task, 0)
