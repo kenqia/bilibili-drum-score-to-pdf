@@ -2,9 +2,11 @@
 
 架构与支持范围读取 docs/architecture.md，验证入口和实际验收读取 docs/verification.md，领域术语见 GLOSSARY.md。文档使用 google-developer-docs 编写，unslop 润色。
 
-正常 PDF 任务使用 `prepare → stage`。Agent 查看原生首尾画面，按可见接续补采，present 后 assemble 有序完整谱行；一份具体来源审阅覆盖标题、首尾和跨截图接续。来源未决保持待审，裁剪问题只针对实际报错或看图发现的区域修正。同位置只选择一个来源，不同位置的重复音乐保留。记号交错时保留连续行组。
+正常 PDF 任务使用 `prepare → stage` 自动长截图。Agent 整体查看长图和原生首尾，通过 review-longshot 提交谱名及一份备注。蓝标、水印、轻微接缝及局部模糊进入重绘；允许局部符号推测，小疑点不阻止交付，不逐符号校对或逐行填来源。整小节、整行缺失修复拼接，不凭空补写整段音乐。同位置重叠去重，不同位置重复音乐保留。
 
-命令字段读取 docs/agents/reconstruction-entry.md；局部修改、生图恢复、一次修正预算和打印布局读取 docs/agents/stage-recovery-layout.md。宿主生图优先，失败、不可用或确认无法恢复的未知调用转矢量。轮廓转描只保留可见外形。最终全部页面实际查看后，使用当前 output_revision 审核。
+命令字段读取 docs/agents/reconstruction-entry.md；重拼、生图恢复、一次修正和排版读取 docs/agents/stage-recovery-layout.md。宿主生图优先，不可用或失败转矢量，未知调用先恢复原 ID。长截图路线自动取得生成行边界，每块最多一次定向修正。最终全部页面实际查看后，用当前 output_revision 审核，交付统一披露局部推测；轮廓转描只保留可见外形。
+
+修改 AGENTS.md、Skill 及运行协议时使用 writing-for-agents。旧手动任务沿用其来源约定，新任务不恢复手工选框主线。
 
 运行仓库验证：
 

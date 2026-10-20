@@ -27,17 +27,19 @@ class AgentSourceTests(unittest.TestCase):
                   'first_last': 'Controlled complete start and ending.'}
         return shot, rows, review
 
-    def test_stage_only_returns_source_instructions_without_decoding_or_approval(self):
+    def test_stage_builds_longshot_without_claiming_overall_agent_approval(self):
         workflow.prepare(self.video, self.task)
+        result = workflow.stage(self.task)
+        self.assertEqual(result['phase'], 'longshot_review')
+        record = workflow.load(self.task)
+        self.assertIsNone(record['longshot']['review'])
+        self.assertNotIn('freeze', record)
+        self.assertEqual(record['captures'], [])
+        with self.assertRaises(score_task.ReconstructionError):
+            workflow.redraw_requests(self.task)
         before = (self.task / 'record.json').read_bytes()
-        with patch('video_seek.VideoReader', side_effect=AssertionError('unexpected decoding')):
-            for _ in range(2):
-                result = workflow.stage(self.task)
-                self.assertEqual(result['phase'], 'source')
-                self.assertEqual(result['next']['request'], {'seconds': 0})
-                self.assertFalse(result['provenance']['reviewed'])
+        self.assertEqual(workflow.stage(self.task), result)
         self.assertEqual((self.task / 'record.json').read_bytes(), before)
-        self.assertEqual(workflow.load(self.task)['captures'], [])
 
     def test_all_assembly_entries_require_present_but_accept_one_concrete_review(self):
         shot, rows, review = self.source()
@@ -170,4 +172,4 @@ class AgentSourceTests(unittest.TestCase):
         compact = json.loads(subprocess.check_output(command + ['--summary'], text=True))
         details = json.loads((self.task / compact['details']['path']).read_text())
         self.assertEqual(details, full)
-        self.assertEqual(compact['phase'], 'source')
+        self.assertEqual(compact['phase'], 'longshot_review')

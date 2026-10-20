@@ -95,12 +95,12 @@ class VideoReader:
                         if not data:
                             break
                         if len(data) != size or count >= 4097:
-                            raise ValueError('incomplete or excessive frame stream')
+                            raise ConversionError('decode_failed', '采样帧不完整或数量过多。')
                         with Image.frombytes('RGB', (width, height), bytes(data)) as image:
                             consume(count, image)
                         count += 1
                     if process.wait() != 0:
-                        raise ValueError('decoder failed or exceeded deadline')
+                        raise ConversionError('decode_failed', '连续解码失败或超过期限。')
                 finally:
                     timer.cancel()
                     if process.poll() is None:
@@ -112,12 +112,12 @@ class VideoReader:
             base = re.search(r'config in time_base:\s*(\d+)/(\d+)', text)
             pts = [int(v) for v in re.findall(r'\bpts:\s*(-?\d+)', text)]
             if not base or int(base[2]) == 0 or len(pts) != count or not pts:
-                raise ValueError('missing timestamps')
+                raise ConversionError('decode_failed', '实际时间戳记录不完整。')
             time_base = [int(base[1]), int(base[2])]
             self.metrics['decoded_reported_frames'] += count
             return [{'pts': value, 'time_base': time_base,
                      'timestamp': value * time_base[0] / time_base[1]} for value in pts]
-        except (subprocess.SubprocessError, ValueError, OSError):
+        except (subprocess.SubprocessError, OSError):
             raise ConversionError('decode_failed', '连续采样解码失败或超时；未发布长截图。') from None
         finally:
             self.metrics['decode_elapsed'] += time.monotonic() - began

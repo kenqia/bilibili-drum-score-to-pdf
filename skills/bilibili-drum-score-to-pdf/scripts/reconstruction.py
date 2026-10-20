@@ -136,11 +136,25 @@ def ink_mask(image):
 def trace_region(task, item):
     with Image.open(artifact(task, item)) as image:
         mask = ink_mask(image)
+        gray = np.asarray(image.convert('L')) if item.get('source_kind') == 'longshot' else None
     outlines, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     paths = [cv2.approxPolyDP(outline, .25, True)[:, 0].tolist() for outline in outlines if len(outline) >= 3]
     paths = [points for points in paths if len(points) >= 3]
     lines = []
-    if item['kind'] == 'system':
+    if gray is not None:
+        horizontal = cv2.morphologyEx((gray < 225).astype(np.uint8), cv2.MORPH_OPEN,
+                                     np.ones((1, max(10, item['width'] // 12)), np.uint8))
+        # Trace visible thin horizontal runs independently of full-width system
+        # detection: short endings and multi-bar rests also have pale staffs.
+        ys = np.flatnonzero(horizontal.any(axis=1))
+        for band in np.split(ys, np.flatnonzero(np.diff(ys) > 1) + 1):
+            if not 1 <= len(band) <= 6:
+                continue
+            xs = np.flatnonzero(horizontal[band].any(axis=0))
+            for run in np.split(xs, np.flatnonzero(np.diff(xs) > 1) + 1):
+                if len(run):
+                    lines.append([int(run[0]), float(band.mean()), int(run[-1])])
+    if item['kind'] == 'system' and item.get('source_kind') != 'longshot':
         horizontal = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((1, max(10, item['width'] // 12)), np.uint8))
         for line in range(5):
             y = item['staff_top'] + line * item['staff_spacing']

@@ -21,6 +21,7 @@ CROP_ENTRIES = ('cli', 'workflow', 'task')
 REQUEST_ENTRIES = ('cli', 'workflow', 'task')
 SOURCE_ASSEMBLY_ENTRIES = ('cli', 'workflow', 'task', 'vector')
 SOURCE_RECOVERY_ENTRIES = ('cli', 'workflow')
+LONGSHOT_ENTRIES = ('cli', 'workflow')
 
 
 class PublicContracts(unittest.TestCase):
@@ -56,6 +57,29 @@ class PublicContracts(unittest.TestCase):
             return self.cli('redraw-inputs', {} if groups is None else {'groups': groups})
         owner = {'workflow': score_workflow, 'task': score_task}[entry]
         return owner.redraw_inputs(self.task, groups=groups)
+
+    def test_longshot_entries_share_overall_review_and_source_integrity_contracts(self):
+        for entry in LONGSHOT_ENTRIES:
+            with self.subTest(entry=entry):
+                self.task = self.root / ('longshot-' + entry)
+                score_workflow.prepare(self.video, self.task)
+                def call(operation, payload):
+                    if entry == 'cli':
+                        return self.cli(operation, payload)
+                    return getattr(score_workflow, operation.replace('-', '_'))(self.task, **payload)
+                stitched = call('stitch', {})
+                with self.assertRaises(score_task.ReconstructionError):
+                    call('review-longshot', {'title': 'Fixture', 'notes': ''})
+                call('review-longshot', {'title': 'Fixture', 'notes': 'Controlled overall review.', 'accepted': False})
+                with self.assertRaises(score_task.ReconstructionError):
+                    score_workflow.redraw_requests(self.task)
+                call('review-longshot', {'title': 'Fixture', 'notes': 'Controlled acceptance with local ambiguity.'})
+                self.assertEqual(score_workflow.stage(self.task)['phase'], 'generation')
+                before = (self.task / 'record.json').read_bytes()
+                (self.task / stitched['samples']['path']).write_text('controlled corrupted source mapping')
+                with self.assertRaises(score_task.ReconstructionError):
+                    call('review-longshot', {'title': 'Fixture', 'notes': 'Must refuse corrupt provenance.'})
+                self.assertEqual((self.task / 'record.json').read_bytes(), before)
 
     def test_removed_routes_and_stage_modes_cannot_mutate_existing_task(self):
         self.select()

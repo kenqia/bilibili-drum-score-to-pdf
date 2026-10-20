@@ -82,7 +82,7 @@ def artifact(task, reference):
 
 
 def load(task):
-    for name in ('record.json','record.tmp','captures','regions','navigation','native-cache','redraw','exports'):
+    for name in ('record.json','record.tmp','captures','regions','navigation','native-cache','redraw','exports','longshot'):
         write_path(task,name)
     try:
         record = json.loads((Path(task) / 'record.json').read_text(encoding='utf-8'))
@@ -99,6 +99,10 @@ def load(task):
         artifact(task, record['rough'])
     for chunk in record.get('rough_chunks', []):
         artifact(task, chunk)
+    if record.get('longshot'):
+        stitched = record['longshot']
+        for reference in [stitched['image'], stitched['samples'], *stitched['endpoints']]:
+            artifact(task, reference)
     if record.get('output'):
         for preview in record['output'].get('previews', []):
             artifact(task, preview)
@@ -126,6 +130,8 @@ def _fingerprint(record):
         'rough_chunks': record.get('rough_chunks'), 'review': record.get('source_review'),
         'checks': record.get('program_checks'),
         'overview_candidates': [c['sha256'] for c in record.get('overview',{}).get('candidates',[])]}
+    if record.get('longshot'):
+        material['longshot'] = record['longshot']
     if record.get('agent_review_contract'):
         material['agent_review_contract'] = record['agent_review_contract']
         material['source_issue_history'] = record.get('source_issue_history', [])
@@ -150,12 +156,17 @@ def freeze(record, producer):
 
 def require_frozen(record):
     frozen = record.get('freeze', {})
-    if (frozen.get('producer') != 'agent' or frozen.get('fingerprint') != _fingerprint(record)
+    from longshot import is_longshot
+    stitched = is_longshot(record)
+    if (frozen.get('producer') != ('longshot' if stitched else 'agent') or frozen.get('fingerprint') != _fingerprint(record)
             or record.get('source_review', {}).get('complete') is not True
             or record['source_review'].get('unresolved')):
         raise ReconstructionError('来源尚未审阅或选行已改变；查看 stage 后重新确认。',
                                   code='source_review_required', action='stage')
-    if record.get('agent_review_contract'):
+    if stitched:
+        if (record['longshot'].get('review') or {}).get('accepted') is not True:
+            raise ReconstructionError('需要先整体查看长截图。', code='source_review_required')
+    elif record.get('agent_review_contract'):
         from agent_source_review import validate
         validate(record, record['regions'], record['source_review'], same=True)
 
@@ -165,7 +176,7 @@ def input_identity(record, indices):
     members = []
     for index in indices:
         region = record['regions'][index]
-        shot = captures[region['capture']]
+        shot = record['longshot']['image'] if region.get('source_kind') == 'longshot' else captures[region['capture']]
         geometry = {key: float(region[key]) if region.get(key) is not None else None for key in ('staff_top','staff_spacing')}
         members.append({'source': record['source']['sha256'], 'capture': shot['sha256'],
             'pts': shot.get('pts'), 'time_base': shot.get('time_base'),
@@ -213,6 +224,10 @@ def assemble(task, title, regions, review, *, positioned=False):
             not isinstance(review.get('notes'), str) or not review['notes'].strip()):
         raise ReconstructionError('需要实际确认的谱名和原图审阅记录。')
     previous = load(task)
+    # Explicit manual selection uses the manual contract, even on a task that
+    # was initially prepared for automatic longshot stitching.
+    previous.pop('longshot', None)
+    previous.pop('workflow', None)
     if positioned or previous.get('agent_review_contract'):
         if not review.get('continuity') or not review.get('first_last'):
             raise ReconstructionError('需要接续和首尾实际审阅记录。')
@@ -321,7 +336,7 @@ def redraw_inputs(task, groups=None):
         blocks = [record['regions'][i] for i in indices]
         scale = min(1, 4096 / max(max(b['width'] for b in blocks), sum(b['height'] for b in blocks)))
         systems = [b for b in blocks if b['kind'] == 'system']
-        if len(systems) > 8 or any(b['staff_spacing'] * scale < 4 for b in systems):
+        if len(systems) > 8 or (not record.get('longshot') and any(b['staff_spacing'] * scale < 4 for b in systems)):
             raise ReconstructionError('新重绘组超过八条完整谱行或小符号有效分辨率不足；拆分完整行，单行不足时补采更清晰来源。')
     directory = write_path(task, Path('redraw') / uuid.uuid4().hex)
     directory.mkdir(parents=True)
@@ -372,6 +387,17 @@ def _page(record, identifier):
 
 
 def _crop_checks(task, record):
+    if record.get('longshot'):
+        # The complete longshot is the source. Pixel-level edge ambiguity is
+        # covered by its overall review, never an automatic rejection gate.
+        image = record['longshot']['image']
+        boxes = [r['bbox'] for r in record['regions']]
+        valid = (bool(boxes) and boxes[0][1] == 0 and boxes[-1][3] == image['height'] and
+                 all(0 <= a[1] < a[3] <= image['height'] and a[0] == 0 and a[2] == image['width'] for a in boxes) and
+                 all(a[3] == b[1] for a, b in zip(boxes, boxes[1:])))
+        return {'producer': 'program', 'status': 'passed' if valid else 'blocked',
+                'issues': [] if valid else [{'code': 'longshot_cut_coverage'}],
+                'scope': 'complete longshot coverage; no symbol-by-symbol check'}
     import cv2
     import numpy as np
     from reconstruction import ink_mask
@@ -441,6 +467,9 @@ def _reserve_redraw(record, page, viewed_notes, correction, reserve):
                'status': 'prepared' if reserve else 'calling', 'cost': None,
                'approval': {'producer': 'agent',
                             'freeze_id': record['freeze']['id']}}
+    if record.get('longshot'):
+        from longshot import PROMPT
+        attempt['prompt'] = PROMPT
     page['attempts'].append(attempt)
     page['status'] = attempt['status']
     return attempt
@@ -468,6 +497,8 @@ def redraw_requests(task, viewed_notes=None):
     """Return one ordered handoff for every group, including resumed requests."""
     redraw_inputs(task)
     record = load(task)
+    if not viewed_notes and record.get('longshot'):
+        viewed_notes = (record['longshot'].get('review') or {}).get('notes')
     _require_safe_crops(task, record)
     handoffs = []
     changed = False
@@ -578,6 +609,12 @@ def review_redraw(task, identifier, accepted, notes, boundaries=None):
         raise ReconstructionError('需要实际重绘图审阅。')
     if accepted:
         with Image.open(artifact(task, page['output'])) as image:
+            if boundaries is None and record.get('longshot'):
+                from longshot import system_boxes
+                boundaries = [row['bbox'] for row in system_boxes(image)]
+                if len(boundaries) != len(page['regions']):
+                    raise ReconstructionError('生成图谱行数量发生变化；定向修正一次或转矢量。',
+                                              code='redraw_row_count', action='review-redraw accepted=false or fail-redraw')
             boxes = boundaries or []
             if len(boxes) != len(page['regions']):
                 raise ReconstructionError('必须确认每个完整谱行边界。')
@@ -749,6 +786,9 @@ def _preview_and_check(task, output, blocks, options):
 
 def finalize_output(task, output, blocks, options, record):
     """Create ordered previews and geometry evidence for every public renderer."""
+    if record.get('longshot'):
+        from longshot import NOTICE
+        output.update(notice=NOTICE, reliable=False)
     output['previews'], output['checks'] = _preview_and_check(task, output, blocks, options)
     target = options.get('target_pages')
     count = output['page_count']

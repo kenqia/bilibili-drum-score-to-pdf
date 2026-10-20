@@ -6,13 +6,13 @@
 
 - Type: Agent Skill with local Python scripts; not a standalone one-command converter or hosted API.
 - Input: public HTTPS Bilibili BV video URLs, including ?p=2, or local video files.
-- Supported layout: fixed-scale, white-background, multi-system drum notation moving upward or changing pages in a verifiable order.
-- Output: A4 PDF named after the verified score title, source evidence, and task records. PDF files are under exports/<revision>/ in the task directory.
+- Supported layout: fixed-scale, white-background, multi-system drum notation scrolling vertically, especially stationary viewports followed by upward advancement.
+- Output: A4 PDF named after the verified score title, source evidence, and task records. PDF files are under exports/<revision>/ in the task directory. Outputs disclose possible local inference and are not symbol-by-symbol music transcriptions.
 - Runtime: Python 3.12, Git, uv, ffmpeg, ffprobe, Poppler; a host agent with file access, script execution, native image viewing, and PDF page viewing.
 - Rendering: host image generation first, contour-vector fallback when unavailable or unsuitable. Contour tracing is not music recognition and cannot recover fully hidden symbols.
 - Authentication: anonymous public-video acquisition; no Bilibili cookies, login session, or model credentials required or read. No embedded model API.
 - Validation: real full-score PDF evidence exists in Codex for three videos. Other hosts have not completed full-score acceptance. No general accuracy, speed, or cost guarantee.
-- Limitations: horizontal scrolling, changing scale, unverifiable continuity, and performance-only videos are outside the validated scope. New unresolved source checks remain blocked.
+- Limitations: horizontal scrolling, changing scale, unverifiable continuity, and performance-only videos are outside the validated scope. Local blurred or obscured symbols may be inferred by image generation; obvious missing systems must be repaired by stitching, not invented.
 
 ## License
 
@@ -27,7 +27,7 @@ Install the complete skills/bilibili-drum-score-to-pdf directory, including SKIL
 
 ## Execute
 
-Read the canonical Skill instructions before acting. Prepare the source, then use stage to advance through source checks, host generation, output review and export. Actual host generation and image viewing remain agent actions. Do not claim delivery until every final page has been viewed and review-pdf approves the current independent output_revision. A PDF hash is not an output revision.
+Read the canonical Skill instructions before acting. Prepare the source, then stage automatically stitches a longshot. Review the longshot once with review-longshot, then advance through host generation or vector fallback, A4 export and final-page review. Actual host generation and image viewing remain agent actions. Do not claim delivery until every final page has been viewed and review-pdf approves the current independent output_revision. A PDF hash is not an output revision.
 
 - [Normal stages, local recovery and print layout](skills/bilibili-drum-score-to-pdf/references/stage-recovery-layout.md)
 - [CLI operations and request fields](skills/bilibili-drum-score-to-pdf/references/reconstruction-entry.md)

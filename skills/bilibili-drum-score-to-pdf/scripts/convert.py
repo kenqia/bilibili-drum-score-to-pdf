@@ -12,7 +12,7 @@ import sys
 from public_video import InputError, ACQUISITION_SECONDS, retryable_acquisition
 from video_seek import ConversionError
 
-OPERATIONS = ('prepare', 'resume', 'stage', 'navigate', 'capture', 'promote', 'present',
+OPERATIONS = ('prepare', 'resume', 'stage', 'stitch', 'review-longshot', 'navigate', 'capture', 'promote', 'present',
               'assemble', 'revise-selection', 'revise-crop', 'crop-checks', 'layout',
               'cache-report', 'cache-limits', 'redraw-inputs', 'redraw-requests',
               'dispatch-redraw', 'cancel-redraw', 'begin-redraw', 'finish-redraw',
@@ -48,6 +48,9 @@ def error_receipt(error, operation):
     else:
         code = 'internal_error'
     messages = {'invalid_request': '请求字段或参数无效，请核对操作参数。',
+                'longshot_no_systems': '长截图未找到五线谱，请检查原视频布局和长图。',
+                'redraw_row_count': '生成图谱行数量发生变化，请定向修正一次或转矢量。',
+                'resource_limit': '输入或长截图超出资源限制。',
                 'source_review_required': '来源审阅尚未完成，请读取 stage。',
                 'invalid_state': '当前任务状态不允许该操作，请读取 stage 或 resume。',
                 'decode_failed': '视频解码失败，请检查来源和解码工具。',

@@ -35,7 +35,7 @@ def _profile(gray):
             cv2.GaussianBlur(values[:, None], (1, 0), 24).ravel())
 
 
-def _shift(previous, current, maximum):
+def _shift(previous, current, maximum, previous_ink, current_ink):
     correlation = np.correlate(previous, current, mode='full')
     scores = correlation[len(previous) - 1:len(previous) + maximum]
     # Normalize the actual overlap. Otherwise an unshifted pair of similar
@@ -43,7 +43,19 @@ def _shift(previous, current, maximum):
     old_energy = np.cumsum((previous * previous)[::-1])[::-1][:maximum + 1]
     new_energy = np.cumsum(current * current)[len(current) - 1 - np.arange(maximum + 1)]
     scores = scores / np.maximum(np.sqrt(old_energy * new_energy), 1e-9)
-    offset = int(np.argmax(scores))
+    peaks = np.flatnonzero((scores >= np.r_[-np.inf, scores[:-1]]) &
+                           (scores >= np.r_[scores[1:], -np.inf]))
+    # Repeated five-line profiles can offer nearly equal peaks. Compare visible
+    # notation in two dimensions to distinguish an actual overlap from a
+    # different system with similar row density. Ties prefer less movement.
+    candidates = peaks[scores[peaks] >= scores.max() - .01]
+    offset, best = int(candidates[0]), -1.
+    for candidate in candidates:
+        a = previous_ink[candidate:]
+        b = current_ink[:len(current_ink) - candidate]
+        similarity = np.count_nonzero(a & b) / max(1, np.count_nonzero(a | b))
+        if similarity > best + .0001:
+            offset, best = int(candidate), similarity
     confidence = float(scores[offset])
     return offset, confidence
 
@@ -56,7 +68,7 @@ def system_boxes(image):
     """Find staff systems, splitting only in visible whitespace between them."""
     gray = np.asarray(image.convert('L'))
     height, width = gray.shape
-    mask = (gray < 180).astype(np.uint8)
+    mask = (gray < 225).astype(np.uint8)
     horizontal = cv2.morphologyEx(mask, cv2.MORPH_OPEN,
                                  np.ones((1, max(20, width // 3)), np.uint8))
     bands = _runs(np.flatnonzero(horizontal.sum(axis=1) > width * .4))
@@ -85,7 +97,8 @@ def system_boxes(image):
         # Interleaved notation stays in one continuous group.
     splits.append(height)
     return [{'bbox': [0, top, width, bottom], 'kind': 'system',
-             'staff_top': staff[0] - top, 'staff_spacing': staff[1]}
+             'staff_top': staff[0] - top, 'staff_spacing': staff[1],
+             'staves': [{'top': y - top, 'spacing': spacing} for y, spacing in staffs if top <= y < bottom]}
             for top, bottom, staff in zip(splits, splits[1:], groups)]
 
 
@@ -95,8 +108,9 @@ class _Composer:
         self.ink = np.zeros((height, width), np.uint32)
         self.counts = np.zeros(height, np.uint32)
         self.offset = self.extent = 0
-        self.previous = None
+        self.previous = self.previous_ink = None
         self.frames, self.group_size, self.samples = [], 0, []
+        self.max_frames = max(1, min(13, 40_000_000 // (width * height)))
         self.first = self.last = None
 
     def flush(self):
@@ -120,25 +134,34 @@ class _Composer:
     def add(self, index, image):
         gray = np.asarray(image.convert('L'))
         profile = _profile(gray)
-        delta, confidence = (0, 1.) if self.previous is None else _shift(self.previous, profile, self.max_jump)
+        ink = gray[:, ::3] < 145
+        empty = not np.any(profile) or np.count_nonzero(gray > 200) < gray.size // 4
+        delta, confidence = ((0, 0.) if empty else
+                             (0, 1.) if self.previous is None else
+                             _shift(self.previous, profile, self.max_jump, self.previous_ink, ink))
         if delta:
             self.flush()
             self.offset += delta
         self.samples.append({'displacement': self.offset, 'delta': delta, 'confidence': round(confidence, 4)})
-        self.previous = profile
         if self.first is None:
             self.first = image.copy()
         if self.last is not None:
             self.last.close()
         self.last = image.copy()
-        if len(self.frames) < 13:
+        if empty:
+            return
+        self.previous = profile
+        self.previous_ink = ink
+        if len(self.frames) < self.max_frames:
             self.frames.append(gray)
         else:
-            self.frames[self.group_size % 13] = gray
+            self.frames[self.group_size % self.max_frames] = gray
         self.group_size += 1
 
     def image(self):
         self.flush()
+        if not self.extent:
+            raise ReconstructionError('视频没有可合成的谱面。', code='longshot_no_systems')
         result = np.empty((self.extent, self.width), np.uint8)
         for start in range(0, self.extent, 512):
             end = min(start + 512, self.extent)
@@ -210,6 +233,13 @@ def stitch(task, interval=1., max_jump=400):
                                    for s in samples if s['confidence'] < .48]})
         save(task, record)
         return record['longshot']
+    except Exception:
+        # A failed retry still consumes the task's cumulative decode budget.
+        # Keep its last valid selection and outputs rather than partial materials.
+        previous = load(task)
+        previous['metrics'] = record['metrics']
+        save(task, previous)
+        raise
     finally:
         reader.close()
         composer.close()
@@ -219,6 +249,8 @@ def review_longshot(task, title, notes, accepted=True):
     record = load(task)
     if not is_longshot(record) or not isinstance(title, str) or not title.strip() or not isinstance(notes, str) or not notes.strip() or type(accepted) is not bool:
         raise ReconstructionError('需要长截图、谱名和整体查看记录。', code='invalid_request')
+    if not accepted or record.get('title') != title.strip():
+        score_task.invalidate_output(record, 'overall_longshot_review')
     record['longshot']['review'] = {'accepted': accepted, 'notes': notes}
     record.update(title=title.strip(), source_review={'complete': accepted, 'notes': notes,
                   'producer': 'agent_overall_longshot', 'unresolved': [] if accepted else [notes]},
@@ -229,7 +261,9 @@ def review_longshot(task, title, notes, accepted=True):
 
 
 def handoff(record):
-    return {'phase': 'longshot_review', 'status': 'blocked' if record['longshot'].get('review') else 'pending',
+    rejected = bool(record['longshot'].get('review'))
+    return {'phase': 'longshot_review', 'status': 'blocked' if rejected else 'pending',
             'artifacts': {'longshot': record['longshot']},
-            'next': {'operation': 'review-longshot', 'required_fields': ['title', 'notes'],
+            'next': {'operation': 'stitch' if rejected else 'review-longshot',
+                     'required_fields': [] if rejected else ['title', 'notes'],
                      'instruction': '整体查看长图和首尾。检查明显漏行、重复、裁断；蓝标、水印和局部模糊不阻塞。'}}

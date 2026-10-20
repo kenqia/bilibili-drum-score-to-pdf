@@ -238,6 +238,7 @@ def _render_pdf(task, record):
 
 
 from score_task import layout
+from longshot import stitch, review_longshot
 
 
 def stage(task):

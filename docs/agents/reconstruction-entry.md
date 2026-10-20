@@ -6,13 +6,25 @@
 uv run --python 3.12 --quiet --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
   python skills/bilibili-drum-score-to-pdf/scripts/convert.py video.mp4 --output /absolute/new-task
 uv run --python 3.12 --quiet --isolated --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
-  python skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation capture \
-  --task /absolute/new-task --request /absolute/capture.json
+  python skills/bilibili-drum-score-to-pdf/scripts/convert.py --operation stage \
+  --task /absolute/new-task --request /absolute/request.json
 ```
 
-`capture.json` 的内容为 `{"seconds":12.5}`。JSON 使用 UTF-8，也接受 Windows 写入的 UTF-8 BOM，最大 8 MiB。成功退出 0，失败退出 2；错误字段提供稳定 `code`，不会回显原始异常或请求体。
+`request.json` 是 Agent 编写的请求文件，stage 的内容为 `{}`；旧手动 capture 操作使用 `{"seconds":12.5}`。JSON 使用 UTF-8，也接受 Windows 写入的 UTF-8 BOM，最大 8 MiB。成功退出 0，失败退出 2；错误字段提供稳定 `code`，不会回显原始异常或请求体。
 
-## 来源操作
+## 长截图操作
+
+| 操作 | 请求字段 | 用途 |
+| --- | --- | --- |
+| prepare | 命令行 input、output | 匿名获取或读取本地视频 |
+| stage / resume | 无 | 推进当前阶段或读取完整任务 |
+| stitch | 可选 interval、max_jump | 自动长图或修复明显接续问题；默认1秒、400像素 |
+| review-longshot | title、notes；可选 accepted=true | 记录一次长图整体查看，局部模糊可接受 |
+| layout | 可选 margin、minimum_gap、target_pages | 等比整行 A4 重排，复用生成结果 |
+
+正常任务无需 capture、present、assemble 或逐行选框。长图通过整体审阅后，stage 自动预留全部生图请求。
+
+## 旧手动任务的来源操作
 
 | 操作 | 请求字段 | 用途 |
 | --- | --- | --- |
@@ -58,12 +70,12 @@ uv run --python 3.12 --quiet --isolated --with-requirements skills/bilibili-drum
 | begin-redraw | identifier、viewed_notes；可选 correction、reserve |
 | finish-redraw | identifier、request、output、tool、receipt |
 | fail-redraw | identifier、notes；可选 outcome=failed/unavailable/unknown |
-| review-redraw | identifier、accepted、notes；接受时需 boundaries |
+| review-redraw | identifier、accepted、notes；长截图路线自动取得 boundaries，旧手动任务接受时需填写 |
 | reject-accepted-redraw | identifier、notes |
 | generation-materials / export | 无 |
 | review-pdf | pages、notes、output_revision |
 
-宿主生图由 Agent 在 `dispatch-redraw` 与 `finish-redraw` 之间真实执行，脚本不内嵌模型调用。`finish-redraw` 的 `tool` 固定填写 `"host-imagegen"`，`receipt` 保存实际工具调用依据，`output` 填本地结果路径。`boundaries` 按输入选区顺序列出生成图中每行的整数边界，包含标题。批量 handoff、一次修正和恢复规则见 [阶段恢复](stage-recovery-layout.md)。
+宿主生图由 Agent 在 `dispatch-redraw` 与 `finish-redraw` 之间真实执行，脚本不内嵌模型调用。`finish-redraw` 的 `tool` 固定填写 `"host-imagegen"`，`receipt` 保存实际工具调用依据，`output` 填本地结果路径。新长截图任务只提交 accepted、notes，程序检测输出行边界；可选 boundaries 用于检测恢复。旧手动任务的 boundaries 按输入选区顺序列出每行整数边界。批量 handoff、一次修正和恢复规则见 [阶段恢复](stage-recovery-layout.md)。
 
 `--summary` 返回阶段、状态和完整回执的 `details.path`，路径相对任务目录。读取该文件取得全部 handoff 和请求；摘要不能替代实际看图。
 

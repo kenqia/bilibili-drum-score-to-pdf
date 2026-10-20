@@ -7,9 +7,30 @@ from unittest.mock import patch
 from score_fixtures import score_frame, video_from_image
 import test_link_input
 import score_workflow
-from video_seek import VideoReader, probe_video
+from video_seek import ConversionError, VideoReader, probe_video
 
 class MediaBoundaryTests(unittest.TestCase):
+    def test_failed_longshot_retry_keeps_decode_budget_and_previous_materials(self):
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            video = video_from_image(score_frame(), base)
+            task = base / 'task'
+            score_workflow.prepare(video, task)
+            original = score_workflow.stitch(task)
+            before = score_workflow.load(task)
+            def fail(reader, interval, consume):
+                reader.metrics['decode_elapsed'] += 60
+                reader.metrics['seek_count'] += 1
+                raise ConversionError('decode_failed', 'Controlled decode deadline.')
+            with patch.object(VideoReader, 'sample_records', fail):
+                with self.assertRaises(ConversionError):
+                    score_workflow.stitch(task)
+            after = score_workflow.load(task)
+            self.assertEqual(after['longshot'], original)
+            self.assertEqual(after['regions'], before['regions'])
+            self.assertEqual(after['metrics']['decode_elapsed'], before['metrics']['decode_elapsed'] + 60)
+            self.assertEqual(after['metrics']['seek_count'], before['metrics']['seek_count'] + 1)
+
     def test_url_and_local_use_same_original_and_native_capture(self):
         with tempfile.TemporaryDirectory() as d:
             base=Path(d); video=video_from_image(score_frame(),base)
