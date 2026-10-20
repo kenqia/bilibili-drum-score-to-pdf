@@ -208,6 +208,11 @@ def _download_route(origin, staging, *, public_api=False):
                         'selected_format': {'format_id': fmt.get('format_id'), 'width': fmt.get('width'), 'height': fmt.get('height'), 'fps': fmt.get('fps'), 'quality': fmt.get('quality')}}
             except InputError as error:
                 error.diagnostics = {'failure_stage': transport.stage, 'backend_error_type': type(error).__name__}
+                if error.code == 'unsafe_media_target':
+                    # Reject this address, then validate the next bounded candidate.
+                    # Size, duration and resolution failures remain terminal.
+                    last_error = error
+                    continue
                 raise
             except HTTPError as error:
                 last_error = InputError('http_unavailable', '媒体服务器拒绝匿名获取。请提供清晰的本地视频。')

@@ -122,6 +122,22 @@ class APIAcquisitionTests(unittest.TestCase):
                 self.assertNotIn('webpage', events)
                 self.assertEqual(Path(result['source']['path']).read_bytes(), video.read_bytes())
 
+    def test_api_unsafe_primary_uses_official_backup_at_every_entry(self):
+        play = {'timelength': 2000, 'dash': {'video': [{
+            'id': 80, 'baseUrl': MEDIA.replace('.com/', '.com:8082/'),
+            'backupUrl': [MEDIA], 'width': 1280, 'height': 960,
+            'codecs': 'avc1', 'mimeType': 'video/mp4', 'frameRate': '4/1'}]}}
+        for entry in ACQUISITION_ENTRIES:
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as scratch:
+                base = Path(scratch)
+                video = video_from_image(score_frame(), base)
+                status, result, events = self.run_case(base, video, entry=entry, play=play)
+                self.assertEqual(status, 0, result)
+                self.assertTrue(result['origin']['backup_used'])
+                self.assertEqual(result['origin']['format_attempts'], 1)
+                self.assertEqual(events.count('media'), 1)
+                self.assertEqual(Path(result['source']['path']).read_bytes(), video.read_bytes())
+
     def test_webpage_412_recovers_without_requiring_proxy_refusal(self):
         with tempfile.TemporaryDirectory() as scratch:
             base = Path(scratch)
