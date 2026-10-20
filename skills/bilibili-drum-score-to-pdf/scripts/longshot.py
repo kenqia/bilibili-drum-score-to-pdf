@@ -102,6 +102,27 @@ def system_boxes(image):
             for top, bottom, staff in zip(splits, splits[1:], groups)]
 
 
+def redraw_boxes(image, originals):
+    """Keep input groups when removing a marker opens a gap between staffs."""
+    rows = system_boxes(image)
+    if len(rows) == len(originals):
+        return [row['bbox'] for row in rows]
+    boxes, cursor = [], 0
+    for original in originals:
+        start, count = cursor, 0
+        expected = len(original.get('staves', [])) or 1
+        while cursor < len(rows) and count < expected:
+            count += len(rows[cursor]['staves'])
+            cursor += 1
+        if count != expected:
+            break
+        boxes.append([0, rows[start]['bbox'][1], image.width, rows[cursor - 1]['bbox'][3]])
+    if len(boxes) != len(originals) or cursor != len(rows):
+        raise ReconstructionError('生成图谱行数量发生变化；定向修正一次或转矢量。',
+                                  code='redraw_row_count', action='review-redraw accepted=false or fail-redraw')
+    return boxes
+
+
 class _Composer:
     def __init__(self, width, height, max_jump):
         self.width, self.height, self.max_jump = width, height, min(max_jump, height - 1)

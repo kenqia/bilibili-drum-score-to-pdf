@@ -182,6 +182,31 @@ class LongshotCLI(unittest.TestCase):
         short = [line for line in lines if 390 < line[1] < 440 and line[2] < 230]
         self.assertEqual(len(short), 5, short)
 
+    def test_cleaned_image_can_separate_staffs_joined_by_playback_marker(self):
+        clean = Image.new('RGB', (640, 600), 'white')
+        draw = ImageDraw.Draw(clean)
+        for top in (140, 400):
+            for line in range(5):
+                draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+        marked = clean.copy()
+        ImageDraw.Draw(marked).line((320, 170, 320, 405), fill='blue', width=4)
+        self.video = video_from_image(marked, self.root, 'joined-systems')
+        marked.close()
+        self.call('prepare')
+        self.assertEqual(self.call('stage')['artifacts']['longshot']['system_count'], 1)
+        self.call('review-longshot', title='Joined systems', notes='Controlled two staffs joined by a marker.')
+        handoff = self.call('stage')['handoffs'][0]
+        request = handoff['request']['request']
+        self.call('dispatch-redraw', identifier=handoff['group'], request=request)
+        output = self.root / 'cleaned.png'
+        clean.save(output)
+        clean.close()
+        self.call('finish-redraw', identifier=handoff['group'], request=request, output=str(output),
+                  tool='host-imagegen', receipt='controlled-cleaned-marker-not-real-generation')
+        accepted = self.call('review-redraw', identifier=handoff['group'], accepted=True,
+                             notes='Controlled same two staffs with playback marker removed.')
+        self.assertEqual(accepted['boundaries'], [[0, 0, 640, 600]])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -610,11 +610,8 @@ def review_redraw(task, identifier, accepted, notes, boundaries=None):
     if accepted:
         with Image.open(artifact(task, page['output'])) as image:
             if boundaries is None and record.get('longshot'):
-                from longshot import system_boxes
-                boundaries = [row['bbox'] for row in system_boxes(image)]
-                if len(boundaries) != len(page['regions']):
-                    raise ReconstructionError('生成图谱行数量发生变化；定向修正一次或转矢量。',
-                                              code='redraw_row_count', action='review-redraw accepted=false or fail-redraw')
+                from longshot import redraw_boxes
+                boundaries = redraw_boxes(image, [record['regions'][i] for i in page['regions']])
             boxes = boundaries or []
             if len(boxes) != len(page['regions']):
                 raise ReconstructionError('必须确认每个完整谱行边界。')
