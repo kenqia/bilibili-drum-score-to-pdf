@@ -76,6 +76,7 @@ def worker_lock(jobs):
 
 
 def recover(jobs):
+    jobs.recover_staging()
     with jobs.transaction() as db:
         rows = [dict(row) for row in db.execute("SELECT * FROM tasks WHERE state IN ('running','cancelling','finishing')")]
     for row in rows:
@@ -94,7 +95,7 @@ def recover(jobs):
         with jobs.transaction() as db:
             managed = db.execute('SELECT files FROM managed_attempts WHERE task=? AND attempt=?',
                 (row['id'], row['attempt'])).fetchone()
-        if managed and json.loads(managed['files']) == []:
+        if managed and not any(entry[0] == 'result/manifest.json' for entry in json.loads(managed['files'])):
             try:
                 validate_result(jobs, row)
                 manifest = jobs.attempt_root(row['id'], row['attempt']) / 'result' / 'manifest.json'
@@ -106,7 +107,7 @@ def recover(jobs):
 
 
 def run(jobs, *, once=False, poll_interval=.25, limits=None):
-    from .supervision import guardian_lease
+    from .supervision import guardian_lease, service_attempt
     stopping = False
     def stop(*args):
         nonlocal stopping
@@ -135,9 +136,10 @@ def run(jobs, *, once=False, poll_interval=.25, limits=None):
                             except JobError as error:
                                 raise ConversionError(error.code, error.message) from None
                         return stopping or jobs.cancelled(row)
-                    convert(json.loads(row['source'])['url'], attempt / 'result',
-                        progress=lambda stage: jobs.stage(row, stage) if stage != 'complete' else None,
-                        cancel=cancelled, limits={**(limits or {}), 'temp_bytes': jobs.job_temp_bytes})
+                    with service_attempt(jobs, row):
+                        convert(json.loads(row['source'])['url'], attempt / 'result',
+                            progress=lambda stage: jobs.stage(row, stage) if stage != 'complete' else None,
+                            cancel=cancelled, limits={**(limits or {}), 'temp_bytes': jobs.job_temp_bytes})
                     validate_result(jobs, row)
                     summary = retain_delivery(jobs, row)
                     jobs.capacity()
@@ -164,6 +166,7 @@ def run(jobs, *, once=False, poll_interval=.25, limits=None):
                         raise JobError('publication_pending', '发布决定已保存，重启后恢复。') from None
                     jobs.discard(row)
                     jobs.settle(row, 'failed', 'conversion_failed', '转换失败，可检查来源后重试。')
+                jobs.recover_staging()
                 jobs.cleanup()
                 if once:
                     return 0

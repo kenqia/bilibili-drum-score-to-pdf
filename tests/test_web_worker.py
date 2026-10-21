@@ -300,7 +300,7 @@ fixture = Path(os.environ['SYNTHETIC_NETWORK_ROOT'])
 original_connect = sqlite3.connect
 class InventoryConnection(sqlite3.Connection):
     def execute(self, sql, *args, **kwargs):
-        if sql.startswith('UPDATE managed_attempts SET files=') and (fixture / 'trap-inventory').exists():
+        if sql.startswith('UPDATE managed_attempts SET files=') and args and 'result/manifest.json' in str(args[0]) and (fixture / 'trap-inventory').exists():
             (fixture / 'before-inventory').write_text('core published')
             while (fixture / 'trap-inventory').exists():
                 time.sleep(.01)

@@ -20,6 +20,7 @@ web = ["fastapi==0.156.8", "uvicorn==0.54.0"]
 drum-score = "drum_score.cli:main"
 drum-score-web = "drum_score.web:main"
 drum-score-worker = "drum_score.worker:main"
+drum-score-maintenance = "drum_score.maintenance:main"
 
 [tool.setuptools]
 packages = ["drum_score"]

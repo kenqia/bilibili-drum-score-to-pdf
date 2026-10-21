@@ -17,6 +17,16 @@ from .core import ConversionError, ResourceBudget, _convert, _publish
 
 
 _guardian_lock = ContextVar('guardian_lock', default=None)
+_service_attempt = ContextVar("service_attempt", default=None)
+
+
+@contextmanager
+def service_attempt(jobs, row):
+    token = _service_attempt.set((jobs, row))
+    try:
+        yield
+    finally:
+        _service_attempt.reset(token)
 
 
 @contextmanager
@@ -153,6 +163,9 @@ def _run(source, output, *, progress=None, limits=None, cancel=None):
     try:
         temporary = temporary_directory.name
         root = Path(temporary)
+        owner = _service_attempt.get()
+        if owner is not None:
+            owner[0].remember_staging(owner[1], root)
         budget.root = root
         parent, child = context.Pipe(duplex=False)
         ready = context.Event()

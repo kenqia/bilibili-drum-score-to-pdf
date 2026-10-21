@@ -23,6 +23,8 @@ python3.12 -m venv .venv
 
 在另一个终端启动 `.venv/bin/drum-score-worker --data-root /absolute/path/drum-score-data`，打开 [本地网页](http://127.0.0.1:8000)。保存完整任务链接，完成后查看全部预览并下载 PDF。网站结果保留 24 小时，视频、原生帧及长图在任务结束后清理。详见[网站运行与存储规则](docs/script-product/website.md)。
 
+停服备份、核验和恢复见[维护指南](docs/script-product/maintenance.md)，独立发行环境、systemd、nginx 及回滚见[部署指南](docs/script-product/deployment.md)。
+
 网站尚未公开部署。资源参数是本地候选值，不能据此认定现有 2GB 服务器已通过硬限额验收。
 
 ## 适合什么视频

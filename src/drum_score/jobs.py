@@ -17,7 +17,7 @@ from .public_video import InputError, video_origin
 
 UNFINISHED = ('queued', 'running', 'cancelling', 'finishing')
 ACTIVE = ('running', 'cancelling', 'finishing')
-SCHEMA_VERSION = 1
+from .schema import SCHEMA_VERSION, SCHEMA_STATEMENTS, validate_schema
 
 
 class JobError(Exception):
@@ -64,22 +64,11 @@ class Jobs:
             if version != SCHEMA_VERSION and (version != 0 or tables):
                 raise ValueError('不支持的任务数据库 schema；请恢复匹配版本的数据与程序。')
             if not tables:
-                db.execute("""CREATE TABLE tasks (
-                  id TEXT PRIMARY KEY, capability_hash TEXT NOT NULL, source TEXT NOT NULL,
-                  ip_key TEXT NOT NULL, state TEXT NOT NULL, stage TEXT NOT NULL,
-                  created_at REAL NOT NULL, queued_at REAL NOT NULL,
-                  attempt TEXT, completed_at REAL, expires_at REAL,
-                  summary TEXT, error_code TEXT, error_message TEXT
-                )""")
-                db.execute("""CREATE TABLE managed_attempts (
-                  task TEXT NOT NULL, attempt TEXT NOT NULL, device INTEGER NOT NULL,
-                  inode INTEGER NOT NULL, files TEXT NOT NULL DEFAULT '[]',
-                  PRIMARY KEY(task,attempt))""")
-                db.execute("CREATE UNIQUE INDEX unfinished_ip ON tasks(ip_key) WHERE state IN ('queued','running','cancelling','finishing')")
-                db.execute("CREATE UNIQUE INDEX single_active ON tasks((1)) WHERE state IN ('running','cancelling','finishing')")
+                for statement in SCHEMA_STATEMENTS:
+                    db.execute(statement)
                 db.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
-            elif tables != {'tasks', 'managed_attempts'} or len(db.execute('PRAGMA table_info(tasks)').fetchall()) != 14:
-                raise ValueError('任务数据库 schema 与程序不匹配。')
+            else:
+                validate_schema(db)
 
     @contextmanager
     def transaction(self):
@@ -203,6 +192,138 @@ class Jobs:
                 (row['id'], row['attempt'], info.st_dev, info.st_ino))
         return path
 
+    def _attempt_descriptor(self, managed):
+        path = self.attempt_root(managed["task"], managed["attempt"])
+        descriptor = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            info = os.fstat(descriptor)
+            if (info.st_dev, info.st_ino) != self.root_identity:
+                raise ValueError("Changed service root")
+            for name in path.relative_to(self.root).parts:
+                child = os.open(
+                    name,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    dir_fd=descriptor,
+                )
+                os.close(descriptor)
+                descriptor = child
+            info = os.fstat(descriptor)
+            if (info.st_dev, info.st_ino) != (managed["device"], managed["inode"]):
+                raise ValueError("Changed attempt root")
+            return descriptor
+        except BaseException:
+            os.close(descriptor)
+            raise
+
+
+    def remember_staging(self, row, root):
+        if (
+            root.parent != self.attempt_root(row["id"], row["attempt"])
+            or not re.fullmatch(r"\.drum-score-job-[a-z0-9_]+", root.name)
+            or list(root.iterdir())
+        ):
+            raise ValueError("Invalid new staging root")
+        with self.transaction() as db:
+            managed = dict(
+                db.execute(
+                    "SELECT * FROM managed_attempts WHERE task=? AND attempt=?",
+                    (row["id"], row["attempt"]),
+                ).fetchone()
+            )
+            descriptor = self._attempt_descriptor(managed)
+            try:
+                info = root.lstat()
+                value = dict(name=root.name, device=info.st_dev, inode=info.st_ino)
+                fd = os.open(
+                    ".staging-ownership.json",
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o600,
+                    dir_fd=descriptor,
+                )
+                with os.fdopen(fd, "w") as stream:
+                    json.dump(value, stream)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                    marker = os.fstat(stream.fileno())
+                os.fsync(descriptor)
+                entries = json.loads(managed["files"])
+                entries.append(
+                    [
+                        ".staging-ownership.json",
+                        marker.st_dev,
+                        marker.st_ino,
+                        marker.st_ctime_ns,
+                    ]
+                )
+                db.execute(
+                    "UPDATE managed_attempts SET files=? WHERE task=? AND attempt=?",
+                    (json.dumps(entries), row["id"], row["attempt"]),
+                )
+            finally:
+                os.close(descriptor)
+
+
+    def recover_staging(self):
+        from .owned_tree import remove_owned_tree
+
+        with self.transaction() as db:
+            managed = [
+                dict(row) for row in db.execute("SELECT * FROM managed_attempts")
+            ]
+        for item in managed:
+            entries = json.loads(item["files"])
+            marker = next(
+                (entry for entry in entries if entry[0] == ".staging-ownership.json"),
+                None,
+            )
+            if marker is None:
+                continue
+            descriptor = None
+            try:
+                descriptor = self._attempt_descriptor(item)
+                fd = os.open(
+                    marker[0],
+                    os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                    dir_fd=descriptor,
+                )
+                with os.fdopen(fd, "rb") as stream:
+                    info = os.fstat(stream.fileno())
+                    if (
+                        not stat.S_ISREG(info.st_mode)
+                        or info.st_size > 4096
+                        or [info.st_dev, info.st_ino, info.st_ctime_ns] != marker[1:]
+                    ):
+                        continue
+                    value = json.loads(stream.read(4097))
+                if set(value) != {"name", "device", "inode"} or not re.fullmatch(
+                    r"\.drum-score-job-[a-z0-9_]+", value["name"]
+                ):
+                    continue
+                if not remove_owned_tree(
+                    descriptor, value["name"], (value["device"], value["inode"])
+                ):
+                    continue
+                check = os.stat(marker[0], dir_fd=descriptor, follow_symlinks=False)
+                if [check.st_dev, check.st_ino, check.st_ctime_ns] != marker[1:]:
+                    continue
+                os.unlink(marker[0], dir_fd=descriptor)
+                with self.transaction() as db:
+                    db.execute(
+                        "UPDATE managed_attempts SET files=? WHERE task=? AND attempt=? AND files=?",
+                        (
+                            json.dumps([entry for entry in entries if entry != marker]),
+                            item["task"],
+                            item["attempt"],
+                            item["files"],
+                        ),
+                    )
+            except (OSError, ValueError, TypeError, KeyError):
+                pass
+            finally:
+                if descriptor is not None:
+                    os.close(descriptor)
+
+
     def remember_result(self, row, result):
         root = self.attempt_root(row['id'], row['attempt'])
         references = [dict(path='manifest.json'), result['pdf'], *result['pages'],
@@ -224,6 +345,9 @@ class Jobs:
                 raise ValueError('Invalid managed artifact')
             entries.append([relative.as_posix(), info.st_dev, info.st_ino, info.st_ctime_ns])
         with self.transaction() as db:
+            old = db.execute('SELECT files FROM managed_attempts WHERE task=? AND attempt=?',
+                (row['id'], row['attempt'])).fetchone()
+            entries.extend(entry for entry in json.loads(old['files']) if entry[0] == '.staging-ownership.json')
             db.execute('UPDATE managed_attempts SET files=? WHERE task=? AND attempt=?',
                        (json.dumps(entries), row['id'], row['attempt']))
 
@@ -258,6 +382,8 @@ class Jobs:
                 return
             directories = set()
             for name, device, inode, changed_ns in entries:
+                if name == '.staging-ownership.json':
+                    continue  # Only recover_staging may release this ownership record.
                 relative = Path(name)
                 if relative.is_absolute() or '..' in relative.parts:
                     continue

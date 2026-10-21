@@ -12,6 +12,7 @@ Python、CLI 和匿名网站共用 `drum_score.convert`。转换通过图像处�
 | `video_seek.py` | 有限时 FFmpeg 解码、实际 PTS/time_base、原生运动摘要和临时帧清理。 |
 | `cli.py`、`arguments.py` | JSON 与参数适配；非法输入不反射载荷、路径或原始异常。 |
 | `web.py`、`static/` | 同源网页、能力认证、真实阶段及 FD 分块下载。 |
+| `schema.py`、`maintenance.py`、`owned_tree.py` | 共享已知 schema、停服快照、完整性核验、新身份恢复及有界私有根清理。 |
 | `jobs.py`、`worker.py`、`service_limits.py` | SQLite 队列、排他 worker、发布决定、存储准入、保留期和受管清理。 |
 
 所有生产模块位于同一 Python 包；wheel 不包含旧 Skill、实验视频或机器认证。基础依赖与网站可选依赖由 `pyproject.toml` 定义。
@@ -29,6 +30,8 @@ Python、CLI 和匿名网站共用 `drum_score.convert`。转换通过图像处�
 HTTP 只提交公开 BV 链接，重计算由独立串行 worker 执行。SQLite 短 `BEGIN IMMEDIATE` 事务和部分唯一索引限制每 IP 一个未完成任务、全站 10 个等待加 1 个活动任务。随机任务 ID 与 256 位能力凭据独立生成；SQLite 只存凭据摘要。IP 限流不代表所有权。
 
 转换排他发布到私有 attempt/result 后，worker 核对 PDF 和全部预览，清理线上原生帧及长图并更新 manifest，再持久保存 `finishing` 决定及完成/到期时间。此后取消不撤销结果。重启核验同一决定，恢复完成而不延长保留期；未作完成决定的活动任务标为 `interrupted`，只允许显式重试。
+
+服务暂存根在启动子进程前登记 ownership marker 与根 device/inode，整服务树终止后只恢复清理身份匹配的确切私有根。未知根、attempt 外文件和替换 marker 保留。备份/恢复在排他发布前 fsync 所有嵌套目录，核验拒绝未知 schema、额外文件、链接与特殊文件。具体命令见[维护指南](script-product/maintenance.md)。
 
 服务 schema 显式使用 SQLite `user_version=1`，拒绝旧未版本化库及未知版本。`managed_attempts` 记录 task/attempt、受管根 device/inode，以及生成文件的相对路径、device/inode/ctime。清理从数据根经 no-follow 目录 FD 遍历，只 unlink 身份仍匹配的文件，未知文件和替换物保留。目录只在空时移除。恢复到新目录必须先核验备份清单/hash，再登记工具自己新建的文件身份；数据库旧 inode/ctime 不可直接当作新副本所有权。
 
