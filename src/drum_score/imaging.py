@@ -97,7 +97,7 @@ def register(paths, region):
 def compose(paths, region, placements, output):
     width, height = region[2] - region[0], region[3] - region[1]
     total = placements[-1]['offset'] + height
-    if width * total > 80_000_000:
+    if width * total > 20_000_000:
         raise ConversionError('resource_limit', '派生长图超出像素限制。')
     # Keep source RGB. No chroma mask, whitening or inferred hidden symbols.
     result = Image.new('RGB', (width, total), 'white')
@@ -119,11 +119,19 @@ def compose(paths, region, placements, output):
 
 
 def system_groups(image):
-    gray = np.asarray(image.convert('L'))
-    height, width = gray.shape
-    horizontal = cv2.morphologyEx((gray < 225).astype(np.uint8), cv2.MORPH_OPEN,
-                                 np.ones((1, max(20, width // 12)), np.uint8))
-    rows = np.flatnonzero(horizontal.sum(axis=1) > width * .3)
+    width, height = image.size
+    rows = []
+    counts = np.zeros(height, dtype=np.int64)
+    # The morphology kernel is horizontal only. Independent 256-row strips
+    # retain exact row detection while bounding gray/RGB/ink work buffers.
+    for top in range(0, height, 256):
+        with image.crop((0, top, width, min(height, top + 256))) as strip:
+            gray = np.asarray(strip.convert('L'))
+            horizontal = cv2.morphologyEx((gray < 225).astype(np.uint8), cv2.MORPH_OPEN,
+                                         np.ones((1, max(20, width // 12)), np.uint8))
+            rows.extend((top + np.flatnonzero(horizontal.sum(axis=1) > width * .3)).tolist())
+            counts[top:top + strip.height] = (np.min(np.asarray(strip.convert('RGB')), axis=2) < 245).sum(axis=1)
+    rows = np.asarray(rows, dtype=np.int64)
     runs = np.split(rows, np.flatnonzero(np.diff(rows) > 1) + 1) if len(rows) else []
     lines = [float(run.mean()) for run in runs if 0 < len(run) <= 6]
     staffs = []
@@ -139,8 +147,6 @@ def system_groups(image):
     if not staffs:
         raise ConversionError('unsupported_layout', '谱区中未找到可用五线谱。')
     # Use all RGB channels to protect colored marks from page boundaries.
-    ink = np.min(np.asarray(image.convert('RGB')), axis=2) < 245
-    counts = ink.sum(axis=1)
     boundaries = [0]
     for previous, current in zip(staffs, staffs[1:]):
         begin = min(height, math.ceil(previous[0] + previous[1] * 5))

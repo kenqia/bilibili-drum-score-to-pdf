@@ -5,6 +5,7 @@ import tempfile
 import subprocess
 import json
 import os
+import time
 from PIL import Image, ImageDraw, ImageChops
 import unittest
 
@@ -13,6 +14,137 @@ import drum_score
 
 
 class ScriptConversion(unittest.TestCase):
+    def test_source_size_limit_is_checked_before_probe(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'large.mp4'
+            source.write_bytes(b'12345')
+            with self.assertRaises(drum_score.ConversionError) as caught:
+                drum_score.convert(source, root / 'result', limits={'input_bytes': 4})
+            self.assertEqual(caught.exception.code, 'resource_limit')
+            self.assertFalse((root / 'result').exists())
+
+    def test_memory_and_temporary_disk_budgets_fail_without_partial_publication(self):
+        from score_fixtures import score_frame, video_from_image
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = video_from_image(score_frame(), root)
+            before = source.read_bytes()
+            for limit in ('rss_bytes', 'temp_bytes'):
+                with self.subTest(limit=limit):
+                    with self.assertRaises(drum_score.ConversionError) as caught:
+                        drum_score.convert(source, root / limit, limits={limit: 1})
+                    self.assertEqual(caught.exception.code, 'resource_limit')
+                    self.assertFalse((root / limit).exists())
+                    self.assertEqual(source.read_bytes(), before)
+                    self.assertEqual(list(root.glob('.drum-score-*')), [])
+
+    def test_total_deadline_stops_child_decoder_and_cleans_owned_temporary_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'source.mp4'
+            source.write_bytes(b'not decoded by the waiting fixture')
+            tools = root / 'bin'
+            tools.mkdir()
+            decoder = tools / 'ffprobe'
+            decoder.write_text('#!/usr/bin/env python3\nimport os,time\nfrom pathlib import Path\nPath(' + repr(str(root / 'decoder-pid')) + ').write_text(str(os.getpid()))\ntime.sleep(30)\n')
+            decoder.chmod(0o755)
+            from unittest.mock import patch
+            with patch.dict(os.environ, {'PATH': str(tools) + os.pathsep + os.environ['PATH']}):
+                with self.assertRaises(drum_score.ConversionError) as caught:
+                    drum_score.convert(source, root / 'result', limits={'wall_seconds': .5})
+            self.assertEqual(caught.exception.code, 'resource_limit')
+            self.assertFalse((root / 'result').exists())
+            self.assertEqual(list(root.glob('.drum-score-*')), [])
+            self.assertTrue((root / 'decoder-pid').exists())
+            pid = int((root / 'decoder-pid').read_text())
+            if Path('/proc').is_dir():
+                state = Path('/proc') / str(pid) / 'stat'
+                self.assertTrue(not state.exists() or state.read_text().split(') ')[1].startswith('Z'))
+
+    @unittest.skipUnless(Path('/proc').is_dir(), 'Linux process recovery contract')
+    def test_abnormal_conversion_worker_stops_its_independent_session_descendant(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'source.mp4'
+            source.write_bytes(b'worker exit fixture')
+            binaries = root / 'bin'
+            binaries.mkdir()
+            decoder = binaries / 'ffprobe'
+            decoder.write_text('#!/usr/bin/env python3\nimport os,time,signal\nfrom pathlib import Path\nos.setsid()\nPath(' + repr(str(root / 'decoder-pid')) + ').write_text(str(os.getpid()))\ntime.sleep(.2)\nos.kill(os.getppid(),signal.SIGKILL)\ntime.sleep(30)\n')
+            decoder.chmod(0o755)
+            from unittest.mock import patch
+            with patch.dict(os.environ, {'PATH': str(binaries) + os.pathsep + os.environ['PATH']}):
+                with self.assertRaises(drum_score.ConversionError) as caught:
+                    drum_score.convert(source, root / 'result')
+            self.assertEqual(caught.exception.code, 'conversion_failed')
+            self.assertFalse((root / 'result').exists())
+            self.assertEqual(list(root.glob('.drum-score-*')), [])
+            pid = int((root / 'decoder-pid').read_text())
+            state = Path('/proc') / str(pid) / 'stat'
+            self.assertTrue(not state.exists() or state.read_text().split(') ')[1].startswith('Z'))
+
+    @unittest.skipUnless(Path('/proc').is_dir(), 'Linux process recovery contract')
+    def test_killed_caller_leaves_no_active_decoder_or_task_temporary_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'source.mp4'
+            source.write_bytes(b'waiting decoder fixture')
+            binaries = root / 'bin'
+            binaries.mkdir()
+            decoder = binaries / 'ffprobe'
+            decoder.write_text('#!/usr/bin/env python3\nimport os,time\nfrom pathlib import Path\nPath(' + repr(str(root / 'decoder-pid')) + ').write_text(str(os.getpid()))\ntime.sleep(30)\n')
+            decoder.chmod(0o755)
+            process = subprocess.Popen([sys.executable, '-m', 'drum_score', str(source),
+                '--output', str(root / 'result')], env={**os.environ,
+                'PATH': str(binaries) + os.pathsep + os.environ['PATH'],
+                'PYTHONPATH': os.pathsep.join(sys.path)}, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            try:
+                deadline = time.monotonic() + 10
+                while not (root / 'decoder-pid').exists() and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertTrue((root / 'decoder-pid').exists())
+                process.kill()
+                process.wait(timeout=5)
+                deadline = time.monotonic() + 5
+                while list(root.glob('.drum-score-*')) and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertEqual(list(root.glob('.drum-score-*')), [])
+                pid = int((root / 'decoder-pid').read_text())
+                state = Path('/proc') / str(pid) / 'stat'
+                self.assertTrue(not state.exists() or state.read_text().split(') ')[1].startswith('Z'))
+                self.assertFalse((root / 'result').exists())
+                self.assertEqual(source.read_bytes(), b'waiting decoder fixture')
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
+                process.stdout.close()
+                process.stderr.close()
+
+    def test_cancelled_conversion_does_not_publish_or_leave_staging(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = Image.new('RGB', (640, 520), 'white')
+            draw = ImageDraw.Draw(image)
+            for top in (120, 300):
+                for line in range(5):
+                    draw.line((25, top + 8 * line, 615, top + 8 * line), fill='black')
+            image.save(root / 'frame.png')
+            source = root / 'video.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-loop', '1', '-i', str(root / 'frame.png'),
+                '-t', '2', '-r', '4', '-c:v', 'ffv1', str(source)], check=True)
+            cancelled = False
+            def progress(stage):
+                nonlocal cancelled
+                if stage == 'sampling':
+                    cancelled = True
+            with self.assertRaises(drum_score.ConversionError) as caught:
+                drum_score.convert(source, root / 'result', progress=progress, cancel=lambda: cancelled)
+            self.assertEqual(caught.exception.code, 'cancelled')
+            self.assertFalse((root / 'result').exists())
+            self.assertEqual(list(root.glob('.drum-score-*')), [])
+
     def test_invalid_input_never_publishes_or_overwrites(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -72,7 +204,11 @@ class ScriptConversion(unittest.TestCase):
             subprocess.run(['ffmpeg', '-v', 'error', '-loop', '1', '-i', str(root / 'native.png'),
                 '-t', '2', '-r', '4', '-c:v', 'ffv1', str(source)], check=True)
             stages = []
-            result = drum_score.convert(source, root / 'result', progress=stages.append)
+            def progress(stage):
+                stages.append(stage)
+                if stage == 'complete':
+                    raise RuntimeError('SYNTHETIC observer error after publication')
+            result = drum_score.convert(source, root / 'result', progress=progress)
             self.assertEqual(result['status'], 'complete')
             self.assertFalse(result['reliable'])
             self.assertGreaterEqual(len(result['warnings']), 1)

@@ -54,17 +54,22 @@ def main_adapter(checkout, source, output, name):
 
 
 def rss_tree(group):
-    total = 0
+    records = {}
     for path in Path('/proc').iterdir():
         if not path.name.isdigit():
             continue
         try:
             fields = (path / 'stat').read_text().rsplit(')', 1)[1].split()
-            if int(fields[2]) == group:
-                total += int(fields[21]) * os.sysconf('SC_PAGE_SIZE')
+            records[int(path.name)] = (int(fields[1]), int(fields[2]), int(fields[21]) * os.sysconf('SC_PAGE_SIZE'))
         except (OSError, ValueError, IndexError):
             continue
-    return total
+    descendants = {group} | {pid for pid, record in records.items() if record[1] == group}
+    while True:
+        before = len(descendants)
+        descendants.update(pid for pid, record in records.items() if record[0] in descendants)
+        if len(descendants) == before:
+            break
+    return sum(records.get(pid, (0, 0, 0))[2] for pid in descendants)
 
 
 def run_bounded(command, directory, seconds, memory, checkout=None):

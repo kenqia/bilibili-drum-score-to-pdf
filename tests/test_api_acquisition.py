@@ -82,10 +82,17 @@ class APIAcquisitionTests(unittest.TestCase):
             env['https_proxy'] = 'http://fixture:SYNTHETIC_PROXY_SECRET@proxy.example:8888'
         output = base / 'result'
         stdout = io.StringIO()
+        # The socket fixture belongs to this process. Exercise the unchanged
+        # downloader/image boundary here; supervision has real process tests.
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+        import drum_score.supervision
+        from drum_score.core import _convert
         with patch.dict(os.environ, env), patch('socket.getaddrinfo', side_effect=dns), patch(
             'socket.create_connection', side_effect=connect), patch('ssl.SSLContext.wrap_socket',
                 side_effect=lambda self, sock, **kw: sock, autospec=True), patch.object(
-                    BiliBiliIE, '_wbi_key_cache', {}), contextlib.redirect_stdout(stdout):
+                    BiliBiliIE, '_wbi_key_cache', {}), patch(
+                    'drum_score.supervision.run', side_effect=_convert), contextlib.redirect_stdout(stdout):
             if entry == 'cli':
                 with patch('sys.argv', ['convert.py', URL, '--output', str(output)]):
                     status = cli.main()

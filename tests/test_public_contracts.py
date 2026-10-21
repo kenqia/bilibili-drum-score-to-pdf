@@ -533,6 +533,35 @@ if __name__ == '__main__':
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    def test_script_entries_apply_input_resource_limit_before_decoding(self):
+        from pathlib import Path
+        import tempfile
+        import contextlib
+        import io
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+        import drum_score
+        from drum_score.cli import main
+        for entry in SCRIPT_CONVERSION_ENTRIES:
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                source = root / 'source.mp4'
+                source.write_bytes(b'x' * 2048)
+                output = root / 'result'
+                if entry == 'script_core':
+                    with self.assertRaises(drum_score.ConversionError) as caught:
+                        drum_score.convert(source, output, limits={'input_bytes': 1024})
+                    code = caught.exception.code
+                else:
+                    stream = io.StringIO()
+                    with contextlib.redirect_stdout(stream):
+                        self.assertEqual(main([str(source), '--output', str(output),
+                                               '--max-input-mib', str(1/1024)]), 2)
+                    code = json.loads(stream.getvalue())['error']['code']
+                self.assertEqual(code, 'resource_limit')
+                self.assertFalse(output.exists())
+                self.assertEqual(source.read_bytes(), b'x' * 2048)
+                self.assertEqual(list(root.glob('.drum-score-*')), [])
+
     def test_script_entries_reject_existing_paths_and_invalid_source(self):
         from pathlib import Path
         import tempfile
