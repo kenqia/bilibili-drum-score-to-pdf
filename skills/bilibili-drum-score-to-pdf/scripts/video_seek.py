@@ -89,8 +89,9 @@ class _MotionDiagnostics:
                         if int(header[1]) != self.native_count or self.native_count != self.values_count:
                             self.invalid = True
                         pts = int(header[2])
-                        if self.native is not None and pts <= self.native[0]:
-                            self.invalid = True
+                        # Decoders can emit a delayed tail frame with an older
+                        # presentation timestamp. Preserve its actual PTS and
+                        # validate pairing by native sequence, not PTS sorting.
                         self.native_count += 1
                         self.native = (pts, None)
                     value = re.search(r'lavfi.signalstats.YDIF=([0-9.eE+-]+)', text)
