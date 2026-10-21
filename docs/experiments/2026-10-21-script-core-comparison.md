@@ -20,7 +20,7 @@
 
 ## 运行边界
 
-`tools/compare_script_core.py` 在运行前复核全部输入 hash、原附件 hash或 main HEAD，每次建立新结果目录，串行执行任务。子进程组默认有600秒期限和2048 MiB采样RSS上限；结束时清理该进程组。数值库线程限为1。额外的全部PDF预览由 pdftoppm 生成。
+`tools/compare_script_core.py` 在运行前复核全部输入 hash、原附件 hash或程序完整提交。main 与优化版的运行源码目录必须没有修改或未跟踪文件，优化版子进程从指定 checkout 导入。每次建立新结果目录，串行执行任务。子进程组默认有600秒期限和2048 MiB采样RSS上限；结束时清理该进程组。数值库线程限为1。额外的全部PDF预览由 pdftoppm 生成。
 
 main 对照提取该提交的自动 `prepare`、`stitch` 与 `_continuous_pages` 算法，以原来的裁剪嵌图方式渲染PDF。它不经过旧产品的完整CLI交付，不创建虚构的长图或PDF批准，材料明确标记 `unreviewed_algorithm_extraction`。因此这里只比较其自动算法，不将它称为旧产品无人值守成功。
 
@@ -41,8 +41,9 @@ main 对照提取该提交的自动 `prepare`、`stitch` 与 `_continuous_pages`
 | 小星星 | main自动算法 | 4.064 | 251.1 | 1 | 172394 |
 | 小星星 | 原附件 | 38.617 | 784.7 | 1 | 321471 |
 | 鲜花 | main自动算法 | 18.030 | 357.5 | 2 | 1639637 |
+| 鲜花 | 原附件 | 254.442 | 1750.0 | 3 | 2205710 |
 
-本地完整证据位于 `/home/kenqia/issue69-context/evidence/`，清单为该目录上级的 `inputs.json`、`inputs-v2.json`、`versions.json`。各目录保留measurement、日志、PDF、全部渲染预览和实际可得中间材料。原附件《鲜花》及优化程序当时尚未完成，后续结果另行追加，不能把本表当最终对照。
+本地完整证据位于 `/home/kenqia/issue69-context/evidence/`，清单为该目录上级的 `inputs.json`、`inputs-v2.json`、`versions.json`。各目录保留measurement、日志、PDF、全部渲染预览和实际可得中间材料。原附件《鲜花》已完成，数据来自 `attachment-v2-extra`。优化程序的完整复测与用户质量确认仍待完成，不能把本表当最终对照。
 
 逐页视觉检查尚未通过。根Agent曾调用预览工具并在进度中描述页面外观，但恢复核查发现工具没有返回可见图片；这些外观、首尾小节和无缺行判断缺乏可验证的实际看图依据，现撤回，不作为验收。全部PDF和渲染预览已保存，仍须用户实际查看并确认。分页数量差异本身不证明缺行，附件的连续行组数量也不是五线谱数量。
 
@@ -62,6 +63,10 @@ python tools/compare_script_core.py \
   --output "$NEW_RESULTS" --program attachment \
   --attachment "$ORIGINAL_SCRIPT" \
   --attachment-sha256 2ea5ddd758665efd48320d15e3be5c39706dd6dc290eb4e6dd738a75b87ee239
+
+python tools/compare_script_core.py \
+  --manifest "$INPUTS" --output "$NEW_RESULTS" --program optimized \
+  --checkout "$OPTIMIZED_CHECKOUT" --version "$OPTIMIZED_COMMIT"
 ```
 
-`--sample xianhua` 可补跑同一固定清单的新增项，不替代其他样本回归。优化程序须在安装后使用同一清单，并保存每次失败及修正版本。程序的成功、Agent实际查看与用户最终质量确认分别记录。
+`--sample xianhua` 可补跑同一固定清单的新增项，不替代其他样本回归。`OPTIMIZED_CHECKOUT` 是优化版干净工作区，`OPTIMIZED_COMMIT` 是该版本的完整提交 hash；不能填手工版本名。使用具备项目依赖的独立 Python 环境执行，仓库外安装运行另行验证。保存每次失败及修正版本，分别记录程序成功、Agent实际查看与用户最终质量确认。
