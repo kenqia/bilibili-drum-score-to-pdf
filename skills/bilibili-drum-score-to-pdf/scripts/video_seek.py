@@ -50,67 +50,94 @@ def probe_video(source):
 
 
 class _MotionDiagnostics:
-    """Drain native observations without retaining native frames or log text.
+    """Drain bounded per-native-frame motion summaries, never raw log text.
 
-    Checksums are motion evidence, never source-integrity hashes. The selected
-    RGB frames still carry their own SHA-256 and actual PTS in the caller.
+    A separate thumbnail branch measures mean absolute luma change. The native
+    RGB branch is untouched. These are heuristic motion observations, never
+    source-integrity hashes or proof that every movement has been detected.
     """
     def __init__(self):
         self.time_base = None
-        self.pts = []
+        self.samples = []
         self.native = None
         self.native_count = 0
-        self.anchor = None
-        self.changed = False
-        self.ambiguous = False
+        self.values_count = 0
+        self.maximum = 0.0
+        self.last_sample_native_count = 0
+        self.pending = None
         self.invalid = False
+
+    def _finish_sample(self, pts):
+        if self.native is None or self.native[0] != pts or self.native[1] is None:
+            self.invalid = True
+        if len(self.samples) >= 4097:
+            self.invalid = True
+            return
+        skipped = max(0, self.native_count - self.last_sample_native_count - 1)
+        self.samples.append((pts, self.maximum, skipped))
+        self.last_sample_native_count = self.native_count
+        self.maximum = 0.0
+        self.pending = None
 
     def drain(self, stream):
         try:
             for line in iter(lambda: stream.readline(4096), b''):
                 text = line.decode(errors='replace')
-                if 'showinfo@sample' in text:
-                    base = re.search(r'config in time_base:\s*(\d+)/(\d+)', text)
-                    if base:
-                        value = [int(base[1]), int(base[2])]
-                        if not value[1] or self.time_base not in (None, value):
+                if 'metadata@motion' in text:
+                    header = re.search(r'frame:(\d+)\s+pts:(-?\d+)', text)
+                    if header:
+                        if int(header[1]) != self.native_count or self.native_count != self.values_count:
                             self.invalid = True
-                        self.time_base = value
-                if not ('showinfo@motion' in text or 'showinfo@sample' in text):
+                        pts = int(header[2])
+                        if self.native is not None and pts <= self.native[0]:
+                            self.invalid = True
+                        self.native_count += 1
+                        self.native = (pts, None)
+                    value = re.search(r'lavfi.signalstats.YDIF=([0-9.eE+-]+)', text)
+                    if value:
+                        difference = float(value[1])
+                        if (self.native is None or self.native[1] is not None
+                                or not math.isfinite(difference) or not 0 <= difference <= 255):
+                            self.invalid = True
+                            continue
+                        self.native = (self.native[0], difference)
+                        self.values_count += 1
+                        self.maximum = max(self.maximum, difference)
+                        if self.pending is not None:
+                            self._finish_sample(self.pending)
+                if 'showinfo@sample' not in text:
                     continue
-                frame = re.search(r'\bn:\s*(\d+)\s+pts:\s*(-?\d+).*?\bchecksum:([0-9A-Fa-f]+)', text)
-                if not frame:
-                    continue
-                index, pts, checksum = int(frame[1]), int(frame[2]), frame[3]
-                if 'showinfo@motion' in text:
-                    if index != self.native_count:
+                base = re.search(r'config in time_base:\s*(\d+)/(\d+)', text)
+                if base:
+                    value = [int(base[1]), int(base[2])]
+                    if not value[1] or self.time_base not in (None, value):
                         self.invalid = True
-                    self.native_count += 1
-                    self.native = (pts, checksum)
-                    if self.anchor is not None and checksum != self.anchor:
-                        self.changed = True
-                else:
-                    if index != len(self.pts) or self.native != (pts, checksum):
+                    self.time_base = value
+                frame = re.search(r'\bn:\s*(\d+)\s+pts:\s*(-?\d+)', text)
+                if frame:
+                    if int(frame[1]) != len(self.samples) or self.pending is not None:
                         self.invalid = True
-                    if len(self.pts) >= 4097:
-                        self.invalid = True
-                        continue
-                    self.pts.append(pts)
-                    if checksum == self.anchor and self.changed:
-                        self.ambiguous = True
-                    self.anchor, self.changed = checksum, False
+                    pts = int(frame[2])
+                    if self.native is not None and self.native[0] == pts and self.native[1] is not None:
+                        self._finish_sample(pts)
+                    else:
+                        self.pending = pts
         except (OSError, ValueError):
             self.invalid = True
 
     def records(self, count):
-        if self.invalid or not self.time_base or len(self.pts) != count or not count:
+        if (self.invalid or not self.time_base or len(self.samples) != count or not count
+                or self.pending is not None or self.native_count != self.values_count):
             raise ConversionError('decode_failed', '实际时间戳与原生运动观察记录不完整。')
-        # Include the final native interval before the separately captured tail.
-        if self.ambiguous or (self.native[1] == self.anchor and self.changed):
-            raise ConversionError('discontinuity', '采样间存在画面变化，无法可靠确认位移；未发布可能缺段的曲谱。')
         numerator, denominator = self.time_base
-        return [{'pts': value, 'time_base': self.time_base,
-                 'timestamp': value * numerator / denominator} for value in self.pts]
+        records = [{'pts': pts, 'time_base': self.time_base,
+                    'timestamp': pts * numerator / denominator,
+                    'native_motion_max_luma_difference': difference,
+                    'native_intermediate_frames': skipped}
+                   for pts, difference, skipped in self.samples]
+        records[-1]['native_trailing_motion_max_luma_difference'] = self.maximum
+        records[-1]['native_trailing_frames'] = self.native_count - self.last_sample_native_count
+        return records
 
 
 class VideoReader:
@@ -134,10 +161,13 @@ class VideoReader:
         if budget <= 0:
             raise ConversionError('decode_failed', '视频解码期限已耗尽。')
         selection = f"select='isnan(prev_selected_t)+gte(t-prev_selected_t,{interval:.9f})'"
-        filters = ('showinfo@motion,' + selection + ',showinfo@sample'
+        filters = ('split=2[keep][motion];[motion]'
+                   'scale=128:128:force_original_aspect_ratio=decrease,format=yuv444p,'
+                   'signalstats,metadata@motion=print:key=lavfi.signalstats.YDIF,nullsink;'
+                   '[keep]' + selection + ',showinfo@sample'
                    if verify_motion else selection + ',showinfo')
         command = ['ffmpeg', '-v', 'info', '-nostdin', '-copyts', '-threads', '2',
-                   '-i', str(self.source), '-vf',
+                   '-filter_threads', '1', '-i', str(self.source), '-vf',
                    filters,
                    '-an', *frame_sync_args(), '-threads', '1', '-pix_fmt', 'rgb24',
                    '-f', 'rawvideo', 'pipe:1']

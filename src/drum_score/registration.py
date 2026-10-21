@@ -116,16 +116,21 @@ def shift_candidates(A, B, lo, hi, min_ov, top=6):
     out.sort()
     return out
 
-def pick(cands, global_thr, prefer=None, strict=False):
+def pick(cands, global_thr, prefer=None, strict=False, reject_ambiguity=False):
     """Choose among (global, dy, local) candidates passing the global test.
 
     Near-ties (repeated identical systems) are broken by the local test (measure
     numbers differ), then by closeness to `prefer`. With strict=True the local
-    test is also a hard requirement (used before accepting jumps)."""
+    test is also a hard requirement (used before accepting jumps). With
+    reject_ambiguity=True, equivalent positions separated by more than two
+    pixels have no chosen result; temporal evidence must resolve them."""
     ok = [c for c in cands if c[0] <= global_thr and (not strict or c[2] <= LOCAL_GOOD)]
     if not ok:
         return None, (cands[0][0] if cands else np.inf)
     cmin = ok[0][0]
     ok = [c for c in ok if c[0] <= cmin * 1.15 + 0.005]
     ok.sort(key=lambda c: (round(c[2] / 0.15), abs(c[1] - prefer) if prefer is not None else c[0]))
+    if reject_ambiguity and any(abs(candidate[1] - ok[0][1]) > 2
+            and round(candidate[2] / 0.15) == round(ok[0][2] / 0.15) for candidate in ok[1:]):
+        return None, ok[0][0]
     return ok[0][1], ok[0][0]

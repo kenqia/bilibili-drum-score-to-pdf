@@ -327,15 +327,46 @@ class ScriptConversion(unittest.TestCase):
             source = root / 'alias.mkv'
             subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '30', '-i',
                             str(root / 'alias-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
-            before = source.read_bytes()
-            output = root / 'result'
-            with self.assertRaises(drum_score.ConversionError) as caught:
-                drum_score.convert(source, output)
-            self.assertEqual(caught.exception.code, 'discontinuity')
-            self.assertFalse(output.exists())
-            self.assertEqual(list(root.glob('.drum-score-*')), [])
-            self.assertEqual(source.read_bytes(), before)
+            compressed = root / 'alias.mp4'
+            subprocess.run(['ffmpeg', '-v', 'error', '-i', str(source), '-c:v', 'libx264',
+                            '-threads', '1', '-crf', '23', '-pix_fmt', 'yuv420p', str(compressed)], check=True)
+            # A 270px sampling jump has a plausible nonzero 90px alias too.
+            for index, shift in enumerate(range(0, 901, 18)):
+                sheet.crop((0, shift, 640, shift + 520)).save(root / f'wide-{index:03d}.png')
+            wide = root / 'wide.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '30', '-i',
+                            str(root / 'wide-%03d.png'), '-c:v', 'ffv1', str(wide)], check=True)
+            wide_compressed = root / 'wide.mp4'
+            subprocess.run(['ffmpeg', '-v', 'error', '-i', str(wide), '-c:v', 'libx264',
+                            '-threads', '1', '-crf', '23', '-pix_fmt', 'yuv420p', str(wide_compressed)], check=True)
+            for index, video in enumerate((source, compressed, wide, wide_compressed)):
+                with self.subTest(source=video.name):
+                    before = video.read_bytes()
+                    output = root / f'result-{index}'
+                    with self.assertRaises(drum_score.ConversionError) as caught:
+                        drum_score.convert(video, output)
+                    self.assertEqual(caught.exception.code, 'discontinuity')
+                    self.assertFalse(output.exists())
+                    self.assertEqual(list(root.glob('.drum-score-*')), [])
+                    self.assertEqual(video.read_bytes(), before)
             sheet.close()
+
+    def test_static_lossy_video_does_not_invent_scroll_from_compression_changes(self):
+        from score_fixtures import score_frame
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = score_frame()
+            image.save(root / 'still.png')
+            source = root / 'still.mp4'
+            subprocess.run(['ffmpeg', '-v', 'error', '-loop', '1', '-i', str(root / 'still.png'),
+                            '-t', '2', '-r', '30', '-c:v', 'libx264', '-threads', '1',
+                            '-crf', '23', '-pix_fmt', 'yuv420p', str(source)], check=True)
+            result = drum_score.convert(source, root / 'result')
+            self.assertEqual(result['staff_count'], 3)
+            self.assertTrue(all(placement['offset'] == 0 for placement in result['placements']))
+            with Image.open(root / 'result' / result['longshot']['path']) as longshot:
+                self.assertLessEqual(longshot.height, image.height)
+            image.close()
 
     def test_repeated_music_with_small_measure_numbers_retains_fast_scroll_positions(self):
         with tempfile.TemporaryDirectory() as temporary:
