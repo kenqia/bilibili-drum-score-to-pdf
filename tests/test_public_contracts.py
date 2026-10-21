@@ -16,6 +16,7 @@ import score_workflow
 
 
 SCRIPT_CONVERSION_ENTRIES = ('script_core', 'script_cli')
+REMOTE_SCRIPT_ENTRIES = (*SCRIPT_CONVERSION_ENTRIES, 'script_http')
 
 ACQUISITION_ENTRIES = ('cli', 'workflow', 'acquire')
 EXPORT_ENTRIES = ('cli', 'workflow', 'vector')
@@ -533,6 +534,95 @@ if __name__ == '__main__':
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    def test_remote_script_matrix_refuses_nonpublic_targets_without_publication(self):
+        from pathlib import Path
+        import tempfile
+        import os
+        if not Path('/proc').is_dir():
+            self.skipTest('Linux website contract')
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            self.skipTest('Install tests/requirements-web.txt for website matrix')
+        from drum_score.web import create_app
+        from drum_score import ConversionError, convert
+        source = 'https://127.0.0.1/video/BV1rH4y1R7Rk'
+        repository = Path(__file__).resolve().parents[1]
+        env = {**os.environ, 'PYTHONPATH': os.pathsep.join(map(str, (repository / 'src',
+            repository / 'skills/bilibili-drum-score-to-pdf/scripts')))}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for entry in REMOTE_SCRIPT_ENTRIES:
+                with self.subTest(entry=entry):
+                    output = root / entry
+                    if entry == 'script_core':
+                        with self.assertRaises(ConversionError) as caught:
+                            convert(source, output)
+                        code = caught.exception.code
+                    elif entry == 'script_cli':
+                        process = subprocess.run([sys.executable, '-m', 'drum_score', source, '--output', str(output)],
+                            env=env, capture_output=True, text=True, timeout=10)
+                        self.assertEqual(process.returncode, 2)
+                        code = json.loads(process.stdout)['error']['code']
+                    else:
+                        with TestClient(create_app(root / 'service'), client=('192.0.2.1', 2000)) as client:
+                            response = client.post('/api/tasks', json={'url': source})
+                            self.assertEqual(response.status_code, 422)
+                            code = response.json()['error']['code']
+                    self.assertEqual(code, 'invalid_bilibili_url')
+                    self.assertFalse(output.exists())
+            self.assertEqual(list(root.rglob('.drum-score-*')), [])
+
+    def test_remote_script_matrix_preserves_source_pages_and_honest_completion(self):
+        from pathlib import Path
+        import hashlib
+        if not (Path('/proc').is_dir()):
+            self.skipTest('Linux website process lifecycle contract')
+        # Optional web dependencies are mandatory in the Linux offline CI job.
+        import test_web_worker as web_fixture
+        fixture = web_fixture.WebsiteWorker(methodName='runTest')
+        fixture.setUp()
+        try:
+            runner = fixture.network / 'invoke-core.py'
+            runner.write_text("import json,sys\nfrom drum_score import convert\nif __name__ == '__main__':\n    print(json.dumps(convert(sys.argv[1],sys.argv[2])))\n")
+            source_hash = hashlib.sha256((fixture.network / 'input.mp4').read_bytes()).hexdigest()
+            link = 'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=2'
+            for entry in REMOTE_SCRIPT_ENTRIES:
+                with self.subTest(entry=entry):
+                    if entry == 'script_http':
+                        task, auth = fixture.submit()
+                        self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
+                        view = fixture.state(task, auth)
+                        self.assertEqual(view['state'], 'complete', view)
+                        result = view['result']
+                        pdf = fixture.client.get(f'/api/tasks/{task}/pdf', headers=auth).content
+                        for page in range(1, len(result['pages']) + 1):
+                            response = fixture.client.get(f'/api/tasks/{task}/pages/{page}', headers=auth)
+                            self.assertEqual(response.status_code, 200)
+                            self.assertEqual(hashlib.sha256(response.content).hexdigest(), result['pages'][page-1]['sha256'])
+                    else:
+                        output = fixture.root / entry
+                        args = [sys.executable, str(runner)] if entry == 'script_core' else [sys.executable, '-m', 'drum_score']
+                        args += [link, str(output)] if entry == 'script_core' else [link, '--output', str(output)]
+                        process = subprocess.run(args, env=fixture.env, capture_output=True, text=True, timeout=30)
+                        self.assertEqual(process.returncode, 0, process.stderr)
+                        result = json.loads(process.stdout)
+                        pdf = (output / result['pdf']['path']).read_bytes()
+                        self.assertEqual(json.loads((output / 'manifest.json').read_text()), result)
+                    self.assertEqual(result['status'], 'complete')
+                    self.assertFalse(result['reliable'])
+                    self.assertEqual(result['source']['bvid'], 'BV1rH4y1R7Rk')
+                    self.assertEqual(result['source']['page'], 2)
+                    self.assertEqual(result['source']['sha256'], source_hash)
+                    self.assertFalse(result['source']['authenticated'])
+                    self.assertEqual(hashlib.sha256(pdf).hexdigest(), result['pdf']['sha256'])
+                    self.assertTrue(result['pages'])
+                    self.assertIn('not_musically_proofread', {warning['code'] for warning in result['warnings']})
+                    self.assertEqual(list(fixture.root.rglob('.drum-score-*')), [])
+            self.assertEqual(hashlib.sha256((fixture.network / 'input.mp4').read_bytes()).hexdigest(), source_hash)
+        finally:
+            fixture.tearDown()
+
     def test_script_entries_keep_complete_result_when_temporary_cleanup_fails(self):
         from pathlib import Path
         import tempfile

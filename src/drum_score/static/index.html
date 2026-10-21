@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>鼓谱整理 · 从视频到谱架</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">跳到主要内容</a>
+  <header class="masthead"><a class="brand" href="/" aria-label="鼓谱整理首页"><span class="mark" aria-hidden="true">𝄢</span>鼓谱整理</a><span class="edition">VIDEO → A4</span></header>
+  <main id="main">
+    <section id="submission" class="introduction" aria-labelledby="intro-title">
+      <p class="eyebrow">公开 B站链接 · 可打印 PDF</p>
+      <h1 id="intro-title">把视频里的鼓谱，<br>放到谱架上。</h1>
+      <p class="intro-copy">粘贴带有完整鼓谱的视频链接，自动拼接纵向滚动的谱面，整理成 A4 页面。</p>
+      <form id="submit-form">
+        <label for="source">B站视频链接</label>
+        <div class="input-row"><input id="source" name="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="2048" placeholder="https://www.bilibili.com/video/BV…" required aria-describedby="source-help"><button id="submit-button" type="submit">整理鼓谱 <span aria-hidden="true">↗</span></button></div>
+        <p id="source-help" class="help">支持公开 HTTPS BV 链接及分 P。无需登录，不支持本地上传。</p>
+      </form>
+      <p id="submit-error" class="error" role="alert" hidden></p>
+      <div class="scope"><h2>适合什么样的视频？</h2><p>固定比例、白底、纵向滚动的完整鼓谱。视频最长 10 分钟，下载上限 256 MiB，画面不超过 420 万像素。横向翻页、镜头移动和被遮挡的谱面可能无法处理。</p></div>
+    </section>
+
+    <section id="task" hidden aria-labelledby="task-title">
+      <div class="task-heading"><div><p class="eyebrow" id="task-kicker">本次整理</p><h1 id="task-title">正在读取任务</h1></div><a class="text-link" href="/">整理另一份鼓谱 ↗</a></div>
+      <p id="task-description" class="intro-copy" role="status" aria-live="polite">正在确认访问链接。</p>
+      <div class="task-meta" id="task-meta" hidden><span id="source-label"></span><a id="source-link" target="_blank" rel="noreferrer noopener">查看原视频 ↗</a></div>
+      <div class="actions"><button id="download" hidden>下载 A4 PDF ↓</button><button id="cancel" class="secondary" hidden>取消任务</button><button id="retry" hidden>重新排队</button></div>
+      <section class="save-link" id="save-link" hidden aria-labelledby="save-title"><h2 id="save-title">保存这条链接，稍后回来</h2><p>关掉页面后任务会继续。链接包含此任务的访问和操作权限，请只向可信的人分享。</p><div class="copy-row"><input id="task-link" readonly aria-label="任务访问链接"><button id="copy-link" class="secondary">复制链接</button></div><p id="copy-status" class="help" role="status"></p></section>
+      <p id="task-error" class="error" role="alert" hidden></p>
+      <section id="result" hidden aria-labelledby="preview-title"><div class="result-heading"><h2 id="preview-title">全部页面</h2><p id="expiry" class="help"></p></div><div class="notice"><p>图像处理自动整理，未经音乐校对。打印和演奏前，请对照原视频检查。</p><ul id="warnings"></ul></div><div id="previews" class="previews"></div><button id="reload-previews" class="secondary" hidden>重新加载预览</button></section>
+    </section>
+  </main>
+  <footer><p>同一网络同时可提交一个未完成任务，最多 10 个任务等待。校园网、家庭和公司网络可能共享名额。</p><p>谱面可能保留模糊、水印、播放标记或未检测出的拼接问题。请尊重原作者，仅处理你有权使用的内容。</p></footer>
+</body>
+</html>

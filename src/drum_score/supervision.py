@@ -1,5 +1,7 @@
 """Single task owner; sampled resource limits are not cgroup hard limits."""
 from pathlib import Path
+from contextlib import contextmanager
+from contextvars import ContextVar
 import json
 import multiprocessing
 import os
@@ -12,6 +14,19 @@ import threading
 import time
 
 from .core import ConversionError, ResourceBudget, _convert, _publish
+
+
+_guardian_lock = ContextVar('guardian_lock', default=None)
+
+
+@contextmanager
+def guardian_lease(descriptor):
+    """Keep a service worker's OS lease alive until orphan writers stop."""
+    token = _guardian_lock.set(descriptor)
+    try:
+        yield
+    finally:
+        _guardian_lock.reset(token)
 
 
 def _worker(source, output, limits, connection, temporary, parent_pid, ready):
@@ -61,7 +76,7 @@ def _processes(root_pid):
         records.get(pid, (0, 0, '', 0))[1] for pid in descendants)
 
 
-def _stop(process, tracked):
+def _stop(process, tracked, *, wait_until_stopped=False):
     if process.is_alive() and hasattr(os, 'killpg') and process.pid:
         try:
             os.killpg(process.pid, signal.SIGKILL)
@@ -82,7 +97,7 @@ def _stop(process, tracked):
         process.kill()
     process.join(timeout=5)
     deadline = time.monotonic() + 2
-    while time.monotonic() < deadline:
+    while wait_until_stopped or time.monotonic() < deadline:
         active = False
         for pid, start_time in tracked.items():
             try:
@@ -113,6 +128,7 @@ def run(source, output, *, progress=None, limits=None, cancel=None):
 def _run(source, output, *, progress=None, limits=None, cancel=None):
     started = time.monotonic()
     budget = ResourceBudget(limits, cancel)
+    lease = _guardian_lock.get()
     output = Path(output).absolute()
     if output.exists() or output.is_symlink():
         raise ConversionError('output_exists', '结果路径已存在，请选择新的目录。')
@@ -135,7 +151,12 @@ def _run(source, output, *, progress=None, limits=None, cancel=None):
         guardian_write = None
         previous_term = None
         if threading.current_thread() is threading.main_thread():
-            previous_term = signal.signal(signal.SIGTERM, lambda *args: (_ for _ in ()).throw(KeyboardInterrupt()))
+            previous_term = signal.getsignal(signal.SIGTERM)
+            def interrupted(signum, frame):
+                if lease is not None and callable(previous_term):
+                    previous_term(signum, frame)
+                raise KeyboardInterrupt
+            signal.signal(signal.SIGTERM, interrupted)
         try:
             budget.check()
             process.start()
@@ -145,8 +166,9 @@ def _run(source, output, *, progress=None, limits=None, cancel=None):
                 identity = root.stat()
                 try:
                     guardian = subprocess.Popen([sys.executable, '-m', 'drum_score.guardian',
-                        str(guardian_read), str(process.pid), str(root), str(identity.st_dev), str(identity.st_ino)],
-                        pass_fds=(guardian_read,), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                        str(guardian_read), str(process.pid), str(root), str(identity.st_dev), str(identity.st_ino),
+                        *(['lease'] if lease is not None else [])],
+                        pass_fds=(guardian_read,) + ((lease,) if lease is not None else ()), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                         stderr=subprocess.DEVNULL, start_new_session=True)
                 finally:
                     os.close(guardian_read)
@@ -204,7 +226,7 @@ def _run(source, output, *, progress=None, limits=None, cancel=None):
             parent.close()
             child.close()
             if process.pid is not None:
-                _stop(process, tracked)
+                _stop(process, tracked, wait_until_stopped=lease is not None)
             if guardian_write is not None:
                 try:
                     os.write(guardian_write, b'1')
@@ -213,7 +235,7 @@ def _run(source, output, *, progress=None, limits=None, cancel=None):
                 os.close(guardian_write)
             if guardian is not None:
                 try:
-                    guardian.wait(timeout=5)
+                    guardian.wait(timeout=None if lease is not None else 5)
                 except subprocess.TimeoutExpired:
                     guardian.kill()
                     guardian.wait()
