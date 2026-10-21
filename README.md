@@ -177,3 +177,5 @@ CI 验证合成与确定性产物，不调用宿主模型，不证明音乐准�
 ## 许可证与示例署名
 
 代码与原创文档采用 [MIT 许可证](LICENSE)。音乐、谱面及其衍生展示不属于本项目的 MIT 授权范围，权利归原权利人；[展示素材说明](docs/media/readme/README.md)保留来源与署名。
+
+Issue #70 新增可安装的独立 Python 核心与 `drum-score` CLI，正在固定真实输入集验收。安装、公开契约和支持边界见[独立转换说明](docs/script-product/conversion.md)。本票保留现有 Skill；新入口不要求模型或 Agent 批准，自动完成不表示音乐已校对。

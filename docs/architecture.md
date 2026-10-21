@@ -49,3 +49,11 @@ prepared 经 dispatch-redraw 进入 calling，重复读取沿用原 ID；结果�
 已有白底多行、固定比例的纵向滚谱，优先适配停驻后向上推进。缩放、横移、复杂翻页及没有谱面的演奏视频不纳入首版。历史版本通过 Git history 获取，回滚使用独立 checkout 及新任务目录。
 
 新主线的验证范围和限制见[验证记录](verification.md)，产品取舍见 [ADR 0005](adr/0005-direct-source-pdf.md)。历史样本通过不自动构成本次真实生图或跨宿主验收。
+
+## Issue #70 独立程序入口
+
+`src/drum_score/` 提供新的共享 `convert` Python 入口与 `drum-score` CLI。转换直接生成 A4 PDF、全部页面预览和实际来源记录，不经过旧 `score-reconstruction/1` 审批协议，不创建视觉批准字段。旧产品在本票继续保留。
+
+核心通过安装包复用现有 `public_video`、`anonymous_backend`、`anonymous_network` 和 `video_seek`。附件的分带配准用于相邻画面搜索，不回查全画布来合并不同位置的相同音乐。原始 RGB 观察保守合成长图，保留无法确认安全去除的彩色记号、播放标记与水印。分页在真实空白行间保留完整谱行或连续行组，超高组整体缩小，不硬切。
+
+私有临时目录包含全部 PDF、预览、原生帧与 manifest 后才发布。Linux 使用 `renameat2(RENAME_NOREPLACE)`，Windows 使用排他 `os.rename`；不支持排他发布的平台明确失败。原视频不覆盖，重复输出目录拒绝。公开契约及限制见[独立转换说明](script-product/conversion.md)。本票不声明已完成2GB服务器预算或用户真实谱面质量验收，这些属于后续 #71。

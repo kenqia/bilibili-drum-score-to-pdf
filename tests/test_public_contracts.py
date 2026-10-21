@@ -15,6 +15,8 @@ import score_task
 import score_workflow
 
 
+SCRIPT_CONVERSION_ENTRIES = ('script_core', 'script_cli')
+
 ACQUISITION_ENTRIES = ('cli', 'workflow', 'acquire')
 EXPORT_ENTRIES = ('cli', 'workflow', 'vector')
 REVIEW_ENTRIES = ('cli', 'workflow', 'vector', 'task')
@@ -528,3 +530,81 @@ class PublicContracts(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ScriptPublicContracts(unittest.TestCase):
+    def test_script_entries_reject_existing_paths_and_invalid_source(self):
+        from pathlib import Path
+        import tempfile
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+        import drum_score
+        from drum_score.cli import main
+        import contextlib
+        import io
+        for entry in SCRIPT_CONVERSION_ENTRIES:
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                source = root / 'source.mp4'
+                source.write_bytes(b'invalid video')
+                output = root / 'result'
+                def invoke():
+                    if entry == 'script_core':
+                        try:
+                            return drum_score.convert(source, output)
+                        except drum_score.ConversionError as error:
+                            return {'error': {'code': error.code}}
+                    stream = io.StringIO()
+                    with contextlib.redirect_stdout(stream):
+                        self.assertEqual(main([str(source), '--output', str(output)]), 2)
+                    return json.loads(stream.getvalue())
+                self.assertEqual(invoke()['error']['code'], 'invalid_input')
+                self.assertFalse(output.exists())
+                output.mkdir()
+                (output / 'mine').write_bytes(b'keep')
+                self.assertEqual(invoke()['error']['code'], 'output_exists')
+                self.assertEqual((output / 'mine').read_bytes(), b'keep')
+                self.assertEqual(source.read_bytes(), b'invalid video')
+
+
+    def test_script_entries_publish_all_pages_or_no_result_for_black_input(self):
+        from pathlib import Path
+        import tempfile
+        import contextlib
+        import io
+        from PIL import Image
+        from score_fixtures import score_frame, video_from_image
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+        import drum_score
+        from drum_score.cli import main
+        for entry in SCRIPT_CONVERSION_ENTRIES:
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                for black in (False, True):
+                    source = video_from_image(Image.new('RGB', (640, 520), 'black') if black
+                                              else score_frame(), root, name=f'input-{black}')
+                    before = source.read_bytes()
+                    output = root / f'result-{black}'
+                    if entry == 'script_core':
+                        try:
+                            result = drum_score.convert(source, output)
+                        except drum_score.ConversionError as error:
+                            result = {'status': 'failed', 'error': {'code': error.code}}
+                    else:
+                        stream = io.StringIO()
+                        with contextlib.redirect_stdout(stream):
+                            status = main([str(source), '--output', str(output)])
+                        self.assertEqual(status, 2 if black else 0)
+                        result = json.loads(stream.getvalue())
+                    self.assertEqual(source.read_bytes(), before)
+                    if black:
+                        self.assertEqual(result['status'], 'failed')
+                        self.assertEqual(result['error']['code'], 'unsupported_layout')
+                        self.assertFalse(output.exists())
+                    else:
+                        self.assertEqual(result['status'], 'complete')
+                        self.assertFalse(result['reliable'])
+                        self.assertTrue(result['warnings'])
+                        self.assertGreater(len(result['pages']), 0)
+                        self.assertTrue((output / result['pdf']['path']).is_file())
+                        for page in result['pages']:
+                            self.assertTrue((output / page['path']).is_file())
