@@ -58,7 +58,7 @@ worker 按入队时间和ID领取最早任务。它同时持有本机 `flock` �
 | `complete` | PDF与全部预览可读，重复取消保持完成。 |
 | `failed`、`cancelled`、`interrupted` | 用户可显式重试，重新检查当前IP与全站配额，创建全新 attempt。 |
 
-worker 收到 SIGTERM 会停止当前处理并退出；与HTTP取消同时发生时也不会继续领取下一个任务。SIGKILL 后，guardian 继承同一文件锁，只有真实进程树停止并完成清理后才释放。新 worker 取得锁后恢复遗留任务，旧 `running/cancelling` 转为 `interrupted`，不静默重跑。
+worker 收到 SIGTERM 会停止当前处理并退出；与HTTP取消同时发生时也不会继续领取下一个任务。SIGKILL 后，guardian 继承同一文件锁，只有真实进程树停止并完成清理后才释放。若 guardian 也同时终止，新 worker 按持久 ownership marker 和目录身份清理已登记的确切私有暂存根，未知根与替换物保留。新 worker 取得锁后恢复遗留任务，旧 `running/cancelling` 转为 `interrupted`，不静默重跑。
 
 核心首先排他发布到私有 attempt 的 `result` 目录。worker 校验PDF、全部预览的字节数和SHA-256、清理原生帧及长图并更新manifest后，持久保存 `finishing`、摘要、原始完成时刻和到期时刻，再变为 `complete`。HTTP只发布 `complete`。这个数据库决定是取消与完成的顺序点，不再移动目录来制造第二个发布窗口。提交回执丢失时保留决定和文件；重启验证 `finishing` 的同一目录并恢复完成，不刷新保留期。缺失或损坏的决定不能发布为完整结果。
 
@@ -95,7 +95,7 @@ worker另接受 `--timeout`、`--max-input-mib`、`--max-rss-mib`，默认600秒
 
 SQLite的 `PRAGMA user_version=1` 是当前服务schema。未版本化旧库和未知版本拒绝启动，不自动迁移任务。`managed_attempts` 保存受管根 device/inode及文件相对路径、device/inode/ctime。清理从数据根逐级打开 no-follow 目录FD并核对身份，只删除已登记文件；目录只在空时删除，符号链接和替换物保留。丢失或无法安全确认的材料宁可保留，随后计入容量并由运营者核查，不扫描其他服务目录。
 
-备份恢复须同时保存数据库、结果和准确发行版本。复制到新目录会改变inode/ctime，恢复工具只可为经清单/hash核验且自己新建的文件登记新身份，保留原始completed_at/expires_at。直接恢复旧身份会阻止清理，不能当成完整恢复。正式恢复工具与部署运行手册由后续交付提供。
+备份恢复须同时保存数据库、结果和准确发行版本。复制到新目录会改变inode/ctime，恢复工具只可为经清单/hash核验且自己新建的文件登记新身份，保留原始completed_at/expires_at。直接恢复旧身份会阻止清理，不能当成完整恢复。停服备份与恢复使用 [drum-score-maintenance](maintenance.md)，配置与回滚步骤见[部署指南](deployment.md)。
 
 ## HTTP 接口
 

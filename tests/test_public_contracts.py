@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 SCRIPT_CONVERSION_ENTRIES = ('script_core', 'script_cli')
 REMOTE_SCRIPT_ENTRIES = (*SCRIPT_CONVERSION_ENTRIES, 'script_http')
 ACQUISITION_ENTRIES = ('acquire',)
+MAINTENANCE_ENTRIES = ('backup', 'verify', 'restore')
 
 
 class ScriptPublicContracts(unittest.TestCase):
@@ -15,6 +16,8 @@ class ScriptPublicContracts(unittest.TestCase):
         import os
         import importlib.util
         modules = ['drum_score']
+        if sys.platform == 'linux':
+            modules.extend(f'drum_score.maintenance:{operation}' for operation in MAINTENANCE_ENTRIES)
         if sys.platform == 'linux' and importlib.util.find_spec('fastapi'):
             modules.extend(('drum_score.web', 'drum_score.worker'))
         import hashlib
@@ -26,6 +29,9 @@ class ScriptPublicContracts(unittest.TestCase):
             for module in modules:
                 with self.subTest(module=module):
                     arguments = [str(root / 'operator-note'), '--output', str(root / 'output')] if module == 'drum_score' else ['--data-root', str(root)]
+                    if ':' in module:
+                        module, operation = module.split(':')
+                        arguments = [operation, *arguments]
                     process = subprocess.run([sys.executable, '-m', module, *arguments, '--operation',
                         'stage', '--unknown', 'SYNTHETIC_PRIVATE_PAYLOAD'],
                         env={**os.environ, 'PYTHONPATH': os.pathsep.join(sys.path)},
@@ -416,3 +422,48 @@ class ScriptPublicContracts(unittest.TestCase):
                         self.assertTrue((output / result['pdf']['path']).is_file())
                         for page in result['pages']:
                             self.assertTrue((output / page['path']).is_file())
+
+
+@unittest.skipUnless(sys.platform == 'linux', 'Linux maintenance contract')
+class MaintenancePublicContracts(unittest.TestCase):
+    def test_offline_entries_share_readonly_refusal_and_resource_contracts(self):
+        import os
+        import tempfile
+        import hashlib
+        import sqlite3
+        from drum_score.jobs import Jobs
+        from drum_score.maintenance import backup
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / 'service'
+            Jobs(data)
+            saved = root / 'backup'
+            backup(data, saved, services_stopped=True, min_free_bytes=1)
+            env = {**os.environ, 'PYTHONPATH': os.pathsep.join(sys.path)}
+            for boundary in ('symlink', 'limit', 'schema'):
+                for operation in MAINTENANCE_ENTRIES:
+                    with self.subTest(boundary=boundary, operation=operation):
+                        source = data if operation == 'backup' else saved
+                        args = ['--data-root', str(source), '--services-stopped'] if operation == 'backup' else ['--backup-root', str(source)]
+                        output = root / (boundary + '-' + operation)
+                        if operation != 'verify':
+                            args += ['--output', str(output)]
+                        if boundary == 'symlink':
+                            link = root / (operation + '-link')
+                            link.symlink_to(source, target_is_directory=True)
+                            args[1] = str(link)
+                        elif boundary == 'limit':
+                            args += ['--max-mib', '.001']
+                        else:
+                            with sqlite3.connect(source / 'tasks.sqlite3') as db:
+                                db.execute('PRAGMA user_version=2')
+                        before = {p.relative_to(source).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in source.rglob('*') if p.is_file()}
+                        result = subprocess.run([sys.executable, '-m', 'drum_score.maintenance', operation, *args, '--min-free-mib', '1'], env=env, capture_output=True, text=True, timeout=5)
+                        self.assertEqual(result.returncode, 2, result.stdout)
+                        self.assertEqual(json.loads(result.stdout)['status'], 'failed')
+                        self.assertNotIn(str(root), result.stdout + result.stderr)
+                        self.assertFalse(output.exists())
+                        self.assertEqual({p.relative_to(source).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in source.rglob('*') if p.is_file()}, before)
+                        if boundary == 'schema':
+                            with sqlite3.connect(source / 'tasks.sqlite3') as db:
+                                db.execute('PRAGMA user_version=1')
