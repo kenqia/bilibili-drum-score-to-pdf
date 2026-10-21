@@ -26,6 +26,8 @@ PYTHONPATH=src:skills/bilibili-drum-score-to-pdf/scripts uv run --no-project --p
 
 首轮七项通过。相同环境的 `test_public_contracts.py` 19项与 `test_api_acquisition.py` 9项通过。`uv build --wheel --out-dir /tmp/issue70-wheel` 成功；从 `/tmp` 以 `uv run --no-project --isolated --with WHEEL drum-score ...` 实际完成合成视频转换，导入位置为安装后的 site-packages，无源码目录依赖。
 
+收尾补充合成测试验证无安全空隙的超高连续行组：黄色记号贯穿两组五线时，公开转换保留一页和完整内嵌像素，不按灰度阈值切断浅色记号。核心与 CLI 的共同矩阵同时验证成功产物包含全部预览、来源不变和 `reliable=false`，无谱黑场返回 `unsupported_layout` 且不发布输出。恢复后实际复跑 `test_script_conversion.py` 8项，5.027秒，及 `test_public_contracts.py` 20项，28.792秒，均通过。该记录没有将新增测试声称为新的真实音乐验收，也没有声称完整回归已经运行。
+
 ## 初次优化版真实对比
 
 固定输入版本2包含原三条和额外映射成功的《鲜花》。原三条来源 hash 没有改变。`optimized-first` 为开发中首轮候选，版本标签 `issue70-working-v1`，没有冒充不可变发布版本。比较由父任务工具以240秒、1400MiB进程树边界串行执行，排除下载和人工查看；RSS 每50毫秒采样，不是 cgroup 精确峰值。

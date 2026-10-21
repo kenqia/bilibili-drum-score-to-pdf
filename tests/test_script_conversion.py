@@ -159,3 +159,28 @@ class ScriptConversion(unittest.TestCase):
             with Image.open(root / 'result' / result['longshot']['path']) as actual:
                 self.assertEqual(actual.size, (640, 1420))
                 self.assertIsNone(ImageChops.difference(actual.convert('RGB'), sheet).getbbox())
+
+    def test_no_safe_gap_preserves_tall_group_without_hard_cut(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = Image.new('RGB', (640, 2200), 'white')
+            draw = ImageDraw.Draw(image)
+            for top in (120, 1900):
+                for line in range(5):
+                    draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+            # Known colored mark connects the two systems. It must not be cut
+            # just because its luminance is lighter than the staff threshold.
+            draw.line((10, 0, 10, 2199), fill=(255, 210, 0), width=2)
+            image.save(root / 'group.png')
+            source = root / 'group.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-loop', '1', '-i', str(root / 'group.png'),
+                            '-t', '2', '-r', '1', '-c:v', 'ffv1', str(source)], check=True)
+            result = drum_score.convert(source, root / 'result')
+            self.assertEqual(result['staff_count'], 2)
+            self.assertEqual(result['page_regions'], [[0, 2200]])
+            self.assertEqual(len(result['pages']), 1)
+            subprocess.run(['pdfimages', '-png', str(root / 'result' / result['pdf']['path']),
+                            str(root / 'group-embedded')], check=True, capture_output=True)
+            with Image.open(root / 'group-embedded-000.png') as embedded:
+                self.assertEqual(embedded.size, image.size)
+                self.assertIsNone(ImageChops.difference(embedded.convert('RGB'), image).getbbox())
