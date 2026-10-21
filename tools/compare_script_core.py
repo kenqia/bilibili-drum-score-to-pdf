@@ -67,12 +67,16 @@ def rss_tree(group):
     return total
 
 
-def run_bounded(command, directory, seconds, memory):
+def run_bounded(command, directory, seconds, memory, checkout=None):
     environment = {**os.environ, 'OPENBLAS_NUM_THREADS': '1', 'OMP_NUM_THREADS': '1',
                    'MKL_NUM_THREADS': '1', 'NUMEXPR_NUM_THREADS': '1'}
+    if checkout:
+        root = Path(checkout).resolve()
+        environment['PYTHONPATH'] = os.pathsep.join([str(root / 'src'),
+            str(root / 'skills/bilibili-drum-score-to-pdf/scripts')])
     started, peak, stopped = time.monotonic(), 0, None
     with (directory / 'program.log').open('wb') as log:
-        process = subprocess.Popen(command, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
+        process = subprocess.Popen(command, cwd=checkout, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
                                    start_new_session=True, env=environment)
         try:
             while process.poll() is None:
@@ -106,13 +110,15 @@ def run(args):
             digest(args.attachment) != args.attachment_sha256):
         print(json.dumps({'error': 'attachment_changed'}))
         return 2
-    if args.program == 'main':
+    if args.program in ('main', 'optimized'):
         version = subprocess.check_output(['git', '-C', args.checkout, 'rev-parse', 'HEAD'], text=True).strip()
-        versions = json.loads(Path(args.versions).read_text())
-        changed = subprocess.run(['git', '-C', args.checkout, 'diff', '--quiet', 'HEAD', '--',
-                                  'skills/bilibili-drum-score-to-pdf/scripts']).returncode
-        if version != versions['main']['commit'] or changed:
-            print(json.dumps({'error': 'main_version_changed'}))
+        expected = (json.loads(Path(args.versions).read_text())['main']['commit']
+                    if args.program == 'main' else args.version)
+        source_paths = ['skills/bilibili-drum-score-to-pdf/scripts', 'src', 'pyproject.toml']
+        changed = subprocess.check_output(['git', '-C', args.checkout, 'status',
+            '--porcelain', '--untracked-files=all', '--', *source_paths], text=True)
+        if version != expected or changed:
+            print(json.dumps({'error': args.program + '_version_changed'}))
             return 2
     else:
         version = args.attachment_sha256 if args.program == 'attachment' else args.version
@@ -134,7 +140,8 @@ def run(args):
         else:
             command = [sys.executable, '-m', 'drum_score', item['path'],
                        '--output', str(directory / 'result')]
-        report = run_bounded(command, directory, args.seconds, args.memory_mib * 1024**2)
+        report = run_bounded(command, directory, args.seconds, args.memory_mib * 1024**2,
+                             args.checkout if args.program == 'optimized' else None)
         report.update(sample=item['name'], source_sha256=item['sha256'], program=args.program,
                       version=version, musical_review=False, download_seconds=None)
         pdfs = list(directory.rglob('*.pdf'))
@@ -187,6 +194,8 @@ def main():
         parser.error('main requires --checkout and --versions')
     if args.program == 'attachment' and (not args.attachment or not args.attachment_sha256):
         parser.error('attachment requires its path and SHA-256')
+    if args.program == 'optimized' and (not args.checkout or not args.version):
+        parser.error('optimized requires --checkout and its full commit --version')
     try:
         return run(args)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
