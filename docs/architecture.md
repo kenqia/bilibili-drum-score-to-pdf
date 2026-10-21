@@ -57,3 +57,9 @@ prepared 经 dispatch-redraw 进入 calling，重复读取沿用原 ID；结果�
 核心通过安装包复用现有 `public_video`、`anonymous_backend`、`anonymous_network` 和 `video_seek`。附件的分带配准用于相邻画面搜索，不回查全画布来合并不同位置的相同音乐。原始 RGB 观察保守合成长图，保留无法确认安全去除的彩色记号、播放标记与水印。分页在真实空白行间保留完整谱行或连续行组，超高组整体缩小，不硬切。
 
 私有临时目录包含全部 PDF、预览、原生帧与 manifest 后才发布。Linux 使用 `renameat2(RENAME_NOREPLACE)`，Windows 使用排他 `os.rename`；不支持排他发布的平台明确失败。原视频不覆盖，重复输出目录拒绝。公开契约及限制见[独立转换说明](script-product/conversion.md)。本票不声明已完成2GB服务器预算或用户真实谱面质量验收，这些属于后续 #71。
+
+## Issue #72 匿名网站
+
+可选 `web` 安装提供 `web.py` HTTP适配、`jobs.py` SQLite事务、独立 `worker.py` 和同源静态资源。网页只接受公开BV，复用自动转换核心，不承担重计算。能力链接隔离状态、预览、下载、取消与重试；IP仅限制入队。SQLite事务和部分唯一索引限制10个等待加1个活动任务，worker的OS文件锁延续到guardian完成异常清理。
+
+核心排他发布到服务私有attempt目录后，worker验证全部产物，再以持久 `finishing` 决定完成/取消顺序。重启恢复同一产物与原完成时间，不增加第二次目录发布。结果访问共用24小时期限，认证与实际打开FD在同一短事务内完成；响应关闭或断连后释放文件。容量准入、定时清理和公开部署仍需后续验收，详见[网站运行与协议](script-product/website.md)。

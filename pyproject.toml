@@ -13,10 +13,18 @@ dependencies = [
   "reportlab==5.0.1", "yt-dlp==2026.8.19",
 ]
 
+[project.optional-dependencies]
+web = ["fastapi==0.156.8", "uvicorn==0.54.0"]
+
 [project.scripts]
 drum-score = "drum_score.cli:main"
+drum-score-web = "drum_score.web:main"
+drum-score-worker = "drum_score.worker:main"
 
 [tool.setuptools]
 packages = ["drum_score"]
 py-modules = ["video_seek", "public_video", "anonymous_network", "anonymous_backend"]
 package-dir = {"drum_score" = "src/drum_score", "" = "skills/bilibili-drum-score-to-pdf/scripts"}
+
+[tool.setuptools.package-data]
+drum_score = ["static/*.html", "static/*.css", "static/*.js"]

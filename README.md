@@ -53,6 +53,8 @@
 
 ## 开始使用
 
+独立转换程序支持直接生成PDF；匿名网站已提供本地运行入口、持久队列、全部预览与下载。网站尚未公开部署，安装及限制见[独立程序说明](docs/script-product/conversion.md)和[网站运行指南](docs/script-product/website.md)。下方为继续保留的 Agent Skill 入口。
+
 ### 1. 安装后这样用
 
 本 Skill 在 Codex 中仅允许显式调用。通过 `$bilibili-drum-score-to-pdf` 或技能选择器主动选择后使用，模型不会根据话题自动调用。

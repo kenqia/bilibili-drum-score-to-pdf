@@ -59,3 +59,5 @@ _Avoid_：可靠音乐还原、准确转写
 
 - **自动转换核心（script conversion core）**：`drum_score.convert`，共享本地输入与公开链接转换，不调用模型或提交 Agent 审阅。`complete` 只表示产物完整发布，不表示音乐已校对。
 - **连续行组（continuous system group）**：五线及关联记号之间没有可用空白切口时保留的整块谱面。分页整体缩放，不硬切。
+- **任务能力链接（task capability link）**：包含随机任务ID和独立256位访问凭据的链接。凭据位于URL fragment，经Authorization传给接口，具有该任务的读取与操作权限。
+- **完成决定（finishing decision）**：网站验证私有完整产物后持久保存的发布决定。后续取消不破坏结果，重启恢复同一产物和原完成时刻。

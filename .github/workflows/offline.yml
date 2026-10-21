@@ -29,14 +29,16 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: skills/bilibili-drum-score-to-pdf/scripts/requirements.txt
+          cache-dependency-path: |
+            skills/bilibili-drum-score-to-pdf/scripts/requirements.txt
+            tests/requirements-web.txt
       - name: Install video and PDF tools
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y ffmpeg poppler-utils fonts-dejavu-core
       - name: Install pinned Python dependencies
         id: dependencies
-        run: python -m pip install -r skills/bilibili-drum-score-to-pdf/scripts/requirements.txt
+        run: python -m pip install -r skills/bilibili-drum-score-to-pdf/scripts/requirements.txt -r tests/requirements-web.txt
       - name: Check request and workflow syntax
         run: |
           python -m pip install --quiet ruff==0.14.14

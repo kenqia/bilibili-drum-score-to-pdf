@@ -11,7 +11,8 @@ from .supervision import _processes
 
 
 def main():
-    descriptor, worker, root_name, device, inode = sys.argv[1:]
+    descriptor, worker, root_name, device, inode = sys.argv[1:6]
+    lease = sys.argv[6:] == ['lease']
     descriptor, worker, device, inode = map(int, (descriptor, worker, device, inode))
     root = Path(root_name)
     tracked = {}
@@ -39,7 +40,7 @@ def main():
                     pass
             if not active:
                 break
-            if time.monotonic() >= deadline:
+            if not lease and time.monotonic() >= deadline:
                 return 1  # Do not race a writer that could still use the tree.
             time.sleep(.01)
         try:
