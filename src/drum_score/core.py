@@ -200,7 +200,7 @@ def _process(source, output, metadata, emit, budget):
             image.save(path, compress_level=1)
             paths.append(path)
             references.append(artifact(output, path))
-        records = reader.sample_records(.5, consume)
+        records = reader.sample_records(.5, consume, verify_motion=True)
         tail_record, tail_image = reader.read_record()
         try:
             if tail_record['timestamp'] > records[-1]['timestamp']:
