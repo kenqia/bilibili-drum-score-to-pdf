@@ -14,6 +14,120 @@ import drum_score
 
 
 class ScriptConversion(unittest.TestCase):
+    @unittest.skipUnless(Path('/proc').is_dir(), 'Linux process identity contract')
+    def test_guardian_does_not_rebind_a_reused_root_pid(self):
+        # Replace only external /proc observations; signal targets remain real.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sentinel = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+            guard = None
+            read_fd, write_fd = os.pipe()
+            try:
+                (root / 'sitecustomize.py').write_text("""from pathlib import Path
+import os
+original = Path.read_text
+observed = Path(os.environ['IDENTITY_FIXTURE'])
+target = '/proc/' + os.environ['SENTINEL_PID'] + '/stat'
+def read(self, *args, **kwargs):
+    value = original(self, *args, **kwargs)
+    if str(self) == target and not (observed / 'reused').exists():
+        head, tail = value.rsplit(') ', 1)
+        fields = tail.split()
+        fields[19] = 'original-identity'
+        (observed / 'observed').write_text('ready')
+        return head + ') ' + ' '.join(fields)
+    return value
+Path.read_text = read
+""")
+                identity = root.stat()
+                guard = subprocess.Popen([sys.executable, '-m', 'drum_score.guardian',
+                    str(read_fd), str(sentinel.pid), str(root / 'owned'),
+                    str(identity.st_dev), str(identity.st_ino), 'original-identity'],
+                    pass_fds=(read_fd,), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    env={**os.environ, 'IDENTITY_FIXTURE': str(root), 'SENTINEL_PID': str(sentinel.pid),
+                         'PYTHONPATH': os.pathsep.join([str(root), *sys.path])})
+                os.close(read_fd)
+                read_fd = None
+                self.assertEqual(guard.stdout.read(1), b'R')
+                deadline = time.monotonic() + 5
+                while not (root / 'observed').exists() and time.monotonic() < deadline:
+                    time.sleep(.01)
+                self.assertTrue((root / 'observed').exists())
+                (root / 'reused').touch()
+                time.sleep(.05)
+                os.close(write_fd)
+                write_fd = None
+                guard.communicate(timeout=5)
+                self.assertEqual(guard.returncode, 0)
+                self.assertIsNone(sentinel.poll(), 'unrelated reused PID was killed')
+            finally:
+                for fd in (read_fd, write_fd):
+                    if fd is not None:
+                        os.close(fd)
+                if guard is not None and guard.poll() is None:
+                    guard.kill()
+                    guard.communicate(timeout=5)
+                sentinel.terminate()
+                sentinel.wait(timeout=5)
+
+    @unittest.skipUnless(Path('/proc').is_dir(), 'Linux process identity contract')
+    def test_supervisor_does_not_rebind_reused_descendant_pid(self):
+        # Only /proc observations are synthetic. Both supervised work and the
+        # unrelated sentinel are actual processes receiving actual OS signals.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            tools = root / 'tools'
+            tools.mkdir()
+            probe = tools / 'ffprobe'
+            probe.write_text(f'#!{sys.executable}\nimport os,time\nfrom pathlib import Path\nPath({str(root / "worker-pid")!r}).write_text(str(os.getppid()))\ntime.sleep(60)\n')
+            probe.chmod(0o755)
+            (root / 'source.mp4').write_bytes(b'supervised synthetic input')
+            sentinel = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+            process = None
+            try:
+                (root / 'sitecustomize.py').write_text("""from pathlib import Path
+import os
+original = Path.read_text
+fixture = Path(os.environ['IDENTITY_FIXTURE'])
+target = '/proc/' + os.environ['SENTINEL_PID'] + '/stat'
+def read(self, *args, **kwargs):
+    value = original(self, *args, **kwargs)
+    if str(self) == target and (fixture / 'worker-pid').exists():
+        head, tail = value.rsplit(') ', 1)
+        fields = tail.split()
+        fields[1] = original(fixture / 'worker-pid').strip()
+        if not (fixture / 'reused').exists():
+            fields[19] = 'original-descendant-identity'
+            (fixture / 'observed').touch()
+        return head + ') ' + ' '.join(fields)
+    return value
+Path.read_text = read
+""")
+                process = subprocess.Popen([sys.executable, '-m', 'drum_score', str(root / 'source.mp4'),
+                    '--output', str(root / 'result'), '--timeout', '30'],
+                    env={**os.environ, 'IDENTITY_FIXTURE': str(root), 'SENTINEL_PID': str(sentinel.pid),
+                         'PATH': str(tools) + os.pathsep + os.environ['PATH'],
+                         'PYTHONPATH': os.pathsep.join([str(root), *sys.path])},
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                deadline = time.monotonic() + 10
+                while not (root / 'observed').exists() and process.poll() is None and time.monotonic() < deadline:
+                    time.sleep(.01)
+                self.assertTrue((root / 'observed').exists())
+                (root / 'reused').touch()
+                time.sleep(.1)  # Allow multiple external /proc observations of the replacement.
+                process.terminate()
+                stdout, stderr = process.communicate(timeout=10)
+                self.assertEqual(json.loads(stdout)['error']['code'], 'cancelled', stderr)
+                self.assertIsNone(sentinel.poll(), 'unrelated reused descendant PID was killed')
+                self.assertFalse((root / 'result').exists())
+                self.assertEqual(list(root.glob('.drum-score-*')), [])
+            finally:
+                if process is not None and process.poll() is None:
+                    process.kill()
+                    process.communicate(timeout=5)
+                sentinel.terminate()
+                sentinel.wait(timeout=5)
+
     def test_page_balancing_moves_whole_groups_to_sparse_final_page(self):
         from drum_score.imaging import _page_strips
         groups = [(0, 600), (600, 1200), (1200, 1800), (1800, 2400), (2400, 2700)]
@@ -55,7 +169,7 @@ class ScriptConversion(unittest.TestCase):
             tools = root / 'bin'
             tools.mkdir()
             decoder = tools / 'ffprobe'
-            decoder.write_text('#!/usr/bin/env python3\nimport os,time\nfrom pathlib import Path\nPath(' + repr(str(root / 'decoder-pid')) + ').write_text(str(os.getpid()))\ntime.sleep(30)\n')
+            decoder.write_text(f'#!{sys.executable}\nimport os,time\nfrom pathlib import Path\nPath(' + repr(str(root / 'decoder-pid')) + ').write_text(str(os.getpid()))\ntime.sleep(30)\n')
             decoder.chmod(0o755)
             from unittest.mock import patch
             with patch.dict(os.environ, {'PATH': str(tools) + os.pathsep + os.environ['PATH']}):
@@ -79,7 +193,7 @@ class ScriptConversion(unittest.TestCase):
             binaries = root / 'bin'
             binaries.mkdir()
             decoder = binaries / 'ffprobe'
-            decoder.write_text('#!/usr/bin/env python3\nimport os,time,signal\nfrom pathlib import Path\nos.setsid()\nPath(' + repr(str(root / 'decoder-pid')) + ').write_text(str(os.getpid()))\ntime.sleep(.2)\nos.kill(os.getppid(),signal.SIGKILL)\ntime.sleep(30)\n')
+            decoder.write_text(f'#!{sys.executable}\nimport os,time,signal\nfrom pathlib import Path\nos.setsid()\nPath(' + repr(str(root / 'decoder-pid')) + ').write_text(str(os.getpid()))\ntime.sleep(.2)\nos.kill(os.getppid(),signal.SIGKILL)\ntime.sleep(30)\n')
             decoder.chmod(0o755)
             from unittest.mock import patch
             with patch.dict(os.environ, {'PATH': str(binaries) + os.pathsep + os.environ['PATH']}):
@@ -101,7 +215,7 @@ class ScriptConversion(unittest.TestCase):
             binaries = root / 'bin'
             binaries.mkdir()
             decoder = binaries / 'ffprobe'
-            decoder.write_text('#!/usr/bin/env python3\nimport os,time\nfrom pathlib import Path\nPath(' + repr(str(root / 'decoder-pid')) + ').write_text(str(os.getpid()))\ntime.sleep(30)\n')
+            decoder.write_text(f'#!{sys.executable}\nimport os,time\nfrom pathlib import Path\nPath(' + repr(str(root / 'decoder-pid')) + ').write_text(str(os.getpid()))\ntime.sleep(30)\n')
             decoder.chmod(0o755)
             process = subprocess.Popen([sys.executable, '-m', 'drum_score', str(source),
                 '--output', str(root / 'result')], env={**os.environ,
@@ -246,7 +360,7 @@ class ScriptConversion(unittest.TestCase):
             self.assertEqual(manifest, result)
 
     def test_scrolling_preserves_every_position_and_full_endpoints(self):
-        from test_longshot_cli import scrolling_video
+        from score_fixtures import scrolling_video
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             video, sheet = scrolling_video(root)
@@ -261,6 +375,75 @@ class ScriptConversion(unittest.TestCase):
             self.assertEqual(result['page_regions'][0][0], 0)
             self.assertEqual(result['page_regions'][-1][1], 1420)
             sheet.close()
+
+    def test_blank_outro_preserves_last_music_system_and_actual_source_tail(self):
+        from score_fixtures import scrolling_video
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            video, sheet = scrolling_video(root, [i // 2 * 180 for i in range(12)] + [None, None])
+            result = drum_score.convert(video, root / 'result')
+            self.assertEqual(result['staff_count'], 7)
+            self.assertEqual(result['samples'][-1]['timestamp'], 13)
+            self.assertEqual(result['page_regions'][-1][1], 1420)
+            with Image.open(root / 'result' / result['longshot']['path']) as actual:
+                for row in range(7):
+                    self.assertLess(min(actual.getpixel((50, 197 + row * 180))), 80)
+            sheet.close()
+
+    def test_continuous_pages_preserve_gray_spacing_detached_marks_and_pale_short_ending(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = Image.new('RGB', (640, 2400), (249, 249, 249))
+            draw = ImageDraw.Draw(image)
+            for row, top in enumerate(range(100, 2350, 280)):
+                color = (150, 150, 150) if row == 8 else (0, 0, 0)
+                right = 300 if row == 8 else 615
+                for line in range(5):
+                    draw.line((25, top + 8 * line, right, top + 8 * line), fill=color)
+                draw.ellipse((90, top + 12, 100, top + 20), fill=color)
+                draw.line((100, top - 20, 100, top + 18), fill=color, width=2)
+                draw.rectangle((600, top + 70, 605, top + 75), fill=(220, 20, 30))
+            image.save(root / 'source.png')
+            source = root / 'source.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-loop', '1', '-i', str(root / 'source.png'),
+                '-t', '1', '-r', '2', '-c:v', 'ffv1', str(source)], check=True)
+            result = drum_score.convert(source, root / 'result')
+            subprocess.run(['pdfimages', '-png', str(root / 'result' / result['pdf']['path']),
+                str(root / 'embedded')], check=True, capture_output=True)
+            listing = subprocess.run(['pdfimages', '-list', str(root / 'result' / result['pdf']['path'])],
+                check=True, capture_output=True).stdout.splitlines()[2:]
+            self.assertGreater(len(listing), 1)
+            # Poppler reads actual PDF image placements. Identical image width
+            # and x/y resolution mean identical printed width and uniform scale.
+            placements = [line.split() for line in listing]
+            self.assertEqual(len({(row[3], row[12], row[13]) for row in placements}), 1)
+            self.assertTrue(all(row[12] == row[13] for row in placements))
+            regions = result['page_regions']
+            self.assertEqual(regions[0][0], 0)
+            self.assertEqual(regions[-1][1], image.height)
+            for index, (start, end) in enumerate(regions):
+                if index:
+                    self.assertEqual(regions[index - 1][1], start)
+                with Image.open(root / f'embedded-{index:03d}.png') as embedded:
+                    self.assertEqual(embedded.size, (640, end - start))
+                    self.assertIsNone(ImageChops.difference(embedded.convert('RGB'), image.crop((0, start, 640, end))).getbbox())
+
+    def test_changed_source_is_rejected_without_publishing_or_touching_other_results(self):
+        from score_fixtures import score_frame, video_from_image
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = video_from_image(score_frame(), root)
+            previous = root / 'previous.pdf'
+            previous.write_bytes(b'existing result')
+            def progress(stage):
+                if stage == 'paginating':
+                    with source.open('ab') as stream:
+                        stream.write(b'synthetic source mutation')
+            with self.assertRaises(drum_score.ConversionError) as caught:
+                drum_score.convert(source, root / 'result', progress=progress)
+            self.assertEqual(caught.exception.code, 'source_changed')
+            self.assertFalse((root / 'result').exists())
+            self.assertEqual(previous.read_bytes(), b'existing result')
 
     def test_detected_page_flip_does_not_silently_publish_only_first_page(self):
         with tempfile.TemporaryDirectory() as temporary:

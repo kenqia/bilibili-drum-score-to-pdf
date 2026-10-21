@@ -23,8 +23,7 @@ drum-score-worker = "drum_score.worker:main"
 
 [tool.setuptools]
 packages = ["drum_score"]
-py-modules = ["video_seek", "public_video", "anonymous_network", "anonymous_backend"]
-package-dir = {"drum_score" = "src/drum_score", "" = "skills/bilibili-drum-score-to-pdf/scripts"}
+package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
 drum_score = ["static/*.html", "static/*.css", "static/*.js"]

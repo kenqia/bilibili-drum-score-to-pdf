@@ -30,7 +30,7 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: |
-            skills/bilibili-drum-score-to-pdf/scripts/requirements.txt
+            pyproject.toml
             tests/requirements-web.txt
       - name: Install video and PDF tools
         run: |
@@ -38,11 +38,11 @@ jobs:
           sudo apt-get install --no-install-recommends -y ffmpeg poppler-utils fonts-dejavu-core
       - name: Install pinned Python dependencies
         id: dependencies
-        run: python -m pip install -r skills/bilibili-drum-score-to-pdf/scripts/requirements.txt -r tests/requirements-web.txt
-      - name: Check request and workflow syntax
+        run: python -m pip install ".[web]" -r tests/requirements-web.txt
+      - name: Check product syntax
         run: |
           python -m pip install --quiet ruff==0.14.14
-          ruff check --select E701,E702 skills/bilibili-drum-score-to-pdf/scripts/score_task.py skills/bilibili-drum-score-to-pdf/scripts/score_workflow.py skills/bilibili-drum-score-to-pdf/scripts/convert.py skills/bilibili-drum-score-to-pdf/scripts/host_check.py
+          ruff check --select E701,E702 src/drum_score
       - name: Run offline regression shard
         run: python ci/run_unittest_shard.py --index ${{ matrix.shard }} --count 2
 
@@ -57,17 +57,17 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: skills/bilibili-drum-score-to-pdf/scripts/requirements.txt
+          cache-dependency-path: pyproject.toml
       - name: Install video and PDF tools
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y ffmpeg poppler-utils fonts-dejavu-core
       - name: Install pinned Python dependencies
         id: dependencies
-        run: python -m pip install -r skills/bilibili-drum-score-to-pdf/scripts/requirements.txt
-      - name: Replay synthetic reconstruction and refusal cases
+        run: python -m pip install .
+      - name: Verify synthetic script conversion and refusal cases
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
-        run: python ci/verify_agent_replay.py --output work/ci-evidence
+        run: python ci/verify_script_product.py --output work/ci-evidence
       - name: Retain bounded synthetic evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -96,16 +96,14 @@ jobs:
         timeout-minutes: 10
         run: python ci/install_windows_tools.py
       - name: Install pinned Python dependencies
-        run: python -m pip install -r skills/bilibili-drum-score-to-pdf/scripts/requirements.txt
-      - name: Verify native installation, Agent flow and shared contracts
+        run: python -m pip install .
+      - name: Verify supported CLI and media contracts
         shell: pwsh
         run: |
-          $patterns = @('test_ci_windows_tools.py', 'test_skill_install.py', 'test_host_check.py', 'test_cross_host.py', 'test_agent_source.py', 'test_public_contracts.py', 'test_stage_cli.py')
+          $patterns = @('test_ci_windows_tools.py', 'test_cross_host.py', 'test_public_contracts.py')
           foreach ($pattern in $patterns) {
             python -m unittest discover -s tests -p $pattern -v
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          python tools/sync_skill_references.py --check
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python ci/verify_agent_replay.py --output work/windows-replay
+          python ci/verify_script_product.py --output work/windows-replay
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

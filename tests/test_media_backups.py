@@ -7,12 +7,12 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from score_fixtures import CLI, score_frame, video_from_image
+from score_fixtures import score_frame, video_from_image
 from yt_dlp import YoutubeDL
 
-sys.path.insert(0, str(CLI.parent))
-import anonymous_backend
-from public_video import InputError, video_origin
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+from drum_score import anonymous_backend
+from drum_score.public_video import InputError, video_origin
 
 
 ORIGIN = video_origin('https://www.bilibili.com/video/BV1b5411x7Ku?p=2')

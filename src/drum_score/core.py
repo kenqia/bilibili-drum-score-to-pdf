@@ -10,8 +10,8 @@ import sys
 import time
 from importlib.metadata import PackageNotFoundError, version
 
-import video_seek
-import public_video
+from . import video_seek
+from . import public_video
 
 ConversionError = video_seek.ConversionError
 NOTICE = '图像处理自动整理，未经音乐校对；可能保留模糊、水印、播放标记或未检测出的拼接问题。'

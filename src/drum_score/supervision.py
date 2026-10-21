@@ -57,7 +57,14 @@ def _worker(source, output, limits, connection, temporary, parent_pid, ready):
         connection.close()
 
 
-def _processes(root_pid):
+def _identity(pid):
+    try:
+        return (Path('/proc') / str(pid) / 'stat').read_text().rsplit(') ', 1)[1].split()[19]
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _processes(root_pid, root_identity=None):
     """Read only process identity and RSS, never command lines or environments."""
     records = {}
     for entry in Path('/proc').glob('[0-9]*'):
@@ -66,6 +73,8 @@ def _processes(root_pid):
             records[int(entry.name)] = (int(fields[1]), int(fields[21]) * os.sysconf('SC_PAGE_SIZE'), fields[19], int(fields[3]))
         except (OSError, ValueError, IndexError):
             continue
+    if root_identity is not None and records.get(root_pid, (None, None, None))[2] != root_identity:
+        return {}, 0
     descendants = {root_pid} | {pid for pid, record in records.items() if record[3] == root_pid}
     changed = True
     while changed:
@@ -76,8 +85,9 @@ def _processes(root_pid):
         records.get(pid, (0, 0, '', 0))[1] for pid in descendants)
 
 
-def _stop(process, tracked, *, wait_until_stopped=False):
-    if process.is_alive() and hasattr(os, 'killpg') and process.pid:
+def _stop(process, tracked, *, root_identity=None, wait_until_stopped=False):
+    same_root = root_identity is None or _identity(process.pid) == root_identity
+    if same_root and process.is_alive() and hasattr(os, 'killpg') and process.pid:
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
@@ -93,7 +103,7 @@ def _stop(process, tracked, *, wait_until_stopped=False):
             os.kill(pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-    if process.is_alive():
+    if same_root and process.is_alive():
         process.kill()
     process.join(timeout=5)
     deadline = time.monotonic() + 2
@@ -150,6 +160,7 @@ def _run(source, output, *, progress=None, limits=None, cancel=None):
         guardian = None
         guardian_write = None
         previous_term = None
+        root_identity = None
         if threading.current_thread() is threading.main_thread():
             previous_term = signal.getsignal(signal.SIGTERM)
             def interrupted(signum, frame):
@@ -160,13 +171,18 @@ def _run(source, output, *, progress=None, limits=None, cancel=None):
         try:
             budget.check()
             process.start()
+            if Path('/proc').is_dir():
+                root_identity = _identity(process.pid)
+                if root_identity is None:
+                    raise ConversionError('conversion_failed', '转换进程身份不可用。')
+                tracked[process.pid] = root_identity
             child.close()
             if Path('/proc').is_dir():
                 guardian_read, guardian_write = os.pipe()
                 identity = root.stat()
                 try:
                     guardian = subprocess.Popen([sys.executable, '-m', 'drum_score.guardian',
-                        str(guardian_read), str(process.pid), str(root), str(identity.st_dev), str(identity.st_ino),
+                        str(guardian_read), str(process.pid), str(root), str(identity.st_dev), str(identity.st_ino), root_identity,
                         *(['lease'] if lease is not None else [])],
                         pass_fds=(guardian_read,) + ((lease,) if lease is not None else ()), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                         stderr=subprocess.DEVNULL, start_new_session=True)
@@ -180,8 +196,9 @@ def _run(source, output, *, progress=None, limits=None, cancel=None):
                 budget.check()
                 peak_disk = max(peak_disk, budget._peak_temp)
                 if Path('/proc').is_dir():
-                    descendants, rss = _processes(process.pid)
-                    tracked.update(descendants)
+                    descendants, rss = _processes(process.pid, root_identity)
+                    for pid, identity_value in descendants.items():
+                        tracked.setdefault(pid, identity_value)
                     peak_rss = max(peak_rss, rss)
                     if rss > budget.limits['rss_bytes']:
                         raise ConversionError('resource_limit', '转换进程树超过采样内存预算，未发布结果。')
@@ -226,7 +243,7 @@ def _run(source, output, *, progress=None, limits=None, cancel=None):
             parent.close()
             child.close()
             if process.pid is not None:
-                _stop(process, tracked, wait_until_stopped=lease is not None)
+                _stop(process, tracked, root_identity=root_identity, wait_until_stopped=lease is not None)
             if guardian_write is not None:
                 try:
                     os.write(guardian_write, b'1')

@@ -1,7 +1,7 @@
 """HTTP adapter. Conversion runs exclusively in the separate worker."""
 from pathlib import Path
 import asyncio
-import argparse
+from .arguments import PublicParser
 import ipaddress
 import os
 import re
@@ -72,8 +72,8 @@ class ArtifactResources:
                 stream.close()
 
 
-def create_app(data_root, *, trusted_proxies=(), retention_seconds=86400):
-    jobs = Jobs(data_root, retention_seconds=retention_seconds)
+def create_app(data_root, *, trusted_proxies=(), retention_seconds=86400, **storage):
+    jobs = Jobs(data_root, retention_seconds=retention_seconds, **storage)
     proxies = frozenset(ipaddress.ip_address(value) for value in trusted_proxies)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(BodyLimit)
@@ -182,14 +182,16 @@ def create_app(data_root, *, trusted_proxies=(), retention_seconds=86400):
 
 def main(argv=None):
     import uvicorn
-    parser = argparse.ArgumentParser(description='匿名鼓谱网站 HTTP 服务，另行启动 worker。')
+    parser = PublicParser(prog='drum-score-web', description='匿名鼓谱网站 HTTP 服务，另行启动 worker。')
     parser.add_argument('--data-root', required=True)
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8000)
     parser.add_argument('--trusted-proxy', action='append', default=[], help='明确核实的代理 IP，可重复；不接受通配符')
+    from .service_limits import add_storage_arguments, storage_options
+    add_storage_arguments(parser)
     args = parser.parse_args(argv)
     try:
-        app = create_app(args.data_root, trusted_proxies=args.trusted_proxy)
+        app = create_app(args.data_root, trusted_proxies=args.trusted_proxy, **storage_options(args))
     except (OSError, ValueError, JobError):
         parser.error('数据目录或可信代理配置无效。')
     # Never let Uvicorn rewrite ASGI peer identity before our explicit proxy policy.

@@ -14,13 +14,11 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
-from score_fixtures import CLI, score_frame, video_from_image
+from score_fixtures import score_frame, video_from_image
 from yt_dlp import YoutubeDL
 
-sys.path.insert(0, str(CLI.parent))
-spec = importlib.util.spec_from_file_location('link_cli', CLI)
-cli = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(cli)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+from drum_score import public_video
 
 URL = 'https://www.bilibili.com/video/BV1b5411x7Ku?p=2'
 MEDIA = 'https://cdn.bilivideo.com/video?sign=DO_NOT_SAVE_TEST_SENTINEL'
@@ -31,13 +29,19 @@ class LinkInputTests(unittest.TestCase):
         info = {'id': info_id or 'BV1b5411x7Ku_p2', 'formats': formats or [
             {'url': MEDIA, 'width': 1280, 'height': 960, 'vcodec': 'avc1', 'acodec': 'none', 'format_id': '80'}]}
         stdout, stderr = io.StringIO(), io.StringIO()
-        with patch.object(sys, 'argv', [str(CLI), url, '--operation', 'prepare', '--output', str(output)]), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), (contextlib.nullcontext() if actual_backend else patch.object(YoutubeDL, 'extract_info', return_value=info, side_effect=backend_error)), (contextlib.nullcontext() if real_transport else patch('urllib.request.OpenerDirector.open', side_effect=response or (lambda *a, **k: io.BytesIO(video.read_bytes())))), patch('socket.getaddrinfo', return_value=dns or [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]):
-            code = cli.main()
-        result=json.loads(stdout.getvalue())
-        if result.get('schema') == 'score-reconstruction/1':
-            result['origin']=result['origin']
-            result['status']='success'
-        return code, result, stdout.getvalue() + stderr.getvalue()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), (contextlib.nullcontext() if actual_backend else patch.object(YoutubeDL, 'extract_info', return_value=info, side_effect=backend_error)), (contextlib.nullcontext() if real_transport else patch('urllib.request.OpenerDirector.open', side_effect=response or (lambda *a, **k: io.BytesIO(video.read_bytes())))), patch('socket.getaddrinfo', return_value=dns or [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]):
+            try:
+                source, origin = public_video.acquire(url, output)
+                result = {'status': 'complete', 'origin': origin,
+                          'source': {'path': str(source), 'sha256': __import__('hashlib').sha256(source.read_bytes()).hexdigest()}}
+                code = 0
+            except public_video.InputError as error:
+                result = {'status': 'failed', 'origin': error.origin, 'error': {'code': error.code,
+                    'message': str(error), **getattr(error, 'diagnostics', {})}}
+                if hasattr(error, 'http_status'):
+                    result['error']['http_status'] = error.http_status
+                code = 2
+        return code, result, stdout.getvalue() + stderr.getvalue() + json.dumps(result)
 
     def test_dash_only_link_uses_native_video_track_and_records_anonymous_backend(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -45,13 +49,13 @@ class LinkInputTests(unittest.TestCase):
             video = video_from_image(score_frame(), base)
             code, result, logs = self.invoke(base / 'result', video)
             self.assertEqual(code, 0, result)
-            self.assertTrue((base / 'result/record.json').exists())
+            self.assertTrue(Path(result['source']['path']).is_file())
             self.assertEqual(result['origin']['page'], 2)
             self.assertEqual(result['origin']['backend'], 'yt-dlp')
             self.assertFalse(result['origin']['authenticated'])
             self.assertFalse(result['origin']['single_file_fallback'])
             self.assertEqual(result['origin']['actual_video']['width'], 1280)
-            combined = logs + (base / 'result' / ('record.json' if code == 0 else 'manifest.json')).read_text()
+            combined = logs + json.dumps(result)
             if 'DO_NOT_SAVE_TEST_SENTINEL' in combined:
                 offset = combined.index('DO_NOT_SAVE_TEST_SENTINEL')
                 self.fail(repr(combined[max(0, offset-180):offset+120]))
@@ -101,7 +105,7 @@ class LinkInputTests(unittest.TestCase):
             video = video_from_image(score_frame(), base)
             code, result, logs = self.invoke(base / 'result', video, [{'url': MEDIA, 'backup_urls': ['https://backup.bilivideo.cn/recovery?sign=DO_NOT_SAVE_TEST_SENTINEL'], 'acodec': 'none', 'vcodec': 'avc1'}], response=lambda request, **kw: response(None, request, **kw))
             self.assertEqual(code, 0, result)
-            combined = logs + (base / 'result' / ('record.json' if code == 0 else 'manifest.json')).read_text()
+            combined = logs + json.dumps(result)
             if 'DO_NOT_SAVE_TEST_SENTINEL' in combined:
                 offset = combined.index('DO_NOT_SAVE_TEST_SENTINEL')
                 self.fail(repr(combined[max(0, offset-180):offset+120]))
@@ -117,7 +121,7 @@ class LinkInputTests(unittest.TestCase):
             self.assertEqual(result['error']['failure_stage'], 'media')
             self.assertEqual(result['error']['backend_error_type'], 'HTTPError')
             failure.close()
-            combined = logs + (base / 'result' / ('record.json' if code == 0 else 'manifest.json')).read_text()
+            combined = logs + json.dumps(result)
             if 'DO_NOT_SAVE_TEST_SENTINEL' in combined:
                 offset = combined.index('DO_NOT_SAVE_TEST_SENTINEL')
                 self.fail(repr(combined[max(0, offset-180):offset+120]))
@@ -140,7 +144,7 @@ class LinkInputTests(unittest.TestCase):
         def response(request, **kwargs):
             headers = Message()
             headers['Location'] = 'https://127.0.0.1/?sign=DO_NOT_SAVE_TEST_SENTINEL'
-            from anonymous_network import PublicRedirect
+            from drum_score.anonymous_network import PublicRedirect
             from unittest.mock import patch
             with patch('socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('127.0.0.1', 443))]):
                 return PublicRedirect().redirect_request(request, io.BytesIO(), 302, 'Moved', headers, headers['Location'])
@@ -178,26 +182,24 @@ class LinkInputTests(unittest.TestCase):
             output = base / 'result'
             code, result, _ = self.invoke(output, video, backend_error=RuntimeError('fixture failure'))
             self.assertEqual(code, 2)
-            self.assertEqual(result['phase'], 'acquisition')
-            self.assertEqual(set(path.name for path in output.iterdir()), {'manifest.json'})
+            self.assertFalse(output.exists())
             code, result, _ = self.invoke(output, video)
             self.assertEqual(code, 0, result)
-            saved = (output / 'record.json').read_bytes()
+            before = Path(result['source']['path']).read_bytes()
             code, result, _ = self.invoke(output, video)
-            self.assertEqual(code,0,result)
-            self.assertEqual((output / 'record.json').read_bytes(), saved)
+            self.assertEqual(result['error']['code'], 'existing_output')
+            self.assertEqual(next(output.glob('*.mp4')).read_bytes(), before)
 
     def test_failure_diagnosis_with_unknown_files_cannot_retry(self):
         with tempfile.TemporaryDirectory() as scratch:
             base = Path(scratch)
             output = base / 'result'
-            self.invoke(output, base / 'unused', backend_error=RuntimeError('fixture'))
-            diagnosis = (output / 'manifest.json').read_bytes()
+            output.mkdir()
             user = output / 'notes.txt'
             user.write_bytes(b'user notes')
-            _, result, _ = self.invoke(output, base / 'unused')
+            code, result, _ = self.invoke(output, base / 'unused')
+            self.assertEqual(code, 2)
             self.assertEqual(result['error']['code'], 'existing_output')
-            self.assertEqual((output / 'manifest.json').read_bytes(), diagnosis)
             self.assertEqual(user.read_bytes(), b'user notes')
 
     def test_probe_failure_can_retry_the_same_directory(self):
@@ -208,7 +210,7 @@ class LinkInputTests(unittest.TestCase):
             output = base / 'result'
             _, result, _ = self.invoke(output, invalid)
             self.assertEqual(result['error']['code'], 'undecodable_video')
-            self.assertFalse(list(output.glob('*.mp4')))
+            self.assertFalse(output.exists())
             video = video_from_image(score_frame(), base)
             code, result, _ = self.invoke(output, video)
             self.assertEqual(code, 0, result)
@@ -224,7 +226,7 @@ class LinkInputTests(unittest.TestCase):
             code, result, _ = self.invoke(output, video)
             self.assertEqual(code, 0, result)
             self.assertEqual(Path(result['source']['path']).read_bytes(), video.read_bytes())
-            self.assertEqual(len([p for p in Path(destination).iterdir() if p.name.startswith('result-source-')]),1)
+            self.assertEqual(list(Path(destination).glob('.anonymous-publish-*')), [])
 
     def test_config_cookie_netrc_and_plugin_sentinels_are_not_read(self):
         from yt_dlp.extractor.bilibili import BiliBiliIE
@@ -255,12 +257,10 @@ class LinkInputTests(unittest.TestCase):
                     raise AssertionError('credential/config sentinel was read')
                 return real_open(file, *args, **kwargs)
             ydl_module = importlib.import_module('yt_dlp.YoutubeDL')
-            stdout, stderr = io.StringIO(), io.StringIO()
-            with patch.object(BiliBiliIE, '_real_extract', extractor), patch.object(builtins, 'open', guarded_open), patch.object(ydl_module, 'load_all_plugins', side_effect=AssertionError('plugins were loaded')), patch.object(sys, 'path', [str(base), *sys.path]), patch.dict('os.environ', {'XDG_CONFIG_HOME': str(base), 'HOME': str(base)}), patch.object(sys, 'argv', [str(CLI), URL, '--operation', 'prepare', '--output', str(base / 'result')]), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), patch('urllib.request.OpenerDirector.open', side_effect=lambda *a, **k: io.BytesIO(video.read_bytes())), patch('socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]):
-                code = cli.main()
-            result = json.loads(stdout.getvalue())
+            with patch.object(BiliBiliIE, '_real_extract', extractor), patch.object(builtins, 'open', guarded_open), patch.object(ydl_module, 'load_all_plugins', side_effect=AssertionError('plugins were loaded')), patch.object(sys, 'path', [str(base), *sys.path]), patch.dict('os.environ', {'XDG_CONFIG_HOME': str(base), 'HOME': str(base)}):
+                code, result, logs = self.invoke(base / 'result', video, actual_backend=True)
             self.assertEqual(code, 0, result)
-            self.assertNotIn('DO_NOT_SAVE_TEST_SENTINEL', stdout.getvalue() + stderr.getvalue())
+            self.assertNotIn('DO_NOT_SAVE_TEST_SENTINEL', logs)
 
     def test_actual_connection_pins_public_dns_and_keeps_tls_hostname(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -318,7 +318,7 @@ class LinkInputTests(unittest.TestCase):
             self.assertNotIn('DO_NOT_SAVE_TEST_SENTINEL', logs)
 
     def test_pinned_connect_host_handles_ipv6_retry_and_restores_headers(self):
-        from anonymous_network import PublicHTTPSConnection
+        from drum_score.anonymous_network import PublicHTTPSConnection
         ipv4 = (socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))
         ipv6 = (socket.AF_INET6, socket.SOCK_STREAM, 6, '', ('2606:4700:4700::1111', 443, 0, 0))
         for addresses in ([ipv4], [ipv6], [ipv6, ipv4]):
@@ -338,7 +338,7 @@ class LinkInputTests(unittest.TestCase):
                 connection.set_tunnel('cdn.bilivideo.com', 443, {
                     'hOsT': 'cdn.bilivideo.com:443', 'Proxy-Authorization': 'TEST_ONLY'})
                 original = dict(connection._tunnel_headers)
-                with patch('anonymous_network.public_addresses', return_value=addresses), patch.object(
+                with patch('drum_score.anonymous_network.public_addresses', return_value=addresses), patch.object(
                     connection, '_create_connection', side_effect=lambda *a, **kw: WireSocket()), patch.object(
                         connection._context, 'wrap_socket', side_effect=lambda sock, **kw: sock) as tls:
                     connection.connect()

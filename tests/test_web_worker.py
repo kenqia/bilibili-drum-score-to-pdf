@@ -76,14 +76,14 @@ class WebsiteWorker(unittest.TestCase):
         self.network = self.root / 'network'
         self.network.mkdir()
         video_from_image(score_frame(), self.network)
-        (self.network / 'anonymous_backend.py').write_text(BACKEND)
+        (self.network / 'network_fixture.py').write_text(BACKEND)
+        (self.network / 'sitecustomize.py').write_text("from drum_score import anonymous_backend\nfrom network_fixture import download\nanonymous_backend.download = download\n")
         (self.network / 'mode').write_text('ready')
         self.client = TestClient(create_app(self.data), client=('192.0.2.10', 2000))
         self.processes = []
         repository = Path(__file__).resolve().parents[1]
         self.env = {**os.environ, 'SYNTHETIC_NETWORK_ROOT': str(self.network),
-            'PYTHONPATH': os.pathsep.join(map(str, (self.network, repository / 'src',
-                repository / 'skills/bilibili-drum-score-to-pdf/scripts'))),
+            'PYTHONPATH': os.pathsep.join(map(str, (self.network, repository / 'src',))),
             'PATH': str(Path(sys.executable).parent) + os.pathsep + os.environ['PATH']}
 
     def tearDown(self):
@@ -145,6 +145,56 @@ class WebsiteWorker(unittest.TestCase):
         self.assertEqual(self.client.get(f'/api/tasks/{task}/pages/999', headers=auth).status_code, 404)
         self.assertEqual(self.client.post(f'/api/tasks/{task}/cancel', headers=auth).json()['state'], 'complete')
         self.assertEqual(list(self.data.rglob('.drum-score-*')), [])
+
+    def test_delivery_prunes_native_images_and_records_honest_provenance(self):
+        task, auth = self.submit()
+        self.assertEqual(self.worker(once=True).wait(timeout=30), 0)
+        manifest = next(self.data.rglob('result/manifest.json'))
+        result = json.loads(manifest.read_text())
+        self.assertFalse((manifest.parent / 'samples').exists())
+        self.assertFalse((manifest.parent / 'longshot.png').exists())
+        self.assertFalse(result['retention']['can_reconstruct_from_retained_sources'])
+        self.assertTrue(result['samples'])
+        for frame in result['samples']:
+            self.assertFalse(frame['retained'])
+            self.assertNotIn('path', frame)
+            self.assertIn('sha256', frame)
+            self.assertIn('pts', frame)
+        self.assertEqual(self.state(task, auth)['result']['retention'], result['retention'])
+
+    def test_running_disk_exhaustion_stops_real_tree_and_keeps_other_files(self):
+        with (self.network / 'sitecustomize.py').open('a') as startup:
+            startup.write("\nimport os\nfrom pathlib import Path\nfrom types import SimpleNamespace\noriginal_statvfs = os.statvfs\ndef statvfs(path):\n    if (Path(os.environ['SYNTHETIC_NETWORK_ROOT']) / 'full').exists():\n        return SimpleNamespace(f_bavail=0, f_frsize=4096)\n    return original_statvfs(path)\nos.statvfs = statvfs\n")
+        unrelated = self.data / 'operator-sentinel'
+        unrelated.write_text('preserve')
+        task, auth, worker, writers = self.waiting()
+        (self.network / 'full').touch()
+        view = self.until(lambda: (value if (value := self.state(task, auth))['state'] == 'failed' else None))
+        self.assertEqual(view['error']['code'], 'storage_full')
+        self.assertTrue(all(not self.alive(pid) for pid in writers))
+        self.assertEqual(unrelated.read_text(), 'preserve')
+        self.assertEqual(list(self.data.rglob('.drum-score-*')), [])
+        self.assertEqual(list(self.data.rglob('*.mp4')), [])
+
+    def test_preview_tool_failure_never_completes_or_serves_partial_result(self):
+        tools = self.root / 'tools'
+        tools.mkdir()
+        tool = tools / 'pdftoppm'
+        tool.write_text(f'#!{sys.executable}\nimport sys\nsys.stderr.write("SYNTHETIC_PRIVATE_PREVIEW /private/synthetic")\nsys.exit(1)\n')
+        tool.chmod(0o755)
+        self.env['PATH'] = str(tools) + os.pathsep + self.env['PATH']
+        before = (self.network / 'input.mp4').read_bytes()
+        task, auth = self.submit()
+        self.assertEqual(self.worker(once=True).wait(timeout=30), 0)
+        view = self.state(task, auth)
+        self.assertEqual(view['state'], 'failed')
+        self.assertEqual(view['error']['code'], 'preview_failed')
+        self.assertNotIn('SYNTHETIC_PRIVATE_PREVIEW', json.dumps(view))
+        for suffix in ('/pdf', '/pages/1'):
+            self.assertEqual(self.client.get(f'/api/tasks/{task}' + suffix, headers=auth).status_code, 409)
+        self.assertEqual(list(self.data.rglob('score.pdf')), [])
+        self.assertEqual(list(self.data.rglob('*.mp4')), [])
+        self.assertEqual((self.network / 'input.mp4').read_bytes(), before)
 
     def waiting(self):
         (self.network / 'mode').write_text('wait')
@@ -241,8 +291,46 @@ class WebsiteWorker(unittest.TestCase):
             self.assertEqual(full.json()['error']['code'], 'queue_full')
         self.assertEqual(self.state(task, auth)['state'], 'running')
 
+    def test_crash_before_inventory_registration_cleans_only_verified_generated_files(self):
+        with (self.network / 'sitecustomize.py').open('a') as startup:
+            startup.write("""
+import sqlite3, time, os
+from pathlib import Path
+fixture = Path(os.environ['SYNTHETIC_NETWORK_ROOT'])
+original_connect = sqlite3.connect
+class InventoryConnection(sqlite3.Connection):
+    def execute(self, sql, *args, **kwargs):
+        if sql.startswith('UPDATE managed_attempts SET files=') and (fixture / 'trap-inventory').exists():
+            (fixture / 'before-inventory').write_text('core published')
+            while (fixture / 'trap-inventory').exists():
+                time.sleep(.01)
+        return super().execute(sql, *args, **kwargs)
+def connect(database, *args, **kwargs):
+    if str(database).endswith('tasks.sqlite3'):
+        kwargs.setdefault('factory', InventoryConnection)
+    return original_connect(database, *args, **kwargs)
+sqlite3.connect = connect
+""")
+        (self.network / 'trap-inventory').touch()
+        task, auth = self.submit()
+        worker = self.worker(once=True)
+        self.until(lambda: (self.network / 'before-inventory').exists())
+        manifest = next(self.data.rglob('result/manifest.json'))
+        unknown = manifest.parent / 'operator-note'
+        unknown.write_text('keep unknown file')
+        worker.kill()
+        worker.wait(timeout=10)
+        (self.network / 'trap-inventory').unlink()
+        self.assertEqual(self.state(task, auth)['state'], 'running')
+        self.assertEqual(self.worker(once=True).wait(timeout=15), 0)
+        self.assertEqual(self.state(task, auth)['state'], 'interrupted')
+        self.assertEqual(list(manifest.parent.iterdir()), [unknown])
+        self.assertEqual(unknown.read_text(), 'keep unknown file')
+        self.assertEqual(list(self.data.rglob('.drum-score-*')), [])
+
     def test_durable_finishing_wins_cancel_and_recovers_after_real_sigkill(self):
-        (self.network / 'sitecustomize.py').write_text(DATABASE_FAULT)
+        with (self.network / 'sitecustomize.py').open('a') as startup:
+            startup.write(DATABASE_FAULT)
         (self.network / 'trap-finishing').touch()
         task, auth = self.submit()
         worker = self.worker(once=True)
@@ -266,7 +354,8 @@ class WebsiteWorker(unittest.TestCase):
 
     def test_lost_database_commit_acknowledgement_cannot_delete_committed_result(self):
         fault = DATABASE_FAULT.replace("(fixture / 'finishing-committed').write_text('durable')", "raise sqlite3.OperationalError('synthetic lost commit acknowledgement')")
-        (self.network / 'sitecustomize.py').write_text(fault)
+        with (self.network / 'sitecustomize.py').open('a') as startup:
+            startup.write(fault)
         (self.network / 'trap-finishing').touch()
         task, auth = self.submit()
         worker = self.worker(once=True)

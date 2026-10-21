@@ -4,7 +4,6 @@ import subprocess
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
-CLI = ROOT / 'skills/bilibili-drum-score-to-pdf/scripts/convert.py'
 
 
 def score_frame(size=(1280, 960), row_count=3):
@@ -35,18 +34,28 @@ def video_from_image(image, directory, name='input'):
     return video
 
 
-def controlled_source_review(regions, review):
-    """Explicitly synthetic assertions, never evidence of an actual Agent view."""
-    return {**review, 'unresolved': review.get('unresolved', [])}
-
-
-def controlled_reselection(task, title, regions, review):
-    """Supply explicit fixture receipts when a legacy test changes its sources."""
-    import score_workflow
-    import reconstruction
-    regions = [{**r, 'position': r.get('position') or str(i)} for i, r in enumerate(regions)]
-    captures = list(dict.fromkeys(r['capture'] for r in regions))
-    score_workflow.present(task, captures, 'Controlled fixture view, not real visual acceptance.')
-    review = controlled_source_review(regions, {**review, 'viewed_captures': captures,
-        'continuity': 'Controlled source order.', 'first_last': 'Controlled endpoints.'})
-    return reconstruction.assemble(task, title, regions, review)
+def scrolling_video(root, offsets=None):
+    """Seven visibly distinct systems, six overlapping stationary viewports."""
+    sheet = Image.new('RGB', (640, 1420), 'white')
+    draw = ImageDraw.Draw(sheet)
+    draw.text((35, 35), 'LONGSHOT FIXTURE', fill='black')
+    for row in range(7):
+        top = 140 + row * 180
+        for line in range(5):
+            draw.line((25, top + line * 8, 615, top + line * 8), fill='black', width=1)
+        for note in range(row + 2):
+            x = 65 + note * 45
+            draw.ellipse((x, top + 12, x + 10, top + 20), fill='black')
+            draw.line((x + 10, top - 25 - row * 2, x + 10, top + 17), fill='black', width=2)
+        draw.rectangle((40, top + 55, 80 + row * 25, top + 60 + row), fill='black')
+    offsets = [index // 4 * 180 for index in range(24)] if offsets is None else offsets
+    for index, shift in enumerate(offsets):
+        frame = sheet.crop((0, shift, 640, shift + 520)) if shift is not None else Image.new('RGB', (640, 520), 'white')
+        # Keep a fixed watermark in the upper right; the stitcher must not erase it.
+        if shift is not None:
+            ImageDraw.Draw(frame).rectangle((590, 15, 610, 25), fill='black')
+        frame.save(root / f'frame-{index:03d}.png')
+    video = root / 'scroll.mkv'
+    subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '1', '-i',
+                    str(root / 'frame-%03d.png'), '-c:v', 'ffv1', str(video)], check=True)
+    return video, sheet

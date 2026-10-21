@@ -14,23 +14,18 @@ class CIReplayTests(unittest.TestCase):
     def test_offline_replay_produces_bounded_sanitized_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / 'evidence'
-            result = subprocess.run([sys.executable, str(ROOT / 'ci/verify_agent_replay.py'),
+            result = subprocess.run([sys.executable, str(ROOT / 'ci/verify_script_product.py'),
                                      '--output', str(output)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             summary = json.loads((output / 'summary.json').read_text())
             self.assertEqual(summary['status'], 'passed')
-            self.assertEqual(summary['evaluation'], 'synthetic_vector_replay_only')
+            self.assertEqual(summary['evaluation'], 'synthetic_image_product_only')
             self.assertEqual(summary['system_count'], 3)
-            self.assertEqual(summary['negative_cases'], {
-                'unknown_version': 'reconstruction_rejected',
-                'out_of_bounds': 'reconstruction_rejected',
-                'unresolved': 'reconstruction_rejected',
-                'corrupt_image': 'reconstruction_rejected'})
+            self.assertEqual(summary['negative_cases'], {'output_exists': 'rejected', 'resource_limit': 'rejected'})
             self.assertTrue(summary['replay_pdf_equal'])
             self.assertEqual(summary['pdf_pages'], 1)
-            self.assertEqual(summary['pdf_name'], 'Fixture song.pdf')
-            self.assertEqual(summary['embedded_images'], 0)
-            self.assertIsNone(summary['model_cost'])
+            self.assertEqual(summary['pdf_name'], 'score.pdf')
+            self.assertGreater(summary['embedded_images'], 0)
             files = list(output.iterdir())
             self.assertEqual({p.name for p in files}, {'summary.json', 'fixture-score.pdf'})
             self.assertLess(sum(p.stat().st_size for p in files), 5 * 1024 * 1024)
@@ -40,7 +35,7 @@ class CIReplayTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / 'evidence'
             environment = {**os.environ, 'PATH': directory}
-            result = subprocess.run([sys.executable, str(ROOT / 'ci/verify_agent_replay.py'),
+            result = subprocess.run([sys.executable, str(ROOT / 'ci/verify_script_product.py'),
                                      '--output', str(output)], env=environment,
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 1)

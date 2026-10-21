@@ -1,6 +1,6 @@
 """Short SQLite transactions for capability-owned anonymous tasks."""
 from contextlib import contextmanager
-from hashlib import sha256
+from hashlib import sha256, file_digest
 from pathlib import Path
 import hmac
 import json
@@ -9,14 +9,15 @@ import secrets
 import sqlite3
 import time
 import re
-import shutil
 import stat
+import math
 
-from public_video import InputError, video_origin
+from .public_video import InputError, video_origin
 
 
 UNFINISHED = ('queued', 'running', 'cancelling', 'finishing')
 ACTIVE = ('running', 'cancelling', 'finishing')
+SCHEMA_VERSION = 1
 
 
 class JobError(Exception):
@@ -37,26 +38,48 @@ def controlled_root(path):
 
 
 class Jobs:
-    def __init__(self, root, *, retention_seconds=86400):
+    def __init__(self, root, *, retention_seconds=86400, diagnostic_seconds=3600,
+                 diagnostic_bytes=8 * 1024**2, min_free_bytes=512 * 1024**2,
+                 retained_bytes=4 * 1024**3, job_temp_bytes=1024**3):
+        values = (retention_seconds, diagnostic_seconds, diagnostic_bytes,
+                  min_free_bytes, retained_bytes, job_temp_bytes)
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or
+               not math.isfinite(v) or v <= 0 for v in values) or job_temp_bytes > retained_bytes:
+            raise ValueError('无效的服务资源参数。')
         self.root = controlled_root(root)
+        identity = self.root.stat()
+        self.root_identity = (identity.st_dev, identity.st_ino)
         self.retention_seconds = retention_seconds
+        self.diagnostic_seconds = diagnostic_seconds
+        self.diagnostic_bytes = int(diagnostic_bytes)
+        self.min_free_bytes = int(min_free_bytes)
+        self.retained_bytes = int(retained_bytes)
+        self.job_temp_bytes = int(job_temp_bytes)
         self.database = self.root / 'tasks.sqlite3'
         if self.database.is_symlink():
             raise ValueError('任务数据库不能是符号链接。')
         with self.transaction() as db:
-            db.executescript('''
-                CREATE TABLE IF NOT EXISTS tasks (
+            version = db.execute('PRAGMA user_version').fetchone()[0]
+            tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if version != SCHEMA_VERSION and (version != 0 or tables):
+                raise ValueError('不支持的任务数据库 schema；请恢复匹配版本的数据与程序。')
+            if not tables:
+                db.execute("""CREATE TABLE tasks (
                   id TEXT PRIMARY KEY, capability_hash TEXT NOT NULL, source TEXT NOT NULL,
                   ip_key TEXT NOT NULL, state TEXT NOT NULL, stage TEXT NOT NULL,
                   created_at REAL NOT NULL, queued_at REAL NOT NULL,
                   attempt TEXT, completed_at REAL, expires_at REAL,
                   summary TEXT, error_code TEXT, error_message TEXT
-                );
-                CREATE UNIQUE INDEX IF NOT EXISTS unfinished_ip ON tasks(ip_key)
-                  WHERE state IN ('queued','running','cancelling','finishing');
-                CREATE UNIQUE INDEX IF NOT EXISTS single_active ON tasks((1))
-                  WHERE state IN ('running','cancelling','finishing');
-            ''')
+                )""")
+                db.execute("""CREATE TABLE managed_attempts (
+                  task TEXT NOT NULL, attempt TEXT NOT NULL, device INTEGER NOT NULL,
+                  inode INTEGER NOT NULL, files TEXT NOT NULL DEFAULT '[]',
+                  PRIMARY KEY(task,attempt))""")
+                db.execute("CREATE UNIQUE INDEX unfinished_ip ON tasks(ip_key) WHERE state IN ('queued','running','cancelling','finishing')")
+                db.execute("CREATE UNIQUE INDEX single_active ON tasks((1)) WHERE state IN ('running','cancelling','finishing')")
+                db.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
+            elif tables != {'tasks', 'managed_attempts'} or len(db.execute('PRAGMA table_info(tasks)').fetchall()) != 14:
+                raise ValueError('任务数据库 schema 与程序不匹配。')
 
     @contextmanager
     def transaction(self):
@@ -89,6 +112,7 @@ class Jobs:
             raise JobError('expired', '结果已到期，请重新提交来源链接。', 410)
 
     def admit(self, db, ip_key):
+        self.capacity(reserve=True)
         if db.execute("SELECT 1 FROM tasks WHERE ip_key=? AND state IN ('queued','running','cancelling','finishing')", (ip_key,)).fetchone():
             raise JobError('ip_busy', '此网络已有一个未完成任务，请等待或取消后重试。', 429)
         if db.execute("SELECT COUNT(*) FROM tasks WHERE state='queued'").fetchone()[0] >= 10:
@@ -125,7 +149,8 @@ class Jobs:
             row = self.authorize(db, task, capability)
             self.check_live(row)
             state = {'queued': 'cancelled', 'running': 'cancelling'}.get(row['state'], row['state'])
-            db.execute('UPDATE tasks SET state=?,stage=? WHERE id=?', (state, state if state in ('cancelled', 'cancelling') else row['stage'], task))
+            db.execute("UPDATE tasks SET state=?,stage=?,expires_at=CASE WHEN ?='cancelled' THEN COALESCE(expires_at,?) ELSE expires_at END WHERE id=?",
+                (state, state if state in ('cancelled', 'cancelling') else row['stage'], state, time.time() + self.diagnostic_seconds, task))
         return self.view(task, capability)
 
     def retry(self, task, capability, ip):
@@ -149,11 +174,161 @@ class Jobs:
                 raise ValueError('任务目录不能是符号链接。')
         return path
 
+    def capacity(self, *, reserve=False):
+        # Count even unrecognized files, never delete live results to admit work.
+        total = 0
+        if (self.root / 'attempts').is_symlink():
+            raise JobError('storage_unavailable', '服务存储目录不可用，请联系运营者。', 503)
+        for directory, dirs, files in os.walk(self.root / 'attempts', followlinks=False):
+            for name in files:
+                try:
+                    info = (Path(directory) / name).lstat()
+                    if stat.S_ISREG(info.st_mode):
+                        total += info.st_size
+                except FileNotFoundError:
+                    pass
+        free = os.statvfs(self.root)
+        available = free.f_bavail * free.f_frsize
+        reservation = self.job_temp_bytes if reserve else 0
+        if total + reservation > self.retained_bytes or available < self.min_free_bytes + reservation:
+            raise JobError('storage_full', '服务存储空间不足，请稍后重试。', 503)
+        return total
+
+    def register_attempt(self, row):
+        path = self.attempt_root(row['id'], row['attempt'])
+        path.mkdir(mode=0o700, parents=True)
+        info = path.lstat()
+        with self.transaction() as db:
+            db.execute('INSERT INTO managed_attempts(task,attempt,device,inode) VALUES(?,?,?,?)',
+                (row['id'], row['attempt'], info.st_dev, info.st_ino))
+        return path
+
+    def remember_result(self, row, result):
+        root = self.attempt_root(row['id'], row['attempt'])
+        references = [dict(path='manifest.json'), result['pdf'], *result['pages'],
+                      *[ref for ref in result.get('samples', []) if ref.get('retained', True)],
+                      *([result['longshot']] if result.get('longshot', {}).get('retained', True) and 'longshot' in result else [])]
+        entries = []
+        for reference in references:
+            relative = Path('result') / reference['path']
+            if relative.is_absolute() or '..' in relative.parts:
+                raise ValueError('Invalid managed artifact')
+            path = root / relative
+            for parent in path.parents:
+                if parent == root:
+                    break
+                if parent.is_symlink():
+                    raise ValueError('Invalid managed artifact')
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode):
+                raise ValueError('Invalid managed artifact')
+            entries.append([relative.as_posix(), info.st_dev, info.st_ino, info.st_ctime_ns])
+        with self.transaction() as db:
+            db.execute('UPDATE managed_attempts SET files=? WHERE task=? AND attempt=?',
+                       (json.dumps(entries), row['id'], row['attempt']))
+
+    def remove_files(self, managed, entries):
+        # Every unlink is relative to no-follow directory FDs and recorded inodes.
+        try:
+            root = self.attempt_root(managed['task'], managed['attempt'])
+        except ValueError:
+            return
+        descriptor = None
+        parent_descriptor = None
+        try:
+            descriptor = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            info = os.fstat(descriptor)
+            if (info.st_dev, info.st_ino) != self.root_identity:
+                os.close(descriptor)
+                return
+            for component in root.relative_to(self.root).parts:
+                child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
+                if parent_descriptor is not None:
+                    os.close(parent_descriptor)
+                parent_descriptor, descriptor = descriptor, child
+        except OSError:
+            if descriptor is not None:
+                os.close(descriptor)
+            if parent_descriptor is not None:
+                os.close(parent_descriptor)
+            return
+        try:
+            info = os.fstat(descriptor)
+            if (info.st_dev, info.st_ino) != (managed['device'], managed['inode']):
+                return
+            directories = set()
+            for name, device, inode, changed_ns in entries:
+                relative = Path(name)
+                if relative.is_absolute() or '..' in relative.parts:
+                    continue
+                directories.update(relative.parents)
+                current = os.dup(descriptor)
+                try:
+                    for component in relative.parts[:-1]:
+                        child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
+                        os.close(current)
+                        current = child
+                    metadata = os.stat(relative.name, dir_fd=current, follow_symlinks=False)
+                    if stat.S_ISREG(metadata.st_mode) and (metadata.st_dev, metadata.st_ino, metadata.st_ctime_ns) == (device, inode, changed_ns):
+                        os.unlink(relative.name, dir_fd=current)
+                except (FileNotFoundError, NotADirectoryError):
+                    pass
+                except OSError:
+                    continue  # Symlinks/replaced directories are never followed.
+                finally:
+                    os.close(current)
+            for relative in sorted(directories, key=lambda item: len(item.parts), reverse=True):
+                if relative == Path('.'):
+                    continue
+                current = os.dup(descriptor)
+                try:
+                    for component in relative.parts[:-1]:
+                        child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
+                        os.close(current)
+                        current = child
+                    os.rmdir(relative.name, dir_fd=current)
+                except OSError:
+                    pass
+                finally:
+                    os.close(current)
+            try:
+                info = os.stat(root.name, dir_fd=parent_descriptor, follow_symlinks=False)
+                if (info.st_dev, info.st_ino) == (managed['device'], managed['inode']) and stat.S_ISDIR(info.st_mode):
+                    os.rmdir(root.name, dir_fd=parent_descriptor)
+            except OSError:
+                pass
+        finally:
+            os.close(descriptor)
+            os.close(parent_descriptor)
+
     def discard(self, row):
-        if row['attempt']:
-            path = self.attempt_root(row['id'], row['attempt'])
-            if path.exists():
-                shutil.rmtree(path)
+        if not row['attempt']:
+            return
+        with self.transaction() as db:
+            managed = db.execute('SELECT * FROM managed_attempts WHERE task=? AND attempt=?',
+                (row['id'], row['attempt'])).fetchone()
+        if managed:
+            self.remove_files(managed, json.loads(managed['files']))
+
+    def cleanup(self):
+        # Expiry/auth/open share SQLite serialization. Existing FDs survive unlink.
+        now = time.time()
+        with self.transaction() as db:
+            db.execute("""UPDATE tasks SET state='expired',stage='expired',summary=NULL,
+                error_code=NULL,error_message=NULL,source='{}',ip_key=''
+                WHERE expires_at<=? AND state NOT IN ('queued','running','cancelling','finishing')""", (now,))
+            managed = [dict(row) for row in db.execute("""SELECT m.* FROM managed_attempts m
+                JOIN tasks t ON m.task=t.id WHERE t.state='expired' OR
+                (t.state IN ('failed','cancelled','interrupted') OR t.attempt<>m.attempt)""")]
+            # Diagnostic text has a global byte budget; result retention is independent.
+            records = list(db.execute("SELECT id,error_code,error_message FROM tasks WHERE error_code IS NOT NULL ORDER BY queued_at DESC"))
+            size = 0
+            for row in records:
+                size += len((row['error_code'] + (row['error_message'] or '')).encode('utf-8'))
+                if size > self.diagnostic_bytes:
+                    db.execute('UPDATE tasks SET error_code=NULL,error_message=NULL WHERE id=?', (row['id'],))
+        for item in managed:
+            self.remove_files(item, json.loads(item['files']))
 
     def claim(self):
         with self.transaction() as db:
@@ -161,6 +336,12 @@ class Jobs:
                 return None
             row = db.execute("SELECT * FROM tasks WHERE state='queued' ORDER BY queued_at,id LIMIT 1").fetchone()
             if row is None:
+                return None
+            try:
+                self.capacity(reserve=True)
+            except JobError as error:
+                db.execute("UPDATE tasks SET state='failed',stage='failed',error_code=?,error_message=?,expires_at=? WHERE id=?",
+                    (error.code, error.message, time.time() + self.diagnostic_seconds, row['id']))
                 return None
             attempt = secrets.token_urlsafe(24)
             db.execute("UPDATE tasks SET state='running',stage='starting',attempt=? WHERE id=?", (attempt, row['id']))
@@ -183,8 +364,8 @@ class Jobs:
 
     def settle(self, row, state, code=None, message=None):
         with self.transaction() as db:
-            db.execute("UPDATE tasks SET state=?,stage=?,error_code=?,error_message=? WHERE id=? AND attempt=? AND state IN ('running','cancelling','finishing')",
-                (state, state, code, message, row['id'], row['attempt']))
+            db.execute("UPDATE tasks SET state=?,stage=?,error_code=?,error_message=?,expires_at=COALESCE(expires_at,?) WHERE id=? AND attempt=? AND state IN ('running','cancelling','finishing')",
+                (state, state, code, message, time.time() + self.diagnostic_seconds, row['id'], row['attempt']))
 
     def finishing(self, row, summary):
         with self.transaction() as db:
@@ -204,8 +385,11 @@ class Jobs:
             if page is not None and not 1 <= page <= summary['page_count']:
                 raise JobError('not_found', '页面不存在。', 404)
             reference = summary['pdf'] if page is None else summary['pages'][page - 1]
+            if not isinstance(reference['path'], str) or '/' in reference['path'] or '\\' in reference['path'] or reference['path'] in ('.', '..'):
+                raise JobError('result_unavailable', '结果文件不可用，请重新提交。', 409)
             path = self.attempt_root(task, row['attempt']) / 'result'
             descriptor = None
+            stream = None
             try:
                 descriptor = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
                 for component in path.relative_to(self.root).parts:
@@ -215,10 +399,15 @@ class Jobs:
                 stream = os.open(reference['path'], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=descriptor)
                 metadata = os.fstat(stream)
                 if not stat.S_ISREG(metadata.st_mode) or metadata.st_size != reference['bytes']:
-                    os.close(stream)
                     raise OSError
+                with os.fdopen(os.dup(stream), 'rb') as verification:
+                    if file_digest(verification, 'sha256').hexdigest() != reference['sha256']:
+                        raise OSError
+                os.lseek(stream, 0, os.SEEK_SET)
                 return stream, metadata.st_size
             except OSError:
+                if stream is not None:
+                    os.close(stream)
                 raise JobError('result_unavailable', '结果文件不可用，请重新提交。', 409) from None
             finally:
                 if descriptor is not None:

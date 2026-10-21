@@ -78,7 +78,7 @@ def run_bounded(command, directory, seconds, memory, checkout=None):
     if checkout:
         root = Path(checkout).resolve()
         environment['PYTHONPATH'] = os.pathsep.join([str(root / 'src'),
-            str(root / 'skills/bilibili-drum-score-to-pdf/scripts')])
+            str(root / 'src')])
     started, peak, stopped = time.monotonic(), 0, None
     with (directory / 'program.log').open('wb') as log:
         process = subprocess.Popen(command, cwd=checkout, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
@@ -119,7 +119,7 @@ def run(args):
         version = subprocess.check_output(['git', '-C', args.checkout, 'rev-parse', 'HEAD'], text=True).strip()
         expected = (json.loads(Path(args.versions).read_text())['main']['commit']
                     if args.program == 'main' else args.version)
-        source_paths = ['skills/bilibili-drum-score-to-pdf/scripts', 'src', 'pyproject.toml']
+        source_paths = ['src', 'pyproject.toml']
         changed = subprocess.check_output(['git', '-C', args.checkout, 'status',
             '--porcelain', '--untracked-files=all', '--', *source_paths], text=True)
         if version != expected or changed:
