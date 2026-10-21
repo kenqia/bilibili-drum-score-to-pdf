@@ -47,7 +47,8 @@ class ScriptComparison(unittest.TestCase):
             result = subprocess.run([sys.executable,
                 str(Path(__file__).resolve().parents[1] / 'tools/compare_script_core.py'),
                 '--manifest', str(manifest), '--output', str(root / 'comparison'),
-                '--program', 'main', '--checkout', str(root)], capture_output=True, text=True)
+                '--program', 'main', '--checkout', str(root), '--versions', str(root / 'versions.json')],
+                capture_output=True, text=True)
             self.assertEqual(result.returncode, 2)
             self.assertIn('input_changed', result.stdout)
             self.assertFalse((root / 'comparison').exists())
