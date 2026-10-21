@@ -10,7 +10,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 
 from video_seek import ConversionError
-from .registration import profile_of, shift_candidates, pick, fine_shift
+from .registration import profile_of, shift_candidates, pick
 
 
 def detect_region(paths):
@@ -67,10 +67,12 @@ def register(paths, region):
         if previous is not None:
             height = len(gray)
             minimum = max(16, int(.25 * height))
-            # Most source frames are stationary. First check only the adjacent
-            # two-pixel neighborhood; broad search remains for actual motion.
-            delta, cost = fine_shift(previous, profile, -2, 2, minimum)
-            if cost > .005:
+            # Only identical observations can skip the forward search. A small
+            # near-zero cost can hide motion by a whole repeated system, whose
+            # measure numbers contribute very little to the global profile.
+            if np.array_equal(previous_pixels, pixels):
+                delta = 0
+            else:
                 candidates = shift_candidates(previous, profile, -2, height - minimum, minimum)
                 delta, cost = pick(candidates, .17, prefer=0, strict=False)
             if delta is None:

@@ -533,6 +533,148 @@ if __name__ == '__main__':
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    def test_script_entries_keep_complete_result_when_temporary_cleanup_fails(self):
+        from pathlib import Path
+        import tempfile
+        import shutil
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from score_fixtures import score_frame, video_from_image
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+        import drum_score
+        from drum_score.cli import main
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = video_from_image(score_frame(), root)
+            remove_tree = shutil.rmtree
+            def fail_after_removal(*args, **kwargs):
+                remove_tree(*args, **kwargs)
+                raise OSError('SYNTHETIC_PRIVATE_CLEANUP /private/synthetic')
+            for entry in SCRIPT_CONVERSION_ENTRIES:
+                with self.subTest(entry=entry), patch('shutil.rmtree', side_effect=fail_after_removal):
+                    output = root / entry
+                    if entry == 'script_core':
+                        result = drum_score.convert(source, output)
+                    else:
+                        stream = io.StringIO()
+                        with contextlib.redirect_stdout(stream):
+                            self.assertEqual(main([str(source), '--output', str(output)]), 0)
+                        result = json.loads(stream.getvalue())
+                    self.assertEqual(result['status'], 'complete')
+                    self.assertEqual(json.loads((output / 'manifest.json').read_text()), result)
+                    self.assertTrue((output / result['pdf']['path']).is_file())
+                    self.assertNotIn('SYNTHETIC_PRIVATE_CLEANUP', json.dumps(result))
+                    self.assertEqual(list(root.glob('.drum-score-*')), [])
+
+    def test_script_entries_normalize_temporary_allocation_errors(self):
+        from pathlib import Path
+        import tempfile
+        import contextlib
+        import io
+        from unittest.mock import patch
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+        import drum_score
+        from drum_score.cli import main
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'source.mp4'
+            source.write_bytes(b'synthetic source unchanged by allocation failure')
+            for entry in SCRIPT_CONVERSION_ENTRIES:
+                with self.subTest(entry=entry), patch('tempfile.mkdtemp',
+                        side_effect=OSError('SYNTHETIC_PRIVATE_ALLOCATION /private/synthetic')):
+                    output = root / entry
+                    if entry == 'script_core':
+                        with self.assertRaises(drum_score.ConversionError) as caught:
+                            drum_score.convert(source, output)
+                        code = caught.exception.code
+                        diagnostic = str(caught.exception)
+                    else:
+                        stream = io.StringIO()
+                        with contextlib.redirect_stdout(stream):
+                            self.assertEqual(main([str(source), '--output', str(output)]), 2)
+                        code = json.loads(stream.getvalue())['error']['code']
+                        diagnostic = stream.getvalue()
+                    self.assertEqual(code, 'conversion_failed')
+                    self.assertNotIn('SYNTHETIC_PRIVATE_ALLOCATION', diagnostic)
+                    self.assertNotIn('/private/synthetic', diagnostic)
+                    self.assertFalse(output.exists())
+                    self.assertEqual(list(root.glob('.drum-score-*')), [])
+
+    def test_script_entries_preserve_specific_error_when_temporary_cleanup_fails(self):
+        from pathlib import Path
+        import tempfile
+        import shutil
+        import contextlib
+        import io
+        from unittest.mock import patch
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+        import drum_score
+        from drum_score.cli import main
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'invalid-video.mp4'
+            source.write_bytes(b'synthetic invalid video')
+            remove_tree = shutil.rmtree
+            def fail_after_removal(*args, **kwargs):
+                remove_tree(*args, **kwargs)
+                raise OSError('SYNTHETIC_PRIVATE_CLEANUP /private/synthetic')
+            for entry in SCRIPT_CONVERSION_ENTRIES:
+                with self.subTest(entry=entry), patch('shutil.rmtree', side_effect=fail_after_removal):
+                    output = root / entry
+                    if entry == 'script_core':
+                        with self.assertRaises(drum_score.ConversionError) as caught:
+                            drum_score.convert(source, output)
+                        code = caught.exception.code
+                        diagnostic = str(caught.exception)
+                    else:
+                        stream = io.StringIO()
+                        with contextlib.redirect_stdout(stream):
+                            self.assertEqual(main([str(source), '--output', str(output)]), 2)
+                        result = json.loads(stream.getvalue())
+                        code = result['error']['code']
+                        diagnostic = stream.getvalue()
+                    self.assertEqual(code, 'invalid_input')
+                    self.assertNotIn('SYNTHETIC_PRIVATE_CLEANUP', diagnostic)
+                    self.assertNotIn(str(root), diagnostic)
+                    self.assertFalse(output.exists())
+                    self.assertEqual(list(root.glob('.drum-score-*')), [])
+
+    def test_script_entries_normalize_output_parent_filesystem_errors(self):
+        from pathlib import Path
+        import tempfile
+        import os
+        from score_fixtures import score_frame, video_from_image
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+        import drum_score
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = video_from_image(score_frame(), root, name='private-source')
+            before = source.read_bytes()
+            output = source / 'result'
+            for entry in SCRIPT_CONVERSION_ENTRIES:
+                with self.subTest(entry=entry):
+                    if entry == 'script_core':
+                        with self.assertRaises(drum_score.ConversionError) as caught:
+                            drum_score.convert(source, output)
+                        code = caught.exception.code
+                        diagnostic = str(caught.exception)
+                    else:
+                        process = subprocess.run([sys.executable, '-m', 'drum_score',
+                            str(source), '--output', str(output)], capture_output=True, text=True,
+                            env={**os.environ, 'PYTHONPATH': os.pathsep.join(sys.path)})
+                        self.assertEqual(process.returncode, 2, process.stderr)
+                        result = json.loads(process.stdout)
+                        self.assertEqual(result['status'], 'failed')
+                        code = result['error']['code']
+                        diagnostic = process.stdout + process.stderr
+                    self.assertEqual(code, 'conversion_failed')
+                    self.assertNotIn(str(root), diagnostic)
+                    self.assertNotIn('private-source', diagnostic)
+                    self.assertNotIn('Traceback', diagnostic)
+                    self.assertEqual(source.read_bytes(), before)
+                    self.assertEqual(list(root.glob('.drum-score-*')), [])
+
     def test_script_entries_apply_input_resource_limit_before_decoding(self):
         from pathlib import Path
         import tempfile

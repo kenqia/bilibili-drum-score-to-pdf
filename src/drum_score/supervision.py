@@ -98,6 +98,19 @@ def _stop(process, tracked):
 
 
 def run(source, output, *, progress=None, limits=None, cancel=None):
+    # Directory setup and context-manager cleanup are filesystem operations too.
+    # Keep them inside the same public error boundary as the worker lifecycle.
+    try:
+        return _run(source, output, progress=progress, limits=limits, cancel=cancel)
+    except KeyboardInterrupt:
+        raise ConversionError('cancelled', '转换已取消，未发布结果。') from None
+    except ConversionError:
+        raise
+    except Exception:
+        raise ConversionError('conversion_failed', '转换进程异常退出，未发布结果。') from None
+
+
+def _run(source, output, *, progress=None, limits=None, cancel=None):
     started = time.monotonic()
     budget = ResourceBudget(limits, cancel)
     output = Path(output).absolute()
@@ -109,7 +122,10 @@ def run(source, output, *, progress=None, limits=None, cancel=None):
     peak_rss = peak_disk = 0
     tracked = {}
     result = None
-    with tempfile.TemporaryDirectory(prefix='.drum-score-job-', dir=output.parent) as temporary:
+    temporary_directory = tempfile.TemporaryDirectory(prefix='.drum-score-job-', dir=output.parent)
+    published = False
+    try:
+        temporary = temporary_directory.name
         root = Path(temporary)
         budget.root = root
         parent, child = context.Pipe(duplex=False)
@@ -175,6 +191,7 @@ def run(source, output, *, progress=None, limits=None, cancel=None):
             (root / 'complete' / 'manifest.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
             budget.check(force_disk=True)
             _publish(root / 'complete', output)
+            published = True
         except KeyboardInterrupt:
             raise ConversionError('cancelled', '转换已取消，未发布结果。') from None
         except ConversionError:
@@ -200,6 +217,15 @@ def run(source, output, *, progress=None, limits=None, cancel=None):
                 except subprocess.TimeoutExpired:
                     guardian.kill()
                     guardian.wait()
+    finally:
+        handling_error = sys.exc_info()[0] is not None
+        try:
+            temporary_directory.cleanup()
+        except Exception:
+            # Keep an existing specific error, or the committed complete result.
+            # Cleanup must never expose filesystem paths through the boundary.
+            if not handling_error and not published:
+                raise
     if progress:
         try:
             progress('complete')
