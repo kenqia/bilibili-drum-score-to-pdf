@@ -7,6 +7,7 @@ import tempfile
 import ctypes
 import sys
 import time
+from importlib.metadata import PackageNotFoundError, version
 
 import video_seek
 import public_video
@@ -23,6 +24,23 @@ def digest(path):
 def artifact(root, path):
     path = Path(path)
     return {'path': path.relative_to(root).as_posix(), 'sha256': digest(path), 'bytes': path.stat().st_size}
+
+
+def _program_identity():
+    package = Path(__file__).resolve().parent
+    source_hash = hashlib.sha256()
+    for path in sorted(package.glob('*.py')):
+        source_hash.update(path.name.encode('utf-8'))
+        source_hash.update(b'\0')
+        with path.open('rb') as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                source_hash.update(chunk)
+    try:
+        package_version = version('bilibili-drum-score-to-pdf')
+    except PackageNotFoundError:
+        package_version = 'unknown'
+    return {'name': 'bilibili-drum-score-to-pdf', 'version': package_version,
+            'source_sha256': source_hash.hexdigest()}
 
 
 def convert(source, output, *, progress=None):
@@ -68,12 +86,18 @@ def convert(source, output, *, progress=None):
             if digest(local) != source_hash:
                 raise ConversionError('source_changed', '处理期间来源发生变化，未发布结果。')
             result.update(schema_version=1, status='complete', reliable=False,
+                          program=_program_identity(),
                           source={**origin, 'sha256': source_hash, 'bytes': local.stat().st_size,
                                   'metadata': metadata, 'retained': not remote},
                           elapsed_seconds=time.monotonic() - started)
             (result_dir / 'manifest.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
             _publish(result_dir, output)
-        emit('complete')
+        try:
+            emit('complete')
+        except Exception:
+            # Publication is the commit point. Notification failure cannot
+            # turn a committed result into a reported conversion failure.
+            pass
         return result
     except ConversionError:
         raise

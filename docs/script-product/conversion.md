@@ -32,11 +32,11 @@ except ConversionError as error:
     print(error.code, str(error))
 ```
 
-`progress` 接收正在执行的阶段名，包括 `downloading`、`probing`、`sampling`、`registering`、`composing`、`paginating` 和 `complete`。本地输入跳过下载。没有可靠百分比和预计时间。
+`progress` 接收正在执行的阶段名，包括 `downloading`、`probing`、`sampling`、`registering`、`composing`、`paginating` 和 `complete`。本地输入跳过下载。没有可靠百分比和预计时间。转换阶段的回调异常会使转换失败；`complete` 在结果发布后通知，通知异常不会撤回已发布结果。
 
 结果使用 JSON 可序列化字典，`status=complete`、`reliable=false`。`pdf`、有序 `pages`、`longshot` 包含输出目录相对路径、SHA-256 与字节数；`source` 区分本地来源和公开 BV/分 P；`samples` 记录实际解码 PTS、time_base、时间与原生帧 hash。派生长图不称为原生截图。来源文件移除后不得宣称仍可重建原始帧。
 
-`manifest.json` 与 Python 返回值及 CLI 成功标准输出相同。CLI 失败退出码为 2，JSON 包含 `status=failed` 和 `error.code/message`。错误不返回第三方原始异常、签名媒体地址或本地私有路径。
+`manifest.json` 与 Python 返回值及 CLI 成功标准输出相同。`program` 记录发行版本与转换包源码文件的 SHA-256，未安装包的源码运行以 `unknown` 表示未知发行版本。CLI 失败退出码为 2，JSON 包含 `status=failed` 和 `error.code/message`。错误不返回第三方原始异常、签名媒体地址或本地私有路径。
 
 ## 支持边界与验收
 

@@ -7,12 +7,42 @@ import json
 import os
 from PIL import Image, ImageDraw, ImageChops
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 import drum_score
 
 
 class ScriptConversion(unittest.TestCase):
+    def test_final_progress_failure_does_not_report_failure_after_publish(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'source.mp4'
+            source.write_bytes(b'fixed source')
+            metadata = {'duration': 1, 'width': 640, 'height': 480}
+
+            def fake_process(_source, output, _metadata, _emit):
+                pdf = output / 'score.pdf'
+                pdf.write_bytes(b'%PDF-test')
+                page = output / 'page-1.png'
+                page.write_bytes(b'preview')
+                return {'pdf': drum_score.core.artifact(output, pdf),
+                        'pages': [drum_score.core.artifact(output, page)]}
+
+            def progress(stage):
+                if stage == 'complete':
+                    raise RuntimeError('notification failed')
+
+            with mock.patch('drum_score.core.video_seek.probe_video', return_value=metadata), \
+                    mock.patch('drum_score.core._process', side_effect=fake_process):
+                result = drum_score.convert(source, root / 'result', progress=progress)
+
+            self.assertEqual(result['status'], 'complete')
+            self.assertEqual(result['program']['name'], 'bilibili-drum-score-to-pdf')
+            self.assertEqual(len(result['program']['source_sha256']), 64)
+            self.assertTrue((root / 'result' / 'score.pdf').is_file())
+            self.assertEqual(json.loads((root / 'result' / 'manifest.json').read_text()), result)
+
     def test_invalid_input_never_publishes_or_overwrites(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
