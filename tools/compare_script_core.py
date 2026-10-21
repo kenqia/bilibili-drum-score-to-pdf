@@ -109,7 +109,9 @@ def run(args):
     if args.program == 'main':
         version = subprocess.check_output(['git', '-C', args.checkout, 'rev-parse', 'HEAD'], text=True).strip()
         versions = json.loads(Path(args.versions).read_text())
-        if version != versions['main']['commit']:
+        changed = subprocess.run(['git', '-C', args.checkout, 'diff', '--quiet', 'HEAD', '--',
+                                  'skills/bilibili-drum-score-to-pdf/scripts']).returncode
+        if version != versions['main']['commit'] or changed:
             print(json.dumps({'error': 'main_version_changed'}))
             return 2
     else:
@@ -181,6 +183,10 @@ def main():
     args = parser.parse_args()
     if args.seconds <= 0 or args.memory_mib <= 0:
         parser.error('limits must be positive')
+    if args.program == 'main' and (not args.checkout or not args.versions):
+        parser.error('main requires --checkout and --versions')
+    if args.program == 'attachment' and (not args.attachment or not args.attachment_sha256):
+        parser.error('attachment requires its path and SHA-256')
     try:
         return run(args)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
