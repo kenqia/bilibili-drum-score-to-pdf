@@ -51,10 +51,16 @@ def _profile(image):
     return gray, profile_of(gray, np.zeros(gray.shape, dtype=bool))
 
 
-def register(paths, region):
+def register(paths, region, *, observations=None):
     placements = []
     previous, previous_pixels, position = None, None, 0
+    motion_since_previous = 0.0
+    skipped_since_previous = 0
     for index, path in enumerate(paths):
+        if observations is not None:
+            motion_since_previous = max(motion_since_previous,
+                observations[index].get('native_motion_max_luma_difference', 0.0))
+            skipped_since_previous += observations[index].get('native_intermediate_frames', 0)
         with Image.open(path) as original:
             cropped = original.convert('RGB').crop(region)
             pixels = np.asarray(cropped)
@@ -74,10 +80,18 @@ def register(paths, region):
                 delta = 0
             else:
                 candidates = shift_candidates(previous, profile, -2, height - minimum, minimum)
-                delta, cost = pick(candidates, .17, prefer=0, strict=False)
+                delta, cost = pick(candidates, .17, prefer=0, strict=False,
+                                   reject_ambiguity=motion_since_previous > 1.0 and skipped_since_previous > 0)
             if delta is None:
-                raise ConversionError('discontinuity', '无法可靠接续相邻画面，可能存在缺段、翻页或不支持的布局。')
+                raise ConversionError('discontinuity', '无法可靠确认相邻采样的位移，未发布可能缺段的曲谱。')
             delta = max(0, int(round(delta)))
+            if (observations is not None and delta <= 2
+                    and motion_since_previous > 1.0):
+                # A <=128px native thumbnail changed by more than one 8-bit
+                # luma level on average, yet sparse registration claims no
+                # motion. Do not let prefer=0 collapse a repeated position.
+                # Small lossy-codec fluctuations alone are not motion evidence.
+                raise ConversionError('discontinuity', '采样间存在显著画面变化，无法可靠确认位移；未发布可能缺段的曲谱。')
             # A similar profile is insufficient when notation in the overlap
             # differs. This prevents hiding a known failed continuation.
             old = previous_pixels[delta:]
@@ -91,6 +105,8 @@ def register(paths, region):
             position += delta
         placements.append({'sample': index, 'offset': position})
         previous, previous_pixels = profile, pixels
+        motion_since_previous = 0.0
+        skipped_since_previous = 0
     if not placements:
         raise ConversionError('unsupported_layout', '视频中未找到可用的白底五线谱。')
     return placements

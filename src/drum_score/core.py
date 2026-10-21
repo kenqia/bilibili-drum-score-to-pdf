@@ -205,6 +205,9 @@ def _process(source, output, metadata, emit, budget):
         try:
             if tail_record['timestamp'] > records[-1]['timestamp']:
                 consume(len(paths), tail_image)
+                tail_record['native_motion_max_luma_difference'] = records[-1].get(
+                    'native_trailing_motion_max_luma_difference', 0.0)
+                tail_record['native_intermediate_frames'] = max(0, records[-1].get('native_trailing_frames', 0) - 1)
                 records.append(tail_record)
         finally:
             tail_image.close()
@@ -214,7 +217,7 @@ def _process(source, output, metadata, emit, budget):
                for reference, record in zip(references, records)]
     emit('registering')
     region = imaging.detect_region(paths[::max(1, len(paths) // 60)])
-    placements = imaging.register(paths, region)
+    placements = imaging.register(paths, region, observations=records)
     emit('composing')
     longshot = output / 'longshot.png'
     imaging.compose(paths, region, placements, longshot)
