@@ -1,6 +1,6 @@
 # 独立转换核心与 CLI
 
-本页说明 Issue #70 的程序入口。旧 Skill 在本票继续保留。新程序通过图像处理整理视频，不调用模型，也不创建 Agent 审阅回执。自动完成不表示音乐已校对。
+本页说明当前 Python 与 CLI 入口。旧 Skill 分发及审批协议已退役。新程序通过图像处理整理视频，不调用模型，也不创建 Agent 审阅回执。自动完成不表示音乐已校对。
 
 Issue #71 的本地资源模拟为每次转换建立独立 worker 和任务临时目录。父进程监督整个任务，PDF、预览和清单全部准备好后由父进程排他发布。Linux 守护进程在调用方异常退出后清理本次任务；它只删除启动时记录 inode 身份的目录。Windows 尚无本轮异常退出清理验收。
 
@@ -38,7 +38,7 @@ except ConversionError as error:
 
 结果使用 JSON 可序列化字典，`status=complete`、`reliable=false`。`pdf`、有序 `pages`、`longshot` 包含输出目录相对路径、SHA-256 与字节数；`source` 区分本地来源和公开 BV/分 P；`samples` 记录实际解码 PTS、time_base、时间与原生帧 hash。派生长图不称为原生截图。来源文件移除后不得宣称仍可重建原始帧。 原生帧按解码器实际输出顺序观察，末尾延迟帧的PTS可能小于前一帧；程序保留这些实际值，不按PTS重排或重新赋时。诊断完整性检查使用原生序号及每帧统计、采样PTS的配对，不要求所有原生PTS单调。
 
-`manifest.json` 与 Python 返回值及 CLI 成功标准输出相同。`program` 记录发行版本与转换包源码文件的 SHA-256，未安装包的源码运行以 `unknown` 表示未知发行版本。CLI 失败退出码为 2，JSON 包含 `status=failed` 和 `error.code/message`。错误不返回第三方原始异常、签名媒体地址或本地私有路径。
+`manifest.json` 与 Python 返回值及 CLI 成功标准输出相同。`program` 记录发行版本与包内直接子级 Python 源码文件的 SHA-256，不包含网站静态资源，不能当成整个发行产物的 hash，未安装包的源码运行以 `unknown` 表示未知发行版本。CLI 失败退出码为 2，JSON 包含 `status=failed` 和 `error.code/message`。错误不返回第三方原始异常、签名媒体地址或本地私有路径。
 
 输出父目录创建或临时目录分配失败时，Python 抛出 `ConversionError`，CLI 返回 `conversion_failed` JSON 和退出码 2。临时目录清理失败不会覆盖已有具体错误码，也不会撤回已完整发布的成功结果。
 

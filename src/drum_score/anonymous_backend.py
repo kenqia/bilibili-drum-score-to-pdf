@@ -5,8 +5,8 @@ import gzip
 import math
 import subprocess
 from urllib.error import HTTPError
-from public_video import InputError, MAX_BYTES, checked_media_url
-from anonymous_network import PublicTransport
+from .public_video import InputError, MAX_BYTES, checked_media_url
+from .anonymous_network import PublicTransport
 
 
 class BoundedBody(io.IOBase):

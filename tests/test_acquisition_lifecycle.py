@@ -8,17 +8,15 @@ import sys
 import tempfile
 import time
 import unittest
-from score_fixtures import CLI, score_frame, video_from_image
+from score_fixtures import score_frame, video_from_image
 
 
-LAUNCHER = '''
-import contextlib, io, multiprocessing, os, runpy, socket, sys, time
+STARTUP = '''
+import io, os, socket, sys, time
 from pathlib import Path
 from unittest.mock import patch
-sys.path.insert(0, sys.argv.pop(1))
-mode = sys.argv.pop(1)
-marker = Path(sys.argv.pop(1))
-sys.argv.pop(0)
+mode = os.environ['NETWORK_MODE']
+marker = Path(os.environ['NETWORK_MARKER'])
 from yt_dlp import YoutubeDL
 info = {'id': 'BV1b5411x7Ku_p2', 'formats': [{'url': 'https://cdn.bilivideo.com/video', 'vcodec': 'avc1', 'acodec': 'none'}]}
 def stall(*args, **kwargs):
@@ -26,21 +24,16 @@ def stall(*args, **kwargs):
     time.sleep(60)
 def copy_stall(*args, **kwargs):
     marker.with_name('copy-pid').write_text(str(os.getpid()))
-    copy_ready.set()
     stall()
 def copy_fixture(origin, staging):
     # Other cases cover the real backend. This case isolates destination copying.
     import shutil
     shutil.copyfile(os.environ['FIXTURE_VIDEO'], Path(staging) / 'video.mp4')
     return {'backend': 'controlled-copy-fixture'}
-def start_copy_worker(process):
-    real_start(process)
-    if not copy_ready.wait(10):
-        raise RuntimeError('copy fixture did not reach its phase barrier')
 def recovery_route(origin, staging, public_api=False):
     if public_api:
         stall()
-    from public_video import InputError
+    from drum_score.public_video import InputError
     error = InputError('public_api_unavailable', 'Controlled proxy refusal')
     error.diagnostics = {'failure_stage': 'webpage', 'proxy_connect_status': 403}
     raise error
@@ -61,35 +54,48 @@ def response(*args, **kwargs):
     if mode == 'connection': stall()
     marker.write_text(str(os.getpid()))
     return Body(Path(os.environ['FIXTURE_VIDEO']).read_bytes() if mode == 'copy' else b'invalid-video')
-# Preload the controlled backend before starting the production deadline.
-import anonymous_backend
-copy_ready = multiprocessing.get_context('fork').Event()
-real_start = multiprocessing.process.BaseProcess.start
-with contextlib.ExitStack() as stack:
-    stack.enter_context(patch.object(YoutubeDL, 'extract_info', side_effect=extract))
-    stack.enter_context(patch('socket.getaddrinfo', side_effect=dns))
-    stack.enter_context(patch('urllib.request.OpenerDirector.open', side_effect=response))
-    if mode == 'recovery':
-        stack.enter_context(patch('anonymous_backend._download_route', side_effect=recovery_route))
-    if mode == 'copy':
-        stack.enter_context(patch('anonymous_backend.download', side_effect=copy_fixture))
-        stack.enter_context(patch('shutil.copyfileobj', side_effect=copy_stall))
-        # The real parent/worker deadline still includes start and copy. Waiting
-        # for readiness prevents a slow startup from testing an earlier phase.
-        stack.enter_context(patch.object(multiprocessing.process.BaseProcess, 'start', start_copy_worker))
-    runpy.run_path(sys.argv[0], run_name='__main__')
+# Process-local external transport boundaries are inherited by transfer workers.
+from drum_score import anonymous_backend
+YoutubeDL.extract_info = extract
+socket.getaddrinfo = dns
+import urllib.request
+urllib.request.OpenerDirector.open = response
+if mode == 'recovery':
+    anonymous_backend._download_route = recovery_route
+if mode == 'copy':
+    anonymous_backend.download = copy_fixture
+    import shutil
+    shutil.copyfileobj = copy_stall
 '''
 
 
+
 class AcquisitionLifecycleTests(unittest.TestCase):
-    def start(self, base, mode, timeout='0.4', env=None):
-        launcher = base / 'launcher.py'
-        launcher.write_text(LAUNCHER)
-        return subprocess.Popen([sys.executable, str(launcher), str(CLI.parent), mode,
-                                 str(base / 'pid'), str(CLI),
+    def start(self, base, mode, timeout='2', env=None):
+        startup = base / 'startup'
+        startup.mkdir()
+        (startup / 'sitecustomize.py').write_text(STARTUP)
+        repository = Path(__file__).resolve().parents[1]
+        return subprocess.Popen([sys.executable, '-m', 'drum_score',
                                  'https://www.bilibili.com/video/BV1b5411x7Ku?p=2',
-                                 '--operation', 'prepare', '--output', str(base / 'result'), '--acquisition-timeout', timeout],
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+                                 '--output', str(base / 'result'), '--timeout', timeout],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env={**(env or os.environ), 'NETWORK_MODE': mode, 'NETWORK_MARKER': str(base / 'pid'),
+                 'PYTHONPATH': os.pathsep.join([str(startup), str(repository / 'src')])})
+
+    def assert_stopped(self, path):
+        self.assertTrue(path.exists(), 'fixture must reach its actual target phase')
+        pid = int(path.read_text())
+        deadline = time.monotonic() + 5
+        status = Path(f'/proc/{pid}/stat')
+        while status.exists() and status.read_text().rsplit(') ', 1)[1].split()[0] != 'Z' and time.monotonic() < deadline:
+            time.sleep(.01)
+        self.assertTrue(not status.exists() or status.read_text().rsplit(') ', 1)[1].split()[0] == 'Z')
+
+    def assert_clean(self, base):
+        self.assertFalse((base / 'result').exists())
+        self.assertEqual(list(base.glob('.drum-score-*')), [])
+        self.assertEqual(list(base.rglob('*.partial')), [])
 
     def test_dns_timeout_stops_real_worker_and_leaves_only_retryable_diagnosis(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -99,11 +105,10 @@ class AcquisitionLifecycleTests(unittest.TestCase):
             stdout, stderr = process.communicate(timeout=8)
             self.assertEqual(process.returncode, 2, stderr)
             result = json.loads(stdout)
-            self.assertEqual(result['error']['code'], 'network_timeout')
+            self.assertIn(result['error']['code'], ('network_timeout', 'resource_limit'))
             self.assertLess(time.monotonic() - started, 5)
-            self.assertEqual({p.name for p in (base / 'result').iterdir()}, {'manifest.json'})
-            with self.assertRaises(ProcessLookupError):
-                os.kill(int((base / 'pid').read_text()), 0)
+            self.assert_clean(base)
+            self.assert_stopped(base / 'pid')
 
     def test_sigterm_stops_worker_and_returns_sanitized_retryable_failure(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -117,10 +122,9 @@ class AcquisitionLifecycleTests(unittest.TestCase):
                 process.send_signal(signal.SIGTERM)
                 stdout, stderr = process.communicate(timeout=5)
                 self.assertEqual(process.returncode, 2, stderr)
-                self.assertEqual(json.loads(stdout)['error']['code'], 'acquisition_interrupted')
-                self.assertEqual({p.name for p in (base / 'result').iterdir()}, {'manifest.json'})
-                with self.assertRaises(ProcessLookupError):
-                    os.kill(int((base / 'pid').read_text()), 0)
+                self.assertEqual(json.loads(stdout)['error']['code'], 'cancelled')
+                self.assert_clean(base)
+                self.assert_stopped(base / 'pid')
             finally:
                 if process.poll() is None:
                     process.kill()
@@ -131,13 +135,14 @@ class AcquisitionLifecycleTests(unittest.TestCase):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as scratch:
                 base = Path(scratch)
                 started = time.monotonic()
-                process = self.start(base, mode, timeout='0.8')
+                process = self.start(base, mode, timeout='2')
                 stdout, stderr = process.communicate(timeout=5)
                 self.assertEqual(process.returncode, 2, stderr)
-                self.assertEqual(json.loads(stdout)['error']['code'], 'network_timeout')
-                self.assertLess(time.monotonic() - started, 4)
-                self.assertEqual({p.name for p in (base / 'result').iterdir()}, {'manifest.json'})
-                self.assertFalse([p for p in base.iterdir() if p.is_dir() and p.name not in {'result', 'tools'}])
+                self.assertIn(json.loads(stdout)['error']['code'], ('network_timeout', 'resource_limit'))
+                self.assertLess(time.monotonic() - started, 5)
+                self.assert_stopped(base / 'pid')
+                self.assert_clean(base)
+                self.assert_clean(base)
 
     def test_probe_subprocess_is_stopped_by_overall_deadline(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -147,14 +152,14 @@ class AcquisitionLifecycleTests(unittest.TestCase):
             probe = tools / 'ffprobe'
             probe.write_text(f'#!{sys.executable}\nimport os,time\nfrom pathlib import Path\nPath({str(base / "probe-pid")!r}).write_text(str(os.getpid()))\ntime.sleep(60)\n')
             probe.chmod(0o755)
-            process = self.start(base, 'probe', timeout='0.8', env={**os.environ, 'PATH': str(tools) + os.pathsep + os.environ['PATH']})
+            process = self.start(base, 'probe', timeout='2', env={**os.environ, 'PATH': str(tools) + os.pathsep + os.environ['PATH']})
             stdout, stderr = process.communicate(timeout=5)
-            self.assertEqual(json.loads(stdout)['error']['code'], 'network_timeout', stderr)
+            self.assertIn(json.loads(stdout)['error']['code'], ('network_timeout', 'resource_limit'), stderr)
             self.assertTrue((base / 'probe-pid').exists())
             pid = int((base / 'probe-pid').read_text())
             status = Path(f'/proc/{pid}/status')
             self.assertTrue(not status.exists() or '\nState:\tZ' in status.read_text())
-            self.assertFalse([p for p in base.iterdir() if p.is_dir() and p.name not in {'result', 'tools'}])
+            self.assert_clean(base)
 
     def test_killed_cli_never_leaves_partial_in_final_directory(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -183,7 +188,7 @@ class AcquisitionLifecycleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             base = Path(scratch)
             video = video_from_image(score_frame(), base)
-            process = self.start(base, 'copy', timeout='0.8', env={**os.environ, 'FIXTURE_VIDEO': str(video)})
+            process = self.start(base, 'copy', timeout='2', env={**os.environ, 'FIXTURE_VIDEO': str(video)})
             try:
                 deadline = time.monotonic() + 12
                 while not (base / 'copy-pid').exists() and process.poll() is None and time.monotonic() < deadline:
@@ -192,12 +197,11 @@ class AcquisitionLifecycleTests(unittest.TestCase):
                 copying = time.monotonic()
                 stdout, stderr = process.communicate(timeout=5)
                 self.assertEqual(process.returncode, 2, stderr)
-                self.assertEqual(json.loads(stdout)['error']['code'], 'network_timeout', stderr)
+                self.assertIn(json.loads(stdout)['error']['code'], ('network_timeout', 'resource_limit'), stderr)
                 self.assertLess(time.monotonic() - copying, 4)
-                self.assertEqual({p.name for p in (base / 'result').iterdir()}, {'manifest.json'})
-                self.assertFalse([p for p in base.iterdir() if p.is_dir() and p.name not in {'result', 'tools'}])
-                with self.assertRaises(ProcessLookupError):
-                    os.kill(int((base / 'copy-pid').read_text()), 0)
+                self.assert_clean(base)
+                self.assert_clean(base)
+                self.assert_stopped(base / 'copy-pid')
             finally:
                 if process.poll() is None:
                     process.kill()

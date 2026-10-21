@@ -8,10 +8,8 @@ from unittest.mock import patch
 
 from PIL import Image
 
-SCRIPTS = Path(__file__).resolve().parents[1] / 'skills/bilibili-drum-score-to-pdf/scripts'
-sys.path.insert(0, str(SCRIPTS))
-import video_seek
-import host_check
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+from drum_score import video_seek
 
 
 class SeekCompatibility(unittest.TestCase):
@@ -53,37 +51,3 @@ class SeekCompatibility(unittest.TestCase):
                 for command in commands:
                     index = command.index(options[0])
                     self.assertEqual(tuple(command[index:index + 2]), options)
-
-
-
-
-class HostDiscovery(unittest.TestCase):
-    def test_unreadable_unrelated_skill_warns_and_valid_target_is_discovered(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            for name in ('bad', 'good'):
-                (root / name).mkdir()
-                (root / name / 'SKILL.md').write_text('name: bilibili-drum-score-to-pdf', encoding='utf-8')
-            (root / 'auth.json').write_text('synthetic-do-not-read', encoding='utf-8')
-            original = Path.read_text
-            def read(path, *args, **kwargs):
-                self.assertNotEqual(path.name, 'auth.json')
-                if path.parent.name == 'bad':
-                    raise PermissionError('synthetic private path must not be printed')
-                return original(path, *args, **kwargs)
-            with patch.object(Path, 'read_text', read):
-                result = host_check.check([root])
-            self.assertEqual(result['discovery'][0]['entries'], [str(root / 'good/SKILL.md')])
-            self.assertEqual(result['warnings'][0]['code'], 'skill_entry_unreadable')
-            self.assertEqual(result['decode_probe']['status'], 'not_run')
-            self.assertEqual(result['runtime_ready'], result['prerequisites_ready'])
-
-    def test_explicit_function_probe_uses_real_synthetic_pts(self):
-        result = host_check.decode_probe()
-        self.assertEqual(result['status'], 'passed', result)
-        self.assertEqual(result['pts'], 0)
-        self.assertGreater(result['time_base'][1], 0)
-
-
-if __name__ == '__main__':
-    unittest.main()

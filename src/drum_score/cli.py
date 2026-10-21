@@ -1,11 +1,11 @@
 """Thin JSON command line adapter."""
-import argparse
+from .arguments import PublicParser
 import json
 from .core import ConversionError, convert
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description='把固定比例白底纵向滚动鼓谱视频整理为 A4 PDF。')
+    parser = PublicParser(prog='drum-score', description='把固定比例白底纵向滚动鼓谱视频整理为 A4 PDF。')
     parser.add_argument('source', help='本地视频或公开 HTTPS B站 BV 链接')
     parser.add_argument('--output', required=True, help='必须不存在的新结果目录')
     parser.add_argument('--timeout', type=float, default=600, help='包含获取与发布的总秒数，默认600')

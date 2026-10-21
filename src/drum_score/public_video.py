@@ -1,7 +1,6 @@
 """Anonymous public Bilibili input. Signed media addresses remain in memory."""
 from pathlib import Path
 import re
-import json
 import multiprocessing
 import os
 import shutil
@@ -74,7 +73,7 @@ def _worker(url, staging, publication, connection, parent_pid, max_bytes=MAX_BYT
     sys.stdout = open(os.devnull, 'w')
     sys.stderr = open(os.devnull, 'w')
     try:
-        import anonymous_backend
+        from . import anonymous_backend
         # A caller may tighten the backend's existing ceiling, never relax it.
         anonymous_backend.MAX_BYTES = min(anonymous_backend.MAX_BYTES, max_bytes)
         download = anonymous_backend.download
@@ -105,9 +104,11 @@ def acquire(url, output, timeout=ACQUISITION_SECONDS, *, max_bytes=MAX_BYTES):
     if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or not 1 <= max_bytes <= MAX_BYTES:
         raise InputError('invalid_request', '下载大小限制无效。', origin)
     output = Path(output)
+    if output.is_symlink() or (output.exists() and (not output.is_dir() or any(output.iterdir()))):
+        raise InputError('existing_output', '获取目录必须为空的新受管目录。', origin)
     output.parent.mkdir(parents=True, exist_ok=True)
     deadline = time.monotonic() + timeout
-    # Linux uses fork so controlled third-party backends remain usable in CLI tests.
+    # Linux transfer workers inherit the anonymous transport and enclosing task lease.
     context = multiprocessing.get_context('fork' if 'fork' in multiprocessing.get_all_start_methods() else 'spawn')
     with tempfile.TemporaryDirectory(prefix='anonymous-video-') as staging, tempfile.TemporaryDirectory(prefix='.anonymous-publish-', dir=output.parent) as publication:
         parent, child = context.Pipe(duplex=False)
@@ -115,8 +116,12 @@ def acquire(url, output, timeout=ACQUISITION_SECONDS, *, max_bytes=MAX_BYTES):
         previous_term = None
         if threading.current_thread() is threading.main_thread():
             previous_term = signal.signal(signal.SIGTERM, lambda *args: (_ for _ in ()).throw(KeyboardInterrupt()))
+        root_identity = None
         try:
             process.start()
+            if Path('/proc').is_dir():
+                from .supervision import _identity
+                root_identity = _identity(process.pid)
             child.close()
             if not parent.poll(max(0, deadline - time.monotonic())):
                 raise InputError('network_timeout', '匿名获取超过处理时限。请提供清晰的本地视频。', origin)
@@ -152,7 +157,7 @@ def acquire(url, output, timeout=ACQUISITION_SECONDS, *, max_bytes=MAX_BYTES):
             parent.close()
             child.close()
             if process.is_alive():
-                if hasattr(os, 'killpg'):
+                if hasattr(os, 'killpg') and (root_identity is None or _identity(process.pid) == root_identity):
                     try:
                         os.killpg(process.pid, signal.SIGTERM)
                     except ProcessLookupError:
@@ -162,34 +167,16 @@ def acquire(url, output, timeout=ACQUISITION_SECONDS, *, max_bytes=MAX_BYTES):
             if process.pid is not None:
                 process.join(timeout=.2)
             if process.is_alive():
-                if hasattr(os, 'killpg'):
+                if hasattr(os, 'killpg') and (root_identity is None or _identity(process.pid) == root_identity):
                     os.killpg(process.pid, signal.SIGKILL)
                 else:
                     process.kill()
                 process.join(timeout=.2)
             # Descendants may survive even when the worker already exited.
-            if process.pid is not None and hasattr(os, 'killpg'):
+            if process.pid is not None and hasattr(os, 'killpg') and root_identity is not None and _identity(process.pid) == root_identity:
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
             if previous_term is not None:
                 signal.signal(signal.SIGTERM, previous_term)
-
-
-def retryable_acquisition(output):
-    """Only our acquisition-only diagnosis may be replaced by a fresh task."""
-    try:
-        if output.is_symlink() or {entry.name for entry in output.iterdir()} != {'manifest.json'}:
-            return False
-        manifest = output / 'manifest.json'
-        if manifest.is_symlink() or not manifest.is_file():
-            return False
-        result = json.loads(manifest.read_text(encoding='utf-8'))
-        return (result.get('schema_version') == 1 and result.get('phase') == 'acquisition'
-                and result.get('status') == 'failed' and result.get('complete') is False
-                and result.get('rows') == [] and result.get('issues') == []
-                and isinstance(result.get('error'), dict) and not result.get('source')
-                and not result.get('pdf') and not result.get('state'))
-    except (OSError, ValueError, AttributeError):
-        return False

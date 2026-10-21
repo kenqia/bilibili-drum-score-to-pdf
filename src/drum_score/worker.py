@@ -1,5 +1,5 @@
 """One durable conversion worker, independent of HTTP server lifetime."""
-import argparse
+from .arguments import PublicParser
 from contextlib import contextmanager
 import fcntl
 import hashlib
@@ -36,7 +36,29 @@ def validate_result(jobs, row):
                 raise ValueError('Changed artifact')
     return {'status': 'complete', 'reliable': False, 'warnings': result['warnings'], 'page_count': len(result['pages']),
         'pdf': result['pdf'], 'pages': result['pages'], 'source': result['source'],
-        'program': result['program'], 'resources': result['resources']}
+        'program': result['program'], 'resources': result['resources'],
+        'retention': result.get('retention')}
+
+
+def retain_delivery(jobs, row):
+    root = jobs.attempt_root(row['id'], row['attempt']) / 'result'
+    result = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
+    jobs.remember_result(row, result)
+    with jobs.transaction() as db:
+        managed = dict(db.execute('SELECT * FROM managed_attempts WHERE task=? AND attempt=?',
+            (row['id'], row['attempt'])).fetchone())
+    entries = json.loads(managed['files'])
+    intermediates = [entry for entry in entries if entry[0].startswith('result/samples/') or entry[0] == 'result/longshot.png']
+    jobs.remove_files(managed, intermediates)
+    for reference in [*result.get('samples', []), *([result['longshot']] if 'longshot' in result else [])]:
+        reference['original_path'] = reference.pop('path')
+        reference['retained'] = False
+    result['retention'] = {'profile': 'web_delivery', 'native_samples_retained': False,
+        'longshot_retained': False, 'can_reconstruct_from_retained_sources': False,
+        'note': '保留来源指纹、实际 PTS 与处理记录；原生帧和长图已清理，不能仅凭此目录重建。'}
+    (root / 'manifest.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+    jobs.remember_result(row, result)
+    return validate_result(jobs, row)
 
 
 @contextmanager
@@ -66,11 +88,24 @@ def recover(jobs):
                 continue
             except (OSError, ValueError, KeyError, TypeError):
                 pass
+        # A crash can fall between the core's atomic publication and inventory
+        # registration. Recover only the hashed complete artifact set inside an
+        # already registered attempt; never take ownership of unknown entries.
+        with jobs.transaction() as db:
+            managed = db.execute('SELECT files FROM managed_attempts WHERE task=? AND attempt=?',
+                (row['id'], row['attempt'])).fetchone()
+        if managed and json.loads(managed['files']) == []:
+            try:
+                validate_result(jobs, row)
+                manifest = jobs.attempt_root(row['id'], row['attempt']) / 'result' / 'manifest.json'
+                jobs.remember_result(row, json.loads(manifest.read_text(encoding='utf-8')))
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
         jobs.discard(row)
         jobs.settle(row, 'interrupted', 'interrupted', '处理进程已中断，可显式重试。')
 
 
-def run(jobs, *, once=False, poll_interval=.25):
+def run(jobs, *, once=False, poll_interval=.25, limits=None):
     from .supervision import guardian_lease
     stopping = False
     def stop(*args):
@@ -81,6 +116,7 @@ def run(jobs, *, once=False, poll_interval=.25):
         with worker_lock(jobs) as descriptor, guardian_lease(descriptor):
             recover(jobs)
             while not stopping:
+                jobs.cleanup()
                 row = jobs.claim()
                 if row is None:
                     if once:
@@ -88,12 +124,23 @@ def run(jobs, *, once=False, poll_interval=.25):
                     time.sleep(poll_interval)
                     continue
                 try:
-                    attempt = jobs.attempt_root(row['id'], row['attempt'])
-                    attempt.mkdir(mode=0o700, parents=True)
+                    attempt = jobs.register_attempt(row)
+                    next_capacity = 0
+                    def cancelled():
+                        nonlocal next_capacity
+                        if time.monotonic() >= next_capacity:
+                            next_capacity = time.monotonic() + .2
+                            try:
+                                jobs.capacity()
+                            except JobError as error:
+                                raise ConversionError(error.code, error.message) from None
+                        return stopping or jobs.cancelled(row)
                     convert(json.loads(row['source'])['url'], attempt / 'result',
                         progress=lambda stage: jobs.stage(row, stage) if stage != 'complete' else None,
-                        cancel=lambda: stopping or jobs.cancelled(row))
-                    summary = validate_result(jobs, row)
+                        cancel=cancelled, limits={**(limits or {}), 'temp_bytes': jobs.job_temp_bytes})
+                    validate_result(jobs, row)
+                    summary = retain_delivery(jobs, row)
+                    jobs.capacity()
                     if jobs.finishing(row, summary):
                         jobs.settle(row, 'complete')
                     else:
@@ -117,6 +164,7 @@ def run(jobs, *, once=False, poll_interval=.25):
                         raise JobError('publication_pending', '发布决定已保存，重启后恢复。') from None
                     jobs.discard(row)
                     jobs.settle(row, 'failed', 'conversion_failed', '转换失败，可检查来源后重试。')
+                jobs.cleanup()
                 if once:
                     return 0
     finally:
@@ -126,16 +174,19 @@ def run(jobs, *, once=False, poll_interval=.25):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description='串行处理匿名网站持久队列。')
+    parser = PublicParser(prog='drum-score-worker', description='串行处理匿名网站持久队列。')
     parser.add_argument('--data-root', required=True)
     parser.add_argument('--once', action='store_true', help='处理至多一个任务后退出')
     parser.add_argument('--poll-interval', type=float, default=.25)
+    from .service_limits import add_storage_arguments, storage_options, add_conversion_arguments, conversion_options
+    add_storage_arguments(parser)
+    add_conversion_arguments(parser)
     args = parser.parse_args(argv)
     if not .01 <= args.poll_interval <= 60:
         parser.error('poll-interval 必须在 0.01 至 60 秒之间')
     try:
-        return run(Jobs(args.data_root), once=args.once, poll_interval=args.poll_interval)
-    except (JobError, OSError, ValueError):
+        return run(Jobs(args.data_root, **storage_options(args)), once=args.once, poll_interval=args.poll_interval, limits=conversion_options(args))
+    except (JobError, OSError, ValueError, ConversionError):
         return 2
 
 

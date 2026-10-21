@@ -2,7 +2,7 @@
 
 网站接受公开 HTTPS B站 BV 链接，将任务交给独立 worker，完成后显示全部 A4 预览并提供 PDF 下载。无需账号或邀请码。网页不支持本地上传，不调用模型。`complete` 表示完整产物已发布，结果仍为 `reliable=false`，未经音乐校对。
 
-本页面向 Ubuntu/WSL 上的本地运行与集成验证。公开部署、服务器资源硬限制、容量准入和定时清理属于后续验收，本版本不声明已经上线。
+本页面向 Ubuntu/WSL 上的本地运行与集成验证。容量准入与到期物理清理已实现。公开部署与目标服务器资源硬限制仍需后续验收，本版本不声明已经上线。
 
 ## 安装并启动
 
@@ -60,7 +60,7 @@ worker 按入队时间和ID领取最早任务。它同时持有本机 `flock` �
 
 worker 收到 SIGTERM 会停止当前处理并退出；与HTTP取消同时发生时也不会继续领取下一个任务。SIGKILL 后，guardian 继承同一文件锁，只有真实进程树停止并完成清理后才释放。新 worker 取得锁后恢复遗留任务，旧 `running/cancelling` 转为 `interrupted`，不静默重跑。
 
-核心首先排他发布到私有 attempt 的 `result` 目录。worker 校验PDF、全部预览的字节数和SHA-256后，持久保存 `finishing`、摘要、原始完成时刻和到期时刻，再变为 `complete`。HTTP只发布 `complete`。这个数据库决定是取消与完成的顺序点，不再移动目录来制造第二个发布窗口。提交回执丢失时保留决定和文件；重启验证 `finishing` 的同一目录并恢复完成，不刷新保留期。缺失或损坏的决定不能发布为完整结果。
+核心首先排他发布到私有 attempt 的 `result` 目录。worker 校验PDF、全部预览的字节数和SHA-256、清理原生帧及长图并更新manifest后，持久保存 `finishing`、摘要、原始完成时刻和到期时刻，再变为 `complete`。HTTP只发布 `complete`。这个数据库决定是取消与完成的顺序点，不再移动目录来制造第二个发布窗口。提交回执丢失时保留决定和文件；重启验证 `finishing` 的同一目录并恢复完成，不刷新保留期。缺失或损坏的决定不能发布为完整结果。
 
 ## 期限与下载
 
@@ -70,7 +70,32 @@ worker 收到 SIGTERM 会停止当前处理并退出；与HTTP取消同时发生
 
 页面通过认证 fetch 加载全部预览，再建立 Blob URL。PDF同样通过认证fetch下载，页面限制为256 MiB。Blob会占用浏览器内存，手机上的大文件仍需实际验收。页面离开时撤销预览Blob，浏览器从后退缓存恢复时重新查询状态与加载页面。
 
-本版本先提供期限和FD协议，定时清理、全站容量预留、磁盘不足准入、慢下载占用控制属于 #73，不能据此将服务直接暴露到公网。当前私有结果仍包含核心留存的原生帧与长图；后续收口需保留必要脱敏来源记录并清理中间材料。
+worker 启动及每轮领取前清理到期文件，默认轮询间隔0.25秒。HTTP只验证期限和打开文件，不执行物理删除；worker 停止期间到期仍拒绝访问，恢复后继续清理。已授权打开的FD可读完，断连后关闭；逻辑字节扫描不计已unlink但仍打开的FD，磁盘空闲检查仍能观察其占用。应用和代理仍需控制连接资源，不能把FD协议当成目标主机慢连接验收。
+
+线上仅保留 PDF、全部预览与 manifest。获取视频和处理中间文件随任务结束清理；原生 samples 与 longshot 引用改为 `original_path`、`retained=false`，保留实际 PTS、hash和处理记录。`retention.can_reconstruct_from_retained_sources=false` 明确不能仅凭剩余文件重建。CLI 的实验留存不使用此线上策略。
+
+失败、取消及中断任务默认保留1小时，诊断仅含脱敏错误码和信息，文字全局上限8MiB。超过文字额度的旧诊断清空，任务仍可在期限内显式重试。到期清空来源、结果摘要及错误文字，保留任务身份用于410响应。未知文件和身份已替换的文件不会接管或删除，其占用仍计入任务目录额度。
+
+## 存储参数与 schema
+
+以下参数由 web 和 worker 共同使用。两个进程应显式使用相同参数；改变部署参数前停止服务并保存匹配的完整副本。
+
+| 参数 | 默认 | 实际含义 |
+| --- | --- | --- |
+| `--retention-seconds` | 86400 | 结果从持久完成时刻开始的保留期，重启不刷新。 |
+| `--diagnostic-seconds` | 3600 | 失败、取消、中断的保留期。 |
+| `--diagnostic-mib` | 8 | 全局错误文字额度。 |
+| `--min-free-mib` | 512 | 文件系统可用空间底线。 |
+| `--retained-mib` | 4096 | attempts目录全部普通文件的逻辑字节总额，含结果、运行暂存与未知文件。 |
+| `--max-temp-mib` | 1024 | 单次转换临时额度，同时是准入预留量。 |
+
+入队、重试及worker领取要求 `used + max_temp <= retained` 且空闲空间至少 `min_free + max_temp`。运行时约每200ms检查 `used <= retained` 和空闲底线，超额以 `storage_full` 明确失败并停止进程树，不删除未到期结果。若总额和预留都设1024MiB，第一份结果之后将拒收，直到结果到期；总额2048MiB允许约1024MiB留存结果和1024MiB执行预留。数值为逻辑字节，稀疏文件、数据库及已打开删除文件仍由空闲检查兜住，采样不等同硬配额。
+
+worker另接受 `--timeout`、`--max-input-mib`、`--max-rss-mib`，默认600秒、256MiB、1024MiB。`--max-temp-mib`也传入核心资源预算。当前默认值是本地候选，目标2GB主机需按现有服务余量实测及硬限额验收后使用。
+
+SQLite的 `PRAGMA user_version=1` 是当前服务schema。未版本化旧库和未知版本拒绝启动，不自动迁移任务。`managed_attempts` 保存受管根 device/inode及文件相对路径、device/inode/ctime。清理从数据根逐级打开 no-follow 目录FD并核对身份，只删除已登记文件；目录只在空时删除，符号链接和替换物保留。丢失或无法安全确认的材料宁可保留，随后计入容量并由运营者核查，不扫描其他服务目录。
+
+备份恢复须同时保存数据库、结果和准确发行版本。复制到新目录会改变inode/ctime，恢复工具只可为经清单/hash核验且自己新建的文件登记新身份，保留原始completed_at/expires_at。直接恢复旧身份会阻止清理，不能当成完整恢复。正式恢复工具与部署运行手册由后续交付提供。
 
 ## HTTP 接口
 
@@ -92,12 +117,10 @@ worker 收到 SIGTERM 会停止当前处理并退出；与HTTP取消同时发生
 在仓库根目录运行包含网站测试依赖的完整验证：
 
 ```sh
-uv run --isolated \
-  --with-requirements skills/bilibili-drum-score-to-pdf/scripts/requirements.txt \
-  --with-requirements tests/requirements-web.txt --with mido==1.3.3 \
-  python -m unittest discover -s tests -v
+python -m pip install '.[web]' -r tests/requirements-web.txt
+python -m unittest discover -s tests -v
 ```
 
-网站专项为 `test_web` 和 `test_web_worker`。HTTP、Python、CLI的共同远端转换约束在 `tests/test_public_contracts.py`。测试只使用合成视频、随机测试凭据和外部匿名网络替身，不访问真实认证。进程测试在Linux验证 SIGTERM、SIGKILL、冻结guardian、重启、完成/取消顺序和提交回执丢失。合成成功不代替真实谱面或浏览器实际验收。
+网站专项为 `test_web`、`test_web_worker` 和 `test_product_lifecycle`。HTTP、Python、CLI的共同远端转换约束在 `tests/test_public_contracts.py`。测试只使用合成视频、随机测试凭据和外部匿名网络替身，不访问真实认证。进程测试在Linux验证 SIGTERM、SIGKILL、冻结guardian、重启、完成/取消顺序和提交回执丢失。合成成功不代替真实谱面或浏览器实际验收。
 
 停止HTTP服务和worker后，可保留专用数据目录并切回独立旧checkout和虚拟环境。不要让旧版本打开未知数据库schema，不通过删除用户目录进行回滚。安装与页面资源变更仅在独立环境中生效，不改用户全局配置。

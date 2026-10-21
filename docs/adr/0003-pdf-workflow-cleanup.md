@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: superseded
 ---
 
 # PDF Skill 只保留 Agent 取谱路线
+
+当前产品入口与生命周期由 [ADR 0006](0006-script-product-lifecycle.md) 替代。以下保留历史决定。
 
 2026-10-20，用户确认删除 sparse/strict、将 MIDI 移出 PDF 包、保留生图优先及失败转矢量，并精简来源审阅。暂不另建 MIDI Skill。
 

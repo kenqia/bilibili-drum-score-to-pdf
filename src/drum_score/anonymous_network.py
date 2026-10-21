@@ -6,7 +6,7 @@ import socket
 import ssl
 from urllib.parse import urlsplit
 import urllib.request
-from public_video import InputError
+from .public_video import InputError
 
 
 def public_target(url):

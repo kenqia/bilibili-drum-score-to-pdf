@@ -10,11 +10,10 @@ import unittest
 from unittest.mock import patch
 
 from score_fixtures import score_frame, video_from_image
-from test_link_input import cli
+import test_link_input  # installs the source package path
 from test_public_contracts import ACQUISITION_ENTRIES, SCRIPT_CONVERSION_ENTRIES
 from yt_dlp.extractor.bilibili import BiliBiliIE
-import public_video
-import score_workflow
+from drum_score import public_video
 
 BV = 'BV1b5411x7Ku'
 URL = f'https://www.bilibili.com/video/{BV}?p=2'
@@ -22,7 +21,7 @@ MEDIA = 'https://cdn.bilivideo.com/video?sign=SYNTHETIC_SIGNED_SECRET'
 
 
 class APIAcquisitionTests(unittest.TestCase):
-    def run_case(self, base, video, *, entry='cli', refusal='proxy403', view=None,
+    def run_case(self, base, video, *, entry='acquire', refusal='proxy403', view=None,
                  play=None, private_media=False):
         events = base / 'events.jsonl'
         metadata = view if view is not None else {'bvid': BV, 'title': 'Fixture', 'pages': [
@@ -93,32 +92,23 @@ class APIAcquisitionTests(unittest.TestCase):
                 side_effect=lambda self, sock, **kw: sock, autospec=True), patch.object(
                     BiliBiliIE, '_wbi_key_cache', {}), patch(
                     'drum_score.supervision.run', side_effect=_convert), contextlib.redirect_stdout(stdout):
-            if entry == 'cli':
-                with patch('sys.argv', ['convert.py', URL, '--output', str(output)]):
-                    status = cli.main()
-                result = json.loads(stdout.getvalue())
-            else:
-                try:
-                    if entry in SCRIPT_CONVERSION_ENTRIES:
-                        import sys
-                        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
-                        import drum_score
-                        if entry == 'script_core':
-                            result = drum_score.convert(URL, output)
-                        else:
-                            from drum_score.cli import main
-                            status = main([URL, '--output', str(output)])
-                            result = json.loads(stdout.getvalue())
-                    elif entry == 'workflow':
-                        result = score_workflow.prepare(URL, output)
-                    else:
-                        source, origin = public_video.acquire(URL, output)
-                        result = {'origin': origin, 'source': {'path': str(source)}}
-                    if entry != 'script_cli':
+            try:
+                if entry in SCRIPT_CONVERSION_ENTRIES:
+                    import drum_score
+                    if entry == 'script_core':
+                        result = drum_score.convert(URL, output)
                         status = 0
-                except (public_video.InputError, __import__('video_seek').ConversionError) as error:
-                    status = 2
-                    result = {'error': {'code': error.code, **getattr(error, 'diagnostics', {})}}
+                    else:
+                        from drum_score.cli import main
+                        status = main([URL, '--output', str(output)])
+                        result = json.loads(stdout.getvalue())
+                else:
+                    source, origin = public_video.acquire(URL, output)
+                    result = {'origin': origin, 'source': {'path': str(source)}}
+                    status = 0
+            except (public_video.InputError, __import__('drum_score.video_seek', fromlist=['ConversionError']).ConversionError) as error:
+                status = 2
+                result = {'error': {'code': error.code, **getattr(error, 'diagnostics', {})}}
         logs = stdout.getvalue()
         for marker in ('SYNTHETIC_SIGNED_SECRET', 'SYNTHETIC_PROXY_SECRET'):
             self.assertNotIn(marker, logs)
@@ -224,7 +214,7 @@ class APIAcquisitionTests(unittest.TestCase):
             self.assertEqual(status, 2, result)
             self.assertEqual(result['error']['code'], 'incomplete_video')
             self.assertIn('media', events)
-            self.assertEqual({p.name for p in (base / 'result').iterdir()}, {'manifest.json'})
+            self.assertFalse((base / 'result').exists())
             self.assertEqual(result['error']['fallback_trigger']['proxy_connect_status'], 403)
 
     def test_script_conversion_entries_share_real_downloader_boundary(self):

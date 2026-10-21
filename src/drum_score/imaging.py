@@ -9,7 +9,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 
-from video_seek import ConversionError
+from .video_seek import ConversionError
 from .registration import profile_of, shift_candidates, pick
 
 
