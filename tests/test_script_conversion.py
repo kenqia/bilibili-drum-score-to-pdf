@@ -306,6 +306,36 @@ class ScriptConversion(unittest.TestCase):
                 self.assertEqual(actual.size, (640, 1420))
                 self.assertIsNone(ImageChops.difference(actual.convert('RGB'), sheet).getbbox())
 
+    def test_repeated_music_with_small_measure_numbers_retains_fast_scroll_positions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sheet = Image.new('RGB', (640, 1420), 'white')
+            draw = ImageDraw.Draw(sheet)
+            for row in range(7):
+                top = 140 + row * 180
+                for line in range(5):
+                    draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+                for x in (95, 195, 295, 395):
+                    draw.ellipse((x, top + 10, x + 10, top + 20), fill='black')
+                    draw.line((x + 10, top - 25, x + 10, top + 17), fill='black', width=2)
+                draw.text((30, top - 15), str(row + 1), fill='black')
+            # Each sampled half-second moves one system, with 340px of actual
+            # overlap. Tiny measure numbers distinguish otherwise repeated music.
+            for index, shift in enumerate(range(0, 901, 12)):
+                with sheet.crop((0, shift, 640, shift + 520)) as frame:
+                    frame.save(root / f'fast-repeat-{index:03d}.png')
+            source = root / 'fast-repeat.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '30',
+                            '-i', str(root / 'fast-repeat-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
+            result = drum_score.convert(source, root / 'result')
+            self.assertEqual(result['staff_count'], 7)
+            self.assertEqual([placement['offset'] for placement in result['placements']],
+                             [0, 180, 360, 540, 720, 900])
+            with Image.open(root / 'result' / result['longshot']['path']) as actual:
+                self.assertEqual(actual.size, sheet.size)
+                self.assertIsNone(ImageChops.difference(actual.convert('RGB'), sheet).getbbox())
+            self.assertEqual(result['page_regions'][-1][1], 1420)
+
     def test_no_safe_gap_preserves_tall_group_without_hard_cut(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
