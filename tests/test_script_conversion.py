@@ -368,6 +368,69 @@ class ScriptConversion(unittest.TestCase):
                 self.assertLessEqual(longshot.height, image.height)
             image.close()
 
+    def test_changing_background_keeps_unambiguous_stationary_score(self):
+        from score_fixtures import score_frame
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = score_frame()
+            image.save(root / 'still.png')
+            image.close()
+            source = root / 'animated-background.mp4'
+            subprocess.run(['ffmpeg', '-v', 'error', '-loop', '1', '-i', str(root / 'still.png'),
+                            '-t', '2', '-r', '30', '-vf',
+                            "drawbox=x=0:y=0:w=64:h=ih:color=white:t=fill:enable='mod(n,2)'",
+                            '-c:v', 'libx264', '-threads', '1', str(source)], check=True)
+            result = drum_score.convert(source, root / 'result')
+            self.assertEqual(result['staff_count'], 3)
+            self.assertTrue(all(placement['offset'] == 0 for placement in result['placements']))
+            self.assertGreater(max(sample['native_motion_max_luma_difference']
+                                   for sample in result['samples']), 1.0)
+
+    def test_native_tail_pts_regression_keeps_decoder_order_and_real_timestamps(self):
+        import struct
+        from score_fixtures import score_frame
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = score_frame()
+            image.save(root / 'still.png')
+            image.close()
+            source = root / 'tail-pts.mp4'
+            subprocess.run(['ffmpeg', '-v', 'error', '-loop', '1', '-i', str(root / 'still.png'),
+                            '-t', '2', '-r', '25', '-c:v', 'libx264', '-threads', '1',
+                            '-bf', '3', str(source)], check=True)
+            data = bytearray(source.read_bytes())
+            # Change only the synthetic MP4 presentation offset of its final
+            # delayed frame. The encoded pictures and decoding order stay real.
+            def composition_tables(begin, end):
+                while begin + 8 <= end:
+                    size, tag = struct.unpack_from('>I4s', data, begin)
+                    self.assertGreaterEqual(size, 8)
+                    if tag in (b'moov', b'trak', b'mdia', b'minf', b'stbl'):
+                        yield from composition_tables(begin + 8, begin + size)
+                    if tag == b'ctts':
+                        yield begin
+                    begin += size
+            tables = list(composition_tables(0, len(data)))
+            self.assertEqual(len(tables), 1)
+            table = tables[0]
+            count = struct.unpack_from('>I', data, table + 12)[0]
+            last_entry = table + 16 + (count - 1) * 8
+            run, offset = struct.unpack_from('>II', data, last_entry)
+            self.assertEqual(run, 1)
+            self.assertGreater(offset, 0)
+            struct.pack_into('>I', data, last_entry + 4, 0)
+            source.write_bytes(data)
+            probe = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                '-show_entries', 'frame=best_effort_timestamp', '-of', 'json', str(source)],
+                capture_output=True, check=True)
+            native = [frame['best_effort_timestamp'] for frame in json.loads(probe.stdout)['frames']]
+            self.assertLess(native[-1], native[-2])
+            result = drum_score.convert(source, root / 'result')
+            self.assertEqual(result['staff_count'], 3)
+            self.assertEqual(result['metrics']['native_motion_observations'], len(native))
+            self.assertEqual(result['samples'][-1]['pts'], native[-1])
+            self.assertEqual(source.read_bytes(), bytes(data))
+
     def test_repeated_music_with_small_measure_numbers_retains_fast_scroll_positions(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

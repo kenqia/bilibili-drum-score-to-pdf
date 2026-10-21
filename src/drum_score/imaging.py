@@ -76,22 +76,16 @@ def register(paths, region, *, observations=None):
             # Only identical observations can skip the forward search. A small
             # near-zero cost can hide motion by a whole repeated system, whose
             # measure numbers contribute very little to the global profile.
-            if np.array_equal(previous_pixels, pixels):
+            sparse_motion = (motion_since_previous > 1.0 and skipped_since_previous > 0)
+            if np.array_equal(previous_pixels, pixels) and not sparse_motion:
                 delta = 0
             else:
                 candidates = shift_candidates(previous, profile, -2, height - minimum, minimum)
                 delta, cost = pick(candidates, .17, prefer=0, strict=False,
-                                   reject_ambiguity=motion_since_previous > 1.0 and skipped_since_previous > 0)
+                                   reject_ambiguity=sparse_motion)
             if delta is None:
                 raise ConversionError('discontinuity', '无法可靠确认相邻采样的位移，未发布可能缺段的曲谱。')
             delta = max(0, int(round(delta)))
-            if (observations is not None and delta <= 2
-                    and motion_since_previous > 1.0):
-                # A <=128px native thumbnail changed by more than one 8-bit
-                # luma level on average, yet sparse registration claims no
-                # motion. Do not let prefer=0 collapse a repeated position.
-                # Small lossy-codec fluctuations alone are not motion evidence.
-                raise ConversionError('discontinuity', '采样间存在显著画面变化，无法可靠确认位移；未发布可能缺段的曲谱。')
             # A similar profile is insufficient when notation in the overlap
             # differs. This prevents hiding a known failed continuation.
             old = previous_pixels[delta:]
