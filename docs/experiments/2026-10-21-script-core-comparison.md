@@ -20,7 +20,7 @@
 
 ## 运行边界
 
-`tools/compare_script_core.py` 在运行前复核全部输入 hash、原附件 hash或程序完整提交。main 与优化版的运行源码目录必须没有修改或未跟踪文件，优化版子进程从指定 checkout 导入。每次建立新结果目录，串行执行任务。子进程组默认有600秒期限和2048 MiB采样RSS上限；结束时清理该进程组。数值库线程限为1。额外的全部PDF预览由 pdftoppm 生成。
+`tools/compare_script_core.py` 在运行前复核全部输入 hash、原附件 hash或程序完整提交。main 实际加载的 `skills/bilibili-drum-score-to-pdf/scripts`，以及优化版的 `src` 和 `pyproject.toml`，都必须没有修改或未跟踪文件，优化版子进程从指定 checkout 导入。每次建立新结果目录，串行执行任务。子进程组默认有600秒期限和2048 MiB采样RSS上限；结束时清理该进程组。数值库线程限为1。额外的全部PDF预览由 pdftoppm 生成。
 
 main 对照提取该提交的自动 `prepare`、`stitch` 与 `_continuous_pages` 算法，以原来的裁剪嵌图方式渲染PDF。它不经过旧产品的完整CLI交付，不创建虚构的长图或PDF批准，材料明确标记 `unreviewed_algorithm_extraction`。因此这里只比较其自动算法，不将它称为旧产品无人值守成功。
 

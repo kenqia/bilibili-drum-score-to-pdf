@@ -22,7 +22,7 @@ drum-score-maintenance verify --backup-root /srv/drum-backups/snapshot-new
 
 成功输出 `status=complete` 的 JSON，退出码为 0。失败输出脱敏错误，退出码为 2，不输出来源 URL、任务凭据、完整路径或原始异常。`files` 与 `bytes` 统计清单声明的数据库和结果文件，不含 `snapshot.json` 自身。
 
-备份使用 SQLite backup API 得到一致数据库，再复制 `complete` 和 `finishing` 对应的 PDF、全部预览和结果 manifest。工具核对受管目录与文件身份、结果摘要和实际 SHA-256。`queued` 和未决定完成的活动任务只保留数据库元数据，不复制视频、暂存或其他不完整产物。来源中的未知文件不进入备份，也不由备份操作删除。
+备份使用 SQLite backup API 得到一致数据库，再复制 `complete` 和 `finishing` 对应的 PDF、全部预览和结果 manifest。工具核对受管目录与文件身份、结果摘要和实际 SHA-256。预览沿用 manifest 的实际文件名和顺序，支持 pdftoppm 在 10 页以上使用的 `page-01.png` 等补零页名；页号必须从 1 连续递增，不重命名已发布文件。`queued` 和未决定完成的活动任务只保留数据库元数据，不复制视频、暂存或其他不完整产物。来源中的未知文件不进入备份，也不由备份操作删除。
 
 `snapshot.json` 记录格式版本、schema、备份时间、包版本、包源码内容指纹，以及逐文件的相对路径、字节数和 SHA-256。核验检查实际目录与声明完全一致、SQLite 完整性、已知 schema、任务字段及结果引用。额外文件、空目录、重复声明、路径逃逸、符号链接、硬链接和特殊文件均拒绝。不要向完整备份目录追加说明文件。
 

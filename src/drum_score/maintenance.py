@@ -360,10 +360,13 @@ def result_files(tree, db, budget, *, owned=False):
         )
         if json.loads(row["summary"]) != expected:
             raise MaintenanceError("invalid_snapshot")
-        names = [
-            "score.pdf",
-            *[f"page-{index}.png" for index in range(1, len(manifest["pages"]) + 1)],
-        ]
+        names = ["score.pdf"]
+        for index, reference in enumerate(manifest["pages"], 1):
+            name = reference["path"]
+            match = re.fullmatch(r"page-(0*[1-9][0-9]*)\.png", name)
+            if match is None or int(match[1]) != index:
+                raise MaintenanceError("invalid_snapshot")
+            names.append(name)
         for ref, name in zip(references, names):
             if (
                 ref["path"] != name
@@ -715,7 +718,7 @@ def verified_files(source, budget):
         name = entry["path"]
         parts(name)
         if name != "tasks.sqlite3" and not re.fullmatch(
-            r"attempts/[A-Za-z0-9_-]{20,64}/[A-Za-z0-9_-]{20,64}/result/(?:score\.pdf|manifest\.json|page-[1-9][0-9]*\.png)",
+            r"attempts/[A-Za-z0-9_-]{20,64}/[A-Za-z0-9_-]{20,64}/result/(?:score\.pdf|manifest\.json|page-0*[1-9][0-9]*\.png)",
             name,
         ):
             raise MaintenanceError("invalid_snapshot")

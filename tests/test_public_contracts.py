@@ -467,3 +467,83 @@ class MaintenancePublicContracts(unittest.TestCase):
                         if boundary == 'schema':
                             with sqlite3.connect(source / 'tasks.sqlite3') as db:
                                 db.execute('PRAGMA user_version=1')
+
+
+    def test_maintenance_entries_preserve_ten_page_names_and_refuse_invalid_sequences(self):
+        import hashlib
+        import os
+        import shutil
+        import sqlite3
+        import tempfile
+        from reportlab.pdfgen import canvas
+        from drum_score.core import artifact
+        from drum_score.jobs import Jobs
+        from drum_score.worker import validate_result
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            jobs = Jobs(root / 'service', min_free_bytes=1)
+            task = jobs.enqueue('https://www.bilibili.com/video/BV1rH4y1R7Rk', '192.0.2.1')
+            row = jobs.claim()
+            result = jobs.register_attempt(row) / 'result'
+            result.mkdir()
+            document = canvas.Canvas(str(result / 'score.pdf'), invariant=1)
+            for page in range(10):
+                document.drawString(10, 10, str(page + 1))
+                document.showPage()
+            document.save()
+            subprocess.run(['pdftoppm', '-png', '-scale-to', '16', str(result / 'score.pdf'), str(result / 'page')], check=True, capture_output=True, timeout=10)
+            pages = sorted(result.glob('page-*.png'))
+            self.assertEqual([p.name for p in pages], [f'page-{i:02d}.png' for i in range(1, 11)])
+            manifest = dict(status='complete', reliable=False, warnings=[], pdf=artifact(result, result / 'score.pdf'), pages=[artifact(result, p) for p in pages], source={}, program={}, resources={}, retention={'can_reconstruct_from_retained_sources': False})
+            (result / 'manifest.json').write_text(json.dumps(manifest))
+            jobs.remember_result(row, manifest)
+            jobs.finishing(row, validate_result(jobs, row))
+            jobs.settle(row, 'complete')
+            expected = jobs.view(task['id'], task['capability'])
+            env = {**os.environ, 'PYTHONPATH': os.pathsep.join(sys.path)}
+            def invoke(operation, source, output=None):
+                args = ['--data-root', str(source), '--services-stopped'] if operation == 'backup' else ['--backup-root', str(source)]
+                if output is not None:
+                    args += ['--output', str(output)]
+                return subprocess.run([sys.executable, '-m', 'drum_score.maintenance', operation, *args, '--min-free-mib', '1'], env=env, capture_output=True, text=True, timeout=10)
+            saved, restored = root / 'backup', root / 'restored'
+            for operation, source, output in [('backup', jobs.root, saved), ('verify', saved, None), ('restore', saved, restored)]:
+                response = invoke(operation, source, output)
+                self.assertEqual(response.returncode, 0, response.stdout)
+            recovered = Jobs(restored)
+            self.assertEqual(recovered.view(task['id'], task['capability']), expected)
+            self.assertEqual([ref['path'] for ref in expected['result']['pages']], [p.name for p in pages])
+            for index, ref in enumerate(manifest['pages'], 1):
+                fd, _ = recovered.open_artifact(task['id'], task['capability'], index)
+                with os.fdopen(fd, 'rb') as stream:
+                    self.assertEqual(hashlib.sha256(stream.read()).hexdigest(), ref['sha256'])
+            relative = result.relative_to(jobs.root)
+            for variant in ('duplicate', 'wrong-index', 'traversal', 'extra'):
+                with self.subTest(variant=variant):
+                    changed = root / variant
+                    shutil.copytree(saved, changed)
+                    changed_manifest = changed / relative / 'manifest.json'
+                    value = json.loads(changed_manifest.read_text())
+                    if variant == 'duplicate':
+                        value['pages'][1] = dict(value['pages'][0])
+                    elif variant == 'wrong-index':
+                        value['pages'][0], value['pages'][1] = value['pages'][1], value['pages'][0]
+                    elif variant == 'traversal':
+                        value['pages'][0]['path'] = '../page-01.png'
+                    else:
+                        (changed / relative / 'page-11.png').write_bytes(pages[0].read_bytes())
+                    changed_manifest.write_text(json.dumps(value))
+                    summary = {**expected['result'], 'pages': value['pages']}
+                    with sqlite3.connect(changed / 'tasks.sqlite3') as db:
+                        db.execute('UPDATE tasks SET summary=? WHERE id=?', (json.dumps(summary), task['id']))
+                    snapshot = json.loads((changed / 'snapshot.json').read_text())
+                    for entry in snapshot['files']:
+                        data = (changed / entry['path']).read_bytes()
+                        entry.update(bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+                    (changed / 'snapshot.json').write_text(json.dumps(snapshot))
+                    for operation in ('verify', 'restore'):
+                        output = root / (variant + '-restored') if operation == 'restore' else None
+                        response = invoke(operation, changed, output)
+                        self.assertEqual(response.returncode, 2, response.stdout)
+                        if output:
+                            self.assertFalse(output.exists())

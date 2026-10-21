@@ -26,7 +26,7 @@ Windows CI 运行原生工具检查、跨宿主解码、公开入口共同约束
 
 ## 核对行为与证据
 
-`tests/test_public_contracts.py` 是公开入口的共同约束矩阵。新增或改变 Python、CLI、HTTP 的公开能力时，把适用入口加入同一矩阵；HTTP 只接收公开链接，本地文件只适用于 Python 和 CLI。维护 backup/verify/restore 共同覆盖参数脱敏、来源路径拒绝、资源与 schema 拒绝及失败时源文件不变。转换共同约束覆盖来源与资源拒绝、输出不覆盖、完整预览、来源 hash、实际 PTS，以及 `reliable=false` 的完成结果。
+`tests/test_public_contracts.py` 是公开入口的共同约束矩阵。新增或改变 Python、CLI、HTTP 的公开能力时，把适用入口加入同一矩阵；HTTP 只接收公开链接，本地文件只适用于 Python 和 CLI。维护 backup/verify/restore 共同覆盖真实 pdftoppm 十页补零文件名与顺序、全页 hash 往返及重复/错序/穿越/额外页拒绝，也覆盖参数脱敏、来源路径拒绝、资源与 schema 拒绝及失败时源文件不变。转换共同约束覆盖来源与资源拒绝、输出不覆盖、完整预览、来源 hash、实际 PTS，以及 `reliable=false` 的完成结果。
 
 `tests/test_acquisition_lifecycle.py` 和 `tests/test_web_worker.py` 使用真实独立进程与 OS 信号。离线网络只替换外部传输边界；阶段 marker 必须证明测试确实进入待停止阶段。PID 复用测试替换 `/proc` 观测后检查真实 sentinel 进程，不能只断言调用了 mock。
 
@@ -50,3 +50,7 @@ Windows CI 运行原生工具检查、跨宿主解码、公开入口共同约束
 
 
 #74 本地维护和部署演练见[维护实验记录](experiments/2026-10-22-issue74-maintenance.md)。最终全量 148 项通过，无跳过；新 wheel 已完成基础/web 离线安装、仓库外维护恢复正式服务及最终真实小星星浏览器验收。恢复演练保留原期限并实际等待 4 秒到期；浏览器另用 20 秒。两者均检查状态/PDF/全部预览 410 与物理删除，不代表默认保留期已改变。目标主机 systemd/cgroup、真实反向代理、域名与 TLS 仍未执行。
+
+`tests/test_comparison_tool.py` 从真实工具 CLI 验证冻结程序的实际源码目录，拒绝 main 历史脚本的已跟踪修改和未跟踪影子模块，保留优化版 src/pyproject 约束。合成 Git fixture 不运行媒体，不重算历史四曲比较数据。
+
+最终审阅的补零页名备份与比较工具冻结目录修复见[双轴审阅修复记录](experiments/2026-10-22-final-review-fixes.md)。原 #74 浏览器证据只沿用到字节未改的 web/worker/核心，新维护代码另以新安装环境的十页 PDF 往返验收。
