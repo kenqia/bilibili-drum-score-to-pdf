@@ -49,6 +49,70 @@ def probe_video(source):
         raise ConversionError('invalid_input', '无法读取本地视频。请提供可播放的视频文件。') from None
 
 
+class _MotionDiagnostics:
+    """Drain native observations without retaining native frames or log text.
+
+    Checksums are motion evidence, never source-integrity hashes. The selected
+    RGB frames still carry their own SHA-256 and actual PTS in the caller.
+    """
+    def __init__(self):
+        self.time_base = None
+        self.pts = []
+        self.native = None
+        self.native_count = 0
+        self.anchor = None
+        self.changed = False
+        self.ambiguous = False
+        self.invalid = False
+
+    def drain(self, stream):
+        try:
+            for line in iter(lambda: stream.readline(4096), b''):
+                text = line.decode(errors='replace')
+                if 'showinfo@sample' in text:
+                    base = re.search(r'config in time_base:\s*(\d+)/(\d+)', text)
+                    if base:
+                        value = [int(base[1]), int(base[2])]
+                        if not value[1] or self.time_base not in (None, value):
+                            self.invalid = True
+                        self.time_base = value
+                if not ('showinfo@motion' in text or 'showinfo@sample' in text):
+                    continue
+                frame = re.search(r'\bn:\s*(\d+)\s+pts:\s*(-?\d+).*?\bchecksum:([0-9A-Fa-f]+)', text)
+                if not frame:
+                    continue
+                index, pts, checksum = int(frame[1]), int(frame[2]), frame[3]
+                if 'showinfo@motion' in text:
+                    if index != self.native_count:
+                        self.invalid = True
+                    self.native_count += 1
+                    self.native = (pts, checksum)
+                    if self.anchor is not None and checksum != self.anchor:
+                        self.changed = True
+                else:
+                    if index != len(self.pts) or self.native != (pts, checksum):
+                        self.invalid = True
+                    if len(self.pts) >= 4097:
+                        self.invalid = True
+                        continue
+                    self.pts.append(pts)
+                    if checksum == self.anchor and self.changed:
+                        self.ambiguous = True
+                    self.anchor, self.changed = checksum, False
+        except (OSError, ValueError):
+            self.invalid = True
+
+    def records(self, count):
+        if self.invalid or not self.time_base or len(self.pts) != count or not count:
+            raise ConversionError('decode_failed', '实际时间戳与原生运动观察记录不完整。')
+        # Include the final native interval before the separately captured tail.
+        if self.ambiguous or (self.native[1] == self.anchor and self.changed):
+            raise ConversionError('discontinuity', '采样间存在画面变化，无法可靠确认位移；未发布可能缺段的曲谱。')
+        numerator, denominator = self.time_base
+        return [{'pts': value, 'time_base': self.time_base,
+                 'timestamp': value * numerator / denominator} for value in self.pts]
+
+
 class VideoReader:
     def __init__(self, source, metadata, metrics):
         self.source, self.metadata, self.metrics = Path(source), dict(metadata), metrics
@@ -59,7 +123,7 @@ class VideoReader:
     def close(self):
         self.scratch.cleanup()
 
-    def sample_records(self, interval, consume):
+    def sample_records(self, interval, consume, *, verify_motion=False):
         """Stream native RGB samples and return actual source PTS, without caching video frames."""
         if not math.isfinite(interval) or interval <= 0 or self.metadata['duration'] / interval > 4096:
             raise ConversionError('invalid_request', '采样间隔无效或采样数量超出资源限制。')
@@ -69,9 +133,12 @@ class VideoReader:
         budget = min(60, 600 - self.metrics['decode_elapsed'])
         if budget <= 0:
             raise ConversionError('decode_failed', '视频解码期限已耗尽。')
+        selection = f"select='isnan(prev_selected_t)+gte(t-prev_selected_t,{interval:.9f})'"
+        filters = ('showinfo@motion,' + selection + ',showinfo@sample'
+                   if verify_motion else selection + ',showinfo')
         command = ['ffmpeg', '-v', 'info', '-nostdin', '-copyts', '-threads', '2',
                    '-i', str(self.source), '-vf',
-                   f"select='isnan(prev_selected_t)+gte(t-prev_selected_t,{interval:.9f})',showinfo",
+                   filters,
                    '-an', *frame_sync_args(), '-threads', '1', '-pix_fmt', 'rgb24',
                    '-f', 'rawvideo', 'pipe:1']
         began = time.monotonic()
@@ -79,7 +146,13 @@ class VideoReader:
         count = 0
         try:
             with tempfile.TemporaryFile() as diagnostic:
-                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=diagnostic)
+                observations = _MotionDiagnostics() if verify_motion else None
+                process = subprocess.Popen(command, stdout=subprocess.PIPE,
+                                           stderr=subprocess.PIPE if verify_motion else diagnostic)
+                monitor = None
+                if observations is not None:
+                    monitor = threading.Thread(target=observations.drain, args=(process.stderr,), daemon=True)
+                    monitor.start()
                 timer = threading.Timer(budget, process.kill)
                 timer.daemon = True
                 timer.start()
@@ -107,6 +180,16 @@ class VideoReader:
                         process.kill()
                     process.wait()
                     process.stdout.close()
+                    if monitor is not None:
+                        monitor.join(timeout=5)
+                        if monitor.is_alive():
+                            raise ConversionError('decode_failed', '原生运动观察未在期限内结束。')
+                        process.stderr.close()
+                if observations is not None:
+                    records = observations.records(count)
+                    self.metrics['decoded_reported_frames'] += count
+                    self.metrics['native_motion_observations'] = observations.native_count
+                    return records
                 diagnostic.seek(0)
                 text = diagnostic.read().decode(errors='replace')
             base = re.search(r'config in time_base:\s*(\d+)/(\d+)', text)

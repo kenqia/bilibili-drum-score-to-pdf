@@ -238,6 +238,7 @@ class ScriptConversion(unittest.TestCase):
             self.assertTrue(all(isinstance(frame['pts'], int) and len(frame['time_base']) == 2
                                 and len(frame['sha256']) == 64 for frame in result['samples']))
             self.assertEqual(len(result['source']['sha256']), 64)
+            self.assertGreaterEqual(result['metrics']['native_motion_observations'], len(result['samples']))
             self.assertEqual(result['program']['name'], 'bilibili-drum-score-to-pdf')
             self.assertEqual(len(result['program']['source_sha256']), 64)
             self.assertEqual(result['samples'][0]['timestamp'], 0)
@@ -305,6 +306,36 @@ class ScriptConversion(unittest.TestCase):
             with Image.open(root / 'result' / result['longshot']['path']) as actual:
                 self.assertEqual(actual.size, (640, 1420))
                 self.assertIsNone(ImageChops.difference(actual.convert('RGB'), sheet).getbbox())
+
+    def test_native_motion_between_identical_samples_never_publishes_shortened_score(self):
+        # Seven unnumbered identical systems move by one system per 0.5s.
+        # The retained endpoint images alias, but their native intermediate
+        # frames visibly move. Refusing ambiguity is safer than inventing rows.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sheet = Image.new('RGB', (640, 1420), 'white')
+            draw = ImageDraw.Draw(sheet)
+            for row in range(7):
+                top = 140 + 180 * row
+                for line in range(5):
+                    draw.line((25, top + 8 * line, 615, top + 8 * line), fill='black')
+                for x in (95, 195, 295, 395):
+                    draw.ellipse((x, top + 10, x + 10, top + 20), fill='black')
+                    draw.line((x + 10, top - 25, x + 10, top + 17), fill='black', width=2)
+            for index, shift in enumerate(range(0, 901, 12)):
+                sheet.crop((0, shift, 640, shift + 520)).save(root / f'alias-{index:03d}.png')
+            source = root / 'alias.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '30', '-i',
+                            str(root / 'alias-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
+            before = source.read_bytes()
+            output = root / 'result'
+            with self.assertRaises(drum_score.ConversionError) as caught:
+                drum_score.convert(source, output)
+            self.assertEqual(caught.exception.code, 'discontinuity')
+            self.assertFalse(output.exists())
+            self.assertEqual(list(root.glob('.drum-score-*')), [])
+            self.assertEqual(source.read_bytes(), before)
+            sheet.close()
 
     def test_repeated_music_with_small_measure_numbers_retains_fast_scroll_positions(self):
         with tempfile.TemporaryDirectory() as temporary:
