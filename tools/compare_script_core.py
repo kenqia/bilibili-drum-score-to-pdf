@@ -119,7 +119,8 @@ def run(args):
         version = subprocess.check_output(['git', '-C', args.checkout, 'rev-parse', 'HEAD'], text=True).strip()
         expected = (json.loads(Path(args.versions).read_text())['main']['commit']
                     if args.program == 'main' else args.version)
-        source_paths = ['src', 'pyproject.toml']
+        source_paths = (['skills/bilibili-drum-score-to-pdf/scripts']
+                        if args.program == 'main' else ['src', 'pyproject.toml'])
         changed = subprocess.check_output(['git', '-C', args.checkout, 'status',
             '--porcelain', '--untracked-files=all', '--', *source_paths], text=True)
         if version != expected or changed:
