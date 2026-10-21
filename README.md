@@ -55,6 +55,8 @@
 
 ### 1. 安装后这样用
 
+本 Skill 在 Codex 中仅允许显式调用。通过 `$bilibili-drum-score-to-pdf` 或技能选择器主动选择后使用，模型不会根据话题自动调用。
+
 在宿主输入框中选中 [$bilibili-drum-score-to-pdf](skills/bilibili-drum-score-to-pdf/SKILL.md)，然后粘贴视频链接。例如在 Codex 中输入 `$`，从可用 Skill 中选择本项目，再发送：
 
 ```text
@@ -79,7 +81,7 @@ https://github.com/kenqia/bilibili-drum-score-to-pdf
 
 先读取 docs/install.md，将 skills/bilibili-drum-score-to-pdf
 整个目录安装到当前宿主能发现 Skill 的位置。
-请一起保留 SKILL.md、scripts/、references/ 和 LICENSE，
+请一起保留 SKILL.md、agents/、scripts/、references/ 和 LICENSE，
 检查运行依赖；更新已有安装时先保留可恢复副本。
 
 安装后确认它出现在宿主的技能列表或选择器中，

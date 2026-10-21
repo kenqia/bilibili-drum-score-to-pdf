@@ -1,6 +1,8 @@
 # 安装与使用 Skill
 
-对外发布目录是 `skills/bilibili-drum-score-to-pdf/`，包含 `SKILL.md`、`scripts/`、`references/` 和 `LICENSE`。运行协议已随包携带，安装时保留整个目录即可，无需复制源码仓库的 `docs/`、实验、测试或宣传素材。
+对外发布目录是 `skills/bilibili-drum-score-to-pdf/`，包含 `SKILL.md`、`agents/`、`scripts/`、`references/` 和 `LICENSE`。运行协议已随包携带，安装时保留整个目录即可，无需复制源码仓库的 `docs/`、实验、测试或宣传素材。
+
+Codex 的调用策略位于 `agents/openai.yaml`，`policy.allow_implicit_invocation: false` 使本 Skill 仅能由用户通过 `$bilibili-drum-score-to-pdf` 或技能选择器显式调用。安装时保留该文件。其他宿主是否识别此策略需单独核对。恢复自动调用时，将该字段改为 `true` 后重新加载 Skill。字段说明见 [OpenAI 官方文档](https://learn.chatgpt.com/docs/build-skills)。
 
 ## 安装后调用
 
@@ -15,7 +17,7 @@ Skill 默认处理 PDF。需要特定保存位置时，在同条消息补充路�
 
 ## 首次安装
 
-从仓库取得完整 Skill 目录，安装到当前宿主实际发现 Skill 的位置。可以让 Agent 按 README 中的安装提示完成，也可以使用宿主现有的 Skill 安装器。安装器必须同时复制 `scripts/`、`references/` 和许可证；只下载 SKILL.md 不完整。注册符号链接时，链接目标必须是保留所有内容的完整目录。
+从仓库取得完整 Skill 目录，安装到当前宿主实际发现 Skill 的位置。可以让 Agent 按 README 中的安装提示完成，也可以使用宿主现有的 Skill 安装器。安装器必须同时复制 `agents/`、`scripts/`、`references/` 和许可证；只下载 SKILL.md 不完整。注册符号链接时，链接目标必须是保留所有内容的完整目录。
 
 宿主需要文件读写、脚本运行、原生图片查看与 PDF 页面查看能力。环境需要 Python 3.12、uv、ffmpeg、ffprobe 和 Poppler 的 pdftoppm。项目不要求 B站 Cookie，不读取模型认证。当前验证的解释器为 Python 3.12。示例使用 `uv run --python 3.12`，不会替换系统 Python。
 
