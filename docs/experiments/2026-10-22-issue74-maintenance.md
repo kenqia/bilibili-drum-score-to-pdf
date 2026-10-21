@@ -39,7 +39,7 @@ Root 的独立 nginx 1.18 前缀、高端口及合成证书演练覆盖 HTTP 前
 
 `maintenance-smoke-report.json` 从仓库外调用安装版 backup/verify/restore，恢复后启动正式 worker 和 HTTP，核对 durable finishing 恢复完成、遗留 running 变中断、原完成/到期时刻与全部页面 hash。显式 4 秒期限实际等待后，三个入口返回 410，新身份受管文件物理清理，备份仍完整。首次夹具试图同时放置 finishing 和 running，违反合法 `single_active` 约束而未领取任务；改成两个独立合法快照后通过，没有修改生产代码。失败日志保留为 `maintenance-smoke-fixture-failed.log`。
 
-Root 在最终 wheel 的全新 `/home/kenqia/issue74-offline-final-venv` 上完成真实匿名小星星浏览器验收。独立 Chromium context 实际取消、重试、SIGTERM 中断、再重试、关闭后返回、全部预览及按钮下载；PDF SHA-256 `8064538f70851edc4f66702ea2bdf979d1188411c1c222f2d125a56523b873c2` 与认可版相同。显式 20 秒期限后，状态/PDF/预览全 410 且物理清除。5 张桌面与 390 宽截图已实际查看，无布局溢出或脚本异常。没有逐符号音乐校对。
+Root 在最终 wheel 的全新 `/home/kenqia/issue74-offline-final-venv` 上完成真实匿名小星星浏览器验收。独立 Chromium context 实际取消、重试、SIGTERM 中断、再重试、关闭后返回、全部预览及按钮下载；PDF SHA-256 `8064538f70851edc4f66702ea2bdf979d1188411c1c222f2d125a56523b873c2` 与桌面放大均衡版相同。用户认可原谱面后要求放大和均衡分页，已按要求交付，尚无另一次质量回执。显式 20 秒期限后，状态/PDF/预览全 410 且物理清除。5 张桌面与 390 宽截图已实际查看，无布局溢出或脚本异常。没有逐符号音乐校对。
 
 真实浏览器证据为 `browser74-installed-final-report.md` 和 `evidence/website74-installed-final/browser-report.json`，session48681退出 0。100ms 服务树 RSS 采样峰 356347904 字节，仅为 WSL 采样，不是 cgroup 硬峰、服务器资源验证或上线证据。临时浏览器服务已停止；原用户预览及数据保持。
 
