@@ -53,7 +53,7 @@ ACQUISITION_SECONDS = 1800
 MAX_BYTES = 2 * 1024**3
 
 
-def _worker(url, staging, publication, connection, parent_pid):
+def _worker(url, staging, publication, connection, parent_pid, max_bytes=MAX_BYTES):
     # Third-party exceptions and output can contain signed addresses. Never forward them.
     if hasattr(os, 'setsid'):
         os.setsid()
@@ -74,7 +74,9 @@ def _worker(url, staging, publication, connection, parent_pid):
     sys.stdout = open(os.devnull, 'w')
     sys.stderr = open(os.devnull, 'w')
     try:
-        from anonymous_backend import download
+        import anonymous_backend
+        anonymous_backend.MAX_BYTES = max_bytes
+        download = anonymous_backend.download
         origin = video_origin(url)
         details = download(origin, Path(staging))
         # Copy/fsync is part of the same worker deadline. Its temporary file lives
@@ -97,8 +99,10 @@ def _worker(url, staging, publication, connection, parent_pid):
         connection.close()
 
 
-def acquire(url, output, timeout=ACQUISITION_SECONDS):
+def acquire(url, output, timeout=ACQUISITION_SECONDS, *, max_bytes=MAX_BYTES):
     origin = video_origin(url)
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or not 1 <= max_bytes <= MAX_BYTES:
+        raise InputError('invalid_request', '下载大小限制无效。', origin)
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     deadline = time.monotonic() + timeout
@@ -106,7 +110,7 @@ def acquire(url, output, timeout=ACQUISITION_SECONDS):
     context = multiprocessing.get_context('fork' if 'fork' in multiprocessing.get_all_start_methods() else 'spawn')
     with tempfile.TemporaryDirectory(prefix='anonymous-video-') as staging, tempfile.TemporaryDirectory(prefix='.anonymous-publish-', dir=output.parent) as publication:
         parent, child = context.Pipe(duplex=False)
-        process = context.Process(target=_worker, args=(origin['url'], staging, publication, child, os.getpid()))
+        process = context.Process(target=_worker, args=(origin['url'], staging, publication, child, os.getpid(), max_bytes))
         previous_term = None
         if threading.current_thread() is threading.main_thread():
             previous_term = signal.signal(signal.SIGTERM, lambda *args: (_ for _ in ()).throw(KeyboardInterrupt()))
