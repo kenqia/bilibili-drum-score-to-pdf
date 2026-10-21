@@ -75,7 +75,8 @@ def _worker(url, staging, publication, connection, parent_pid, max_bytes=MAX_BYT
     sys.stderr = open(os.devnull, 'w')
     try:
         import anonymous_backend
-        anonymous_backend.MAX_BYTES = max_bytes
+        # A caller may tighten the backend's existing ceiling, never relax it.
+        anonymous_backend.MAX_BYTES = min(anonymous_backend.MAX_BYTES, max_bytes)
         download = anonymous_backend.download
         origin = video_origin(url)
         details = download(origin, Path(staging))
