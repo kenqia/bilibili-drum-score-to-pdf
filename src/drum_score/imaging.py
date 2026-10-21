@@ -154,22 +154,41 @@ def system_groups(image):
     return list(zip(boundaries[:-1], boundaries[1:])), len(staffs)
 
 
-def paginate(longshot, output):
-    with Image.open(longshot) as image:
-        groups, staff_count = system_groups(image)
-        page_width, page_height = A4
-        margin = 24
-        scale = min((page_width - 2 * margin) / image.width,
-                    (page_height - 2 * margin) / max(end - start for start, end in groups))
-        capacity = (page_height - 2 * margin) / scale
+def _page_strips(groups, capacity):
+    """Balance contiguous complete groups at the smallest feasible page count."""
+    def split(limit):
         strips = []
-        start = end = 0
+        start = end = groups[0][0]
         for begin, finish in groups:
-            if end > start and finish - start > capacity + 1e-6:
+            if end > start and finish - start > limit + 1e-6:
                 strips.append((start, end))
                 start = begin
             end = finish
         strips.append((start, end))
+        return strips
+
+    count = len(split(capacity))
+    low = max(max(end - start for start, end in groups),
+              math.ceil((groups[-1][1] - groups[0][0]) / count))
+    high = math.floor(capacity + 1e-6)
+    while low < high:
+        middle = (low + high) // 2
+        if len(split(middle)) <= count:
+            high = middle
+        else:
+            low = middle + 1
+    return split(low)
+
+
+def paginate(longshot, output):
+    with Image.open(longshot) as image:
+        groups, staff_count = system_groups(image)
+        page_width, page_height = A4
+        margin = 12
+        scale = min((page_width - 2 * margin) / image.width,
+                    (page_height - 2 * margin) / max(end - start for start, end in groups))
+        capacity = (page_height - 2 * margin) / scale
+        strips = _page_strips(groups, capacity)
         pdf = output / 'score.pdf'
         document = canvas.Canvas(str(pdf), pagesize=A4, invariant=1)
         for index, (start, end) in enumerate(strips):

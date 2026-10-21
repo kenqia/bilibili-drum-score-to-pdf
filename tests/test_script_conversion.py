@@ -14,6 +14,14 @@ import drum_score
 
 
 class ScriptConversion(unittest.TestCase):
+    def test_page_balancing_moves_whole_groups_to_sparse_final_page(self):
+        from drum_score.imaging import _page_strips
+        groups = [(0, 600), (600, 1200), (1200, 1800), (1800, 2400), (2400, 2700)]
+        strips = _page_strips(groups, 2000)
+        self.assertEqual(strips, [(0, 1200), (1200, 2700)])
+        self.assertEqual(_page_strips([(0, 2200)], 2200), [(0, 2200)])
+        self.assertEqual(_page_strips(groups, 3000), [(0, 2700)])
+
     def test_final_progress_failure_does_not_report_failure_after_publish(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
