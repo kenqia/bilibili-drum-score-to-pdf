@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from score_fixtures import score_frame, video_from_image
 from test_link_input import cli
-from test_public_contracts import ACQUISITION_ENTRIES
+from test_public_contracts import ACQUISITION_ENTRIES, SCRIPT_CONVERSION_ENTRIES
 from yt_dlp.extractor.bilibili import BiliBiliIE
 import public_video
 import score_workflow
@@ -92,13 +92,24 @@ class APIAcquisitionTests(unittest.TestCase):
                 result = json.loads(stdout.getvalue())
             else:
                 try:
-                    if entry == 'workflow':
+                    if entry in SCRIPT_CONVERSION_ENTRIES:
+                        import sys
+                        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+                        import drum_score
+                        if entry == 'script_core':
+                            result = drum_score.convert(URL, output)
+                        else:
+                            from drum_score.cli import main
+                            status = main([URL, '--output', str(output)])
+                            result = json.loads(stdout.getvalue())
+                    elif entry == 'workflow':
                         result = score_workflow.prepare(URL, output)
                     else:
                         source, origin = public_video.acquire(URL, output)
                         result = {'origin': origin, 'source': {'path': str(source)}}
-                    status = 0
-                except public_video.InputError as error:
+                    if entry != 'script_cli':
+                        status = 0
+                except (public_video.InputError, __import__('video_seek').ConversionError) as error:
                     status = 2
                     result = {'error': {'code': error.code, **getattr(error, 'diagnostics', {})}}
         logs = stdout.getvalue()
@@ -208,3 +219,22 @@ class APIAcquisitionTests(unittest.TestCase):
             self.assertIn('media', events)
             self.assertEqual({p.name for p in (base / 'result').iterdir()}, {'manifest.json'})
             self.assertEqual(result['error']['fallback_trigger']['proxy_connect_status'], 403)
+
+    def test_script_conversion_entries_share_real_downloader_boundary(self):
+        for entry in SCRIPT_CONVERSION_ENTRIES:
+            for private in (False, True):
+                with self.subTest(entry=entry, private=private), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    video = video_from_image(score_frame(), root)
+                    status, result, events = self.run_case(root, video, entry=entry, private_media=private)
+                    if private:
+                        self.assertEqual(status, 2)
+                        self.assertFalse((root / 'result').exists())
+                    else:
+                        self.assertEqual(status, 0, result)
+                        self.assertEqual(result['source']['page'], 2)
+                        self.assertEqual(result['source']['bvid'], BV)
+                        self.assertFalse(result['source']['retained'])
+                        self.assertGreater(len(result['pages']), 0)
+                        self.assertTrue((root / 'result' / result['pdf']['path']).is_file())
+                        self.assertIn('media', events)

@@ -15,6 +15,8 @@ import score_task
 import score_workflow
 
 
+SCRIPT_CONVERSION_ENTRIES = ('script_core', 'script_cli')
+
 ACQUISITION_ENTRIES = ('cli', 'workflow', 'acquire')
 EXPORT_ENTRIES = ('cli', 'workflow', 'vector')
 REVIEW_ENTRIES = ('cli', 'workflow', 'vector', 'task')
@@ -528,3 +530,37 @@ class PublicContracts(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ScriptPublicContracts(unittest.TestCase):
+    def test_script_entries_reject_existing_paths_and_invalid_source(self):
+        from pathlib import Path
+        import tempfile
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+        import drum_score
+        from drum_score.cli import main
+        import contextlib
+        import io
+        for entry in SCRIPT_CONVERSION_ENTRIES:
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                source = root / 'source.mp4'
+                source.write_bytes(b'invalid video')
+                output = root / 'result'
+                def invoke():
+                    if entry == 'script_core':
+                        try:
+                            return drum_score.convert(source, output)
+                        except drum_score.ConversionError as error:
+                            return {'error': {'code': error.code}}
+                    stream = io.StringIO()
+                    with contextlib.redirect_stdout(stream):
+                        self.assertEqual(main([str(source), '--output', str(output)]), 2)
+                    return json.loads(stream.getvalue())
+                self.assertEqual(invoke()['error']['code'], 'invalid_input')
+                self.assertFalse(output.exists())
+                output.mkdir()
+                (output / 'mine').write_bytes(b'keep')
+                self.assertEqual(invoke()['error']['code'], 'output_exists')
+                self.assertEqual((output / 'mine').read_bytes(), b'keep')
+                self.assertEqual(source.read_bytes(), b'invalid video')
