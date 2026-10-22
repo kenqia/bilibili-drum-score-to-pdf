@@ -41,13 +41,15 @@ def _positive(value):
 
 
 def _responses(output):
+    if len(output.encode('utf-8')) > MAX_METADATA:
+        raise _invalid('download_too_large')
     decoder = _json()
     values = []
     for match in re.finditer(r'Response: ', output):
         try:
             value, end = decoder.raw_decode(output, match.end())
-            if end - match.end() > 8192:
-                continue
+            if end - match.end() > MAX_METADATA:
+                raise _invalid('download_too_large')
             if isinstance(value, dict):
                 values.append(value)
         except (ValueError, json.JSONDecodeError):

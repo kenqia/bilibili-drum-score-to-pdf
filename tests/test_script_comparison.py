@@ -61,6 +61,9 @@ class ScriptComparison(unittest.TestCase):
             subprocess.run(['git', 'init', '-q', str(checkout)], check=True)
             package = checkout / 'src' / 'drum_score'
             package.mkdir(parents=True)
+            # Match the checked-out regular package. Without __init__.py an
+            # installed regular drum_score package overrides this namespace.
+            (package / '__init__.py').write_text('')
             (package / '__main__.py').write_text('raise SystemExit(99)'+chr(10))
             subprocess.run(['git', '-C', str(checkout), 'add', '.'], check=True)
             subprocess.run(['git', '-C', str(checkout), '-c', 'user.name=Synthetic',

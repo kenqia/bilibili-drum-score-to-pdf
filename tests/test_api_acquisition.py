@@ -185,3 +185,20 @@ class APIAcquisitionTests(unittest.TestCase):
             config['play']['dash']['video'][0]['id'] = 'DO_NOT_SAVE_TEST_SENTINEL'
             status, result, events = self.run_case(root, video, config)
             self.assertNotIn('DO_NOT_SAVE_TEST_SENTINEL', str(result))
+
+    def test_complete_view_larger_than_legacy_log_cutoff_is_accepted(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            video = video_from_image(score_frame(), root)
+            config = fixture_config()
+            config['view']['desc'] = 'synthetic public description ' * 500
+            self.assertGreater(len(json.dumps({'code': 0, 'data': config['view']})), 8192)
+            status, result, events = self.run_case(root, video, config)
+            self.assertEqual(status, 0, result)
+            self.assertEqual(result['origin']['cid'], 22)
+            self.assertEqual(events, ['media'])
+
+    def test_complete_view_over_metadata_budget_is_rejected_before_media(self):
+        config = fixture_config()
+        config['view']['desc'] = 'x' * (2 * 1024**2 + 1)
+        self.reject(config, 'download_too_large')
