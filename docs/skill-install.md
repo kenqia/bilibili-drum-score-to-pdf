@@ -93,7 +93,7 @@ python tools/sync_skill_references.py --check
 
 ## 匿名下载失败
 
-安装检查通过只证明入口可用。获取失败时查看 `manifest.json` 的脱敏错误字段，区分代理 CONNECT 拒绝、来源 HTTP 拒绝与解码失败。程序只在 CONNECT403 或视频网页 HTTP412 时尝试一次公开 API 直连恢复；恢复会保留公共地址与 TLS 等保护，不持久修改代理配置。触发条件、来源完整性检查与资源限制见[输入和资源保护](architecture.md#输入和资源保护)。
+安装检查通过只证明入口可用。获取失败时查看 `manifest.json` 的脱敏错误字段，区分代理 CONNECT 拒绝、来源 HTTP 拒绝与解码失败。Skill 脚本只在 CONNECT403 或视频网页 HTTP412 时尝试一次公开 API 直连恢复；恢复会保留公共地址与 TLS 等保护，不持久修改代理配置。触发条件、来源完整性检查与资源限制见 [Skill 支持与安全范围](../skills/bilibili-drum-score-to-pdf/references/support.md)。
 
 已取得完整视频时可以用其本地路径继续 `prepare`，无需重新下载。视频应保存在任务相邻的独立来源目录，避免只保存在易清理的 `/tmp`。下载成功仍不代表谱行接续、重绘或全部 PDF 页面已验收。
 

@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   offline:
+    name: Skill regression (${{ matrix.shard }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
@@ -45,6 +46,7 @@ jobs:
         run: python ci/run_unittest_shard.py --tests tests/skill --index ${{ matrix.shard }} --count 2
 
   replay:
+    name: Skill synthetic replay
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -79,6 +81,7 @@ jobs:
           include-hidden-files: false
 
   windows-core:
+    name: Skill Windows contracts
     runs-on: windows-2022
     timeout-minutes: 20
     env:

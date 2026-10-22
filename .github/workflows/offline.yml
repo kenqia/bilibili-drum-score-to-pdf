@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   offline:
+    name: Program regression (${{ matrix.shard }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
@@ -47,6 +48,7 @@ jobs:
         run: python ci/run_unittest_shard.py --index ${{ matrix.shard }} --count 2
 
   replay:
+    name: Program synthetic replay
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -81,6 +83,7 @@ jobs:
           include-hidden-files: false
 
   windows-core:
+    name: Program Windows contracts
     runs-on: windows-2022
     timeout-minutes: 20
     env:
