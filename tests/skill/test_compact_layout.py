@@ -8,7 +8,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 from reportlab.lib.pagesizes import A4
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'skills/bilibili-drum-score-to-pdf/scripts'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'skills/bilibili-drum-score-to-pdf/scripts'))
 import longshot
 import score_task
 

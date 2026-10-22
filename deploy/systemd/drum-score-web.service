@@ -1,0 +1,42 @@
+[Unit]
+Description=Anonymous drum score HTTP service
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=drum-score
+Group=drum-score
+WorkingDirectory=/var/lib/drum-score
+StateDirectory=drum-score
+StateDirectoryMode=0700
+ExecStart=/srv/drum-score/current/venv/bin/drum-score-web --data-root /var/lib/drum-score --host 127.0.0.1 --port 8791 --trusted-proxy 127.0.0.1 --retention-seconds 86400 --diagnostic-seconds 3600 --diagnostic-mib 8 --min-free-mib 2048 --retained-mib 2048 --max-temp-mib 1024
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/drum-score
+CapabilityBoundingSet=
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryHigh=96M
+MemoryMax=128M
+MemorySwapMax=0
+CPUQuota=50%
+TasksMax=64
+LimitNOFILE=512
+OOMPolicy=stop
+KillMode=mixed
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

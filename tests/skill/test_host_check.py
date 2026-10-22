@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 CHECK = ROOT / 'skills/bilibili-drum-score-to-pdf/scripts/host_check.py'
 
 HOST_CHECK_ENTRIES = ('module', 'cli')
@@ -59,7 +59,7 @@ class HostCheckTests(unittest.TestCase):
                         self.assertEqual(result['runtime_ready'], supported)
 
     def test_every_ci_job_uses_the_supported_python_minor(self):
-        workflow = (ROOT / '.github/workflows/offline.yml').read_text()
+        workflow = (ROOT / '.github/workflows/skill.yml').read_text()
         versions = re.findall(r"python-version:\s*'([^']+)'", workflow)
         self.assertTrue(versions, 'CI must explicitly select its Python version')
         self.assertEqual(set(versions), {'3.12'})

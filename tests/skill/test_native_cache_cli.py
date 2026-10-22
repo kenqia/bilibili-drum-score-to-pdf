@@ -7,7 +7,7 @@ import unittest
 from PIL import Image
 import test_reconstruction as fixtures
 
-SCRIPT = Path(__file__).resolve().parents[1] / 'skills/bilibili-drum-score-to-pdf/scripts/convert.py'
+SCRIPT = Path(__file__).resolve().parents[2] / 'skills/bilibili-drum-score-to-pdf/scripts/convert.py'
 
 class NativeCacheCLI(unittest.TestCase):
     setUp = fixtures.LocalScoreWorkflow.setUp

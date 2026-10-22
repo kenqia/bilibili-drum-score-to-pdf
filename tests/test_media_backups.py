@@ -7,12 +7,13 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from score_fixtures import CLI, score_frame, video_from_image
-from yt_dlp import YoutubeDL
+from score_fixtures import score_frame, video_from_image
+import test_link_input
+from bbdown_fixture import configured_fake, fixture_config, URL
 
-sys.path.insert(0, str(CLI.parent))
-import anonymous_backend
-from public_video import InputError, video_origin
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+from drum_score import anonymous_backend
+from drum_score.public_video import InputError, video_origin
 
 
 ORIGIN = video_origin('https://www.bilibili.com/video/BV1b5411x7Ku?p=2')
@@ -23,28 +24,34 @@ PUBLIC_DNS = [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]
 
 class MediaBackupTests(unittest.TestCase):
     def route(self, staging, fmt, response, *, public_api=False, dns=None, duration=2):
-        info = {'id': 'BV1b5411x7Ku_p2', 'duration': duration, 'formats': [fmt]}
-        with patch.object(YoutubeDL, 'extract_info', return_value=info), \
-                patch('socket.getaddrinfo', side_effect=dns, return_value=PUBLIC_DNS), \
-                patch('urllib.request.OpenerDirector.open', side_effect=response):
-            return anonymous_backend._download_route(ORIGIN, staging, public_api=public_api)
+        from drum_score.public_video import acquire
+        config = fixture_config()
+        config['view']['pages'][1]['duration'] = duration
+        config['play']['timelength'] = duration * 1000
+        config['play']['dash']['video'] = [{'baseUrl': fmt.get('url'),
+            'backupUrl': fmt.get('backup_urls') or [], 'width': fmt.get('width'),
+            'height': fmt.get('height'), 'codecs': fmt.get('vcodec'), 'id': 80}]
+        with configured_fake(staging, config, response=response, dns=dns):
+            source, result = acquire(URL, staging / 'acquired')
+        (staging / 'video.mp4').write_bytes(source.read_bytes())
+        return result
 
     def test_unsafe_primary_and_first_backup_use_second_backup_on_both_routes(self):
         for public_api in (False, True):
             with self.subTest(public_api=public_api), tempfile.TemporaryDirectory() as scratch:
                 base = Path(scratch)
                 video = video_from_image(score_frame(), base)
-                calls = []
+                calls = base / 'calls'
 
                 def response(request, **kwargs):
-                    calls.append(request.full_url)
+                    calls.write_text(calls.read_text() + request.full_url + '\n' if calls.exists() else request.full_url + '\n')
                     self.assertEqual(request.full_url, BACKUP)
                     return io.BytesIO(video.read_bytes())
 
                 fmt = {'url': UNSAFE, 'backup_urls': ['http://cdn.bilivideo.com/video', BACKUP],
                        'width': 1280, 'height': 960, 'vcodec': 'avc1', 'acodec': 'none'}
                 result = self.route(base, fmt, response, public_api=public_api)
-                self.assertEqual(calls, [BACKUP])
+                self.assertEqual(calls.read_text().splitlines(), [BACKUP])
                 self.assertTrue(result['backup_used'])
                 self.assertEqual(result['format_attempts'], 1)
                 self.assertEqual(result['actual_video']['width'], 1280)
@@ -66,21 +73,21 @@ class MediaBackupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             base = Path(scratch)
             video = video_from_image(score_frame(), base)
-            calls = []
+            calls = base / 'calls'
 
             def dns(host, *args, **kwargs):
                 return ([(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('10.0.0.2', 443))]
                         if host == 'private.bilivideo.com' else PUBLIC_DNS)
 
             def response(request, **kwargs):
-                calls.append(request.full_url)
+                calls.write_text(calls.read_text() + request.full_url + '\n' if calls.exists() else request.full_url + '\n')
                 return io.BytesIO(video.read_bytes())
 
             fmt = {'url': 'https://private.bilivideo.com/video', 'backup_urls': [BACKUP],
                    'vcodec': 'avc1', 'acodec': 'none'}
             result = self.route(base, fmt, response, dns=dns)
             self.assertTrue(result['backup_used'])
-            self.assertEqual(calls, [BACKUP])
+            self.assertEqual(calls.read_text().splitlines(), [BACKUP])
 
     def test_backup_still_obeys_size_resolution_and_duration_checks(self):
         cases = [('download_too_large', False, 1280, 960, 1),
@@ -90,19 +97,19 @@ class MediaBackupTests(unittest.TestCase):
             with self.subTest(error=expected), tempfile.TemporaryDirectory() as scratch:
                 base = Path(scratch)
                 video = video_from_image(score_frame(), base)
-                calls = []
+                calls = base / 'calls'
 
                 def response(request, **kwargs):
-                    calls.append(request.full_url)
+                    calls.write_text(calls.read_text() + request.full_url + '\n' if calls.exists() else request.full_url + '\n')
                     return io.BytesIO(video.read_bytes())
 
                 fmt = {'url': UNSAFE, 'backup_urls': [BACKUP, BACKUP + '&unused=1'],
                        'width': width, 'height': height, 'vcodec': 'avc1', 'acodec': 'none'}
                 with patch.object(anonymous_backend, 'MAX_BYTES', limit or 2 * 1024**3):
                     with self.assertRaises(InputError) as raised:
-                        self.route(base, fmt, response, public_api=public_api, duration=10)
+                        self.route(base, fmt, response, public_api=public_api, duration=10 if expected == 'incomplete_video' else 2)
                 self.assertEqual(raised.exception.code, expected)
-                self.assertEqual(calls, [BACKUP])
+                self.assertEqual(calls.read_text().splitlines(), [BACKUP])
 
     def test_undecodable_backup_is_not_accepted(self):
         with tempfile.TemporaryDirectory() as scratch:

@@ -9,7 +9,7 @@ import sys
 import tempfile
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / 'skills/bilibili-drum-score-to-pdf'
 SPEC = importlib.util.spec_from_file_location('sync_skill_references', ROOT / 'tools/sync_skill_references.py')
 syncer = importlib.util.module_from_spec(SPEC)

@@ -5,7 +5,7 @@ import unittest
 class DeliveryLayoutTests(unittest.TestCase):
     def test_filename_is_portable_and_cannot_escape_output(self):
         import sys
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'skills/bilibili-drum-score-to-pdf/scripts'))
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2]/'skills/bilibili-drum-score-to-pdf/scripts'))
         from delivery_layout import pdf_name
         from video_seek import ConversionError
         for title in ('../曲名', 'CON', '曲'*200, 'A:B?C\\D'):

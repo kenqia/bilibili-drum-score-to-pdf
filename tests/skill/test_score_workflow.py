@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 import unittest
 from unittest.mock import patch
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'skills/bilibili-drum-score-to-pdf/scripts'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'skills/bilibili-drum-score-to-pdf/scripts'))
 import test_reconstruction as fixtures
 import score_workflow as workflow
 

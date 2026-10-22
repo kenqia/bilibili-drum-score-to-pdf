@@ -1,210 +1,245 @@
-"""Exercise API recovery through the public entry matrix and real HTTP parser."""
-import contextlib
+"""Source identity and completeness through public acquire and a real metadata process."""
 import io
 import json
-import os
 from pathlib import Path
-import socket
 import tempfile
 import unittest
 from unittest.mock import patch
-
+import test_link_input
+from bbdown_fixture import configured_fake, fixture_config, URL, BV, MEDIA
+from drum_score.public_video import acquire, InputError
 from score_fixtures import score_frame, video_from_image
-from test_link_input import cli
-from test_public_contracts import ACQUISITION_ENTRIES
-from yt_dlp.extractor.bilibili import BiliBiliIE
-import public_video
-import score_workflow
-
-BV = 'BV1b5411x7Ku'
-URL = f'https://www.bilibili.com/video/{BV}?p=2'
-MEDIA = 'https://cdn.bilivideo.com/video?sign=SYNTHETIC_SIGNED_SECRET'
 
 
 class APIAcquisitionTests(unittest.TestCase):
-    def run_case(self, base, video, *, entry='cli', refusal='proxy403', view=None,
-                 play=None, private_media=False):
-        events = base / 'events.jsonl'
-        metadata = view if view is not None else {'bvid': BV, 'title': 'Fixture', 'pages': [
-            {'page': 1, 'cid': 11, 'duration': 2}, {'page': 2, 'cid': 22, 'duration': 2}]}
-        playdata = play if play is not None else {'timelength': 2000, 'dash': {'video': [{
-            'id': 80, 'baseUrl': MEDIA, 'width': 1280, 'height': 960,
-            'codecs': 'avc1', 'mimeType': 'video/mp4', 'frameRate': '4/1'}]}}
-        def event(kind):
-            with events.open('a') as f:
-                f.write(json.dumps(kind) + '\n')
-        class WireSocket:
-            def __init__(self, proxy):
-                self.proxy = proxy
-                self.request = b''
-            def sendall(self, packet):
-                self.request = packet
-            def close(self):
-                pass
-            def makefile(self, *args):
-                if self.proxy:
-                    event('proxy')
-                    code = 407 if refusal == 'proxy407' else 403
-                    return io.BytesIO(f'HTTP/1.1 {code} SYNTHETIC_PROXY_SECRET\r\n\r\n'.encode())
-                if b'GET /video/BV' in self.request:
-                    event('webpage')
-                    code = 403 if refusal == 'http403' else 412
-                    return io.BytesIO(f'HTTP/1.1 {code} Refused\r\n\r\n'.encode())
-                if b'GET /x/web-interface/view?' in self.request:
-                    event('view')
-                    body = json.dumps({'code': 0, 'data': metadata}).encode()
-                elif b'GET /x/web-interface/nav ' in self.request:
-                    event('nav')
-                    body = json.dumps({'data': {'wbi_img': {
-                        'img_url': 'https://i.example/' + 'a' * 32 + '.png',
-                        'sub_url': 'https://i.example/' + 'b' * 32 + '.png'}}}).encode()
-                elif b'GET /x/player/wbi/playurl?' in self.request:
-                    if b'cid=22' not in self.request or b'qn=80' not in self.request:
-                        raise AssertionError('API must bind requested page and quality')
-                    event('play')
-                    body = json.dumps({'code': 0, 'data': playdata}).encode()
-                else:
-                    event('media')
-                    body = video.read_bytes()
-                return io.BytesIO(b'HTTP/1.1 200 OK\r\nContent-Length: ' + str(len(body)).encode() + b'\r\n\r\n' + body)
-        def connect(address, *args, **kwargs):
-            if address == ('proxy.example', 8888):
-                return WireSocket(True)
-            if address != ('8.8.8.8', 443):
-                raise AssertionError('direct connection must pin the public address')
-            return WireSocket(False)
-        def dns(host, *args, **kwargs):
-            ip = '10.0.0.1' if private_media and host == 'cdn.bilivideo.com' else '8.8.8.8'
-            return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', (ip, 443))]
-        env = {k: '' for k in ('http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY',
-                               'all_proxy', 'ALL_PROXY', 'no_proxy', 'NO_PROXY')}
-        if refusal.startswith('proxy'):
-            env['https_proxy'] = 'http://fixture:SYNTHETIC_PROXY_SECRET@proxy.example:8888'
-        output = base / 'result'
-        stdout = io.StringIO()
-        with patch.dict(os.environ, env), patch('socket.getaddrinfo', side_effect=dns), patch(
-            'socket.create_connection', side_effect=connect), patch('ssl.SSLContext.wrap_socket',
-                side_effect=lambda self, sock, **kw: sock, autospec=True), patch.object(
-                    BiliBiliIE, '_wbi_key_cache', {}), contextlib.redirect_stdout(stdout):
-            if entry == 'cli':
-                with patch('sys.argv', ['convert.py', URL, '--output', str(output)]):
-                    status = cli.main()
-                result = json.loads(stdout.getvalue())
-            else:
-                try:
-                    if entry == 'workflow':
-                        result = score_workflow.prepare(URL, output)
-                    else:
-                        source, origin = public_video.acquire(URL, output)
-                        result = {'origin': origin, 'source': {'path': str(source)}}
-                    status = 0
-                except public_video.InputError as error:
-                    status = 2
-                    result = {'error': {'code': error.code, **getattr(error, 'diagnostics', {})}}
-        logs = stdout.getvalue()
-        for marker in ('SYNTHETIC_SIGNED_SECRET', 'SYNTHETIC_PROXY_SECRET'):
-            self.assertNotIn(marker, logs)
-            self.assertNotIn(marker, json.dumps(result))
-        history = [json.loads(line) for line in events.read_text().splitlines()] if events.exists() else []
-        return status, result, history
+    def run_case(self, base, video, config=None, *, response=None):
+        calls = base / 'events'
+        def fetch(request, **kwargs):
+            with calls.open('a') as event:
+                event.write('media\n')
+            return response(request, **kwargs) if response else io.BytesIO(video.read_bytes())
+        with configured_fake(base, config or fixture_config(), video, response=fetch):
+            try:
+                source, origin = acquire(URL, base / 'result')
+                return 0, {'origin': origin, 'source': {'path': str(source)}}, calls.read_text().splitlines() if calls.exists() else []
+            except InputError as error:
+                result = {'error': {'code': error.code, 'message': str(error),
+                          **getattr(error, 'diagnostics', {})}}
+                return 2, result, calls.read_text().splitlines() if calls.exists() else []
 
-    def test_proxy_refusal_recovers_public_api_at_every_entry(self):
-        for entry in ACQUISITION_ENTRIES:
-            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as scratch:
-                base = Path(scratch)
-                video = video_from_image(score_frame(), base)
-                status, result, events = self.run_case(base, video, entry=entry)
-                self.assertEqual(status, 0, result)
-                self.assertEqual(result['origin']['acquisition_route'], 'public_api_direct')
-                self.assertEqual(result['origin']['fallback_trigger']['proxy_connect_status'], 403)
-                self.assertIn('proxy', events)
-                self.assertIn('media', events)
-                self.assertNotIn('webpage', events)
-                self.assertEqual(Path(result['source']['path']).read_bytes(), video.read_bytes())
-
-    def test_api_unsafe_primary_uses_official_backup_at_every_entry(self):
-        play = {'timelength': 2000, 'dash': {'video': [{
-            'id': 80, 'baseUrl': MEDIA.replace('.com/', '.com:8082/'),
-            'backupUrl': [MEDIA], 'width': 1280, 'height': 960,
-            'codecs': 'avc1', 'mimeType': 'video/mp4', 'frameRate': '4/1'}]}}
-        for entry in ACQUISITION_ENTRIES:
-            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as scratch:
-                base = Path(scratch)
-                video = video_from_image(score_frame(), base)
-                status, result, events = self.run_case(base, video, entry=entry, play=play)
-                self.assertEqual(status, 0, result)
-                self.assertTrue(result['origin']['backup_used'])
-                self.assertEqual(result['origin']['format_attempts'], 1)
-                self.assertEqual(events.count('media'), 1)
-                self.assertEqual(Path(result['source']['path']).read_bytes(), video.read_bytes())
-
-    def test_webpage_412_recovers_without_requiring_proxy_refusal(self):
-        with tempfile.TemporaryDirectory() as scratch:
-            base = Path(scratch)
-            video = video_from_image(score_frame(), base)
-            status, result, events = self.run_case(base, video, refusal='http412')
-            self.assertEqual(status, 0, result)
-            self.assertEqual(result['origin']['fallback_trigger']['http_status'], 412)
-            self.assertEqual(events.count('webpage'), 1)
-            self.assertIn('media', events)
-
-    def test_api_recovery_rejects_private_media_dns(self):
-        with tempfile.TemporaryDirectory() as scratch:
-            base = Path(scratch)
-            video = video_from_image(score_frame(), base)
-            status, result, events = self.run_case(base, video, private_media=True)
+    def reject(self, config, expected='unavailable_page'):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            status, result, events = self.run_case(root, root / 'unused', config)
             self.assertEqual(status, 2, result)
-            self.assertEqual(result['error']['code'], 'unsafe_media_target')
-            self.assertNotIn('media', events)
+            self.assertEqual(result['error']['code'], expected)
+            self.assertEqual(events, [])
+            self.assertFalse((root / 'result').exists())
+            self.assertNotIn('DO_NOT_SAVE_TEST_SENTINEL', str(result))
 
-    def test_other_refusals_do_not_trigger_direct_api(self):
-        for refusal in ('proxy407', 'http403'):
-            with self.subTest(refusal=refusal), tempfile.TemporaryDirectory() as scratch:
-                base = Path(scratch)
-                video = video_from_image(score_frame(), base)
-                status, result, events = self.run_case(base, video, refusal=refusal)
-                self.assertEqual(status, 2, result)
-                self.assertNotIn('view', events)
-                self.assertNotIn('media', events)
+    def test_metadata_selects_requested_page_and_records_full_identity(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            video = video_from_image(score_frame(), root)
+            status, result, events = self.run_case(root, video)
+            self.assertEqual(status, 0, result)
+            self.assertEqual(result['origin']['cid'], 22)
+            self.assertEqual(result['origin']['aid'], 44)
+            self.assertEqual(result['origin']['full_duration'], 2)
+            self.assertEqual(result['origin']['acquisition_route'], 'bbdown_direct')
+            self.assertEqual(result['origin']['backend_build'], 'metadata-bounded.1')
+            binary = root / 'fake-tool' / 'BBDown'
+            import hashlib
+            self.assertEqual(result['origin']['backend_sha256'], hashlib.sha256(binary.read_bytes()).hexdigest())
+            self.assertEqual(events, ['media'])
+            self.assertEqual(Path(result['source']['path']).read_bytes(), video.read_bytes())
 
-    def test_wrong_or_ambiguous_page_never_downloads_media(self):
-        for metadata in (
-            {'bvid': 'BV1np421S78S', 'pages': [{'page': 2, 'cid': 22, 'duration': 2}]},
-            {'bvid': BV, 'pages': [{'page': 1, 'cid': 11, 'duration': 2}]},
-            {'bvid': BV, 'pages': [{'page': 2, 'cid': 22, 'duration': 2}] * 2},
-        ):
-            with self.subTest(metadata=metadata), tempfile.TemporaryDirectory() as scratch:
-                base = Path(scratch)
-                status, result, events = self.run_case(base, base / 'unused', view=metadata)
-                self.assertEqual(status, 2, result)
-                self.assertEqual(result['error']['code'], 'unavailable_page')
-                self.assertNotIn('media', events)
+    def test_wrong_or_ambiguous_bvid_page_cid_and_aid_never_download(self):
+        for field, value in [('bvid', 'BV1np421S78S'), ('aid', 0), ('aid', True),
+                ('pages', [{'page': 1, 'cid': 11, 'duration': 2}]),
+                ('pages', [{'page': 2, 'cid': 22, 'duration': 2}] * 2),
+                ('pages', [{'page': 2, 'cid': False, 'duration': 2}])]:
+            config = fixture_config()
+            config['view'][field] = value
+            with self.subTest(field=field, value=value):
+                self.reject(config)
 
-    def test_restricted_or_preview_api_response_never_downloads_media(self):
-        cases = [
-            ({'bvid': BV, 'is_upower_exclusive': True}, None, 'unsupported_stream'),
-            ({'bvid': BV, 'rights': {'is_stein_gate': True}}, None, 'unsupported_stream'),
-            (None, {'timelength': 2000, 'is_preview': True}, 'incomplete_video'),
-            (None, {'timelength': 500}, 'incomplete_video'),
-        ]
-        for metadata, play, expected in cases:
-            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as scratch:
-                base = Path(scratch)
-                status, result, events = self.run_case(base, base / 'unused', view=metadata, play=play)
-                self.assertEqual(status, 2, result)
-                self.assertEqual(result['error']['code'], expected)
-                self.assertNotIn('media', events)
+    def test_missing_complete_view_or_player_and_duplicate_responses_are_rejected(self):
+        for mode in ('no-view', 'no-player', 'duplicate-view', 'duplicate-player', 'truncated-view', 'truncated-player'):
+            config = fixture_config()
+            view = {'code': 0, 'data': config['view']}
+            player = {'code': 0, 'data': config['player']}
+            config['responses'] = {'no-view': [player], 'no-player': [view],
+                'duplicate-view': [view, view, player], 'duplicate-player': [view, player, player],
+                'truncated-view': [player], 'truncated-player': [view]}[mode]
+            if mode.startswith('truncated'):
+                config['extra_stdout'] = 'Response: {"code":0,"data":' + 'x' * 8192 + '…（已截断）'
+            with self.subTest(mode=mode):
+                self.reject(config)
 
-    def test_actual_media_duration_must_match_the_api_not_just_its_dimensions(self):
-        with tempfile.TemporaryDirectory() as scratch:
-            base = Path(scratch)
-            video = video_from_image(score_frame(), base)
-            view = {'bvid': BV, 'title': 'Fixture', 'pages': [{'page': 2, 'cid': 22, 'duration': 20}]}
-            play = {'timelength': 20000, 'dash': {'video': [{'id': 80, 'baseUrl': MEDIA,
-                    'width': 1280, 'height': 960, 'codecs': 'avc1', 'mimeType': 'video/mp4'}]}}
-            status, result, events = self.run_case(base, video, view=view, play=play)
+    def test_interactive_redirected_and_exclusive_videos_are_rejected(self):
+        for target, field, value in [('view', 'rights', {'is_stein_gate': 1}),
+                ('view', 'redirect_url', 'https://www.bilibili.com/bangumi/play/ep1'),
+                ('view', 'is_upower_exclusive', True), ('player', 'is_upower_exclusive', True)]:
+            config = fixture_config()
+            config[target][field] = value
+            self.reject(config, 'unsupported_stream')
+
+    def test_missing_restriction_fields_cannot_be_assumed_false(self):
+        for target, field in [('view', 'rights'), ('player', 'is_upower_exclusive')]:
+            config = fixture_config()
+            config[target].pop(field)
+            self.reject(config)
+
+    def test_player_cid_and_aid_must_match_view(self):
+        for field, value in [('cid', 11), ('aid', 99), ('cid', True)]:
+            config = fixture_config()
+            config['player'][field] = value
+            self.reject(config)
+
+    def test_request_playurl_identity_must_match_the_selected_page(self):
+        for query in ('avid=44&cid=11', 'avid=99&cid=22', 'bvid=BV1np421S78S&cid=22',
+                      'avid=44&cid=22&cid=11', 'cid=22', 'avid=44&aid=99&cid=22'):
+            self.reject(fixture_config(query=query))
+
+    def test_missing_or_multiple_playurl_files_fail_closed(self):
+        for files in (0, 2):
+            self.reject(fixture_config(files=files))
+
+    def test_preview_and_incomplete_declared_duration_never_download(self):
+        for field, value in [('is_preview', True), ('is_upower_exclusive', True),
+                             ('timelength', 500), ('timelength', 0), ('timelength', None)]:
+            config = fixture_config()
+            config['play'][field] = value
+            self.reject(config, 'incomplete_video')
+
+    def test_unknown_or_nonfinite_full_duration_is_rejected(self):
+        for value in (None, 0, -1, True, '2'):
+            config = fixture_config()
+            config['view']['pages'][1]['duration'] = value
+            self.reject(config, 'incomplete_video')
+
+    def test_oversized_raw_output_is_bounded_and_not_published(self):
+        self.reject(fixture_config(extra_stdout='DO_NOT_SAVE_TEST_SENTINEL' * 100000), 'download_too_large')
+
+    def test_multisegment_durl_cannot_masquerade_as_complete_video(self):
+        config = fixture_config(play={'timelength': 2000, 'durl': [{'url': MEDIA}, {'url': MEDIA}]})
+        self.reject(config, 'unsupported_stream')
+
+    def test_actual_duration_is_checked_for_every_successful_metadata_route(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            video = video_from_image(score_frame(), root)
+            config = fixture_config()
+            config['view']['pages'][1]['duration'] = 20
+            config['play']['timelength'] = 20000
+            status, result, events = self.run_case(root, video, config)
             self.assertEqual(status, 2, result)
             self.assertEqual(result['error']['code'], 'incomplete_video')
-            self.assertIn('media', events)
-            self.assertEqual({p.name for p in (base / 'result').iterdir()}, {'manifest.json'})
-            self.assertEqual(result['error']['fallback_trigger']['proxy_connect_status'], 403)
+            self.assertEqual(events, ['media'])
+            self.assertFalse((root / 'result').exists())
+
+    def test_pinned_binary_digest_is_required_without_trusting_banner(self):
+        from drum_score import bbdown_cli
+        from bbdown_fixture import install_fake_bbdown
+        import os
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            binary, digest = install_fake_bbdown(root, fixture_config())
+            with patch.dict(os.environ, {'PATH': str(binary.parent) + os.pathsep + os.environ['PATH']}):
+                with self.assertRaises(InputError) as raised:
+                    acquire(URL, root / 'result')
+            self.assertEqual(raised.exception.code, 'backend_version_mismatch')
+            self.assertFalse((root / 'result').exists())
+
+    def test_missing_binary_has_an_actionable_sanitized_error(self):
+        from drum_score import bbdown_cli
+        with tempfile.TemporaryDirectory() as d, patch.object(bbdown_cli.shutil, 'which', return_value=None):
+            with self.assertRaises(InputError) as raised:
+                acquire(URL, Path(d) / 'result')
+            self.assertEqual(raised.exception.code, 'dependency_missing')
+
+    def test_complete_playurl_json_size_limit_is_enforced(self):
+        config = fixture_config()
+        config['play']['large_unused'] = 'DO_NOT_SAVE_TEST_SENTINEL' * 100000
+        self.reject(config, 'download_too_large')
+
+    def test_truncated_or_duplicate_json_fields_do_not_override_identity(self):
+        config = fixture_config()
+        config['responses'] = [{'code': 0, 'data': config['player']}]
+        config['extra_stdout'] = 'Response: {"code":0,"data":{"bvid":"' + BV + '","bvid":"' + BV + '","pages":[]}}'
+        self.reject(config)
+
+    def test_metadata_file_symlink_is_rejected_without_reading_target(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            sentinel = root / 'sentinel'
+            sentinel.write_text('DO_NOT_SAVE_TEST_SENTINEL')
+            config = fixture_config(files=0, debug_symlink=str(sentinel))
+            status, result, events = self.run_case(root, root / 'unused', config)
+            self.assertEqual(status, 2, result)
+            self.assertEqual(events, [])
+            self.assertEqual(sentinel.read_text(), 'DO_NOT_SAVE_TEST_SENTINEL')
+
+    def test_format_labels_cannot_publish_arbitrary_upstream_strings(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            video = video_from_image(score_frame(), root)
+            config = fixture_config()
+            config['play']['dash']['video'][0]['id'] = 'DO_NOT_SAVE_TEST_SENTINEL'
+            status, result, events = self.run_case(root, video, config)
+            self.assertNotIn('DO_NOT_SAVE_TEST_SENTINEL', str(result))
+
+    def test_complete_view_larger_than_legacy_log_cutoff_is_accepted(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            video = video_from_image(score_frame(), root)
+            config = fixture_config()
+            config['view']['desc'] = 'synthetic public description ' * 500
+            self.assertGreater(len(json.dumps({'code': 0, 'data': config['view']})), 8192)
+            status, result, events = self.run_case(root, video, config)
+            self.assertEqual(status, 0, result)
+            self.assertEqual(result['origin']['cid'], 22)
+            self.assertEqual(events, ['media'])
+
+    def test_complete_view_over_metadata_budget_is_rejected_before_media(self):
+        config = fixture_config()
+        config['view']['desc'] = 'x' * (2 * 1024**2 + 1)
+        self.reject(config, 'download_too_large')
+
+    def test_view_player_like_fields_do_not_count_as_a_second_player_response(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            video = video_from_image(score_frame(), root)
+            config = fixture_config()
+            config['view'].update(cid=11, is_upower_exclusive=False)
+            status, result, events = self.run_case(root, video, config)
+            self.assertEqual(status, 0, result)
+            self.assertEqual(result['origin']['cid'], 22)
+            self.assertEqual(events, ['media'])
+
+    def test_metadata_bounded_build_records_its_exact_executable_identity(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            video = video_from_image(score_frame(), root)
+            with configured_fake(root, fixture_config(), video, build='metadata-bounded.1') as binary:
+                expected_digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+                source, origin = acquire(URL, root / 'result')
+            self.assertEqual(origin['backend'], 'BBDownNext')
+            self.assertEqual(origin['backend_version'], '2.3.0')
+            self.assertEqual(origin['backend_build'], 'metadata-bounded.1')
+            self.assertEqual(origin['backend_sha256'], expected_digest)
+            self.assertEqual(source.read_bytes(), video.read_bytes())
+
+    def test_official_release_is_rejected_before_execution_without_response_bound(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            marker = root / 'must-not-run'
+            config = fixture_config(marker=str(marker))
+            with configured_fake(root, config, build='official'):
+                with self.assertRaises(InputError) as caught:
+                    acquire(URL, root / 'result')
+            self.assertEqual(caught.exception.code, 'backend_version_mismatch')
+            self.assertFalse(marker.exists())
+            self.assertFalse((root / 'result').exists())

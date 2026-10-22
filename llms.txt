@@ -1,45 +1,25 @@
 # bilibili-drum-score-to-pdf
 
-> Agent Skill for converting existing drum sheet music in Bilibili or local videos into printable A4 PDFs. 中文：B站鼓谱视频转 PDF。输入必须已有可见鼓谱，不从演奏音频或动作生成乐谱。
+One repository, two independent products for turning visible vertical drum score videos into A4 PDFs. The root README is the shared entry point.
 
-## Project facts
+The self-contained Agent Skill lives in skills/bilibili-drum-score-to-pdf/. Install that whole directory, including scripts, references and LICENSE. It uses its own pinned requirements and Agent image/page review protocol. The default route preserves continuous score images; explicit requests enable optional redraw or vector workflows. It does not import or call the website.
 
-- Type: Agent Skill with local Python scripts; not a standalone one-command converter or hosted API.
-- Input: public HTTPS Bilibili BV video URLs, including ?p=2, or local video files.
-- Supported layout: fixed-scale, white-background, multi-system drum notation scrolling vertically, especially stationary viewports followed by upward advancement.
-- Output: A4 PDF named after the verified score title, source evidence, and task records. PDF files are under exports/<revision>/ in the task directory. Outputs disclose possible local inference and are not symbol-by-symbol music transcriptions.
-- Runtime: Python 3.12, Git, uv, ffmpeg, ffprobe, Poppler; a host agent with file access, script execution, native image viewing, and PDF page viewing.
-- Rendering: host image generation first, contour-vector fallback when unavailable or unsuitable. Contour tracing is not music recognition and cannot recover fully hidden symbols.
-- Authentication: anonymous public-video acquisition; no Bilibili cookies, login session, or model credentials required or read. No embedded model API.
-- Validation: real full-score PDF evidence exists in Codex for three videos. Other hosts have not completed full-score acceptance. No general accuracy, speed, or cost guarantee.
-- Limitations: horizontal scrolling, changing scale, unverifiable continuity, and performance-only videos are outside the validated scope. Local blurred or obscured symbols may be inferred by image generation; obvious missing systems must be repaired by stitching, not invented.
+The standalone Python/CLI and optional FastAPI website live in src/drum_score/. Install with pyproject.toml in a separate Python 3.12+ environment; the web extra adds service dependencies. The public website is https://drum.kenqia.top/. It uses BBDownNext 2.3.0 metadata-bounded.1 with direct egress, never loads Skill protocols, and has no model generation or Agent approval step. Complete means artifact publication, with reliable=false. Web results expire after 24 hours.
 
-## License
+Both need native FFmpeg/ffprobe/Poppler. The website service lifecycle is Ubuntu/Linux-specific. Anonymous acquisition must not load user cookies or credentials. Keep task state, dependencies and output directories separate; existing output is never overwritten.
 
-Original code and documentation use the [MIT license](LICENSE). Third-party music, sheet music, and derived demonstration images are excluded from that grant and retain their original rights. See [asset attribution](docs/media/readme/README.md).
+- [Introduction and product choice](README.md)
+- [Skill entry](skills/bilibili-drum-score-to-pdf/SKILL.md)
+- [Skill installation](docs/skill-install.md)
+- [Skill verification](docs/skill-verification.md)
+- [Program and website installation](docs/install.md)
+- [Conversion contract](docs/script-product/conversion.md)
+- [Website and storage contract](docs/script-product/website.md)
+- [Independent product boundaries](docs/adr/0007-independent-skill-and-website.md)
+- [Architecture](docs/architecture.md)
+- [Program verification and evidence](docs/verification.md)
+- [Terminology](GLOSSARY.md)
 
-## Install
+Run tests/skill and root tests in separate Python processes; their fixtures and module names overlap. Synthetic assertions do not prove actual Agent image review, source approval, model calls or musical proofreading. Historical evidence stays in docs/experiments and Git; restoring the Skill does not resolve old source uncertainties.
 
-Install the complete skills/bilibili-drum-score-to-pdf directory, including SKILL.md, scripts/, references/, and LICENSE. It is self-contained and does not require the source repository's docs/ at runtime. Follow the host's actual discovery mechanism and verify visibility in its skill selector, readable protocols, dependencies, and CLI help. After installation, explicitly select $bilibili-drum-score-to-pdf and provide a video URL; the default task is PDF.
-
-- [Installation, verification, updates and rollback](docs/install.md)
-- [Canonical Skill instructions](skills/bilibili-drum-score-to-pdf/SKILL.md)
-
-## Execute
-
-Read the canonical Skill instructions before acting. Prepare the source, then stage automatically stitches a longshot. Review the longshot once with review-longshot, then advance through host generation or vector fallback, A4 export and final-page review. Actual host generation and image viewing remain agent actions. Do not claim delivery until every final page has been viewed and review-pdf approves the current independent output_revision. A PDF hash is not an output revision.
-
-- [Normal stages, local recovery and print layout](skills/bilibili-drum-score-to-pdf/references/stage-recovery-layout.md)
-- [CLI operations and request fields](skills/bilibili-drum-score-to-pdf/references/reconstruction-entry.md)
-
-## Evidence and development
-
-Keep original sources separate from derived outputs. Preserve actual PTS, hashes, generation history and correction budgets. Deduplicate overlapping copies of the same source location; retain repeated music at later locations. Keep costs null when unknown. Synthetic receipts, deterministic replay, actual model generation and actual visual review are different evidence categories.
-
-- [Human introduction and usage examples](README.md)
-- [Documentation index](docs/README.md)
-- [Architecture and safety boundaries](docs/architecture.md)
-- [Verification commands and actual evidence](docs/verification.md)
-- [Release scope](docs/launch-readiness.md)
-- [Domain terminology](GLOSSARY.md)
-- [Contributor working agreements](AGENTS.md)
+Code and documentation use MIT. Music, notation and derived examples retain their owners' rights. See LICENSE and docs/media/readme/README.md.
