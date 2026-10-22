@@ -1,31 +1,89 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const active = new Set(["queued", "running", "cancelling", "finishing"]);
-const titles = {queued:"已加入等待队列",running:"正在整理鼓谱",cancelling:"正在停止处理",finishing:"正在保存结果",complete:"鼓谱整理完成",failed:"这次未能完成",cancelled:"任务已取消",interrupted:"处理已中断"};
-const stages = {starting:"正在开始处理。",downloading:"正在获取公开视频。",probing:"正在检查视频。",sampling:"正在采集原生谱面。",registering:"正在核对相邻谱面的位置。",composing:"正在拼接连续谱面。",paginating:"正在安排 A4 页面。",finishing:"正在保存完整 PDF 和全部预览。",cancelling:"正在停止实际进程并清理临时文件。"};
+const titles = {queued:"正在排队",running:"正在整理鼓谱",cancelling:"正在停止",finishing:"马上就好",complete:"鼓谱整理好了",failed:"这个视频没能整理出来",cancelled:"任务已取消",interrupted:"处理被中断了"};
+const stages = {starting:"正在准备。",downloading:"正在获取视频。",probing:"正在检查视频。",sampling:"正在读取视频里的谱面。",registering:"正在对齐前后画面。",composing:"正在把谱行接起来。",paginating:"正在排成 A4 页面。",finishing:"正在保存 PDF 和预览。",cancelling:"正在停止处理并清理临时文件。"};
+// Progress bar steps, in order; each backend stage maps onto one of them.
+const steps = ["queue", "fetch", "read", "stitch", "layout"];
+const stepOf = {queued:"queue",starting:"fetch",downloading:"fetch",probing:"read",sampling:"read",registering:"stitch",composing:"stitch",paginating:"layout",finishing:"layout"};
+// Plain-language explanations for drummers; the server message stays available as detail.
+const friendly = {
+  invalid_bilibili_url:"这不像是 B站视频链接。请复制 bilibili.com/video/BV… 开头的链接再试。",
+  invalid_request:"这不像是 B站视频链接。请复制 bilibili.com/video/BV… 开头的链接再试。",
+  ip_busy:"你所在的网络已经有一个任务在处理了。等它完成或取消后再提交。学校、公司等共用网络也会占用名额。",
+  queue_full:"现在排队的人太多了，请过几分钟再试。",
+  service_busy:"服务器正忙，请稍后再试。",
+  storage_full:"服务器空间暂时不够，请稍后再试。",
+  unsupported_layout:"视频里没找到白底的鼓谱。这个工具只适合白色背景、从下往上滚动的鼓谱视频。",
+  discontinuity:"视频里有一段谱面接不上（可能跳过了、翻页了或被挡住了）。为了不给你一份缺行的谱子，这次没有生成 PDF。",
+  source_changed:"处理期间视频发生了变化，请重新整理。",
+  resource_limit:"视频太长或画面太大。目前支持 10 分钟以内、4K 以下的视频。",
+  download_too_large:"视频文件太大了。目前支持 10 分钟以内、4K 以下的视频。",
+  http_unavailable:"拿不到这个视频。它可能需要登录、是会员专享、有地区限制或者已经下架。",
+  public_api_unavailable:"拿不到这个视频。它可能需要登录、是会员专享、有地区限制或者已经下架。",
+  unsupported_stream:"这个视频的格式暂时处理不了。",
+  undecodable_video:"视频读取失败。可以点「重新整理」再试一次。",
+  decode_failed:"视频读取失败。可以点「重新整理」再试一次。",
+  network_timeout:"获取视频超时了。可以点「重新整理」再试一次。",
+  acquisition_interrupted:"获取视频时被中断了。可以点「重新整理」再试一次。",
+  incomplete_video:"下载到的视频不完整。可以点「重新整理」再试一次。",
+  expired:"结果已经过了 24 小时的保存期，被自动删除了。重新提交链接就能再整理一次。",
+  not_found:"找不到这个任务。请打开提交时保存的完整链接。"
+};
 let taskId, capability, timer, previewLoaded = false;
 const blobs = [];
-function showError(id, message) { $(id).textContent = message; $(id).hidden = false; }
+
+function showError(box, code, raw) {
+  const text = friendly[code] || raw || "出了点问题，请稍后再试。";
+  if (box === "submit-error") { $(box).textContent = text; $(box).hidden = false; return; }
+  $("task-error-text").textContent = text;
+  const extra = raw && raw !== text;
+  $("task-error-detail").hidden = !extra;
+  $("task-error-raw").textContent = extra ? raw : "";
+  $("task-error").hidden = false;
+}
 async function api(path, options = {}) {
   const headers = {...options.headers};
   if (capability) headers.Authorization = "Bearer " + capability;
-  const response = await fetch(path, {...options, headers, cache:"no-store", credentials:"omit", referrerPolicy:"no-referrer"});
+  let response;
+  try { response = await fetch(path, {...options, headers, cache:"no-store", credentials:"omit", referrerPolicy:"no-referrer"}); }
+  catch (_) { const error = new Error("网络连接不稳定，请检查网络后重试。"); error.code = "offline"; throw error; }
   if (!response.ok) {
-    let message = "请求未完成，请稍后重试。";
-    try { message = (await response.json()).error.message; } catch (_) {}
-    const error = new Error(message); error.status = response.status; throw error;
+    let message = "请求没有完成，请稍后再试。", code = "";
+    try { const body = (await response.json()).error; message = body.message; code = body.code; } catch (_) {}
+    const error = new Error(message); error.status = response.status; error.code = code; throw error;
   }
   return response;
 }
+
+// Accept a pasted link or a whole share message; keep only the BV id and page.
+function normalizeLink(text) {
+  const value = text.trim();
+  const bv = /(?:bilibili\.com\/video\/|^|[^A-Za-z0-9])(BV[0-9A-Za-z]{10})(?![0-9A-Za-z])/.exec(value);
+  if (bv) {
+    const page = /[?&]p=([1-9][0-9]{0,5})(?![0-9])/.exec(value);
+    return {url:`https://www.bilibili.com/video/${bv[1]}` + (page ? `?p=${page[1]}` : "")};
+  }
+  if (/b23\.tv\//i.test(value)) return {error:"这是 App 分享的短链接，网站暂时打不开它。请在浏览器里打开这个链接，再复制地址栏里 bilibili.com/video/BV… 开头的完整链接。"};
+  if (!value) return {error:"先粘贴一个 B站视频链接。"};
+  return {error:friendly.invalid_bilibili_url};
+}
+
 $("submit-form").addEventListener("submit", async (event) => {
-  event.preventDefault(); $("submit-error").hidden = true; $("submit-button").disabled = true;
+  event.preventDefault(); $("submit-error").hidden = true;
+  const link = normalizeLink($("source").value);
+  if (link.error) { $("submit-error").textContent = link.error; $("submit-error").hidden = false; $("source").focus(); return; }
+  $("submit-button").disabled = true; $("submit-button").textContent = "正在提交…";
   try {
-    const response = await api("/api/tasks", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({url:$("source").value.trim()})});
+    const response = await api("/api/tasks", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({url:link.url})});
     const created = await response.json(); window.location.assign(created.link);
-  } catch (error) { showError("submit-error", error.message); $("submit-button").disabled = false; }
+  } catch (error) {
+    showError("submit-error", error.code, error.message);
+    $("submit-button").disabled = false; $("submit-button").textContent = "整理鼓谱";
+  }
 });
+
 async function loadPreviews(count) {
-  $("task-error").hidden = true;
   $("reload-previews").hidden = true;
   $("previews").replaceChildren();
   for (const url of blobs.splice(0)) URL.revokeObjectURL(url);
@@ -39,8 +97,28 @@ async function loadPreviews(count) {
       figure.append(image, caption); $("previews").append(figure);
     }
     previewLoaded = true;
-  } catch (error) { showError("task-error", "预览加载失败。" + error.message); $("reload-previews").hidden = false; }
+  } catch (error) { showError("task-error", "", "预览没加载出来。" + error.message); $("reload-previews").hidden = false; }
 }
+
+function showProgress(state) {
+  const show = active.has(state.state);
+  $("progress").hidden = !show;
+  if (!show) return;
+  const current = steps.indexOf(stepOf[state.stage] || (state.state === "queued" ? "queue" : "layout"));
+  for (const item of $("progress").children) {
+    const index = steps.indexOf(item.dataset.step);
+    item.className = index < current ? "done" : index === current ? "now" : "";
+    if (index === current) item.setAttribute("aria-current", "step"); else item.removeAttribute("aria-current");
+  }
+}
+
+function formatExpiry(seconds) {
+  const date = new Date(seconds * 1000);
+  const hours = Math.max(0, Math.round((date - Date.now()) / 3600000));
+  const clock = date.toLocaleString("zh-CN", {month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit", hour12:false});
+  return `保留到 ${clock}（约 ${hours} 小时后删除）`;
+}
+
 async function refresh() {
   clearTimeout(timer);
   try {
@@ -48,20 +126,27 @@ async function refresh() {
     $("task-error").hidden = true;
     $("task-title").textContent = titles[state.state] || "正在读取任务";
     let description = stages[state.stage] || "";
-    if (state.state === "queued") description = `当前排在等待队列第 ${state.queue_position} 位。关掉页面后任务仍会继续。`;
-    if (state.state === "complete") description = `已整理为 ${state.result.page_count} 页 A4 鼓谱，可查看全部页面并下载。`;
-    if (state.error) description = state.error.message;
-    if (state.state === "cancelled") description = "处理已停止，临时文件已清理。你可以显式重新排队。";
+    if (state.state === "queued") description = state.queue_position > 1 ? `前面还有 ${state.queue_position - 1} 个任务。关掉页面也会继续排队。` : "马上轮到你了。关掉页面也会继续。";
+    if (state.state === "complete") description = `一共 ${state.result.page_count} 页 A4。先翻一遍预览，没问题就下载。`;
+    if (state.state === "cancelled") description = "已经停止，临时文件也清理了。需要的话可以重新整理。";
+    if (state.state === "interrupted") description = "服务器重启打断了处理。点「重新整理」继续。";
+    if (state.state === "failed") description = "";
     $("task-description").textContent = description;
-    $("task-meta").hidden = false; $("source-label").textContent = `${state.source.bvid} · 第 ${state.source.page} P`;
-    $("source-link").href = state.source.url; $("save-link").hidden = false;
+    $("task-description").hidden = !description;
+    if (state.error) showError("task-error", state.error.code, state.error.message);
+    document.title = `${titles[state.state] || "鼓谱整理"} · 鼓谱整理`;
+    showProgress(state);
+    $("task-meta").hidden = false;
+    $("source-label").textContent = `${state.source.bvid}` + (state.source.page > 1 ? ` · 第 ${state.source.page} P` : "");
+    $("source-link").href = state.source.url;
+    $("save-link").hidden = !active.has(state.state) && state.state !== "complete";
     $("task-link").value = window.location.href;
     $("cancel").hidden = !["queued","running"].includes(state.state);
     $("retry").hidden = !["failed","cancelled","interrupted"].includes(state.state);
     $("download").hidden = state.state !== "complete";
     $("result").hidden = state.state !== "complete";
     if (state.state === "complete") {
-      $("expiry").textContent = "结果保留至 " + new Date(state.expires_at * 1000).toLocaleString("zh-CN", {hour12:false});
+      $("expiry").textContent = formatExpiry(state.expires_at);
       $("warnings").replaceChildren();
       for (const warning of state.result.warnings) {
         if (warning.code === "not_musically_proofread") continue;
@@ -72,41 +157,46 @@ async function refresh() {
     }
     if (active.has(state.state)) timer = setTimeout(refresh, 1500);
   } catch (error) {
-    showError("task-error", error.message);
     if (error.status === 404 || error.status === 410) {
-      $("task-title").textContent = error.status === 410 ? "结果已到期" : "无法访问此任务";
-      $("task-description").textContent = error.status === 410 ? "结果保留期为完成后 24 小时。请重新提交来源链接。" : "请使用提交后保存的完整链接，包含 # 后面的访问凭据。";
-      for (const id of ["download","cancel","retry","result"]) $(id).hidden = true;
-    } else timer = setTimeout(refresh, 3000);
+      $("task-title").textContent = error.status === 410 ? "结果已过期" : "找不到这个任务";
+      $("task-description").hidden = true;
+      showError("task-error", error.status === 410 ? "expired" : "not_found", "");
+      for (const id of ["download","cancel","retry","result","progress","save-link"]) $(id).hidden = true;
+    } else { showError("task-error", error.code, error.message + " 正在自动重试…"); timer = setTimeout(refresh, 3000); }
   }
 }
+
 for (const action of ["cancel","retry"]) $(action).addEventListener("click", async () => {
+  if (action === "cancel" && !window.confirm("确定取消这次整理吗？")) return;
   $(action).disabled = true; $("task-error").hidden = true;
   try { await api(`/api/tasks/${taskId}/${action}`, {method:"POST"}); previewLoaded = false; await refresh(); }
-  catch (error) { showError("task-error", error.message); }
+  catch (error) { showError("task-error", error.code, error.message); }
   finally { $(action).disabled = false; }
 });
 $("download").addEventListener("click", async () => {
-  $("download").disabled = true; $("task-error").hidden = true;
+  const label = $("download").textContent;
+  $("download").disabled = true; $("download").textContent = "正在下载…"; $("task-error").hidden = true;
   try {
     const response = await api(`/api/tasks/${taskId}/pdf`);
-    if (Number(response.headers.get("Content-Length")) > 256 * 1024 * 1024) throw new Error("PDF 超过本页 256 MiB 下载上限，请联系维护者。");
+    if (Number(response.headers.get("Content-Length")) > 256 * 1024 * 1024) throw new Error("PDF 超过 256 MiB，浏览器无法下载。");
     const url = URL.createObjectURL(await response.blob());
     const link = document.createElement("a"); link.href = url; link.download = "鼓谱.pdf"; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
-  } catch (error) { showError("task-error", error.message); }
-  finally { $("download").disabled = false; }
+  } catch (error) { showError("task-error", error.code, error.message); }
+  finally { $("download").disabled = false; $("download").textContent = label; }
 });
 $("copy-link").addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText(window.location.href); $("copy-status").textContent = "链接已复制。"; }
-  catch (_) { $("task-link").focus(); $("task-link").select(); $("copy-status").textContent = "请复制已选中的完整链接。"; }
+  try { await navigator.clipboard.writeText(window.location.href); $("copy-status").textContent = "已复制。可以发给自己或存到备忘录。"; }
+  catch (_) { $("task-link").focus(); $("task-link").select(); $("copy-status").textContent = "已选中链接，请手动复制。"; }
 });
 window.addEventListener("pagehide", () => { clearTimeout(timer); for (const url of blobs) URL.revokeObjectURL(url); });
 window.addEventListener("pageshow", (event) => { if (event.persisted && taskId && capability) { previewLoaded = false; refresh(); } });
+
 const match = /^\/task\/([A-Za-z0-9_-]+)$/.exec(window.location.pathname);
 if (match) {
   taskId = match[1]; capability = window.location.hash.slice(1);
-  $("submission").hidden = true; $("task").hidden = false;
+  for (const id of ["landing-hero", "landing-body", "landing-nav"]) $(id).hidden = true;
+  $("task").hidden = false;
   if (/^[A-Za-z0-9_-]{43}$/.test(capability)) refresh();
-  else { $("task-title").textContent = "访问链接不完整"; $("task-description").textContent = "请打开提交后保存的完整链接，包含 # 后面的访问凭据。"; }
+  else { $("task-title").textContent = "链接不完整"; $("task-description").textContent = "请打开提交时保存的完整链接，# 号后面的部分也要带上。"; }
 }
