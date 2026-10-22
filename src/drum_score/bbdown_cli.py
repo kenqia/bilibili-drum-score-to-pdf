@@ -24,7 +24,7 @@ def _invalid(code='unavailable_page'):
     return InputError(code, '匿名播放信息无法完整验证。请提供清晰的本地视频。')
 
 
-def _json(text):
+def _json():
     def unique(pairs):
         result = {}
         for key, value in pairs:
@@ -40,7 +40,7 @@ def _positive(value):
 
 
 def _responses(output):
-    decoder = _json(output)
+    decoder = _json()
     values = []
     for match in re.finditer(r'Response: ', output):
         try:
@@ -66,7 +66,7 @@ def _metadata(output, work, origin):
     if not isinstance(rights, dict) or type(rights.get('is_stein_gate')) not in (bool, int):
         raise _invalid()
     if (rights['is_stein_gate'] or data.get('redirect_url') or data.get('is_upower_exclusive')
-            or data.get('is_upower_play') or rights.get('is_cooperation') and data.get('redirect_url')):
+            or data.get('is_upower_play')):
         raise _invalid('unsupported_stream')
     if not isinstance(data.get('pages'), list) or not all(isinstance(p, dict) for p in data['pages']):
         raise _invalid()
@@ -77,10 +77,12 @@ def _metadata(output, work, origin):
     if not _positive(page.get('duration')):
         raise _invalid('incomplete_video')
     players = [r for r in responses if isinstance(r.get('data'), dict) and 'is_upower_exclusive' in r['data'] and 'cid' in r['data']]
-    if len(players) != 1 or players[0].get('code') != 0:
+    if len(players) != 1 or type(players[0].get('code')) is not int or players[0]['code'] != 0:
         raise _invalid()
     player = players[0]['data']
-    if player.get('cid') != page['cid'] or player.get('aid') != data['aid'] or type(player.get('is_upower_exclusive')) is not bool:
+    if (type(player.get('cid')) is not int or type(player.get('aid')) is not int
+            or player['cid'] != page['cid'] or player['aid'] != data['aid']
+            or type(player.get('is_upower_exclusive')) is not bool):
         raise _invalid()
     if player['is_upower_exclusive']:
         raise _invalid('unsupported_stream')
@@ -104,13 +106,16 @@ def _metadata(output, work, origin):
         raise _invalid()
     raw = files[0]
     try:
-        with raw.open('rb') as source:
-            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode) or raw.is_symlink():
+        if not stat.S_ISREG(raw.lstat().st_mode):
+            raise ValueError
+        descriptor = os.open(raw, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+        with os.fdopen(descriptor, 'rb') as source:
+            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
                 raise ValueError
             payload = source.read(MAX_METADATA + 1)
         if len(payload) > MAX_METADATA:
             raise _invalid('download_too_large')
-        play_response = _json('').decode(payload.decode('utf-8'))
+        play_response = _json().decode(payload.decode('utf-8'))
     finally:
         raw.unlink(missing_ok=True)
     if not isinstance(play_response, dict) or type(play_response.get('code')) is not int or play_response['code'] != 0:
@@ -172,7 +177,11 @@ def inspect(origin, staging):
             with open(location, 'rb') as source, binary.open('xb') as target:
                 if not stat.S_ISREG(os.fstat(source.fileno()).st_mode) or os.fstat(source.fileno()).st_size > 512 * 1024**2:
                     raise _invalid('backend_version_mismatch')
+                total = 0
                 while block := source.read(1024**2):
+                    total += len(block)
+                    if total > 512 * 1024**2:
+                        raise _invalid('backend_version_mismatch')
                     digest.update(block)
                     target.write(block)
             if digest.hexdigest() != OFFICIAL_SHA256:
@@ -190,7 +199,12 @@ def inspect(origin, staging):
                 args = [origin['url'], '--info-only', '--debug', '--all', '--hide-streams', '--api', 'web',
                         '-g', 'v', '--max-retry', '0', '-p', str(origin['page']), '--no-force-http',
                         '--config', str(config), '--work-dir', str(root)]
-                output = _run(binary, args, env)
+                try:
+                    output = _run(binary, args, env)
+                except InputError:
+                    if gateway.failure:
+                        raise gateway.failure from None
+                    raise
                 if gateway.failure:
                     raise gateway.failure
             return _metadata(output, root, origin)

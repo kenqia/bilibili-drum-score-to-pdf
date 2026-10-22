@@ -3,6 +3,8 @@ import json
 import io
 import gzip
 import math
+import re
+from fractions import Fraction
 import subprocess
 from urllib.error import HTTPError
 from .public_video import InputError, MAX_BYTES, checked_media_url
@@ -47,12 +49,31 @@ def download(origin, staging):
     for stream in videos:
         if not isinstance(stream, dict):
             raise InputError('unsupported_stream', '匿名接口视频轨格式无效。')
+        quality = stream.get('id')
+        if isinstance(quality, str) and re.fullmatch(r'[0-9]{1,5}', quality):
+            quality = int(quality)
+        if quality is not None and (type(quality) is not int or not 0 <= quality <= 99999):
+            raise InputError('unsupported_stream', '匿名接口视频格式标记无效。')
+        rate = stream.get('frameRate') or stream.get('frame_rate')
+        try:
+            rate = float(Fraction(str(rate))) if rate is not None else None
+            if rate is not None and (not math.isfinite(rate) or not 0 < rate <= 1000):
+                raise ValueError
+        except (ValueError, ZeroDivisionError):
+            raise InputError('unsupported_stream', '匿名接口视频帧率标记无效。') from None
+        for dimension in ('width', 'height'):
+            value = stream.get(dimension)
+            if value is not None and (type(value) is not int or not 0 < value <= 32768):
+                raise InputError('unsupported_stream', '匿名接口视频尺寸标记无效。')
+        bandwidth = stream.get('bandwidth')
+        if bandwidth is not None and (type(bandwidth) is not int or bandwidth < 0):
+            raise InputError('unsupported_stream', '匿名接口视频码率标记无效。')
         formats.append({'url': stream.get('baseUrl') or stream.get('base_url'),
             'backup_urls': stream.get('backupUrl') or stream.get('backup_url') or [],
             'vcodec': stream.get('codecs') or 'unknown', 'acodec': 'none',
             'width': stream.get('width'), 'height': stream.get('height'),
-            'format_id': str(stream.get('id')), 'quality': stream.get('id'),
-            'fps': stream.get('frameRate') or stream.get('frame_rate'), 'tbr': stream.get('bandwidth')})
+            'format_id': str(quality) if quality is not None else None, 'quality': quality,
+            'fps': rate, 'tbr': bandwidth})
     if not formats:
         segments = play.get('durl') or []
         if len(segments) != 1 or not isinstance(segments[0], dict):
@@ -97,10 +118,9 @@ def download(origin, staging):
                 decode = subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-i', str(destination), '-map', '0:v:0', '-frames:v', '1', '-f', 'null', '-'], capture_output=True, timeout=30)
                 if decode.returncode:
                     raise ValueError
-                if True:
-                    actual_duration = float(metadata.get('format', {}).get('duration', 'nan'))
-                    if not math.isfinite(actual_duration) or abs(actual_duration - info['duration']) > 0.5:
-                        raise InputError('incomplete_video', '下载文件时长与目标分 P 不一致。')
+                actual_duration = float(metadata.get('format', {}).get('duration', 'nan'))
+                if not math.isfinite(actual_duration) or abs(actual_duration - info['duration']) > 0.5:
+                    raise InputError('incomplete_video', '下载文件时长与目标分 P 不一致。')
                 if stream['width'] < (fmt.get('width') or 0) or stream['height'] < (fmt.get('height') or 0):
                     raise InputError('media_resolution_mismatch', '视频实测分辨率低于公开格式标记。请提供清晰的本地视频。', {**origin, 'backend': 'BBDownNext', 'backend_version': '2.3.0', 'anonymous': True, 'actual_video': stream})
                 return {'backend': 'BBDownNext', 'backend_version': '2.3.0', 'anonymous': True,

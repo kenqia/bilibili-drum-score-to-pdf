@@ -11,62 +11,53 @@ import unittest
 from score_fixtures import score_frame, video_from_image
 
 
-STARTUP = '''
+STARTUP = r'''
 import io, os, socket, sys, time
 from pathlib import Path
 from unittest.mock import patch
 mode = os.environ['NETWORK_MODE']
 marker = Path(os.environ['NETWORK_MARKER'])
-from yt_dlp import YoutubeDL
-info = {'id': 'BV1b5411x7Ku_p2', 'formats': [{'url': 'https://cdn.bilivideo.com/video', 'vcodec': 'avc1', 'acodec': 'none'}]}
+sys.path.insert(0, TEST_DIRECTORY)
+from bbdown_fixture import install_fake_bbdown, fixture_config
+from drum_score import bbdown_cli
+config = fixture_config()
+if mode in ('extract', 'recovery', 'exit'):
+ config.update(marker=str(marker), stall=mode != 'exit', child_stall=mode == 'exit')
+base = marker.parent
+binary, digest = install_fake_bbdown(base, config)
+bbdown_cli.OFFICIAL_SHA256 = digest
+os.environ['PATH'] = str(binary.parent) + os.pathsep + os.environ['PATH']
 def stall(*args, **kwargs):
-    marker.write_text(str(os.getpid()))
-    time.sleep(60)
+ marker.write_text(str(os.getpid()))
+ time.sleep(60)
 def copy_stall(*args, **kwargs):
-    marker.with_name('copy-pid').write_text(str(os.getpid()))
-    stall()
+ marker.with_name('copy-pid').write_text(str(os.getpid()))
+ stall()
 def copy_fixture(origin, staging):
-    # Other cases cover the real backend. This case isolates destination copying.
-    import shutil
-    shutil.copyfile(os.environ['FIXTURE_VIDEO'], Path(staging) / 'video.mp4')
-    return {'backend': 'controlled-copy-fixture'}
-def recovery_route(origin, staging, public_api=False):
-    if public_api:
-        stall()
-    from drum_score.public_video import InputError
-    error = InputError('public_api_unavailable', 'Controlled proxy refusal')
-    error.diagnostics = {'failure_stage': 'webpage', 'proxy_connect_status': 403}
-    raise error
+ import shutil
+ shutil.copyfile(os.environ['FIXTURE_VIDEO'], Path(staging) / 'video.mp4')
+ return {'backend': 'controlled-copy-fixture'}
 def dns(*args, **kwargs):
-    if mode == 'dns': stall()
-    return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]
-def extract(*args, **kwargs):
-    if mode == 'extract': stall()
-    if mode == 'exit':
-        import multiprocessing
-        multiprocessing.get_context('fork').Process(target=stall).start()
-    return info
+ if mode == 'dns': stall()
+ return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]
 class Body(io.BytesIO):
-    def read(self, *args):
-        if mode == 'download': stall()
-        return super().read(*args)
+ def read(self, *args):
+  if mode == 'download': stall()
+  return super().read(*args)
 def response(*args, **kwargs):
-    if mode == 'connection': stall()
-    marker.write_text(str(os.getpid()))
-    return Body(Path(os.environ['FIXTURE_VIDEO']).read_bytes() if mode == 'copy' else b'invalid-video')
-# Process-local external transport boundaries are inherited by transfer workers.
-from drum_score import anonymous_backend
-YoutubeDL.extract_info = extract
+ if mode == 'connection': stall()
+ marker.write_text(str(os.getpid()))
+ return Body(Path(os.environ['FIXTURE_VIDEO']).read_bytes() if mode == 'copy' else b'invalid-video')
 socket.getaddrinfo = dns
 import urllib.request
 urllib.request.OpenerDirector.open = response
-if mode == 'recovery':
-    anonymous_backend._download_route = recovery_route
 if mode == 'copy':
-    anonymous_backend.download = copy_fixture
-    import shutil
-    shutil.copyfileobj = copy_stall
-'''
+ from drum_score import anonymous_backend
+ anonymous_backend.download = copy_fixture
+ import shutil
+ shutil.copyfileobj = copy_stall
+'''.replace('TEST_DIRECTORY', repr(str(Path(__file__).parent)))
+
 
 
 

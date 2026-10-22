@@ -1,4 +1,4 @@
-"""Unified CLI acquisition tests at the yt-dlp and HTTP boundaries."""
+"""Public acquisition tests through a real BBDown fixture and HTTP boundaries."""
 import gzip
 import contextlib
 import builtins
@@ -15,7 +15,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from score_fixtures import score_frame, video_from_image
-from yt_dlp import YoutubeDL
+from bbdown_fixture import configured_fake, fixture_config
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from drum_score import public_video
@@ -26,10 +26,21 @@ MEDIA = 'https://cdn.bilivideo.com/video?sign=DO_NOT_SAVE_TEST_SENTINEL'
 
 class LinkInputTests(unittest.TestCase):
     def invoke(self, output, video, formats=None, url=URL, response=None, backend_error=None, dns=None, real_transport=False, info_id=None, actual_backend=False):
-        info = {'id': info_id or 'BV1b5411x7Ku_p2', 'formats': formats or [
-            {'url': MEDIA, 'width': 1280, 'height': 960, 'vcodec': 'avc1', 'acodec': 'none', 'format_id': '80'}]}
+        formats = formats or [{'url': MEDIA, 'width': 1280, 'height': 960, 'vcodec': 'avc1', 'acodec': 'none', 'format_id': '80'}]
+        config = fixture_config()
+        if info_id and info_id != 'BV1b5411x7Ku_p2':
+            config['view']['pages'] = [{'page': 1, 'cid': 11, 'duration': 2}]
+        if backend_error:
+            config['exit'] = True
+        dash = [f for f in formats if f.get('acodec') == 'none' and f.get('vcodec') != 'none']
+        if dash:
+            config['play']['dash']['video'] = [dict(baseUrl=f.get('url'), backupUrl=f.get('backup_urls', []),
+                width=f.get('width'), height=f.get('height'), codecs=f.get('vcodec'), id=f.get('quality') or f.get('format_id')) for f in dash]
+        else:
+            config['play'].pop('dash')
+            config['play']['durl'] = [dict(url=f.get('url'), backup_url=f.get('backup_urls', [])) for f in formats if f.get('vcodec') != 'none']
         stdout, stderr = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), (contextlib.nullcontext() if actual_backend else patch.object(YoutubeDL, 'extract_info', return_value=info, side_effect=backend_error)), (contextlib.nullcontext() if real_transport else patch('urllib.request.OpenerDirector.open', side_effect=response or (lambda *a, **k: io.BytesIO(video.read_bytes())))), patch('socket.getaddrinfo', return_value=dns or [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]):
+        with tempfile.TemporaryDirectory() as tool, contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), configured_fake(Path(tool), config, video, response=response, dns=(lambda *a, **k: dns) if dns else None, real_transport=real_transport):
             try:
                 source, origin = public_video.acquire(url, output)
                 result = {'status': 'complete', 'origin': origin,
@@ -51,7 +62,7 @@ class LinkInputTests(unittest.TestCase):
             self.assertEqual(code, 0, result)
             self.assertTrue(Path(result['source']['path']).is_file())
             self.assertEqual(result['origin']['page'], 2)
-            self.assertEqual(result['origin']['backend'], 'yt-dlp')
+            self.assertEqual(result['origin']['backend'], 'BBDownNext')
             self.assertFalse(result['origin']['authenticated'])
             self.assertFalse(result['origin']['single_file_fallback'])
             self.assertEqual(result['origin']['actual_video']['width'], 1280)
@@ -229,38 +240,23 @@ class LinkInputTests(unittest.TestCase):
             self.assertEqual(list(Path(destination).glob('.anonymous-publish-*')), [])
 
     def test_config_cookie_netrc_and_plugin_sentinels_are_not_read(self):
-        from yt_dlp.extractor.bilibili import BiliBiliIE
-        def extractor(backend, url):
-            # This runs the actual YoutubeDL API/constructor and cookiejar setup.
-            params = backend._downloader.params
-            if params.get('cookiefile') or params.get('cookiesfrombrowser') or params.get('usenetrc') or params.get('cachedir'):
-                raise AssertionError('anonymous isolation violated')
-            if list(backend._downloader.cookiejar):
-                raise AssertionError('loaded cookies')
-            return {'id': 'BV1b5411x7Ku_p2', 'title': 'fixture', 'formats': [{'url': MEDIA, 'vcodec': 'avc1', 'acodec': 'none'}]}
         with tempfile.TemporaryDirectory() as scratch:
             base = Path(scratch)
             video = video_from_image(score_frame(), base)
-            config = base / 'yt-dlp/config'
-            config.parent.mkdir()
-            config.write_text('--cookies sentinel-cookie\n--netrc\n--username DO_NOT_SAVE_TEST_SENTINEL\n')
-            netrc = base / '.netrc'
-            netrc.write_text('machine bilibili.com login DO_NOT_SAVE_TEST_SENTINEL password TEST_ONLY')
-            cookie = base / 'sentinel-cookie'
-            cookie.write_text('DO_NOT_SAVE_TEST_SENTINEL')
-            plugin = base / 'yt_dlp_plugins/extractor/sentinel.py'
-            plugin.parent.mkdir(parents=True)
-            plugin.write_text('raise RuntimeError("plugin sentinel was executed")')
-            real_open = builtins.open
-            def guarded_open(file, *args, **kwargs):
-                if isinstance(file, (str, Path)) and Path(file) in {config, netrc, cookie}:
-                    raise AssertionError('credential/config sentinel was read')
-                return real_open(file, *args, **kwargs)
-            ydl_module = importlib.import_module('yt_dlp.YoutubeDL')
-            with patch.object(BiliBiliIE, '_real_extract', extractor), patch.object(builtins, 'open', guarded_open), patch.object(ydl_module, 'load_all_plugins', side_effect=AssertionError('plugins were loaded')), patch.object(sys, 'path', [str(base), *sys.path]), patch.dict('os.environ', {'XDG_CONFIG_HOME': str(base), 'HOME': str(base)}):
-                code, result, logs = self.invoke(base / 'result', video, actual_backend=True)
-            self.assertEqual(code, 0, result)
-            self.assertNotIn('DO_NOT_SAVE_TEST_SENTINEL', logs)
+            from bbdown_fixture import install_fake_bbdown
+            from drum_score import bbdown_cli
+            binary, digest = install_fake_bbdown(base, fixture_config(assert_isolation=str(base)))
+            for name in ('BBDown.data', 'BBDown.config', '.netrc'):
+                (binary.parent / name).write_text('DO_NOT_SAVE_TEST_SENTINEL')
+            with patch.dict('os.environ', {'PATH': str(binary.parent) + ':' + __import__('os').environ['PATH'],
+                    'HOME': str(base), 'BBDOWN_INSECURE_TLS': '1', 'SSL_CERT_FILE': '/invalid',
+                    'ALL_PROXY': 'http://invalid:9', 'NETRC': str(binary.parent / '.netrc')}), \
+                    patch.object(bbdown_cli, 'OFFICIAL_SHA256', digest), \
+                    patch('socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]), \
+                    patch('urllib.request.OpenerDirector.open', side_effect=lambda *a, **k: io.BytesIO(video.read_bytes())):
+                source, origin = public_video.acquire(URL, base / 'result')
+            self.assertEqual(source.read_bytes(), video.read_bytes())
+            self.assertEqual(origin['backend'], 'BBDownNext')
 
     def test_actual_connection_pins_public_dns_and_keeps_tls_hostname(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -285,76 +281,26 @@ class LinkInputTests(unittest.TestCase):
                 code, result, logs = self.invoke(base / 'result', video, real_transport=True)
             self.assertEqual(code, 0, result)
 
-    def test_environment_proxy_tunnels_to_pinned_origin_without_forwarding_credentials(self):
+    def test_environment_proxy_is_ignored_for_direct_media(self):
         with tempfile.TemporaryDirectory() as scratch:
             base = Path(scratch)
             video = video_from_image(score_frame(), base)
             payload = video.read_bytes()
             class WireSocket:
-                tunnel = False
                 def sendall(self, data):
-                    if data.startswith(b'CONNECT '):
-                        if not data.startswith(b'CONNECT 8.8.8.8:443 '):
-                            raise AssertionError('proxy must not resolve origin again')
-                        if b'Host: 8.8.8.8:443\r\n' not in data:
-                            raise AssertionError('CONNECT Host must match its pinned target')
-                    elif b'Proxy-Authorization' in data:
-                        raise AssertionError('proxy credentials reached origin')
+                    if b'CONNECT' in data or b'Proxy-Authorization' in data:
+                        raise AssertionError('direct media used a proxy')
                 def close(self): pass
                 def makefile(self, *args):
-                    if not self.tunnel:
-                        self.tunnel = True
-                        return io.BytesIO(b'HTTP/1.1 200 Connection established\r\n\r\n')
                     return io.BytesIO(b'HTTP/1.1 200 OK\r\nContent-Length: ' + str(len(payload)).encode() + b'\r\n\r\n' + payload)
             def connect(address, *args, **kwargs):
-                if address != ('127.0.0.1', 8888):
-                    raise AssertionError('environment proxy was not used')
+                if address != ('8.8.8.8', 443):
+                    raise AssertionError('direct media lost numeric pin')
                 return WireSocket()
-            proxy_env = {key: '' for key in ('http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'no_proxy', 'NO_PROXY')}
-            proxy_env['https_proxy'] = 'http://test:DO_NOT_SAVE_TEST_SENTINEL@127.0.0.1:8888'
-            with patch.dict('os.environ', proxy_env), patch('socket.create_connection', side_effect=connect), patch('ssl.SSLContext.wrap_socket', lambda context, sock, **kwargs: sock):
+            with patch.dict('os.environ', {'https_proxy': 'http://test:DO_NOT_SAVE_TEST_SENTINEL@127.0.0.1:8888'}), patch('socket.create_connection', side_effect=connect), patch('ssl.SSLContext.wrap_socket', lambda context, sock, **kwargs: sock):
                 code, result, logs = self.invoke(base / 'result', video, real_transport=True)
             self.assertEqual(code, 0, result)
             self.assertNotIn('DO_NOT_SAVE_TEST_SENTINEL', logs)
-
-    def test_pinned_connect_host_handles_ipv6_retry_and_restores_headers(self):
-        from drum_score.anonymous_network import PublicHTTPSConnection
-        ipv4 = (socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))
-        ipv6 = (socket.AF_INET6, socket.SOCK_STREAM, 6, '', ('2606:4700:4700::1111', 443, 0, 0))
-        for addresses in ([ipv4], [ipv6], [ipv6, ipv4]):
-            with self.subTest(addresses=len(addresses), family=addresses[0][0]):
-                packets = []
-                closed = []
-                class WireSocket:
-                    def sendall(self, packet):
-                        packets.append(packet)
-                    def close(self):
-                        closed.append(self)
-                    def makefile(self, *args):
-                        refused = len(addresses) == 2 and len(packets) == 1
-                        return io.BytesIO(b'HTTP/1.1 403 Refused\r\n\r\n' if refused
-                                          else b'HTTP/1.1 200 Connected\r\n\r\n')
-                connection = PublicHTTPSConnection('proxy.example', 8888)
-                connection.set_tunnel('cdn.bilivideo.com', 443, {
-                    'hOsT': 'cdn.bilivideo.com:443', 'Proxy-Authorization': 'TEST_ONLY'})
-                original = dict(connection._tunnel_headers)
-                with patch('drum_score.anonymous_network.public_addresses', return_value=addresses), patch.object(
-                    connection, '_create_connection', side_effect=lambda *a, **kw: WireSocket()), patch.object(
-                        connection._context, 'wrap_socket', side_effect=lambda sock, **kw: sock) as tls:
-                    connection.connect()
-                for packet, address in zip(packets, addresses):
-                    ip = address[4][0]
-                    authority = (f'[{ip}]' if ':' in ip else ip) + ':443'
-                    self.assertTrue(packet.startswith(f'CONNECT {authority} '.encode()))
-                    self.assertIn(f'Host: {authority}\r\n'.encode(), packet)
-                    self.assertNotIn(b'hOsT:', packet)
-                    self.assertIn(b'Proxy-Authorization: TEST_ONLY', packet)
-                self.assertEqual(len(packets), len(addresses))
-                self.assertEqual(len(closed), len(addresses) - 1)
-                self.assertEqual(connection._tunnel_headers, original)
-                self.assertEqual(connection._tunnel_host, 'cdn.bilivideo.com')
-                self.assertEqual(tls.call_args.kwargs['server_hostname'], 'cdn.bilivideo.com')
-                connection.close()
 
     def test_wrong_page_and_undecodable_video_stop_without_publication(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -392,40 +338,7 @@ class LinkInputTests(unittest.TestCase):
                 self.assertEqual(result['error']['code'], 'unsafe_media_target' if mode == 'http' else 'http_unavailable')
                 self.assertNotIn('DO_NOT_SAVE_TEST_SENTINEL', logs)
 
-    def test_extractor_can_read_metadata_through_real_bounded_transport(self):
-        from yt_dlp.extractor.bilibili import BiliBiliIE
-        def extractor(backend, url):
-            html = backend._download_webpage('https://www.bilibili.com/metadata', 'fixture')
-            if html != 'fixture html':
-                raise AssertionError('metadata response did not cross transport correctly')
-            return {'id': 'BV1b5411x7Ku_p2', 'title': 'fixture', 'formats': [{'url': MEDIA, 'vcodec': 'avc1', 'acodec': 'none'}]}
-        for oversized in (False, True):
-            with self.subTest(oversized=oversized), tempfile.TemporaryDirectory() as scratch:
-                base = Path(scratch)
-                video = video_from_image(score_frame(), base)
-                class WireSocket:
-                    metadata = False
-                    def sendall(self, data):
-                        self.metadata = b'GET /metadata ' in data
-                    def close(self): pass
-                    def makefile(self, *args):
-                        payload = ((b'x' * (2 * 1024**2 + 1)) if oversized else b'fixture html') if self.metadata else video.read_bytes()
-                        if self.metadata:
-                            payload = gzip.compress(payload)
-                        encoding = b'Content-Encoding: gzip\r\n' if self.metadata else b''
-                        return io.BytesIO(b'HTTP/1.1 200 OK\r\n' + encoding + b'Content-Length: ' + str(len(payload)).encode() + b'\r\n\r\n' + payload)
-                proxy_env = {key: '' for key in ('http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY')}
-                with patch.object(BiliBiliIE, '_real_extract', extractor), patch.dict('os.environ', proxy_env), patch('socket.create_connection', side_effect=lambda *a, **k: WireSocket()), patch('ssl.SSLContext.wrap_socket', lambda context, sock, **kwargs: sock):
-                    code, result, logs = self.invoke(base / 'result', video, real_transport=True, actual_backend=True)
-                self.assertEqual(code, 2 if oversized else 0, result)
-                if oversized:
-                    self.assertEqual(result['error']['code'], 'download_too_large')
-
-
-    def test_real_webpage_path_keeps_default_headers_and_tries_next_public_address(self):
-        # The live URL failed at TLS on the first IPv6 address; the next IPv4
-        # works only with yt-dlp's default User-Agent. Exercise the CLI adapter.
-        from yt_dlp.extractor.bilibili import BiliBiliIE
+    def test_next_public_address_keeps_tls_and_user_agent(self):
         addresses = [(socket.AF_INET6, socket.SOCK_STREAM, 6, '', ('2606:4700:4700::1111', 443, 0, 0)),
                      (socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]
         with tempfile.TemporaryDirectory() as scratch:
@@ -435,7 +348,7 @@ class LinkInputTests(unittest.TestCase):
             class WireSocket:
                 def sendall(self, data):
                     if b'User-Agent:' not in data and b'User-agent:' not in data:
-                        raise AssertionError('extractor request lost default User-Agent')
+                        raise AssertionError('request lost user agent')
                 def close(self): pass
                 def makefile(self, *args):
                     return io.BytesIO(b'HTTP/1.1 200 OK\r\nContent-Length: ' + str(len(payload)).encode() + b'\r\n\r\n' + payload)
@@ -443,15 +356,9 @@ class LinkInputTests(unittest.TestCase):
                 if ':' in address[0]:
                     raise OSError('unreachable IPv6')
                 return WireSocket()
-            def extractor(ie, url):
-                ie._download_webpage(url, 'fixture')
-                return {'id': 'BV1b5411x7Ku_p2', 'title': 'fixture',
-                        'formats': [{'url': MEDIA, 'vcodec': 'avc1', 'acodec': 'none'}]}
-            proxy_env = {key: '' for key in ('http_proxy', 'https_proxy', 'all_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY')}
-            with patch.dict('os.environ', proxy_env), patch.object(BiliBiliIE, '_real_extract', extractor), patch('socket.create_connection', side_effect=connect), patch('ssl.SSLContext.wrap_socket', lambda context, sock, **kwargs: sock):
-                code, result, _ = self.invoke(base / 'result', video, dns=addresses, real_transport=True, actual_backend=True)
+            with patch('socket.create_connection', side_effect=connect), patch('ssl.SSLContext.wrap_socket', lambda context, sock, **kwargs: sock):
+                code, result, _ = self.invoke(base / 'result', video, dns=addresses, real_transport=True)
             self.assertEqual(code, 0, result)
-            self.assertEqual(result['origin']['backend'], 'yt-dlp')
 
 if __name__ == '__main__':
     unittest.main()

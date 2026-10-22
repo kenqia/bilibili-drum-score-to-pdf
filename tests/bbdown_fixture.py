@@ -58,6 +58,8 @@ for data in config.get('responses', [{'code': 0, 'data': config['view']}, {'code
 print('[DEBUG] 获取网页内容：Url: https://api.bilibili.com/x/player/wbi/playurl?' + config.get('query', 'avid=44&cid=22') + ', Headers: Referer: https://www.bilibili.com')
 if config.get('extra_stdout'):
  print(config['extra_stdout'])
+if config.get('debug_symlink'):
+ (work / 'debug_link.json').symlink_to(config['debug_symlink'])
 for i in range(config.get('files', 1)):
  (work / ('debug_' + str(i) + '.json')).write_text(json.dumps({'code': 0, 'data': config['play']}))
 '''.replace('CONFIG', repr(config))
