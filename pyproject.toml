@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bilibili-drum-score-to-pdf"
-version = "0.1.0"
+version = "0.1.1"
 description = "Automatic image-based drum score video conversion"
 requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
   "pillow==12.3.0", "numpy==2.5.3", "opencv-python-headless==5.0.0.93",
-  "reportlab==5.0.1", "yt-dlp==2026.8.19",
+  "reportlab==5.0.1",
 ]
 
 [project.optional-dependencies]

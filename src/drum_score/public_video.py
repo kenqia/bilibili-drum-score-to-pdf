@@ -1,4 +1,4 @@
-"""Anonymous public Bilibili input. Signed media addresses remain in memory."""
+"""Anonymous public Bilibili input. Signed addresses stay within private acquisition."""
 from pathlib import Path
 import re
 import multiprocessing

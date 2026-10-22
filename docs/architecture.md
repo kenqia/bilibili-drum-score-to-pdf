@@ -8,7 +8,7 @@ Python、CLI 和匿名网站共用 `drum_score.convert`。转换通过图像处�
 | --- | --- |
 | `core.py`、`imaging.py` | 输入预算、来源 hash、原生采样、位移配准、保守合成与完整条带分页。 |
 | `supervision.py`、`guardian.py` | 独立转换进程、采样资源监督、取消与异常树清理。初始 PID/start-time 固定，后续观察不替换已有身份。 |
-| `public_video.py`、`anonymous_backend.py`、`anonymous_network.py` | 匿名获取、公共 DNS/TLS、重定向与同流备份、完整曲长和实测媒体校验。 |
+| `public_video.py`、`anonymous_backend.py`、`bbdown_cli.py`、`bbdown_network.py`、`anonymous_network.py` | 固定 BBDownNext 2.3.0 匿名解析与直连获取，公共 DNS/TLS、重定向与同流备份、完整曲长和实测媒体校验。 |
 | `video_seek.py` | 有限时 FFmpeg 解码、实际 PTS/time_base、原生运动摘要和临时帧清理。 |
 | `cli.py`、`arguments.py` | JSON 与参数适配；非法输入不反射载荷、路径或原始异常。 |
 | `web.py`、`static/` | 同源网页、能力认证、真实阶段及 FD 分块下载。 |

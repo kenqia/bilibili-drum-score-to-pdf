@@ -17,6 +17,7 @@ from .public_video import InputError
 from .bbdown_network import DirectGateway
 
 OFFICIAL_SHA256 = '8e149b6d90a48bd3665b9c7efb5056e443e4a5c6d04313b8c4d21cfc6e70d114'
+METADATA_SHA256 = 'd5fe48f6c2bf2e388937d3c8985c1e3dcca678e5a8d8345fa5c31e36793baf0a'
 MAX_METADATA = 2 * 1024**2
 
 
@@ -184,8 +185,9 @@ def inspect(origin, staging):
                         raise _invalid('backend_version_mismatch')
                     digest.update(block)
                     target.write(block)
-            if digest.hexdigest() != OFFICIAL_SHA256:
-                raise InputError('backend_version_mismatch', 'BBDownNext 可执行文件与固定的 2.3.0 发布不一致。')
+            build = {OFFICIAL_SHA256: 'official', METADATA_SHA256: 'metadata-bounded.1'}.get(digest.hexdigest())
+            if build is None:
+                raise InputError('backend_version_mismatch', 'BBDownNext 可执行文件与已验证的 2.3.0 构建不一致。')
             binary.chmod(0o700)
             config = root / 'empty.config'
             config.touch(mode=0o600)
@@ -207,7 +209,7 @@ def inspect(origin, staging):
                     raise
                 if gateway.failure:
                     raise gateway.failure
-            return _metadata(output, root, origin)
+            return {**_metadata(output, root, origin), 'backend_build': build, 'backend_sha256': digest.hexdigest()}
     except InputError as error:
         error.diagnostics = {'failure_stage': 'metadata', 'backend_error_type': type(error).__name__}
         raise

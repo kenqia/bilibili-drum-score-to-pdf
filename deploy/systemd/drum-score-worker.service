@@ -14,6 +14,7 @@ StateDirectory=drum-score
 StateDirectoryMode=0700
 ExecStart=/srv/drum-score/current/venv/bin/drum-score-worker --data-root /var/lib/drum-score --retention-seconds 86400 --diagnostic-seconds 3600 --diagnostic-mib 8 --min-free-mib 2048 --retained-mib 2048 --max-temp-mib 1024 --timeout 600 --max-input-mib 256 --max-rss-mib 512
 Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+Environment=PATH=/srv/drum-score/current/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Restart=on-failure
 RestartSec=3
 UMask=0077

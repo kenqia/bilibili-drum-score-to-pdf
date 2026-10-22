@@ -12,6 +12,63 @@ MAINTENANCE_ENTRIES = ('backup', 'verify', 'restore')
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    @unittest.skipUnless(Path('/proc').is_dir(), 'Linux remote worker contract')
+    def test_remote_entries_require_pinned_bbdown_without_changing_existing_files(self):
+        import os
+        import tempfile
+        import shutil
+        from unittest.mock import patch
+        from fastapi.testclient import TestClient
+        from drum_score import convert, ConversionError
+        from drum_score.web import create_app
+        repository = Path(__file__).resolve().parents[1]
+        url = 'https://www.bilibili.com/video/BV1np421S78S?p=1'
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sentinel = root / 'existing-user-video'
+            sentinel.write_bytes(b'SYNTHETIC_EXISTING_CONTENT')
+            startup = root / 'startup'
+            startup.mkdir()
+            (startup / 'sitecustomize.py').write_text(
+                "import shutil\noriginal=shutil.which\n"
+                "def which(name,*a,**k):\n"
+                " return None if name=='BBDown' else original(name,*a,**k)\n"
+                "shutil.which=which\n")
+            env = {**os.environ, 'PYTHONPATH': os.pathsep.join(map(str, (startup, repository / 'src')))}
+            original = shutil.which
+            for entry in REMOTE_SCRIPT_ENTRIES:
+                output = root / entry
+                with self.subTest(entry=entry):
+                    if entry == 'script_core':
+                        with patch('shutil.which', side_effect=lambda name, *a, **k:
+                                   None if name == 'BBDown' else original(name, *a, **k)):
+                            with self.assertRaises(ConversionError) as caught:
+                                convert(url, output)
+                        code = caught.exception.code
+                    elif entry == 'script_cli':
+                        process = subprocess.run([sys.executable, '-m', 'drum_score', url,
+                            '--output', str(output)], env=env, capture_output=True, text=True, timeout=15)
+                        self.assertEqual(process.returncode, 2, process.stderr)
+                        code = json.loads(process.stdout)['error']['code']
+                    else:
+                        service = root / 'service'
+                        with TestClient(create_app(service), client=('192.0.2.10', 2000)) as client:
+                            task = client.post('/api/tasks', json={'url': url}).json()
+                            headers = {'Authorization': 'Bearer ' + task['capability']}
+                            process = subprocess.run([sys.executable, '-m', 'drum_score.worker',
+                                '--data-root', str(service), '--once'], env=env,
+                                capture_output=True, text=True, timeout=15)
+                            self.assertEqual(process.returncode, 0, process.stderr)
+                            state = client.get('/api/tasks/' + task['id'], headers=headers).json()
+                            self.assertEqual(state['state'], 'failed', state)
+                            code = state['error']['code']
+                            self.assertNotEqual(client.get('/api/tasks/' + task['id'] + '/pdf',
+                                                           headers=headers).status_code, 200)
+                    self.assertEqual(code, 'dependency_missing')
+                    self.assertFalse(output.exists())
+                    self.assertEqual(sentinel.read_bytes(), b'SYNTHETIC_EXISTING_CONTENT')
+            self.assertEqual(list(root.rglob('.drum-score-*')), [])
+
     def test_public_cli_parsers_do_not_echo_invalid_arguments_or_private_payload(self):
         import os
         import importlib.util

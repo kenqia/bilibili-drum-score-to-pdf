@@ -83,10 +83,12 @@ DNS 方案是在 DNSPod 新增 `drum` 的 A 记录，值为 `118.25.26.140`。�
    ```sh
    umask 022
    python3.12 -m venv "/srv/drum-score/releases/$DRUM_RELEASE/venv"
-   "/srv/drum-score/releases/$DRUM_RELEASE/venv/bin/pip" install --no-index --find-links "/srv/drum-score/releases/$DRUM_RELEASE/wheelhouse" --constraint "/srv/drum-score/releases/$DRUM_RELEASE/runtime-versions.txt" "/srv/drum-score/releases/$DRUM_RELEASE/bilibili_drum_score_to_pdf-0.1.0-py3-none-any.whl[web]"
+   "/srv/drum-score/releases/$DRUM_RELEASE/venv/bin/pip" install --no-index --find-links "/srv/drum-score/releases/$DRUM_RELEASE/wheelhouse" --constraint "/srv/drum-score/releases/$DRUM_RELEASE/runtime-versions.txt" "/srv/drum-score/releases/$DRUM_RELEASE/bilibili_drum_score_to_pdf-0.1.1-py3-none-any.whl[web]"
    "/srv/drum-score/releases/$DRUM_RELEASE/venv/bin/pip" check
    "/srv/drum-score/releases/$DRUM_RELEASE/venv/bin/drum-score-maintenance" --help
    ```
+
+   同时按[安装指南](../install.md#安装公开链接解析器)核验并安装 BBDownNext 2.3.0 单文件到此发行的 `venv/bin/BBDown`，保留第三方 MIT 许可。它由 root 管理，应用只读。worker 模板的 PATH 包含当前发行的 `venv/bin`；不要安装到共享 Python，也不要导入代理订阅或凭据。新应用 0.1.1 的 Python 依赖已移除 yt-dlp，旧发行保持原样，便于回滚。
 
 5. 从仓库外以 drum-score 用户运行合成 CLI、web 和 worker smoke，核对全部预览、实际 PTS 及依赖位置。保留证据，不能把此检查称为音乐校对。确认新发行只由 root 写入，再创建首次 `current` 链接：
 

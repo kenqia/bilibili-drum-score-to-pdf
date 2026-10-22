@@ -4,9 +4,27 @@
 
 ## 前置条件
 
-需要 Python 3.12 或更新版本、FFmpeg 与 Poppler。当前验证环境为 Python 3.12；网站 worker 使用 Ubuntu/Linux 的 `/proc`、`flock` 和文件描述符语义。Windows 只提供 CLI 与媒体工具兼容性测试，不承诺 Linux 服务生命周期。
+需要 Python 3.12 或更新版本、FFmpeg 与 Poppler。公开 B站链接另需固定 BBDownNext 2.3.0；本地视频转换不需要它。当前验证环境为 Python 3.12；网站 worker 使用 Ubuntu/Linux 的 `/proc`、`flock` 和文件描述符语义。Windows 只提供本地视频 CLI 与媒体工具兼容性测试，不承诺 Linux 服务生命周期。
 
 Ubuntu 可在自己的环境安装 `ffmpeg`、`poppler-utils`、`fonts-dejavu-core`。确认 `ffmpeg -version`、`ffprobe -version`、`pdftoppm -v` 成功。开发验证另需 `pdfinfo` 和 `pdfimages`。
+
+## 安装公开链接解析器
+
+当前公开链接支持 BBDownNext 2.3.0 Linux x64 的 `metadata-bounded.1` 构建，已在 WSL Ubuntu 22.04 编译，目标运行环境为 Ubuntu 24.04 x86_64。它不会随 Python wheel 安装。其他平台或未经验证的可执行文件不作为本轮公开链接支持；不要跳过摘要或 TLS 校验。
+
+该构建基于[准确的上游 v2.3.0 源码](https://github.com/KaiHuaDou/BBDownNext/tree/v2.3.0)，仅把普通调试 JSON 上限从 8192 字符调整为 2 MiB 字符，把 HTTP 响应读取上限从 64 MiB 收紧为 2 MiB。原版调试截断会使必要来源信息不完整。下载、匿名接口与 TLS 逻辑沿用上游。构建补丁、许可与来源记录见 [BBDownNext 构建说明](bbdown-build.md)。
+
+从交付包取得 `BBDown` 后核验摘要，再复制进专用虚拟环境的 `bin/BBDown`。下面的目录须替换成自己的独立环境。目标文件必须不存在，不覆盖旧版本。
+
+```sh
+printf '%s  %s\n' 'd5fe48f6c2bf2e388937d3c8985c1e3dcca678e5a8d8345fa5c31e36793baf0a' '/absolute/path/BBDown' | sha256sum --check
+test ! -e /absolute/path/drum-score-env/bin/BBDown
+install -m 0755 /absolute/path/BBDown /absolute/path/drum-score-env/bin/BBDown
+```
+
+程序每次验证可执行文件摘要，只复制这一个文件到新任务目录，不读取安装位置旁的配置或凭据。不要复制 `BBDown.data` 或 `BBDown.config`，不要登录。解析器仅在匿名公开信息范围工作，可能向公开接口申请临时设备标识。结果记录实际构建名称和摘要。原始官方 Linux x64 摘要也可识别为 `official`，但来源 JSON 截断时仍拒绝转换；实际部署采用上述有界构建。
+
+解析请求通过任务私有回环 CONNECT 校验中继，逐次验证全部 DNS 地址并固定数值 IP。TLS 仍由 BBDownNext 端到端校验；上游由本机直连，没有 VPN、系统代理或全局路由修改，也不继承用户代理变量。媒体传输继续使用已有公共地址与 TLS 校验。没有启动 BBDown `serve` 或第二个任务队列。第三方许可见 [BBDownNext MIT 许可](licenses/BBDownNext-MIT.txt)。
 
 ## 安装与核验
 
