@@ -36,6 +36,9 @@ args = sys.argv
 work = Path(args[args.index('--work-dir') + 1])
 if config.get('marker'):
  Path(config['marker']).write_text(str(os.getpid()))
+if config.get('invocations'):
+ with Path(config['invocations']).open('a') as event:
+  event.write('inspect' + chr(10))
 if config.get('stall'):
  time.sleep(60)
 if config.get('child_stall'):

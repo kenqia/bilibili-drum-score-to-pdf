@@ -195,6 +195,21 @@ class ScriptPublicContracts(unittest.TestCase):
         try:
             runner = fixture.network / 'invoke-core.py'
             runner.write_text("import json,sys\nfrom drum_score import convert\nif __name__ == '__main__':\n    print(json.dumps(convert(sys.argv[1],sys.argv[2])))\n")
+            # Keep the actual BBDown adapter and parser in all public entries.
+            # Replace only the external executable identity and media transport.
+            from bbdown_fixture import fixture_config, install_fake_bbdown
+            config = fixture_config(invocations=str(fixture.network / 'bbdown-invocations'))
+            config['view']['bvid'] = 'BV1rH4y1R7Rk'
+            binary, digest = install_fake_bbdown(fixture.network, config)
+            (fixture.network / 'sitecustomize.py').write_text(
+                "import io,os,socket\nfrom pathlib import Path\n"
+                "from drum_score import bbdown_cli\n"
+                "bbdown_cli.OFFICIAL_SHA256=" + repr(digest) + "\n"
+                "os.environ['PATH']=" + repr(str(binary.parent)) + "+os.pathsep+os.environ['PATH']\n"
+                "socket.getaddrinfo=lambda *a,**k:[(socket.AF_INET,socket.SOCK_STREAM,6,'',('8.8.8.8',443))]\n"
+                "import urllib.request\n"
+                "urllib.request.OpenerDirector.open=lambda *a,**k:io.BytesIO(Path(" +
+                repr(str(fixture.network / 'input.mp4')) + ").read_bytes())\n")
             source_hash = hashlib.sha256((fixture.network / 'input.mp4').read_bytes()).hexdigest()
             link = 'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=2'
             for entry in REMOTE_SCRIPT_ENTRIES:
@@ -225,10 +240,16 @@ class ScriptPublicContracts(unittest.TestCase):
                     self.assertEqual(result['source']['page'], 2)
                     self.assertEqual(result['source']['sha256'], source_hash)
                     self.assertFalse(result['source']['authenticated'])
+                    self.assertEqual(result['source']['backend'], 'BBDownNext')
+                    self.assertEqual(result['source']['backend_version'], '2.3.0')
+                    self.assertEqual(result['source']['acquisition_route'], 'bbdown_direct')
+                    self.assertEqual(result['source']['cid'], 22)
+                    self.assertEqual(result['source']['full_duration'], 2)
                     self.assertEqual(hashlib.sha256(pdf).hexdigest(), result['pdf']['sha256'])
                     self.assertTrue(result['pages'])
                     self.assertIn('not_musically_proofread', {warning['code'] for warning in result['warnings']})
                     self.assertEqual(list(fixture.root.rglob('.drum-score-*')), [])
+            self.assertEqual((fixture.network / 'bbdown-invocations').read_text().splitlines(), ['inspect'] * len(REMOTE_SCRIPT_ENTRIES))
             self.assertEqual(hashlib.sha256((fixture.network / 'input.mp4').read_bytes()).hexdigest(), source_hash)
         finally:
             fixture.tearDown()

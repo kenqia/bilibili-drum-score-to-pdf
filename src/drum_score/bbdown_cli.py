@@ -79,7 +79,7 @@ def _metadata(output, work, origin):
     page = pages[0]
     if not _positive(page.get('duration')):
         raise _invalid('incomplete_video')
-    players = [r for r in responses if isinstance(r.get('data'), dict) and 'is_upower_exclusive' in r['data'] and 'cid' in r['data']]
+    players = [r for r in responses if isinstance(r.get('data'), dict) and 'is_upower_exclusive' in r['data'] and 'cid' in r['data'] and 'pages' not in r['data']]
     if len(players) != 1 or type(players[0].get('code')) is not int or players[0]['code'] != 0:
         raise _invalid()
     player = players[0]['data']

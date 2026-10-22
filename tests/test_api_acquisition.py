@@ -202,3 +202,14 @@ class APIAcquisitionTests(unittest.TestCase):
         config = fixture_config()
         config['view']['desc'] = 'x' * (2 * 1024**2 + 1)
         self.reject(config, 'download_too_large')
+
+    def test_view_player_like_fields_do_not_count_as_a_second_player_response(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            video = video_from_image(score_frame(), root)
+            config = fixture_config()
+            config['view'].update(cid=11, is_upower_exclusive=False)
+            status, result, events = self.run_case(root, video, config)
+            self.assertEqual(status, 0, result)
+            self.assertEqual(result['origin']['cid'], 22)
+            self.assertEqual(events, ['media'])
