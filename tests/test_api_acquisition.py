@@ -47,6 +47,10 @@ class APIAcquisitionTests(unittest.TestCase):
             self.assertEqual(result['origin']['aid'], 44)
             self.assertEqual(result['origin']['full_duration'], 2)
             self.assertEqual(result['origin']['acquisition_route'], 'bbdown_direct')
+            self.assertEqual(result['origin']['backend_build'], 'official')
+            binary = root / 'fake-tool' / 'BBDown'
+            import hashlib
+            self.assertEqual(result['origin']['backend_sha256'], hashlib.sha256(binary.read_bytes()).hexdigest())
             self.assertEqual(events, ['media'])
             self.assertEqual(Path(result['source']['path']).read_bytes(), video.read_bytes())
 
@@ -213,3 +217,17 @@ class APIAcquisitionTests(unittest.TestCase):
             self.assertEqual(status, 0, result)
             self.assertEqual(result['origin']['cid'], 22)
             self.assertEqual(events, ['media'])
+
+    def test_metadata_bounded_build_records_its_exact_executable_identity(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            video = video_from_image(score_frame(), root)
+            with configured_fake(root, fixture_config(), video, build='metadata-bounded.1') as binary:
+                expected_digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+                source, origin = acquire(URL, root / 'result')
+            self.assertEqual(origin['backend'], 'BBDownNext')
+            self.assertEqual(origin['backend_version'], '2.3.0')
+            self.assertEqual(origin['backend_build'], 'metadata-bounded.1')
+            self.assertEqual(origin['backend_sha256'], expected_digest)
+            self.assertEqual(source.read_bytes(), video.read_bytes())

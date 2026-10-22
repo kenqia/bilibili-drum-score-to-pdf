@@ -242,6 +242,8 @@ class ScriptPublicContracts(unittest.TestCase):
                     self.assertFalse(result['source']['authenticated'])
                     self.assertEqual(result['source']['backend'], 'BBDownNext')
                     self.assertEqual(result['source']['backend_version'], '2.3.0')
+                    self.assertEqual(result['source']['backend_build'], 'official')
+                    self.assertEqual(result['source']['backend_sha256'], digest)
                     self.assertEqual(result['source']['acquisition_route'], 'bbdown_direct')
                     self.assertEqual(result['source']['cid'], 22)
                     self.assertEqual(result['source']['full_duration'], 2)

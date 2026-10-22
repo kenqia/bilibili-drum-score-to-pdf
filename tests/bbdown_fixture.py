@@ -77,11 +77,11 @@ for i in range(config.get('files', 1)):
 
 
 @contextlib.contextmanager
-def configured_fake(base, config, video=None, *, response=None, dns=None, real_transport=False):
+def configured_fake(base, config, video=None, *, response=None, dns=None, real_transport=False, build='official'):
     from drum_score import bbdown_cli
     binary, digest = install_fake_bbdown(base, config)
     with patch.dict(os.environ, {'PATH': str(binary.parent) + os.pathsep + os.environ['PATH']}), \
-         patch.object(bbdown_cli, 'OFFICIAL_SHA256', digest), \
+         patch.object(bbdown_cli, 'OFFICIAL_SHA256' if build == 'official' else 'METADATA_SHA256', digest), \
          patch('socket.getaddrinfo', side_effect=dns, return_value=PUBLIC_DNS), \
          (contextlib.nullcontext() if real_transport else patch('urllib.request.OpenerDirector.open', side_effect=response or (lambda *a, **k: io.BytesIO(video.read_bytes())))):
         yield binary
