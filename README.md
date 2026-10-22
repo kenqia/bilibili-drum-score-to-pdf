@@ -4,7 +4,7 @@
 
 ## 开始使用
 
-需要 Python 3.12 或更新版本，以及 `ffmpeg`、`ffprobe`、`pdftoppm`。当前本地验证使用 Python 3.12。
+需要 Python 3.12 或更新版本，以及 `ffmpeg`、`ffprobe`、`pdftoppm`。公开 B站链接另需[固定的 BBDownNext 2.3.0 有界构建](docs/install.md#安装公开链接解析器)。当前本地验证使用 Python 3.12。
 
 ```sh
 python3.12 -m venv .venv
@@ -25,7 +25,7 @@ python3.12 -m venv .venv
 
 停服备份、核验和恢复见[维护指南](docs/script-product/maintenance.md)，独立发行环境、systemd、nginx 及回滚见[部署指南](docs/script-product/deployment.md)。
 
-网站尚未公开部署。资源参数是本地候选值，不能据此认定现有 2GB 服务器已通过硬限额验收。
+网站已部署到 [drum.kenqia.top](https://drum.kenqia.top/)。2026-10-22 的腾讯云直连完整转换、资源、恢复及公网浏览器验收见[BBDownNext 接入记录](docs/experiments/2026-10-22-bbdown-integration.md)。
 
 ## 适合什么视频
 
