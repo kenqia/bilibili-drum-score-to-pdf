@@ -10,6 +10,8 @@
 | 可执行文件 SHA256 | `d5fe48f6c2bf2e388937d3c8985c1e3dcca678e5a8d8345fa5c31e36793baf0a` |
 | 原版 Linux x64 SHA256 | `8e149b6d90a48bd3665b9c7efb5056e443e4a5c6d04313b8c4d21cfc6e70d114` |
 
+完整[构建来源及依赖清单](third-party/BBDownNext-build.json)和[两处源码补丁](third-party/BBDownNext-2.3.0.patch)随仓库保留。上游源码归档 SHA256 为 `e3340b1e9d9b146a21dc9efbe86c00f67afc48488afa40a040799c19c282beb3`。
+
 生产源码只有两处调整：
 
 - `BBDown.Core/Util/HTTPUtil.cs` 的 `TruncateForLog` 保留最多 2 MiB 字符，避免原 8192 字符截断必要的 view JSON。

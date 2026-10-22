@@ -1,0 +1,22 @@
+--- a/BBDown.Core/Util/HTTPUtil.cs
++++ b/BBDown.Core/Util/HTTPUtil.cs
+@@ -95,7 +95,7 @@
+     // 超长响应（playurl / 弹幕等）只打头部：全量数据已由 debug_*.json 写盘，日志刷整段只会淹没有用信息
+     internal static string TruncateForLog(string text)
+     {
+-        return text.Length <= 8192 ? text : $"{text[..8192]}…（已截断，共 {text.Length} 字符）";
++        return text.Length <= 2 * 1024 * 1024 ? text : $"{text[..(2 * 1024 * 1024)]}…（已截断，共 {text.Length} 字符）";
+     }
+ 
+     /// <summary>
+--- a/BBDown.Core/Util/HttpTransfer.cs
++++ b/BBDown.Core/Util/HttpTransfer.cs
+@@ -14,7 +14,7 @@
+ public static class HttpTransfer
+ {
+     // 响应体大小上限：被攻破的端点或 --insecure 下的中间人可用 gzip 炸弹 / 分块慢发打满进程内存
+-    private const int MaxResponseBytes = 64 * 1024 * 1024;
++    private const int MaxResponseBytes = 2 * 1024 * 1024;
+ 
+     internal const int MaxRedirectHops = 10;
+ 

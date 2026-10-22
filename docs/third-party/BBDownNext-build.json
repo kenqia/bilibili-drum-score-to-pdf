@@ -1,0 +1,40 @@
+{
+  "backend": "BBDownNext",
+  "version": "2.3.0",
+  "build": "metadata-bounded.1",
+  "upstream_url": "https://github.com/KaiHuaDou/BBDownNext/archive/refs/tags/v2.3.0.tar.gz",
+  "source_sha256": "e3340b1e9d9b146a21dc9efbe86c00f67afc48488afa40a040799c19c282beb3",
+  "sdk": {
+    "name": "dotnet-sdk-linux-x64.tar.gz",
+    "rid": "linux-x64",
+    "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.401/dotnet-sdk-10.0.401-linux-x64.tar.gz",
+    "hash": "51c8b999af9e8dd9998c9edc5944e19a90788862068acd38694e098889054ce8c23d4f0c5cccfa16bf187d044562359e5ee69a9f8ad0bbe913ba90311fbce25b"
+  },
+  "binary_sha256": "d5fe48f6c2bf2e388937d3c8985c1e3dcca678e5a8d8345fa5c31e36793baf0a",
+  "patch_sha256": "a5c6bea3fcc127607a55b5485b733494e5483914ee7f747054599a9df8abd037",
+  "production_changes": [
+    {
+      "path": "BBDown.Core/Util/HTTPUtil.cs",
+      "before_sha256": "2678504a0be8a7ae94b2408ad16e1f202257e972dab3e0fce6eb07273de111b5",
+      "after_sha256": "2d29343b39e7c10439a18efbd2ea7ba419f76ae8aff257888ee99de408a83be9"
+    },
+    {
+      "path": "BBDown.Core/Util/HttpTransfer.cs",
+      "before_sha256": "7369fcf1ae6d336779febd5d6b9b91caa50be5d960e519e22a74e0f6d5d39875",
+      "after_sha256": "e2d6f785225bb93b7a66e5b8b15b1cb41eddfad30f981cb09c6ef51799e081f2"
+    }
+  ],
+  "build_command": "dotnet publish BBDown -r linux-x64 -c Release -o OUTPUT --configfile NuGet.Config",
+  "resolved_packages": [
+    "BBDown.Core/2.3.0",
+    "Downloader/5.9.8",
+    "Google.Protobuf/3.36.2",
+    "Microsoft.DotNet.ILCompiler/10.0.12",
+    "Microsoft.NET.ILLink.Tasks/10.0.12",
+    "Microsoft.Win32.SystemEvents/6.0.0",
+    "QRCoder/1.8.0",
+    "System.CommandLine/2.0.12",
+    "System.Drawing.Common/6.0.0",
+    "runtime.linux-x64.Microsoft.DotNet.ILCompiler/10.0.12"
+  ]
+}
