@@ -70,6 +70,6 @@ B站公开搜索 API 的实际检索词：
 
 另曾尝试两个未核对 aid 的评论查询；第一个 -404，另一个属于无关视频。它们不用于样本结论；随后从正确 bvid 的 view API 重新取得 aid 并查询，以上样本评论记录只采用正确 aid。
 
-已有 `docs/experiments/issue-55-midi/README.md` 明确记载：Audiveris 官方默认的下位 crossed oval=crash1 与独立 PDF 审阅者可能读为 ride 的判断不同，作者映射没有确认。官方通用文档和其他作者记谱惯例都不能消除这个具体差异。本次调查没有取得可以改变该状态的新作者证据。
+已有[历史十五小节 MIDI 实验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/265231e9e05c77329a5fa5b128b761c674f6f1b9/docs/experiments/issue-55-midi/README.md)明确记载：Audiveris 官方默认的下位 crossed oval=crash1 与独立 PDF 审阅者可能读为 ride 的判断不同，作者映射没有确认。官方通用文档和其他作者记谱惯例都不能消除这个具体差异。本次调查没有取得可以改变该状态的新作者证据。
 
 建议继续保留作者映射未决，拒绝可靠 MIDI 导出；PDF 工作可以独立完成。放行需要与该谱建立明确联系的 drum key、源工程中的鼓件定义，或作者已有公开说明。当前没有这项证据，不能把实验 GM 49/57 或通用架子鼓惯例标成作者确认。

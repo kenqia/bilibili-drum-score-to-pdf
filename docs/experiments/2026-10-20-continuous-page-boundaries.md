@@ -1,6 +1,6 @@
 # 连续条带分页修复记录
 
-2026-10-20，main基线c3afed0da2065a8c426accc180f992f301164c72。用户反馈《鲜花（Live）》48–49小节渐强及部分圆圈错贴上一行，实际调查后接受连续条带和保守分页两项建议。[设计与事实](../research/2026-10-20-continuous-page-boundaries.md)记录根因及取舍。
+2026-10-20，main基线c3afed0da2065a8c426accc180f992f301164c72。用户反馈《鲜花（Live）》48–49小节渐强及部分圆圈错贴上一行，实际调查后接受连续条带和保守分页两项建议。[历史设计与事实](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/265231e9e05c77329a5fa5b128b761c674f6f1b9/docs/research/2026-10-20-continuous-page-boundaries.md)记录根因及取舍。
 
 ## 改动
 

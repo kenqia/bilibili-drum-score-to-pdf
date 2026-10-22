@@ -6,7 +6,7 @@ PDF 仍要求完整曲谱、正确来源和每页实际查看。MIDI 保留完�
 
 ## #58 新门槛结果
 
-三条新鲜 PDF 已实际逐页检查，三条完整近似 MIDI 已实际导出并由 root 独立回读。小星星为107事件、120拍、57600ticks；标准曲为594事件、352拍、168960ticks；KiLLKiSS为1409事件、540拍、259200ticks。均为480PPQ、GM第10通道。实际输出与PDF哈希、未决和调整见 docs/experiments/issue-58-playable-midi/summary.json。
+三条新鲜 PDF 已实际逐页检查，三条完整近似 MIDI 已实际导出并由 root 独立回读。小星星为107事件、120拍、57600ticks；标准曲为594事件、352拍、168960ticks；KiLLKiSS为1409事件、540拍、259200ticks。均为480PPQ、GM第10通道。实际输出与PDF哈希、未决和调整见[历史 MIDI 汇总](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/265231e9e05c77329a5fa5b128b761c674f6f1b9/docs/experiments/issue-58-playable-midi/summary.json)。相关实验文件已移出当前树，本文保留当时的验收调整，不是当前 MIDI 功能入口。
 
 KiLLKiSS 第31小节使用78秒、实际PTS1248000、时间基准1/16000的新完整原行修复遮挡。root 实际查看修复后两条路线全部六页，以及31/67/75/134各自原图、生图、矢量的12张局部。强制矢量三页没有位图，第31小节装饰音完整；固定决定重放保留相同PDF路径和hash。独立记录见 docs/experiments/issue-58-killkiss-independent-review.json。
 

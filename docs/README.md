@@ -12,4 +12,4 @@
 - [工作约定](../AGENTS.md)
 - [当前产品边界决定](adr/0007-independent-skill-and-website.md)
 
-`docs/experiments/` 和 `experiments/` 保留历史实验，原绝对路径不保证在其他机器存在。Skill 协议位于 `docs/agents/` 并同步到分发包 references。历史通过不批准新输入。
+`docs/experiments/` 保留历史实验记录。已移出的单曲脚本、MIDI 中间产物、旧发布批次和设计访谈通过[历史材料索引](experiments/historical-artifacts.md)查看，原绝对路径不保证现在可用。Skill 协议位于 `docs/agents/` 并同步到分发包 references。历史通过不批准新输入。

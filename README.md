@@ -64,6 +64,6 @@ python3.12 -m venv .venv
 
 ## 开发与证据
 
-[架构](docs/architecture.md)、[程序与网站验证](docs/verification.md)、[Skill 验证](docs/skill-verification.md)、[领域术语](GLOSSARY.md)和[文档导航](docs/README.md)说明各自的入口。历史实验保存在 `docs/experiments/` 和 `experiments/`，保护原始来源、实际 PTS 和 hash。合成测试不替代真实谱面与全部页面审阅。
+[架构](docs/architecture.md)、[程序与网站验证](docs/verification.md)、[Skill 验证](docs/skill-verification.md)、[领域术语](GLOSSARY.md)和[文档导航](docs/README.md)说明各自的入口。历史实验记录位于 `docs/experiments/`；已移出当前文件树的材料见[历史材料索引](docs/experiments/historical-artifacts.md)，原始来源、实际 PTS 和 hash 保留在 Git 历史中。合成测试不替代真实谱面与全部页面审阅。
 
 代码与文档使用 [MIT](LICENSE)；音乐、谱面和派生示例素材权利归原权利人，见[素材说明](docs/media/readme/README.md)。

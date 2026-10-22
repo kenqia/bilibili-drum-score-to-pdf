@@ -2,7 +2,9 @@
 
 2026-10-13，在实现 d832de4 上通过统一 URL 入口下载 BV15crrYUEPA。Agent 查看新帧，确认135小节、34个完整谱行，交付生图和强制矢量 PDF。最终各三页。首版失败材料保留；整曲 MIDI 未通过，不能关闭 Issue #58。
 
-活动任务在 /home/kenqia/issue54-worktrees/killkiss/experiments/2026-10-13-issue58-recovered/killkiss/。task 和 forced-vector 保存来源、实际PTS、原帧、选行、输入、真实生图回执、版本化导出和看图记录。archive.json 列出产物 hash。源视频使用持久 worktree 的绝对路径；清理前需要保留引用文件。
+当时的活动任务在 /home/kenqia/issue54-worktrees/killkiss/experiments/2026-10-13-issue58-recovered/killkiss/。task 和 forced-vector 保存来源、实际PTS、原帧、选行、输入、真实生图回执、版本化导出和看图记录。archive.json 列出产物 hash。源视频使用持久 worktree 的绝对路径。
+
+2026-10-23，单曲实验脚本和 JSON 已移出当前文件树，来源与失败记录见[历史材料索引](historical-artifacts.md)。旧工作区路径不保证现在可用，也不是当前任务入口。
 
 Agent 根据新导航选取0、66、86、107、129、151、171、191秒，第80行半行缺口补采140秒，208.5秒确认结尾。独立复核发现86秒第31小节装饰音被水印遮住，于78秒补采完整第28行，实际PTS1248000，时间基准1/16000。正常重选和重新转描解决遮挡，没有重建缺失像素。
 
