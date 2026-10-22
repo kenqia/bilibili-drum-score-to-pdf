@@ -40,7 +40,8 @@ if config.get('stall'):
  time.sleep(60)
 if config.get('child_stall'):
  import subprocess
- subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+ child_marker = str(Path(config['marker']).with_name('descendant-pid'))
+ subprocess.Popen([sys.executable, '-c', 'import os,time; from pathlib import Path; Path(' + repr(child_marker) + ').write_text(str(os.getpid())); time.sleep(60)'])
  time.sleep(60)
 if config.get('assert_isolation'):
  assert not any(k in os.environ for k in ['BBDOWN_INSECURE_TLS', 'SSL_CERT_FILE', 'NETRC', 'PYTHONPATH', 'ALL_PROXY'])
@@ -63,8 +64,12 @@ if config.get('debug_symlink'):
 for i in range(config.get('files', 1)):
  (work / ('debug_' + str(i) + '.json')).write_text(json.dumps({'code': 0, 'data': config['play']}))
 '''.replace('CONFIG', repr(config))
-    binary.write_text('#!' + sys.executable + '\n' + script)
-    binary.chmod(0o755)
+    payload = '#!' + sys.executable + '\n' + script
+    if not binary.exists() or binary.read_text() != payload:
+        temporary = directory / ('tool-' + str(os.getpid()) + '.tmp')
+        temporary.write_text(payload)
+        temporary.chmod(0o755)
+        os.replace(temporary, binary)
     return binary, hashlib.sha256(binary.read_bytes()).hexdigest()
 
 

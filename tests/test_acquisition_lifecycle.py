@@ -132,7 +132,8 @@ class AcquisitionLifecycleTests(unittest.TestCase):
                 self.assertIn(json.loads(stdout)['error']['code'], ('network_timeout', 'resource_limit'))
                 self.assertLess(time.monotonic() - started, 5)
                 self.assert_stopped(base / 'pid')
-                self.assert_clean(base)
+                if mode == 'exit':
+                    self.assert_stopped(base / 'descendant-pid')
                 self.assert_clean(base)
 
     def test_probe_subprocess_is_stopped_by_overall_deadline(self):
