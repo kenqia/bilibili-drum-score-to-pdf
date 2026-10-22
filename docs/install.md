@@ -1,5 +1,7 @@
 # 安装程序
 
+本页安装独立 Python/CLI 与网站，不安装 Agent Skill。使用视觉 Agent 的入口另见 [Skill 安装指南](skill-install.md)。
+
 使用独立虚拟环境安装 CLI；运行匿名网站时增加 `web` 可选依赖。安装不修改 Codex、认证、shell 配置或已安装 Skill。
 
 ## 前置条件
@@ -49,4 +51,4 @@ Windows 使用环境内的 `Scripts/python.exe`、`Scripts/drum-score.exe`。不
 
 回滚时同时恢复匹配版本的程序和完整数据副本，不让旧代码打开未知 schema。复制到新目录会改变 inode 与 ctime，恢复工具必须在核验文件清单与 hash 后，为自己新建的文件重新登记受管身份，原完成与到期时间保持不变。不要直接复制旧所有权字段并声称清理仍有效。停服备份、只读核验与恢复使用随基础包安装的 `drum-score-maintenance`，步骤见[维护指南](script-product/maintenance.md)。部署模板与离线依赖归档见[部署指南](script-product/deployment.md)。
 
-独立环境可通过停止对应进程和停用该环境撤回，不删除用户输出或其他服务目录。旧 Skill 安装与旧任务由用户单独保存；本项目不自动卸载或迁移它们。
+独立环境可通过停止对应进程和停用该环境撤回，不删除用户输出或其他服务目录。Skill 独立安装，网站的安装、升级与回滚不修改 Skill 或迁移其任务。

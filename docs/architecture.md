@@ -1,6 +1,19 @@
 # 鼓谱转换架构
 
-Python、CLI 和匿名网站共用 `drum_score.convert`。转换通过图像处理保留可见谱面，生成 A4 PDF、全部预览及来源记录。`complete` 只表示产物完整发布；`reliable=false` 明确未经音乐校对。当前决定见 [ADR 0006](adr/0006-script-product-lifecycle.md)。
+仓库同时提供独立的 Skill 和程序/网站。入口与依赖边界见 [ADR 0007](adr/0007-independent-skill-and-website.md)。
+
+## 两条产品路径
+
+| 产品 | 运行边界 | 状态与交付 |
+| --- | --- | --- |
+| Skill | `skills/bilibili-drum-score-to-pdf/` 自带脚本和 references，不导入网站包。安装见 [Skill 指南](skill-install.md)。 | 独立任务 `record.json`、Agent 看图和版本绑定的终稿审阅；可选重绘/矢量按本包协议执行。 |
+| 程序与网站 | `src/drum_score/` 由 `pyproject.toml` 打包，不加载 Skill。Python、CLI 与网站共用 `drum_score.convert`。 | CLI manifest 或网站 SQLite 队列/attempt；自动发布保持 `reliable=false`，不需要 Agent 审批。 |
+
+Skill 按自己的 requirements 使用原有匿名获取工具；网站使用固定 BBDownNext 2.3.0 直连元数据入口。两套环境不互相安装依赖、共享任务目录或迁移任务。共享的只是仓库导航、许可证和通用 CI 工具。
+
+Skill 默认长截图、可安全执行的局部去水印、完整谱行分页及全部页面查看；恢复规则见 [Skill 阶段指南](agents/stage-recovery-layout.md)，验证见 [Skill 验证](skill-verification.md)。以下模块、状态及事务规则只属于程序与网站。
+
+程序转换通过图像处理保留可见谱面，生成 A4 PDF、全部预览及来源记录。`complete` 只表示产物完整发布；`reliable=false` 明确未经音乐校对。
 
 ## 模块与执行边界
 
@@ -15,7 +28,7 @@ Python、CLI 和匿名网站共用 `drum_score.convert`。转换通过图像处�
 | `schema.py`、`maintenance.py`、`owned_tree.py` | 共享已知 schema、停服快照、完整性核验、新身份恢复及有界私有根清理。 |
 | `jobs.py`、`worker.py`、`service_limits.py` | SQLite 队列、排他 worker、发布决定、存储准入、保留期和受管清理。 |
 
-所有生产模块位于同一 Python 包；wheel 不包含旧 Skill、实验视频或机器认证。基础依赖与网站可选依赖由 `pyproject.toml` 定义。
+程序与网站模块位于同一 Python 包；wheel 不包含 Skill、实验视频或机器认证。基础依赖与网站可选依赖由 `pyproject.toml` 定义。
 
 ## 转换与发布
 
@@ -43,4 +56,4 @@ HTTP 只提交公开 BV 链接，重计算由独立串行 worker 执行。SQLite
 
 匿名获取不加载用户 Cookie、netrc、下载器配置、插件或模型认证。初始 URL、每次重定向、每个媒体候选均校验公共地址和支持的 HTTPS 域；实际连接固定已核验 IP，同时保持原 TLS 主机名。代理认证不转发到源站；签名 URL 和原始异常不写入产物或公开日志。允许的 API 回退、分 P、完整时长与媒体尺寸检查保留。
 
-支持范围和具体资源参数见[转换契约](script-product/conversion.md)及[网站运行](script-product/website.md)。旧模型编排、重绘、轮廓转描、MIDI 和人工批准入口已退役；历史代码、实验和既有 Skill 安装分别保留，不自动迁移。
+程序与网站的支持范围和具体资源参数见[转换契约](script-product/conversion.md)及[网站运行](script-product/website.md)。这些入口不执行模型编排、重绘、轮廓转描、MIDI 或人工批准；Skill 的可选路线只在其独立工作流内执行。历史实验和现有安装保留，不自动迁移任务。

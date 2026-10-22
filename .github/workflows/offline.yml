@@ -1,4 +1,4 @@
-name: Offline score verification
+name: Script and website verification
 
 on:
   pull_request:

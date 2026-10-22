@@ -4,7 +4,7 @@ status: superseded
 
 # PDF Skill 只保留 Agent 取谱路线
 
-当前产品入口与生命周期由 [ADR 0006](0006-script-product-lifecycle.md) 替代。以下保留历史决定。
+当前 Skill 与程序/网站的产品边界见 [ADR 0007](0007-independent-skill-and-website.md)。本文保留历史决定；Skill 的当前执行规则以分发包协议为准。
 
 2026-10-20，用户确认删除 sparse/strict、将 MIDI 移出 PDF 包、保留生图优先及失败转矢量，并精简来源审阅。暂不另建 MIDI Skill。
 

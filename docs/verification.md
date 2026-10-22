@@ -1,6 +1,6 @@
 # 验证
 
-当前产品是 `drum_score` Python 包、`drum-score` CLI 和可选的匿名网站。安装依赖和运行方式见[安装指南](install.md)。旧 Skill 的历史测试与验收通过 [#72 集成版本的验证记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/9b85b0f4e3c5a7b0fabc48ed76dfdbb4a9b0597d/docs/verification.md) 和保留的 `docs/experiments/` 查看，不作为当前产品的新验收。
+本页验证 `drum_score` Python 包、`drum-score` CLI 和可选的匿名网站。安装依赖和运行方式见[安装指南](install.md)。同仓库的 Skill 使用独立依赖和 `tests/skill/` 测试，命令见 [Skill 验证](skill-verification.md)。两套测试需在不同 Python 进程中发现，避免同名 fixture 和模块相互污染。
 
 ## 运行回归
 
@@ -36,7 +36,7 @@ Windows CI 运行原生工具检查、跨宿主解码、公开入口共同约束
 
 谱面测试检查首尾、重复音乐、原生运动歧义、连续条带、实际 PDF 嵌入像素及跨页比例。轮廓和图像拼接不证明音乐识别或逐符号准确性。受控失败的预算值不能当作实际解码耗时；真实总期限测试单独提供进程停止证据。
 
-旧 217 项直接测试的最终去向见[测试迁移表](test-migration.md)。退役只适用于已退出的 Agent 批准、宿主生成、手动重建、MIDI 和 Skill 分发协议。匿名网络、期限、输出、文件与谱面完整性约束继续由当前测试或安装验收承接。
+#73 将旧测试语义迁入程序时的处理见[历史迁移表](test-migration.md)。恢复的 Skill 测试单独位于 `tests/skill/`，其 Agent 审阅和恢复语义不适用于程序与网站。匿名网络、期限、输出、文件与谱面完整性保护分别由各自产品的测试承接。
 
 ## 验证安装产物
 

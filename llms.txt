@@ -1,17 +1,25 @@
 # bilibili-drum-score-to-pdf
 
-Standalone Python/CLI and optional anonymous FastAPI website converting visible fixed-scale vertical drum score videos into A4 image PDFs. Public HTTPS Bilibili BV URLs and local files are supported by CLI; the website accepts public BV URLs only. No model generation, MIDI or Agent approval protocol. Complete means artifact publication, never musical proofreading; reliable=false.
+One repository, two independent products for turning visible vertical drum score videos into A4 PDFs. The root README is the shared entry point.
 
-Install with pip in a dedicated Python 3.12+ environment; native FFmpeg/ffprobe/Poppler are required. Website service lifecycle is Ubuntu/Linux-specific. Anonymous acquisition does not load cookies, netrc, downloader config, plugins or model credentials. Existing output is never overwritten.
+The self-contained Agent Skill lives in skills/bilibili-drum-score-to-pdf/. Install that whole directory, including scripts, references and LICENSE. It uses its own pinned requirements and Agent image/page review protocol. The default route preserves continuous score images; explicit requests enable optional redraw or vector workflows. It does not import or call the website.
 
-Web results expire 24 hours after durable completion. The independent worker cleans intermediate media and expired managed files; unknown files and replaced identities are preserved. Original native samples are removed from web delivery, so its manifest cannot reconstruct the source. The website has local integration evidence, not public deployment or target-server hard-resource acceptance.
+The standalone Python/CLI and optional FastAPI website live in src/drum_score/. Install with pyproject.toml in a separate Python 3.12+ environment; the web extra adds service dependencies. The public website is https://drum.kenqia.top/. It uses BBDownNext 2.3.0 metadata-bounded.1 with direct egress, never loads Skill protocols, and has no model generation or Agent approval step. Complete means artifact publication, with reliable=false. Web results expire after 24 hours.
 
-- [Introduction](README.md)
-- [Install](docs/install.md)
+Both need native FFmpeg/ffprobe/Poppler. The website service lifecycle is Ubuntu/Linux-specific. Anonymous acquisition must not load user cookies or credentials. Keep task state, dependencies and output directories separate; existing output is never overwritten.
+
+- [Introduction and product choice](README.md)
+- [Skill entry](skills/bilibili-drum-score-to-pdf/SKILL.md)
+- [Skill installation](docs/skill-install.md)
+- [Skill verification](docs/skill-verification.md)
+- [Program and website installation](docs/install.md)
 - [Conversion contract](docs/script-product/conversion.md)
 - [Website and storage contract](docs/script-product/website.md)
+- [Independent product boundaries](docs/adr/0007-independent-skill-and-website.md)
 - [Architecture](docs/architecture.md)
-- [Verification and evidence](docs/verification.md)
+- [Program verification and evidence](docs/verification.md)
 - [Terminology](GLOSSARY.md)
 
-Old Skill distribution and approval/model workflows are retired. History and experiment evidence remain available in Git and docs/experiments. Original code/docs use MIT; music, notation and derived examples retain their owners' rights. See LICENSE and docs/media/readme/README.md.
+Run tests/skill and root tests in separate Python processes; their fixtures and module names overlap. Synthetic assertions do not prove actual Agent image review, source approval, model calls or musical proofreading. Historical evidence stays in docs/experiments and Git; restoring the Skill does not resolve old source uncertainties.
+
+Code and documentation use MIT. Music, notation and derived examples retain their owners' rights. See LICENSE and docs/media/readme/README.md.

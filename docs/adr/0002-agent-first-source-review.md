@@ -4,7 +4,7 @@ status: superseded by 0003-pdf-workflow-cleanup
 
 # 正常 PDF 来源判断由 Agent 负责
 
-当前产品入口与生命周期由 [ADR 0006](0006-script-product-lifecycle.md) 替代。以下保留历史决定。
+当前 Skill 与程序/网站的产品边界见 [ADR 0007](0007-independent-skill-and-website.md)。本文保留历史决定；Skill 的当前执行规则以分发包协议为准。
 
 2026-10-19，用户确认正常 PDF 任务由 Agent 负责来源判断，自动稀疏导航与严格扫描作为显式可选辅助。跨宿主执行已暴露自动导航阻碍人工来源审阅的问题，因此默认阶段入口返回可操作的来源任务，不主动启动扫描。显式扫描保留自身 provenance 和实际覆盖范围。
 
