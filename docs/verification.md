@@ -46,23 +46,23 @@ Windows CI 运行原生工具检查、跨宿主解码、公开入口共同约束
 
 ## 当前结果与限制
 
-#73 的命令、日志、安装身份及失败过程见[产品收口实验记录](experiments/2026-10-21-issue73-product.md)。此前用户认可 #70/#71 的四份原谱面后要求放大和均衡分页，已按要求交付；#73 没有新的逐符号校对或模型生成。Root 已在最终 wheel 独立安装上完成真实匿名小星星浏览器验收，包含取消、重试、SIGTERM 中断、关闭后返回、全部预览、实际下载及显式 20 秒到期物理清理，详情见实验记录。服务器硬资源、备份部署、公开域名与 TLS 属于 #74，当前本地结果不替代这些验收。
+#73 的命令、日志、安装身份及失败过程见[产品收口实验记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/8c8730a4c3defa2fb317897a648ebc3ef66b4273/docs/experiments/2026-10-21-issue73-product.md)。此前用户认可 #70/#71 的四份原谱面后要求放大和均衡分页，已按要求交付；#73 没有新的逐符号校对或模型生成。Root 已在最终 wheel 独立安装上完成真实匿名小星星浏览器验收，包含取消、重试、SIGTERM 中断、关闭后返回、全部预览、实际下载及显式 20 秒到期物理清理，详情见实验记录。服务器硬资源、备份部署、公开域名与 TLS 属于 #74，当前本地结果不替代这些验收。
 
 
-#74 本地维护和部署演练见[维护实验记录](experiments/2026-10-22-issue74-maintenance.md)。该阶段全量 148 项通过，无跳过；新 wheel 已完成基础/web 离线安装、仓库外维护恢复正式服务及真实小星星浏览器验收。恢复演练保留原期限并实际等待 4 秒到期；浏览器另用 20 秒。两者均检查状态/PDF/全部预览 410 与物理删除，不代表默认保留期已改变。后续目标机安装、unit 启动、独立 cgroup 限额探针、域名/TLS、续期及停服备份核验见[部署状态记录](experiments/2026-10-22-server-deployment.md)。该轮因服务器 B站匿名获取 HTTP 412 保留待开放。后续按用户要求换为 BBDownNext 2.3.0 并恢复部署，最新目标机与公网结果见下节。
+#74 本地维护和部署演练见[维护实验记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/8c8730a4c3defa2fb317897a648ebc3ef66b4273/docs/experiments/2026-10-22-issue74-maintenance.md)。该阶段全量 148 项通过，无跳过；新 wheel 已完成基础/web 离线安装、仓库外维护恢复正式服务及真实小星星浏览器验收。恢复演练保留原期限并实际等待 4 秒到期；浏览器另用 20 秒。两者均检查状态/PDF/全部预览 410 与物理删除，不代表默认保留期已改变。后续目标机安装、unit 启动、独立 cgroup 限额探针、域名/TLS、续期及停服备份核验见[部署状态记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/8c8730a4c3defa2fb317897a648ebc3ef66b4273/docs/experiments/2026-10-22-server-deployment.md)。该轮因服务器 B站匿名获取 HTTP 412 保留待开放。后续按用户要求换为 BBDownNext 2.3.0 并恢复部署，最新目标机与公网结果见下节。
 
 `tests/test_comparison_tool.py` 从真实工具 CLI 验证冻结程序的实际源码目录，拒绝 main 历史脚本的已跟踪修改和未跟踪影子模块，保留优化版 src/pyproject 约束。合成 Git fixture 不运行媒体，不重算历史四曲比较数据。
 
-最终审阅的补零页名备份与比较工具冻结目录修复见[双轴审阅修复记录](experiments/2026-10-22-final-review-fixes.md)。原 #74 浏览器证据只沿用到字节未改的 web/worker/核心，新维护代码另以新安装环境的十页 PDF 往返验收。
+最终审阅的补零页名备份与比较工具冻结目录修复见[双轴审阅修复记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/8c8730a4c3defa2fb317897a648ebc3ef66b4273/docs/experiments/2026-10-22-final-review-fixes.md)。原 #74 浏览器证据只沿用到字节未改的 web/worker/核心，新维护代码另以新安装环境的十页 PDF 往返验收。
 
 
 ## BBDownNext 接入与公网验收
 
 2026-10-22 的 0.1.1 发行基于应用提交 `538f758`，wheel SHA256 为 `3cd4e6caec9b64bced0e41ae71df26028758477d4a920fcfa402a9f76cae28e8`。169 项全回归 116.421 秒通过，无跳过；离线 CI 合成重放、基础/web 两份独立安装、25 个包文件字节核对和双轴审阅通过。
 
-腾讯云在 cgroup 512 MiB worker、128 MiB web 下完成真实小星星直连转换、取消、SIGTERM 后重试、全部预览/PDF、备份恢复、原期限和实际 410/物理删除；另在目标机验证合成十页备份恢复。公网 HTTPS 的独立浏览器提交、关闭后返回、全部预览与下载通过，默认保留期 24 小时。缩短的 45 秒恢复测试与 20 秒浏览器到期测试只作用于隔离数据。完整证据、失败和回滚记录见[接入实验](experiments/2026-10-22-bbdown-integration.md)。这不是所有 B站视频或音乐逐符号准确性的保证。
+腾讯云在 cgroup 512 MiB worker、128 MiB web 下完成真实小星星直连转换、取消、SIGTERM 后重试、全部预览/PDF、备份恢复、原期限和实际 410/物理删除；另在目标机验证合成十页备份恢复。公网 HTTPS 的独立浏览器提交、关闭后返回、全部预览与下载通过，默认保留期 24 小时。缩短的 45 秒恢复测试与 20 秒浏览器到期测试只作用于隔离数据。完整证据、失败和回滚记录见[接入实验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/8c8730a4c3defa2fb317897a648ebc3ef66b4273/docs/experiments/2026-10-22-bbdown-integration.md)。这不是所有 B站视频或音乐逐符号准确性的保证。
 
 
 ## 同仓库独立产品回归
 
-2026-10-22 恢复独立 Skill 后，程序与网站171项回归126.861秒、无跳过通过，Skill另在独立依赖环境中186项通过、两项Windows专属检查在Linux跳过。分发包和仓库外转换、依赖隔离、双轴复核见[独立产品验证](experiments/2026-10-22-independent-products.md)。网站应用文件未变，本轮不重复B站下载或生产部署。
+2026-10-22 恢复独立 Skill 后，程序与网站171项回归126.861秒、无跳过通过，Skill另在独立依赖环境中186项通过、两项Windows专属检查在Linux跳过。分发包和仓库外转换、依赖隔离、双轴复核见[独立产品验证](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/8c8730a4c3defa2fb317897a648ebc3ef66b4273/docs/experiments/2026-10-22-independent-products.md)。网站应用文件未变，本轮不重复B站下载或生产部署。

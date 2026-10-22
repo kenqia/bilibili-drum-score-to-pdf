@@ -1,69 +1,123 @@
-# B站鼓谱视频转 PDF
+<div align="center">
 
-把视频中已有的纵向滚动鼓谱整理成 A4 PDF。这个仓库同时提供可安装的 Skill，以及独立运行的 Python 程序和匿名网站。
+# 鼓谱整理
 
-| 使用方式 | 入口 | 安装与依赖 |
+### 把 B站视频里的滚动鼓谱，变成能打印、能放上谱架的 A4 PDF。
+
+**[👉 立即使用：drum.kenqia.top](https://drum.kenqia.top/)**
+
+免费 · 无需注册 · 无需安装 · 手机电脑都能用
+
+</div>
+
+---
+
+## 你是不是也这样扒过谱？
+
+看到一首想练的歌，B站有人做了滚动鼓谱视频。于是你开始暂停、截图、拖进度条、再截图，最后拼出一堆大小不一、互相重叠的图片。练到一半还得回去找漏掉的那一行。
+
+鼓谱整理帮你把这件事一次做完：**粘贴链接，等一会儿，下载 PDF**。
+
+<table>
+<tr>
+<td width="55%" align="center"><b>视频里的样子</b></td>
+<td width="45%" align="center"><b>整理后的 A4 PDF</b></td>
+</tr>
+<tr>
+<td><img src="docs/assets/example-video-frame.png" alt="B站滚动鼓谱视频的一帧画面"></td>
+<td><img src="docs/assets/example-pdf-page.png" alt="整理后的 A4 鼓谱 PDF 第一页"></td>
+</tr>
+</table>
+
+<sub>示例：《鲜花》，演唱回春丹，谱面 JIAN磊，视频来自 B站 UP 主「帅气迷人的小磊子」（<a href="https://www.bilibili.com/video/BV1Yw4m1Y7YH">原视频</a>）。谱面版权归原作者所有。</sub>
+
+## 三步拿到鼓谱
+
+1. **复制链接**：在 B站打开鼓谱视频，复制地址栏或「分享」里的链接（形如 `https://www.bilibili.com/video/BV…`）。多 P 视频带上 `?p=2` 这样的分 P 也可以。
+2. **粘贴提交**：打开 [drum.kenqia.top](https://drum.kenqia.top/)，粘贴链接，点「整理鼓谱」。
+3. **查看下载**：整理完成后，网页会把每一页都显示出来。看一遍没问题，点「下载 A4 PDF」。
+
+> 💡 提交后网页会给你一条专属任务链接。**把它收藏或复制下来**，关掉页面任务也会继续，稍后打开链接就能取结果。这条链接相当于这份鼓谱的钥匙，只分享给信任的人。
+
+## 它会帮你做什么
+
+- **整行拼接**：自动跟着视频滚动，把每一行谱完整接起来，重叠的部分只保留一次。
+- **反复不丢**：重复段、一房二房这类后续重复的音乐会按原样保留，不会被当成重复删掉。
+- **适合打印**：按 A4 排版，不把一行谱切成两半，所有页面统一缩放，行距和原谱一致。
+- **先看再下**：下载前能看到全部页面，哪里不对一眼就能发现。
+- **拿不准就直说**：遇到缺段、画面跳变或无法确定怎么接的地方，会直接告诉你失败，而不是给你一份拼错的谱子。
+
+## 哪些视频效果最好
+
+| ✅ 推荐 | ⚠️ 可能不行 |
+| --- | --- |
+| 白色背景的完整鼓谱 | 谱面被弹幕、人像、贴图挡住 |
+| 谱面**从下往上**匀速滚动 | 左右翻页、整页切换 |
+| 画面比例全程固定 | 镜头推拉、缩放、移动 |
+| 公开视频，不用登录就能看 | 会员专享、需要登录或已下架的视频 |
+
+另外有几个上限：视频最长 10 分钟，画面不超过约 420 万像素（1080p、1440p 都没问题，4K 视频会超出）。
+
+## 常见问题
+
+**要花钱吗？要注册吗？**
+都不用。打开网页、粘贴链接就行，不需要登录 B站，也不会读取你的任何账号信息。
+
+**要等多久？**
+时间取决于视频长度和服务器忙不忙。人多的时候需要排队，网页会显示你排在第几位。
+
+**结果能保存多久？**
+24 小时。过期后 PDF 和预览会被删除，记得及时下载。视频本身在处理完就会清理，不会保存在服务器上。
+
+**PDF 里的谱子一定对吗？**
+网站只是把视频里的画面整理拼接，**不会改动或重新识别音符**。原视频里的水印、模糊、播放进度线可能会保留下来。极少数拼接问题程序也可能没发现，演奏前请对照原视频快速核对一遍。
+
+**为什么提示我还有任务在进行？**
+为了公平，同一个网络同时只能有一个未完成的任务。学校、公司或家里多人共用网络时，可能会互相占用名额，稍等一会儿再试。
+
+**能上传自己手机里的视频吗？**
+网站目前只支持 B站公开链接。需要处理本地视频，可以用下方的命令行工具。
+
+**能转成 MIDI 或者重新打谱吗？**
+网站不提供。它的目标是忠实保留原谱面。
+
+## 尊重原作者
+
+鼓谱是扒谱作者花大量时间做出来的。这个工具只是帮你整理自己能看到的内容，方便练习。请只处理你有权使用的内容，不要把整理出的 PDF 用于售卖或冒充原创。喜欢一份谱子，记得去原视频给作者点个赞。
+
+---
+
+<details>
+<summary><b>给开发者：命令行、自行部署与 AI Skill</b></summary>
+
+<br>
+
+本仓库包含两个互相独立的产品：
+
+| 产品 | 位置 | 说明 |
 | --- | --- | --- |
-| 让视觉 Agent 整理、查看和交付鼓谱 | [Skill](skills/bilibili-drum-score-to-pdf/SKILL.md) | 单独安装完整 Skill 目录，使用自己的固定依赖。 |
-| 在浏览器粘贴公开 B站链接 | [drum.kenqia.top](https://drum.kenqia.top/) | 使用网站无需安装 Skill。 |
-| 本地脚本调用或自行部署网站 | [Python/CLI 安装指南](docs/install.md) | 安装 `drum_score` 包；网站另装 `web` extra。 |
+| Python 命令行与网站 | [`src/drum_score/`](src/drum_score/) | 网站 [drum.kenqia.top](https://drum.kenqia.top/) 的源码。纯图像处理，不调用 AI 模型。支持本地视频。 |
+| AI Agent Skill | [`skills/bilibili-drum-score-to-pdf/`](skills/bilibili-drum-score-to-pdf/SKILL.md) | 给 Codex 等视觉 Agent 使用，可由 Agent 逐页查看后交付，并支持可选重绘。 |
 
-两条产品路径独立发布和运行。Skill 不调用网站，网站不加载 Skill 或 Agent 审阅协议；它们的任务目录和状态不能互换。参见[架构与边界](docs/architecture.md)。
+两者分别安装、分别测试，互不调用。边界见[架构说明](docs/architecture.md)。
 
-## 安装和使用 Skill
-
-安装目录为 `skills/bilibili-drum-score-to-pdf/`，须包含 `SKILL.md`、`agents/`、`scripts/`、`references/` 和 `LICENSE`。只复制这个完整目录即可，无需安装 Python 网站包或启动服务。
-
-也可用仓库工具从指定提交安装并核验，目标换成宿主实际发现 Skill 的绝对目录：
-
-```sh
-python3.12 tools/install_skill.py install --revision HEAD --target /absolute/host/skills/bilibili-drum-score-to-pdf
-python3.12 tools/install_skill.py verify --target /absolute/host/skills/bilibili-drum-score-to-pdf
-```
-
-在 Codex 中通过 `$bilibili-drum-score-to-pdf` 或技能选择器显式选择 Skill，再提供视频链接或本地视频。分发包的 `agents/openai.yaml` 保留 `policy.allow_implicit_invocation: false`，不会根据话题自动调用；其他宿主需单独核对调用策略。默认路线为长截图、完整谱行分页、全部页面查看和交付；显式请求才进入可选重绘或矢量路线。依赖、宿主发现、更新备份与回滚见 [Skill 安装指南](docs/skill-install.md)。
-
-## 使用独立程序
-
-程序保留谱面图像，不调用模型；自动完成不代表音乐已校对。
-
-需要 Python 3.12 或更新版本，以及 `ffmpeg`、`ffprobe`、`pdftoppm`。公开 B站链接另需[固定的 BBDownNext 2.3.0 有界构建](docs/install.md#安装公开链接解析器)。当前本地验证使用 Python 3.12。
+**命令行快速开始**（需要 Python 3.12+，以及 `ffmpeg`、`ffprobe`、`pdftoppm`）：
 
 ```sh
 python3.12 -m venv .venv
 .venv/bin/pip install .
-.venv/bin/drum-score 'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=1' --output /absolute/path/new-result
+.venv/bin/drum-score ./my-drum-video.mp4 --output ./result
 ```
 
-也可将链接换成本地视频路径。输出目录必须不存在。成功目录包含 `score.pdf`、全部页面预览、`manifest.json` 及本地实验所需的原生帧和长图。错误返回脱敏 JSON，退出码为 2。参见[安装指南](docs/install.md)和[转换契约](docs/script-product/conversion.md)。
+处理 B站链接还需要固定版本的 BBDownNext 解析器。完整说明：
 
-## 匿名网站
+- [安装指南](docs/install.md) · [转换参数](docs/script-product/conversion.md)
+- [网站运行](docs/script-product/website.md) · [部署](docs/script-product/deployment.md) · [备份与恢复](docs/script-product/maintenance.md)
+- [Skill 安装](docs/skill-install.md) · [Skill 验证](docs/skill-verification.md)
+- [测试与验证](docs/verification.md) · [全部文档](docs/README.md)
 
-```sh
-.venv/bin/pip install '.[web]'
-.venv/bin/drum-score-web --data-root /absolute/path/drum-score-data --host 127.0.0.1 --port 8000
-```
+</details>
 
-在另一个终端启动 `.venv/bin/drum-score-worker --data-root /absolute/path/drum-score-data`，打开 [本地网页](http://127.0.0.1:8000)。保存完整任务链接，完成后查看全部预览并下载 PDF。网站结果保留 24 小时，视频、原生帧及长图在任务结束后清理。详见[网站运行与存储规则](docs/script-product/website.md)。
+## 许可
 
-停服备份、核验和恢复见[维护指南](docs/script-product/maintenance.md)，独立发行环境、systemd、nginx 及回滚见[部署指南](docs/script-product/deployment.md)。
-
-网站已部署到 [drum.kenqia.top](https://drum.kenqia.top/)。2026-10-22 的腾讯云直连完整转换、资源、恢复及公网浏览器验收见[BBDownNext 接入记录](docs/experiments/2026-10-22-bbdown-integration.md)。
-
-## 适合什么视频
-
-首版面向白底、固定比例、纵向向上推进的已有鼓谱。保留完整谱行、原行距、相关记号与后续重复音乐。无法确认安全去除的水印、模糊和播放标记保留。检测到缺段、配准歧义或不支持的翻页时明确失败；程序不能自动识别所有谱面问题。
-
-不从演奏音频或动作生成乐谱。横移、缩放、复杂翻页不属于已验证范围。独立程序和网站不提供重绘、矢量转描、MIDI 或 Agent 审批入口；Skill 的可选操作按它自己的协议执行。
-
-## Skill 示例
-
-![Skill 流程演示](docs/images/workflow.gif)
-
-此示例来自 Skill 的历史重绘任务。《鲜花》演唱者为回春丹；原视频水印署名「帅气迷人的小磊子」，谱面署名「JIAN磊」。[原视频](https://www.bilibili.com/video/BV1Yw4m1Y7YH)、[三页历史 PDF](docs/media/readme/assets/xianhua/xianhua-A4.pdf)和[来源记录](docs/media/readme/assets/xianhua/provenance.json)不代表程序或网站的新验收。
-
-## 开发与证据
-
-[架构](docs/architecture.md)、[程序与网站验证](docs/verification.md)、[Skill 验证](docs/skill-verification.md)、[领域术语](GLOSSARY.md)和[文档导航](docs/README.md)说明各自的入口。历史实验记录位于 `docs/experiments/`；已移出当前文件树的材料见[历史材料索引](docs/experiments/historical-artifacts.md)，原始来源、实际 PTS 和 hash 保留在 Git 历史中。合成测试不替代真实谱面与全部页面审阅。
-
-代码与文档使用 [MIT](LICENSE)；音乐、谱面和派生示例素材权利归原权利人，见[素材说明](docs/media/readme/README.md)。
+代码与文档使用 [MIT 许可](LICENSE)。示例中的音乐、谱面和视频画面权利归原权利人。

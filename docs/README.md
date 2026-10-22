@@ -1,15 +1,30 @@
 # 文档导航
 
-仓库提供两条独立路径。使用 Skill 从 [Skill 安装](skill-install.md)和 [Skill 入口](../skills/bilibili-drum-score-to-pdf/SKILL.md)开始，开发和验收读 [Skill 验证](skill-verification.md)。使用程序从[安装](install.md)和[转换契约](script-product/conversion.md)开始；运行网页读[网站指南](script-product/website.md)。
+普通用户直接使用网站 [drum.kenqia.top](https://drum.kenqia.top/)，说明见[仓库首页](../README.md)。下面是给开发者和维护者的文档。
 
+## 命令行与网站
+
+- [安装](install.md)
+- [转换契约](script-product/conversion.md)
+- [网站运行与存储规则](script-product/website.md)
+- [部署与回滚](script-product/deployment.md)
 - [停服备份与恢复](script-product/maintenance.md)
-- [部署演练与回滚](script-product/deployment.md)
+- [BBDownNext 构建](bbdown-build.md)
+- [验证](verification.md)
+
+## AI Agent Skill
+
+- [Skill 入口](../skills/bilibili-drum-score-to-pdf/SKILL.md)
+- [Skill 安装](skill-install.md)
+- [Skill 验证](skill-verification.md)
+- Skill 协议源文件位于 `agents/`，同步到分发包的 `references/`。
+
+## 设计与约定
+
 - [架构与数据边界](architecture.md)
-- [程序与网站验证入口及实际结果](verification.md)
-- [交付范围及剩余验收](launch-readiness.md)
+- [产品边界决定](adr/0007-independent-skill-and-website.md)及其余 [ADR](adr/)
 - [旧测试逐项迁移](test-migration.md)
 - [领域术语](../GLOSSARY.md)
 - [工作约定](../AGENTS.md)
-- [当前产品边界决定](adr/0007-independent-skill-and-website.md)
 
-`docs/experiments/` 保留历史实验记录。已移出的单曲脚本、MIDI 中间产物、旧发布批次和设计访谈通过[历史材料索引](experiments/historical-artifacts.md)查看，原绝对路径不保证现在可用。Skill 协议位于 `docs/agents/` 并同步到分发包 references。历史通过不批准新输入。
+历史实验记录、展示素材源文件和验收记录已从当前文件树移除，可在 Git 历史中查看（最后保留于提交 `8c8730a`）。

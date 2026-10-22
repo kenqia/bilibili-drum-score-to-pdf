@@ -27,8 +27,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Reviewed PDF used by the README showcase
-!docs/media/readme/assets/xianhua/xianhua-A4.pdf
 
 # Python package build products
 build/
