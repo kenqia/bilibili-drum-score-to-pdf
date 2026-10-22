@@ -89,6 +89,10 @@ Path.read_text = read
 import os
 original = Path.read_text
 fixture = Path(os.environ['IDENTITY_FIXTURE'])
+if 'drum_score.guardian' in __import__('sys').orig_argv:
+    marker = fixture / ('guardian-pid-' + str(os.getpid()))
+    marker.write_text(str(os.getpid()))
+    os.replace(marker, fixture / 'guardian-pid')
 target = '/proc/' + os.environ['SENTINEL_PID'] + '/stat'
 def read(self, *args, **kwargs):
     value = original(self, *args, **kwargs)
@@ -96,9 +100,14 @@ def read(self, *args, **kwargs):
         head, tail = value.rsplit(') ', 1)
         fields = tail.split()
         fields[1] = original(fixture / 'worker-pid').strip()
-        if not (fixture / 'reused').exists():
+        phase = 'replacement' if (fixture / 'reused').exists() else 'original'
+        if phase == 'original':
             fields[19] = 'original-descendant-identity'
-            (fixture / 'observed').touch()
+        observed = fixture / (phase + '-' + str(os.getpid()))
+        count = int(original(observed)) if observed.exists() else 0
+        update = observed.with_name(observed.name + '.next')
+        update.write_text(str(count + 1))
+        os.replace(update, observed)
         return head + ') ' + ' '.join(fields)
     return value
 Path.read_text = read
@@ -109,12 +118,23 @@ Path.read_text = read
                          'PATH': str(tools) + os.pathsep + os.environ['PATH'],
                          'PYTHONPATH': os.pathsep.join([str(root), *sys.path])},
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                deadline = time.monotonic() + 10
-                while not (root / 'observed').exists() and process.poll() is None and time.monotonic() < deadline:
-                    time.sleep(.01)
-                self.assertTrue((root / 'observed').exists())
+                def wait_observers(phase):
+                    deadline = time.monotonic() + 10
+                    while process.poll() is None and time.monotonic() < deadline:
+                        guardian_pid = root / 'guardian-pid'
+                        if guardian_pid.exists():
+                            observers = [process.pid, int(guardian_pid.read_text())]
+                            # The second read proves the previous scan returned
+                            # and its identity was recorded by each observer.
+                            if all((path := root / f'{phase}-{pid}').exists()
+                                   and path.read_text().isdigit()
+                                   and int(path.read_text()) >= 2 for pid in observers):
+                                return
+                        time.sleep(.01)
+                    self.fail(f'Both supervisor and guardian must observe {phase} identity')
+                wait_observers('original')
                 (root / 'reused').touch()
-                time.sleep(.1)  # Allow multiple external /proc observations of the replacement.
+                wait_observers('replacement')
                 process.terminate()
                 stdout, stderr = process.communicate(timeout=10)
                 self.assertEqual(json.loads(stdout)['error']['code'], 'cancelled', stderr)
