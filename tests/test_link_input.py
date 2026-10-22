@@ -251,7 +251,7 @@ class LinkInputTests(unittest.TestCase):
             with patch.dict('os.environ', {'PATH': str(binary.parent) + ':' + __import__('os').environ['PATH'],
                     'HOME': str(base), 'BBDOWN_INSECURE_TLS': '1', 'SSL_CERT_FILE': '/invalid',
                     'ALL_PROXY': 'http://invalid:9', 'NETRC': str(binary.parent / '.netrc')}), \
-                    patch.object(bbdown_cli, 'OFFICIAL_SHA256', digest), \
+                    patch.object(bbdown_cli, 'METADATA_SHA256', digest), \
                     patch('socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('8.8.8.8', 443))]), \
                     patch('urllib.request.OpenerDirector.open', side_effect=lambda *a, **k: io.BytesIO(video.read_bytes())):
                 source, origin = public_video.acquire(URL, base / 'result')

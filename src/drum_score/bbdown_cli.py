@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlsplit
 from .public_video import InputError
 from .bbdown_network import DirectGateway
 
+# Provenance only: the official build lacks the required 2 MiB response ceiling.
 OFFICIAL_SHA256 = '8e149b6d90a48bd3665b9c7efb5056e443e4a5c6d04313b8c4d21cfc6e70d114'
 METADATA_SHA256 = 'd5fe48f6c2bf2e388937d3c8985c1e3dcca678e5a8d8345fa5c31e36793baf0a'
 MAX_METADATA = 2 * 1024**2
@@ -170,7 +171,7 @@ def _run(binary, args, env):
 def inspect(origin, staging):
     location = shutil.which('BBDown')
     if location is None:
-        raise InputError('dependency_missing', '需要安装已验证的 BBDownNext 2.3.0。')
+        raise InputError('dependency_missing', '需要安装已验证的 BBDownNext 2.3.0 metadata-bounded.1 构建。')
     try:
         with tempfile.TemporaryDirectory(prefix='bbdown-', dir=staging) as temporary:
             root = Path(temporary)
@@ -187,8 +188,8 @@ def inspect(origin, staging):
                         raise _invalid('backend_version_mismatch')
                     digest.update(block)
                     target.write(block)
-            build = {OFFICIAL_SHA256: 'official', METADATA_SHA256: 'metadata-bounded.1'}.get(digest.hexdigest())
-            if build is None:
+            build = 'metadata-bounded.1'
+            if digest.hexdigest() != METADATA_SHA256:
                 raise InputError('backend_version_mismatch', 'BBDownNext 可执行文件与已验证的 2.3.0 构建不一致。')
             binary.chmod(0o700)
             config = root / 'empty.config'

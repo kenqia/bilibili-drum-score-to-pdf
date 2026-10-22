@@ -47,7 +47,7 @@ class APIAcquisitionTests(unittest.TestCase):
             self.assertEqual(result['origin']['aid'], 44)
             self.assertEqual(result['origin']['full_duration'], 2)
             self.assertEqual(result['origin']['acquisition_route'], 'bbdown_direct')
-            self.assertEqual(result['origin']['backend_build'], 'official')
+            self.assertEqual(result['origin']['backend_build'], 'metadata-bounded.1')
             binary = root / 'fake-tool' / 'BBDown'
             import hashlib
             self.assertEqual(result['origin']['backend_sha256'], hashlib.sha256(binary.read_bytes()).hexdigest())
@@ -231,3 +231,15 @@ class APIAcquisitionTests(unittest.TestCase):
             self.assertEqual(origin['backend_build'], 'metadata-bounded.1')
             self.assertEqual(origin['backend_sha256'], expected_digest)
             self.assertEqual(source.read_bytes(), video.read_bytes())
+
+    def test_official_release_is_rejected_before_execution_without_response_bound(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            marker = root / 'must-not-run'
+            config = fixture_config(marker=str(marker))
+            with configured_fake(root, config, build='official'):
+                with self.assertRaises(InputError) as caught:
+                    acquire(URL, root / 'result')
+            self.assertEqual(caught.exception.code, 'backend_version_mismatch')
+            self.assertFalse(marker.exists())
+            self.assertFalse((root / 'result').exists())

@@ -25,7 +25,7 @@ if mode in ('extract', 'recovery', 'exit'):
  config.update(marker=str(marker), stall=mode != 'exit', child_stall=mode == 'exit')
 base = marker.parent
 binary, digest = install_fake_bbdown(base, config)
-bbdown_cli.OFFICIAL_SHA256 = digest
+bbdown_cli.METADATA_SHA256 = digest
 os.environ['PATH'] = str(binary.parent) + os.pathsep + os.environ['PATH']
 def stall(*args, **kwargs):
  marker.write_text(str(os.getpid()))

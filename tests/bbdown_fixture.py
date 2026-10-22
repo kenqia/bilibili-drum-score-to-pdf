@@ -77,7 +77,7 @@ for i in range(config.get('files', 1)):
 
 
 @contextlib.contextmanager
-def configured_fake(base, config, video=None, *, response=None, dns=None, real_transport=False, build='official'):
+def configured_fake(base, config, video=None, *, response=None, dns=None, real_transport=False, build='metadata-bounded.1'):
     from drum_score import bbdown_cli
     binary, digest = install_fake_bbdown(base, config)
     with patch.dict(os.environ, {'PATH': str(binary.parent) + os.pathsep + os.environ['PATH']}), \

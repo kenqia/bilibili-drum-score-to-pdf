@@ -204,7 +204,7 @@ class ScriptPublicContracts(unittest.TestCase):
             (fixture.network / 'sitecustomize.py').write_text(
                 "import io,os,socket\nfrom pathlib import Path\n"
                 "from drum_score import bbdown_cli\n"
-                "bbdown_cli.OFFICIAL_SHA256=" + repr(digest) + "\n"
+                "bbdown_cli.METADATA_SHA256=" + repr(digest) + "\n"
                 "os.environ['PATH']=" + repr(str(binary.parent)) + "+os.pathsep+os.environ['PATH']\n"
                 "socket.getaddrinfo=lambda *a,**k:[(socket.AF_INET,socket.SOCK_STREAM,6,'',('8.8.8.8',443))]\n"
                 "import urllib.request\n"
@@ -242,7 +242,7 @@ class ScriptPublicContracts(unittest.TestCase):
                     self.assertFalse(result['source']['authenticated'])
                     self.assertEqual(result['source']['backend'], 'BBDownNext')
                     self.assertEqual(result['source']['backend_version'], '2.3.0')
-                    self.assertEqual(result['source']['backend_build'], 'official')
+                    self.assertEqual(result['source']['backend_build'], 'metadata-bounded.1')
                     self.assertEqual(result['source']['backend_sha256'], digest)
                     self.assertEqual(result['source']['acquisition_route'], 'bbdown_direct')
                     self.assertEqual(result['source']['cid'], 22)

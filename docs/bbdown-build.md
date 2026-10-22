@@ -8,7 +8,7 @@
 | SDK | .NET SDK 10.0.401，Linux x64 |
 | 构建 | NativeAOT，Release，linux-x64 |
 | 可执行文件 SHA256 | `d5fe48f6c2bf2e388937d3c8985c1e3dcca678e5a8d8345fa5c31e36793baf0a` |
-| 原版 Linux x64 SHA256 | `8e149b6d90a48bd3665b9c7efb5056e443e4a5c6d04313b8c4d21cfc6e70d114` |
+| 原版 Linux x64 SHA256，仅供来源核对，禁止执行 | `8e149b6d90a48bd3665b9c7efb5056e443e4a5c6d04313b8c4d21cfc6e70d114` |
 
 完整[构建来源及依赖清单](third-party/BBDownNext-build.json)和[两处源码补丁](third-party/BBDownNext-2.3.0.patch)随仓库保留。上游源码归档 SHA256 为 `e3340b1e9d9b146a21dc9efbe86c00f67afc48488afa40a040799c19c282beb3`。
 
@@ -16,6 +16,8 @@
 
 - `BBDown.Core/Util/HTTPUtil.cs` 的 `TruncateForLog` 保留最多 2 MiB 字符，避免原 8192 字符截断必要的 view JSON。
 - `BBDown.Core/Util/HttpTransfer.cs` 的 `MaxResponseBytes` 从 64 MiB 改为 2 MiB。读取循环检查解压后的累计字节，不依赖 Content-Length。
+
+程序只执行固定摘要的 `metadata-bounded.1` 构建。原版发布文件的 64 MiB 解压响应上限不符合当前资源契约，程序在启动子进程前返回 `backend_version_mismatch`。原版摘要只保留用于来源核对。
 
 CLI 仅解析元数据，原始输出总量另受 Python 的 2 MiB 限制。总输出超过预算仍失败，不能把单个响应预算理解为所有响应一定可以同时达到上限。
 
