@@ -39,4 +39,4 @@ uv run --python 3.12 --isolated --with-requirements skills/bilibili-drum-score-t
 
 ## 当前结果
 
-2026-10-22 本地Linux独立环境186项回归174.929秒通过，两项Windows专属安装检查跳过。提交快照安装、脱离仓库重放及依赖隔离通过，详见[独立产品验证](experiments/2026-10-22-independent-products.md)。Windows原生与远端CI结果单独核对，不将本地通过冒称为远端通过。
+2026-10-22 本地Linux独立环境186项回归174.929秒通过，两项Windows专属安装检查跳过。提交快照安装、脱离仓库重放及依赖隔离通过，详见[独立产品验证](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/8c8730a4c3defa2fb317897a648ebc3ef66b4273/docs/experiments/2026-10-22-independent-products.md)。Windows原生与远端CI结果单独核对，不将本地通过冒称为远端通过。

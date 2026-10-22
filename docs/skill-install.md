@@ -70,7 +70,7 @@ ffprobe -version
 pdftoppm -v
 ```
 
-帮助应包含 prepare、stage、export 和 review-pdf。能找到 Skill、能读取协议且命令成功，才说明安装入口可用。任务是否完成仍取决于真实来源、宿主调用与全部页面审阅，不把安装检查称为整曲验收。跨宿主状态见[首发记录](launch-readiness.md)。
+帮助应包含 prepare、stage、export 和 review-pdf。能找到 Skill、能读取协议且命令成功，才说明安装入口可用。任务是否完成仍取决于真实来源、宿主调用与全部页面审阅，不把安装检查称为整曲验收。跨宿主状态见[首发记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/8c8730a4c3defa2fb317897a648ebc3ef66b4273/docs/launch-readiness.md)。
 
 ## 回滚受管理安装
 
