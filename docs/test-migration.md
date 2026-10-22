@@ -398,3 +398,21 @@ env -u PYTHONPATH /home/kenqia/issue73-installed-venv/bin/python /home/kenqia/is
 `I-73` 的独立安装与 `B-73` 的真实累计耗时后果已记录，最终提交绑定由外部 `product73-packaging/final-binding.json` 提供。旧跨 stage 累计协议退出，真实总期限测试另保留任务级停止保护，不与解码累计测量混为一谈。最终提交、定向运行和独立 merger 复核完成前，不用本页替代合并门槛。
 
 映射初稿由独立预检者编写，实施者补入真实预算测量和最终提交绑定位置。没有修改已安装 Skill 或原工作区，没有远端写入。
+
+
+## BBDownNext 2.3.0 入口替换
+
+2026-10-22 的后续接入用固定 BBDownNext CLI 替换 yt-dlp 解析器，保留原 Python 媒体传输。此节修订上表关于旧下载器实现的描述，旧测试 ID 继续作为历史清单，不声称所有旧名称仍存在。
+
+| 旧实现契约 | 当前验证与处理 |
+| --- | --- |
+| yt-dlp 原生 DASH、最佳独立视频轨、单文件回退、实际分辨率 | `test_link_input` 的同类测试通过真实合成 BBDown 子进程和 FFprobe/FFmpeg 验证。 |
+| 公开元数据与 BV、aid、CID、分 P、完整曲长绑定 | `test_api_acquisition` 使用完整 view/player JSON、唯一 playurl 文件和匹配请求，缺失、重复、截断或受限来源拒绝传输媒体。 |
+| DNS 固定、TLS 主机名、IPv6 不可达后备、重定向及同轨备份 | 原 Python 媒体传输测试保留；`test_bbdown_network` 覆盖元数据 CONNECT 的全部 DNS 地址、数值 IP、目标白名单与清理。 |
+| 环境代理及恢复路径 | 用户要求保持直连，该生产行为退出。替代测试确认媒体忽略代理，CLI 仅使用任务内直连校验中继，不读系统代理或改路由。 |
+| 下载器配置、Cookie、netrc、插件隔离 | 合成可执行文件旁放置测试标记，验证新 AppDir、空配置、干净 HOME/env，不读任何真实凭据。yt-dlp 插件构造器随依赖退役。 |
+| 元数据压缩体读取限额 | 不再使用 Python 的旧 `BoundedBody`。新构建的 C# HTTP 读取循环限制解压后响应 2 MiB，Python 限制 CLI 总输出及 playurl 文件各 2 MiB，中继限制隧道字节。具体构建验证单独记录，不能以旧未调用测试冒充新路径证据。 |
+| 获取、探测、复制期限，SIGTERM、父进程退出与孙进程 | `test_acquisition_lifecycle` 保留六项真实进程/信号测试，并记录实际 CLI 与孙进程 PID；恢复阶段改为直连元数据阻塞。 |
+| Python、CLI、HTTP 的公开契约 | `test_public_contracts` 的共同矩阵承接成功、依赖缺失、非公共目标和失败不发布；HTTP 仍只接收公开链接。 |
+
+所有新增测试只使用合成标记、离线 DNS/HTTP 边界和假 CLI，不读取用户凭据，不作为真实云端转换通过的替代证据。

@@ -1,7 +1,5 @@
 """BBDownNext anonymous metadata with anonymous, bounded media acquisition."""
 import json
-import io
-import gzip
 import math
 import re
 from fractions import Fraction
@@ -9,35 +7,6 @@ import subprocess
 from urllib.error import HTTPError
 from .public_video import InputError, MAX_BYTES, checked_media_url
 from .anonymous_network import PublicTransport
-
-
-class BoundedBody(io.IOBase):
-    def __init__(self, response, transport, limit=2 * 1024**2, decode=True):
-        self.response, self.transport, self.limit, self.total = response, transport, limit, 0
-        # Servers can return gzip despite Accept-Encoding: identity. Bound both
-        # the wire body and the decompressed body before the extractor reads it.
-        self.reader = (gzip.GzipFile(fileobj=BoundedBody(response, transport, limit, decode=False))
-                       if decode and response.headers.get('Content-Encoding', '').lower() == 'gzip'
-                       else response)
-
-    def read(self, size=-1):
-        size = -1 if size is None else size
-        amount = self.limit + 1 - self.total
-        block = self.reader.read(amount if size < 0 else min(size, amount))
-        self.total += len(block)
-        if self.total > self.limit:
-            self.transport.failure = InputError('download_too_large', '公开响应超过大小上限。请提供清晰的本地视频。')
-            raise self.transport.failure
-        return block
-
-    def readable(self):
-        return True
-
-    def close(self):
-        if self.reader is not self.response:
-            self.reader.close()
-        self.response.close()
-        super().close()
 
 
 def download(origin, staging):
