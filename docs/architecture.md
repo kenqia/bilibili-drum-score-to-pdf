@@ -21,7 +21,7 @@ Skill 默认长截图、可安全执行的局部去水印、完整谱行分页�
 | --- | --- |
 | `core.py`、`imaging.py` | 输入预算、来源 hash、原生采样、位移配准、保守合成与完整条带分页。 |
 | `supervision.py`、`guardian.py` | 独立转换进程、采样资源监督、取消与异常树清理。初始 PID/start-time 固定，后续观察不替换已有身份。 |
-| `public_video.py`、`anonymous_backend.py`、`bbdown_cli.py`、`bbdown_network.py`、`anonymous_network.py` | 固定 BBDownNext 2.3.0 匿名解析与直连获取，公共 DNS/TLS、重定向与同流备份、完整曲长和实测媒体校验。 |
+| `public_video.py`、`short_links.py`、`anonymous_backend.py`、`bbdown_cli.py`、`bbdown_network.py`、`anonymous_network.py` | 固定 BBDownNext 2.3.0 匿名解析与直连获取，公共 DNS/TLS、重定向与同流备份、完整曲长和实测媒体校验。 |
 | `video_seek.py` | 有限时 FFmpeg 解码、实际 PTS/time_base、原生运动摘要和临时帧清理。 |
 | `cli.py`、`arguments.py` | JSON 与参数适配；非法输入不反射载荷、路径或原始异常。 |
 | `web.py`、`static/` | 同源网页、能力认证、真实阶段及 FD 分块下载。 |
@@ -42,7 +42,7 @@ Linux 取消时先以 SIGSTOP 停驻已登记进程，再反复扫描和停驻�
 
 ## 网站事务与数据
 
-HTTP 只提交公开 BV 链接，重计算由独立串行 worker 执行。SQLite 短 `BEGIN IMMEDIATE` 事务和部分唯一索引限制每 IP 一个未完成任务、全站 10 个等待加 1 个活动任务。随机任务 ID 与 256 位能力凭据独立生成；SQLite 只存凭据摘要。IP 限流不代表所有权。
+HTTP 接受公开 HTTPS BV 链接或 b23.tv 短链接，只做本地格式校验和入队。短链接在受监督获取进程中展开至 BV 视频，重计算由独立串行 worker 执行。SQLite 短 `BEGIN IMMEDIATE` 事务和部分唯一索引限制每 IP 一个未完成任务、全站 10 个等待加 1 个活动任务。随机任务 ID 与 256 位能力凭据独立生成；SQLite 只存凭据摘要。IP 限流不代表所有权。
 
 转换排他发布到私有 attempt/result 后，worker 核对 PDF 和全部预览，清理线上原生帧及长图并更新 manifest，再持久保存 `finishing` 决定及完成/到期时间。此后取消不撤销结果。重启核验同一决定，恢复完成而不延长保留期；未作完成决定的活动任务标为 `interrupted`，只允许显式重试。
 
