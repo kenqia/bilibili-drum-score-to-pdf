@@ -102,24 +102,60 @@ def _stat(pid):
         return None
 
 
+def _freeze_tree(tracked):
+    """Stop known writers before rescanning, so they cannot fork past cleanup."""
+    deadline = time.monotonic() + 1
+    while True:
+        pending = False
+        discovered = {}
+        for pid, start_time in list(tracked.items()):
+            fields = _stat(pid)
+            if not fields or fields[19] != start_time or fields[0] == 'Z':
+                continue
+            if fields[0] not in {'T', 't'}:
+                try:
+                    os.kill(pid, signal.SIGSTOP)
+                except ProcessLookupError:
+                    continue
+                pending = True
+            descendants, _ = _processes(pid, start_time)
+            for child, identity in descendants.items():
+                if child not in tracked:
+                    discovered.setdefault(child, identity)
+        tracked.update(discovered)
+        # Uninterruptible I/O may defer SIGSTOP. Still reach SIGKILL and let
+        # the caller's existing writer-wait policy control final cleanup.
+        if (not pending and not discovered) or time.monotonic() >= deadline:
+            return
+        time.sleep(.01)
+
+
 def _kill_groups(tracked):
     """SIGKILL each tracked group leader's whole group and track its members.
 
     A leader killed on its own cannot run its group cleanup, which would
     orphan members it started itself, such as a downloader's child process.
     """
-    groups = set()
+    _freeze_tree(tracked)
+    groups = {}
     for pid, start_time in list(tracked.items()):
         fields = _stat(pid)
         if fields and fields[19] == start_time and fields[2] == str(pid):
-            groups.add(pid)
+            groups[pid] = start_time
     if not groups:
         return
+    members = {}
     for entry in Path('/proc').glob('[0-9]*'):
         fields = _stat(entry.name)
         if fields and int(fields[2]) in groups:
-            tracked.setdefault(int(entry.name), fields[19])
-    for group in groups:
+            members[int(entry.name)] = (int(fields[2]), fields[19])
+    for group, start_time in groups.items():
+        fields = _stat(group)
+        if not fields or fields[19] != start_time or fields[2] != str(group):
+            continue
+        for pid, (member_group, identity) in members.items():
+            if member_group == group:
+                tracked.setdefault(pid, identity)
         try:
             os.killpg(group, signal.SIGKILL)
         except ProcessLookupError:
