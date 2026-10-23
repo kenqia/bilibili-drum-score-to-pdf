@@ -12,6 +12,77 @@ MAINTENANCE_ENTRIES = ('backup', 'verify', 'restore')
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'linux', 'Executable decoder and HTTP worker fixture')
+    def test_total_deadline_still_stops_continuous_decoder_in_each_entry(self):
+        import os
+        import tempfile
+        from unittest.mock import patch
+        from fastapi.testclient import TestClient
+        from drum_score import convert, ConversionError
+        from drum_score.web import create_app
+        repository = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'source.mp4'
+            source.write_bytes(b'SYNTHETIC_MEDIA_FOR_STALLED_DECODER')
+            tools, startup = root / 'tools', root / 'startup'
+            tools.mkdir()
+            startup.mkdir()
+            (startup / 'sitecustomize.py').write_text(
+                'from pathlib import Path\nimport os,shutil\nfrom drum_score import anonymous_backend\n'
+                'def download(origin,target):\n'
+                ' shutil.copyfile(os.environ["SYNTHETIC_DECODER_SOURCE"],target/"video.mp4")\n'
+                ' return {"title":"Synthetic deadline fixture","authenticated":False}\n'
+                'anonymous_backend.download=download\n')
+            for name, body in {
+                'ffprobe': 'import json\nprint(json.dumps({"streams":[{"width":2,"height":2,"avg_frame_rate":"1/1"}],"format":{"duration":"1"}}))\n',
+                'ffmpeg': 'import os,sys,time\nfrom pathlib import Path\n'
+                    'if "-h" in sys.argv:\n print("-fps_mode mode");sys.exit(0)\n'
+                    'Path(os.environ["SYNTHETIC_DECODER_MARKER"]).write_text(str(os.getpid()))\n'
+                    'time.sleep(30)\n',
+            }.items():
+                executable = tools / name
+                executable.write_text('#!' + sys.executable + '\n' + body)
+                executable.chmod(0o755)
+            for entry in REMOTE_SCRIPT_ENTRIES:
+                with self.subTest(entry=entry):
+                    marker, output = root / (entry + '-decoder'), root / (entry + '-result')
+                    env = {**os.environ, 'PATH': str(tools) + os.pathsep + os.environ['PATH'],
+                        'PYTHONPATH': os.pathsep.join(map(str, (startup, repository / 'src'))),
+                        'SYNTHETIC_DECODER_MARKER': str(marker), 'SYNTHETIC_DECODER_SOURCE': str(source)}
+                    if entry == 'script_core':
+                        with patch.dict(os.environ, env):
+                            with self.assertRaises(ConversionError) as caught:
+                                convert(source, output, limits={'wall_seconds': 2})
+                        code = caught.exception.code
+                    elif entry == 'script_cli':
+                        process = subprocess.run([sys.executable, '-m', 'drum_score', str(source),
+                            '--output', str(output), '--timeout', '2'], env=env,
+                            capture_output=True, text=True, timeout=15)
+                        self.assertEqual(process.returncode, 2, process.stderr)
+                        code = json.loads(process.stdout)['error']['code']
+                    else:
+                        service = root / 'service'
+                        with TestClient(create_app(service), client=('192.0.2.10', 2000)) as client:
+                            task = client.post('/api/tasks', json={'url': 'https://www.bilibili.com/video/BV1rH4y1R7Rk'}).json()
+                            headers = {'Authorization': 'Bearer ' + task['capability']}
+                            process = subprocess.run([sys.executable, '-m', 'drum_score.worker',
+                                '--data-root', str(service), '--once', '--timeout', '2'],
+                                env=env, capture_output=True, text=True, timeout=15)
+                            self.assertEqual(process.returncode, 0, process.stderr)
+                            state = client.get('/api/tasks/' + task['id'], headers=headers).json()
+                            self.assertEqual(state['state'], 'failed', state)
+                            code = state['error']['code']
+                            self.assertNotEqual(client.get('/api/tasks/' + task['id'] + '/pdf', headers=headers).status_code, 200)
+                    self.assertEqual(code, 'resource_limit')
+                    self.assertTrue(marker.exists(), 'Must actually enter continuous decoding')
+                    pid = int(marker.read_text())
+                    state = Path('/proc') / str(pid) / 'stat'
+                    self.assertTrue(not state.exists() or state.read_text().split(') ')[1].startswith('Z'))
+                    self.assertFalse(output.exists())
+                    self.assertEqual(list(root.rglob('.drum-score-job-*')), [])
+            self.assertEqual(source.read_bytes(), b'SYNTHETIC_MEDIA_FOR_STALLED_DECODER')
+
     @unittest.skipUnless(Path('/proc').is_dir(), 'Linux remote worker contract')
     def test_remote_entries_require_pinned_bbdown_without_changing_existing_files(self):
         import os

@@ -13,6 +13,60 @@ from drum_score.core import _convert, convert
 from drum_score.video_seek import ConversionError, VideoReader, probe_video
 
 class MediaBoundaryTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'linux', 'Executable decoder fixture')
+    def test_contended_decoder_can_use_remaining_cumulative_budget(self):
+        import subprocess
+        import threading
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            tools = root / 'tools'
+            tools.mkdir()
+            executable = tools / 'ffmpeg'
+            executable.write_text('#!' + sys.executable + '\n' +
+                'import sys,time\nfrom PIL import Image\n' +
+                'if "-h" in sys.argv:\n print("-fps_mode mode"); sys.exit(0)\n' +
+                'time.sleep(.7)\n' +
+                'if "rawvideo" in sys.argv:\n' +
+                ' sys.stderr.write("metadata@motion frame:0 pts:0\\nmetadata@motion lavfi.signalstats.YDIF=0\\nshowinfo@sample config in time_base: 1/1\\nshowinfo@sample n:0 pts:0\\n")\n' +
+                ' sys.stdout.buffer.write(bytes([1,2,3])*4)\n' +
+                'else:\n' +
+                ' Image.new("RGB",(2,2),(1,2,3)).save(sys.argv[-1])\n' +
+                ' sys.stderr.write("config in time_base: 1/1\\npts: 0\\n")\n')
+            executable.chmod(0o755)
+            timer, run = threading.Timer, subprocess.run
+            # Accelerate actual child termination by 120x: the old 60-second
+            # per-call timer expires at .5s; the 600-second total still allows 5s.
+            # This is a synthetic boundary replay, not measured 60s CPU work.
+            def scaled_run(*args, **kwargs):
+                if 'timeout' in kwargs:
+                    kwargs['timeout'] /= 120
+                return run(*args, **kwargs)
+            for operation in ('sample', 'tail'):
+                with self.subTest(operation=operation):
+                    metrics = dict(seek_count=0, decode_elapsed=0,
+                                   decoded_reported_frames=0, peak_temp_disk=0)
+                    reader = VideoReader(root / 'synthetic-video',
+                        dict(width=2, height=2, duration=1, frame_duration=1), metrics)
+                    try:
+                        with patch.dict(os.environ, {'PATH': str(tools) + os.pathsep + os.environ['PATH']}), \
+                             patch('drum_score.video_seek.frame_sync_args', return_value=('-fps_mode', 'passthrough')), \
+                             patch('drum_score.video_seek.threading.Timer', side_effect=lambda seconds, *a, **kw: timer(seconds / 120, *a, **kw)), \
+                             patch('drum_score.video_seek.subprocess.run', side_effect=scaled_run):
+                            if operation == 'sample':
+                                pixels = []
+                                records = reader.sample_records(.5,
+                                    lambda _, image: pixels.append(image.getpixel((0, 0))), verify_motion=True)
+                                self.assertEqual(pixels, [(1, 2, 3)])
+                                self.assertEqual(records[0]['time_base'], [1, 1])
+                            else:
+                                record, image = reader.read_record()
+                                with image:
+                                    self.assertEqual(image.getpixel((0, 0)), (1, 2, 3))
+                                self.assertEqual(record['pts'], 0)
+                        self.assertGreaterEqual(metrics['decode_elapsed'], .7)
+                    finally:
+                        reader.close()
+
     def test_decode_failure_preserves_existing_output_and_charges_attempt_budget(self):
         with tempfile.TemporaryDirectory() as d:
             base = Path(d)

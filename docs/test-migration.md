@@ -1,5 +1,7 @@
 # 旧测试到脚本产品的迁移记录
 
+2026-10-23 的并行修复保留累计 600 秒解码与公开入口总期限，移除单次额外 60 秒期限。新增 `test_contended_decoder_can_use_remaining_cumulative_budget` 以加速定时器和真实合成子进程复现旧限制，不把虚拟时间当作实测。`test_total_deadline_still_stops_continuous_decoder_in_each_entry` 在 Python、CLI、HTTP/worker 三入口实际进入阻塞解码，再由两秒总期限停止进程并核验清理。原累计预算与失败保护断言保留。
+
 本文是 #73 当时从 Skill 收口到程序产品的历史记录。[ADR 0007](adr/0007-independent-skill-and-website.md) 已恢复同仓库中的独立 Skill 和 `tests/skill/`。下表“专属退役”只说明当时未移入程序包的行为，不表示现在从 Skill 删除；当前分开运行的命令见 [Skill 验证](skill-verification.md)和[程序验证](verification.md)。
 
 本文逐项保留旧版 217 个测试 ID，并记录 #73 的实际去向。它用于审阅删除测试时保留了哪些契约，不是测试通过回执。独立安装记录已交付，见 `I-73`，最终提交与 tree 绑定见外部 `product73-packaging/final-binding.json`。两项累计解码预算由真实进程耗时补证，见 `B-73`。

@@ -36,6 +36,8 @@ python3.12 -m venv /tmp/drum-score-web-env
 
 也可运行 `python -m drum_score.web` 和 `python -m drum_score.worker`。worker 的 `--concurrency` 支持 1 至 8 路，默认 1；`--once` 即使配置八路也处理至多一个任务后退出；`--poll-interval` 默认 0.25 秒，允许 0.01 至 60 秒。转换继续使用共享核心默认的600秒总期限、256 MiB输入、1 GiB采样RSS和1 GiB临时文件预算。这些采样预算不等于 cgroup 或文件系统硬限额。
 
+连续采样与尾帧共享累计 600 秒解码预算，不再各自额外限制为 60 秒。监督进程仍独立执行整个任务的 `--timeout`，包括获取、采样与发布；扩大总期限不会取消累计解码或内存、磁盘上限。接受更慢不代表任务可以无限运行。
+
 ## 任务链接与隐私
 
 任务链接使用 `/task/<id>#<capability>`。ID 和256位随机能力凭据独立生成，SQLite 只存凭据 SHA-256，服务以恒定时间比较摘要。浏览器从 fragment 读取凭据，通过 `Authorization: Bearer` 调用接口。任务状态、预览、PDF、取消和重试全部需要凭据；错误凭据与不存在的任务统一返回404，不提供任务列表。

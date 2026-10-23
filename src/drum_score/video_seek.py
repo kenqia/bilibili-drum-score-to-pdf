@@ -158,7 +158,10 @@ class VideoReader:
         width, height = self.metadata['width'], self.metadata['height']
         if not 1 <= width * height <= 20_000_000:
             raise ConversionError('resource_limit', '视频画面超出解码资源限制。')
-        budget = min(60, 600 - self.metrics['decode_elapsed'])
+        # Concurrent jobs may legitimately need more than 60 wall seconds for
+        # one pass. Keep the cumulative ceiling; the supervisor also enforces
+        # the caller's total wall deadline across acquisition and all stages.
+        budget = 600 - self.metrics['decode_elapsed']
         if budget <= 0:
             raise ConversionError('decode_failed', '视频解码期限已耗尽。')
         selection = f"select='isnan(prev_selected_t)+gte(t-prev_selected_t,{interval:.9f})'"
@@ -251,7 +254,7 @@ class VideoReader:
         began = time.monotonic()
         self.metrics['seek_count'] += 1
         try:
-            budget = min(60, 600 - self.metrics['decode_elapsed'])
+            budget = 600 - self.metrics['decode_elapsed']
             if budget <= 0:
                 raise ValueError
             process = subprocess.run(command, capture_output=True, check=True, timeout=budget)
