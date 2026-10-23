@@ -118,6 +118,19 @@ python3.12 -m venv .venv
 
 </details>
 
+## 支持鼓谱整理 · Support 鼓谱整理
+
+如果鼓谱整理帮到了你，欢迎支持它继续开发。谢谢你帮这个项目一直走下去 ❤️
+
+If 鼓谱整理 has been useful to you, you can support its continued development. Thank you for helping keep the project going ❤️
+
+<p align="center">
+<img src="docs/assets/wechat-pay.png" width="240" alt="微信收款码 WeChat Pay QR code"><br>
+<sub>微信扫码支持 · WeChat Pay</sub>
+</p>
+
+不方便打赏也没关系，给仓库点个 ⭐ Star，或者把 [drum.kenqia.top](https://drum.kenqia.top/) 分享给身边的鼓手，同样是很大的支持。
+
 ## 许可
 
 代码与文档使用 [MIT 许可](LICENSE)。示例中的音乐、谱面和视频画面权利归原权利人。
