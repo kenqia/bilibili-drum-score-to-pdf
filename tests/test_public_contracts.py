@@ -184,6 +184,12 @@ class ScriptPublicContracts(unittest.TestCase):
             self.assertEqual(list(root.rglob('.drum-score-*')), [])
 
     def test_remote_script_matrix_preserves_source_pages_and_honest_completion(self):
+        self.check_remote_completion(short=False)
+
+    def test_remote_entries_expand_short_links_without_losing_page_or_source(self):
+        self.check_remote_completion(short=True)
+
+    def check_remote_completion(self, *, short):
         from pathlib import Path
         import hashlib
         if not (Path('/proc').is_dir()):
@@ -202,20 +208,24 @@ class ScriptPublicContracts(unittest.TestCase):
             config['view']['bvid'] = 'BV1rH4y1R7Rk'
             binary, digest = install_fake_bbdown(fixture.network, config)
             (fixture.network / 'sitecustomize.py').write_text(
-                "import io,os,socket\nfrom pathlib import Path\n"
+                "import io,os,socket\nfrom pathlib import Path\nfrom urllib.error import HTTPError\n"
                 "from drum_score import bbdown_cli\n"
                 "bbdown_cli.METADATA_SHA256=" + repr(digest) + "\n"
                 "os.environ['PATH']=" + repr(str(binary.parent)) + "+os.pathsep+os.environ['PATH']\n"
                 "socket.getaddrinfo=lambda *a,**k:[(socket.AF_INET,socket.SOCK_STREAM,6,'',('8.8.8.8',443))]\n"
                 "import urllib.request\n"
-                "urllib.request.OpenerDirector.open=lambda *a,**k:io.BytesIO(Path(" +
-                repr(str(fixture.network / 'input.mp4')) + ").read_bytes())\n")
+                "def open_response(self,request,*a,**k):\n"
+                " if request.full_url.startswith('https://b23.tv/'):\n"
+                "  raise HTTPError(request.full_url,302,'Found',{'Location':'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=2'},io.BytesIO())\n"
+                " return io.BytesIO(Path(" + repr(str(fixture.network / 'input.mp4')) + ").read_bytes())\n"
+                "urllib.request.OpenerDirector.open=open_response\n")
             source_hash = hashlib.sha256((fixture.network / 'input.mp4').read_bytes()).hexdigest()
-            link = 'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=2'
+            link = 'https://b23.tv/Synthetic7' if short else 'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=2'
             for entry in REMOTE_SCRIPT_ENTRIES:
                 with self.subTest(entry=entry):
                     if entry == 'script_http':
-                        task, auth = fixture.submit()
+                        created = fixture.client.post('/api/tasks', json={'url': link}).json()
+                        task, auth = created['id'], {'Authorization': 'Bearer ' + created['capability']}
                         self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
                         view = fixture.state(task, auth)
                         self.assertEqual(view['state'], 'complete', view)

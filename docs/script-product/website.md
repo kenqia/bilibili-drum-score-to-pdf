@@ -1,6 +1,6 @@
 # 本地运行匿名鼓谱网站
 
-网站接受公开 HTTPS B站 BV 链接，将任务交给独立 worker，完成后显示全部 A4 预览并提供 PDF 下载。无需账号或邀请码。网页不支持本地上传，不调用模型。`complete` 表示完整产物已发布，结果仍为 `reliable=false`，未经音乐校对。
+网站接受公开 HTTPS B站 BV 链接和 b23.tv 短链接，将任务交给独立 worker，完成后显示全部 A4 预览并提供 PDF 下载。无需账号或邀请码。网页不支持本地上传，不调用模型。`complete` 表示完整产物已发布，结果仍为 `reliable=false`，未经音乐校对。
 
 本页面向 Ubuntu/WSL 上的本地运行与集成验证。容量准入与到期物理清理已实现。公开部署与目标服务器资源硬限制仍需后续验收，本版本不声明已经上线。
 
@@ -47,6 +47,8 @@ IP 只用于入队限流，不证明所有权。SQLite 保存规范化地址的 
 ## 队列、取消与恢复
 
 全站最多10个 `queued` 和1个活动任务。每个IP最多1个未完成任务，包含 `queued`、`running`、`cancelling` 和 `finishing`。校园网或公司网络可能共享名额。入队、显式重试与领取使用短 `BEGIN IMMEDIATE` 事务；部分唯一索引限制未完成IP与活动任务。数据库忙最多等待1秒，然后返回可重试的503，不无限排队。
+
+HTTP 提交仅校验短链接格式，不访问外部网络。短链接在 worker 的 `downloading` 阶段展开；排队和失败时 BV、分 P 为 `null`，网页显示分享短链接。完成摘要中的 `source` 为核验过的 BV 来源。分享跟踪参数不入库，重试会重新展开原短链接。
 
 worker 按入队时间和ID领取最早任务。它同时持有本机 `flock` 和数据库活动约束。意外启动第二个 worker 时退出码为2，不重复领取。转换仍由共享 `drum_score.convert` 的真实子进程执行。
 
@@ -103,7 +105,7 @@ SQLite的 `PRAGMA user_version=1` 是当前服务schema。未版本化旧库和�
 
 | 方法与路径 | 行为 |
 | --- | --- |
-| `POST /api/tasks` | `{"url":"https://www.bilibili.com/video/BV…?p=2"}`，成功201，返回ID、能力凭据及完整相对链接。 |
+| `POST /api/tasks` | `{"url":"https://www.bilibili.com/video/BV…?p=2"}` 或 `{"url":"https://b23.tv/…"}`，成功201，返回ID、能力凭据及完整相对链接。 |
 | `GET /api/tasks/{id}` | 返回真实状态、阶段、队列位置、来源、错误和完成摘要，无百分比或ETA。 |
 | `POST /api/tasks/{id}/cancel` | 幂等取消，以持久完成决定为界。 |
 | `POST /api/tasks/{id}/retry` | 显式重试失败、取消或中断任务，重新受入队配额限制。 |

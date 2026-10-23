@@ -20,9 +20,17 @@ class InputError(Exception):
 
 def video_origin(url):
     try:
+        if not isinstance(url, str) or len(url) > 2048:
+            raise ValueError
         if any(ord(character) < 33 for character in url):
             raise ValueError
         parsed = urlsplit(url)
+        if (parsed.scheme == 'https' and parsed.hostname == 'b23.tv'
+                and parsed.username is None and parsed.password is None
+                and parsed.port in {None, 443}
+                and re.fullmatch(r'/[0-9A-Za-z]{1,64}/?', parsed.path)):
+            return {'kind': 'bilibili_short', 'bvid': None, 'page': None,
+                    'url': 'https://b23.tv/' + parsed.path.strip('/'), 'authenticated': False}
         match = re.fullmatch(r'/video/(BV[0-9A-Za-z]{10})/?', parsed.path)
         if parsed.scheme != 'https' or parsed.hostname not in {'www.bilibili.com', 'bilibili.com'} or parsed.username is not None or parsed.password is not None or parsed.port not in {None, 443} or not match:
             raise ValueError
@@ -33,7 +41,7 @@ def video_origin(url):
         bvid = match.group(1)
         return {'kind': 'bilibili', 'bvid': bvid, 'page': page, 'url': f'https://www.bilibili.com/video/{bvid}?p={page}', 'authenticated': False}
     except ValueError:
-        raise InputError('invalid_bilibili_url', '请提供 https://www.bilibili.com/video/BV… 格式链接，分 P 使用单个正整数 p；也可提供清晰的本地视频。') from None
+        raise InputError('invalid_bilibili_url', '请提供 HTTPS B站 BV 链接或 https://b23.tv/… 短链接，分 P 使用单个正整数 p；也可提供清晰的本地视频。') from None
 
 
 def checked_media_url(url):
@@ -77,7 +85,8 @@ def _worker(url, staging, publication, connection, parent_pid, max_bytes=MAX_BYT
         # A caller may tighten the backend's existing ceiling, never relax it.
         anonymous_backend.MAX_BYTES = min(anonymous_backend.MAX_BYTES, max_bytes)
         download = anonymous_backend.download
-        origin = video_origin(url)
+        from .short_links import resolve
+        origin = resolve(url)
         details = download(origin, Path(staging))
         # Copy/fsync is part of the same worker deadline. Its temporary file lives
         # beside the result directory, so even SIGKILL leaves no partial in it.
