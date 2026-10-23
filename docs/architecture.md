@@ -42,17 +42,17 @@ Linux 取消时先以 SIGSTOP 停驻已登记进程，再反复扫描和停驻�
 
 ## 网站事务与数据
 
-HTTP 接受公开 HTTPS BV 链接或 b23.tv 短链接，只做本地格式校验和入队。短链接在受监督获取进程中展开至 BV 视频，重计算由独立串行 worker 执行。SQLite 短 `BEGIN IMMEDIATE` 事务和部分唯一索引限制每 IP 一个未完成任务、全站 10 个等待加 1 个活动任务。随机任务 ID 与 256 位能力凭据独立生成；SQLite 只存凭据摘要。IP 限流不代表所有权。
+HTTP 接受公开 HTTPS BV 链接或 b23.tv 短链接，只做本地格式校验和入队。短链接在受监督获取进程中展开至 BV 视频，重计算由独立 worker 调度器执行，`--concurrency` 配置 1 至 8 路，默认 1。每个监督线程调用独立的转换进程及 guardian。SQLite 短 `BEGIN IMMEDIATE` 事务原子检查活动名额与空间预留，部分唯一索引限制每 IP 一个未完成任务；全站最多 10 个等待任务。只读状态与取消轮询不申请写锁，同一调度器内的短事务串行协调，清理或领取轮询的短暂数据库忙不会终止全部活动转换。随机任务 ID 与 256 位能力凭据独立生成；SQLite 只存凭据摘要。IP 限流不代表所有权。
 
 转换排他发布到私有 attempt/result 后，worker 核对 PDF 和全部预览，清理线上原生帧及长图并更新 manifest，再持久保存 `finishing` 决定及完成/到期时间。此后取消不撤销结果。重启核验同一决定，恢复完成而不延长保留期；未作完成决定的活动任务标为 `interrupted`，只允许显式重试。
 
 服务暂存根在启动子进程前登记 ownership marker 与根 device/inode，整服务树终止后只恢复清理身份匹配的确切私有根。未知根、attempt 外文件和替换 marker 保留。备份/恢复在排他发布前 fsync 所有嵌套目录，核验拒绝未知 schema、额外文件、链接与特殊文件。具体命令见[维护指南](script-product/maintenance.md)。
 
-服务 schema 显式使用 SQLite `user_version=1`，拒绝旧未版本化库及未知版本。`managed_attempts` 记录 task/attempt、受管根 device/inode，以及生成文件的相对路径、device/inode/ctime。清理从数据根经 no-follow 目录 FD 遍历，只 unlink 身份仍匹配的文件，未知文件和替换物保留。目录只在空时移除。恢复到新目录必须先核验备份清单/hash，再登记工具自己新建的文件身份；数据库旧 inode/ctime 不可直接当作新副本所有权。
+服务 schema 显式使用 SQLite `user_version=2`，拒绝旧库及未知版本，v1 仅通过显式 `upgrade-v1` 核验备份并升级到新目录，见[维护指南](script-product/maintenance.md)。`managed_attempts` 记录 task/attempt、受管根 device/inode，以及生成文件的相对路径、device/inode/ctime。清理从数据根经 no-follow 目录 FD 遍历，只 unlink 身份仍匹配的文件，未知文件和替换物保留。目录只在空时移除。恢复到新目录必须先核验备份清单/hash，再登记工具自己新建的文件身份；数据库旧 inode/ctime 不可直接当作新副本所有权。
 
 到期状态与认证打开文件共用事务序列。到期先拒绝新访问，再物理 unlink，Linux 已打开 FD 可继续读完。worker 每次轮询及启动恢复后执行清理。结果默认 24 小时，失败/取消/中断默认 1 小时；仅存脱敏错误码和信息，错误文字全局限额 8MiB。到期行只保留用于到期响应的任务身份，不保留来源、结果摘要或诊断文字。
 
-入队、重试与领取要求 `used + max_temp <= retained` 且空闲空间至少 `min_free + max_temp`。运行时约每 200ms 检查当前逻辑用量和空闲底线。`used` 包含 attempts 中全部普通文件及未知文件，不提前删除有效结果换取名额。采样额度不能代替 cgroup 或文件系统硬限额。
+入队、重试与领取要求 `used + (active + 1) * max_temp <= retained` 且空闲空间至少 `min_free + (active + 1) * max_temp`。运行时约每 200ms 检查当前逻辑用量和空闲底线。`used` 包含 attempts 中全部普通文件及未知文件，不提前删除有效结果换取名额。采样额度不能代替 cgroup 或文件系统硬限额。
 
 ## 安全与范围
 

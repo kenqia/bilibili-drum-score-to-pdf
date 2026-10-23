@@ -44,7 +44,7 @@ drum-score-maintenance restore \
 
 ## 设置资源边界
 
-三个子命令共享以下选项，参数必须为有限正数，`--max-files` 为不超过 100000 的整数：
+四个子命令共享以下选项，参数必须为有限正数，`--max-files` 为不超过 100000 的整数：
 
 | 选项 | 默认值 | 约束 |
 | --- | --- | --- |
@@ -70,3 +70,18 @@ SIGKILL 或断电可能留下私有暂存目录。`verify` 和 `restore` 拒绝�
 转换先创建空的私有 `.drum-score-job-*` 根，再于启动任何子进程前，在已有 `managed_attempts` 中持久登记 ownership marker 和根身份。即使 worker、转换进程和 guardian 一起被杀，新 worker 取得服务锁后也能清理身份匹配的确切私有根。根内转换暂存由该根的所有权覆盖。未知同前缀根、attempt 外文件、替换根或替换 marker 保留，不扫描接管。
 
 该协议不改变 schema 版本。仅杀 worker 的 guardian 清理、整树 SIGKILL 恢复、marker 和根替换的保留行为分别验证，不代表目标主机 cgroup/OOM 已验收。
+
+## 从 v1 快照升级并行版本
+
+当前程序要求 schema v2，不自动打开或迁移 v1 数据。先在维护窗口用保留的 v1 发行完成停服备份和 `verify`，保留原发行与原数据根。新版本的普通 `verify/restore` 仍拒绝 v1，使用专用入口：
+
+```sh
+drum-score-maintenance upgrade-v1 \
+  --backup-root /var/backups/drum-score/VERIFIED_V1_SNAPSHOT \
+  --output /var/lib/drum-score-restore/NEW_V2_ROOT \
+  --timeout 60 --max-mib 4096 --max-files 8192 --min-free-mib 2048
+```
+
+将占位路径替换为实际已核验快照和不存在的新目录。该命令严格核对 v1 schema、清单、hash 和全部结果，复制到私有暂存根后，在副本内移除单活动索引并升级到 v2，重新登记新文件身份，再排他发布。源快照不变，任务、能力摘要及原完成/到期时间不变；未知 schema、已有输出和损坏文件拒绝发布。升级回执报告新 schema，不把旧库 hash 当作新库 hash。
+
+升级本身不切换运行数据根、不启动服务，也不购买资源。服务器切换须按具体授权执行。切换前等待原活动任务完成、停止 web 与 worker，核验新发行、新数据、全部预览及原期限；失败时切回保留的旧发行和旧数据根。旧程序不能读取 v2。切换后新任务的保存需要单独处理，不能覆盖或合并两库。

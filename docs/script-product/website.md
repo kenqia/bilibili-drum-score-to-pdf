@@ -34,7 +34,7 @@ python3.12 -m venv /tmp/drum-score-web-env
 4. 打开 `http://127.0.0.1:8000`，提交公开 BV 链接，保存返回的完整任务链接。
 5. 等待完成，检查全部预览与警告，再下载 PDF。关闭网页或重启 HTTP 服务后，worker 继续处理。
 
-也可运行 `python -m drum_score.web` 和 `python -m drum_score.worker`。worker 的 `--once` 处理至多一个任务后退出；`--poll-interval` 默认 0.25 秒，允许 0.01 至 60 秒。转换继续使用共享核心默认的600秒总期限、256 MiB输入、1 GiB采样RSS和1 GiB临时文件预算。这些采样预算不等于 cgroup 或文件系统硬限额。
+也可运行 `python -m drum_score.web` 和 `python -m drum_score.worker`。worker 的 `--concurrency` 支持 1 至 8 路，默认 1；`--once` 即使配置八路也处理至多一个任务后退出；`--poll-interval` 默认 0.25 秒，允许 0.01 至 60 秒。转换继续使用共享核心默认的600秒总期限、256 MiB输入、1 GiB采样RSS和1 GiB临时文件预算。这些采样预算不等于 cgroup 或文件系统硬限额。
 
 ## 任务链接与隐私
 
@@ -46,11 +46,11 @@ IP 只用于入队限流，不证明所有权。SQLite 保存规范化地址的 
 
 ## 队列、取消与恢复
 
-全站最多10个 `queued` 和1个活动任务。每个IP最多1个未完成任务，包含 `queued`、`running`、`cancelling` 和 `finishing`。校园网或公司网络可能共享名额。入队、显式重试与领取使用短 `BEGIN IMMEDIATE` 事务；部分唯一索引限制未完成IP与活动任务。数据库忙最多等待1秒，然后返回可重试的503，不无限排队。
+全站最多 10 个 `queued` 和 `--concurrency` 个活动任务，默认一个，最多八个。每个IP最多1个未完成任务，包含 `queued`、`running`、`cancelling` 和 `finishing`。校园网或公司网络可能共享名额。入队、显式重试与领取使用短 `BEGIN IMMEDIATE` 事务；部分唯一索引限制未完成 IP；同一领取事务检查全站活动数。状态、取消轮询与发布查询使用只读事务，同一调度器内的短事务由本地锁协调；SQLite 锁等待最多 1 秒，HTTP 忙时返回可重试的 503。调度器清理或领取轮询遇到 `service_busy` 会重试，不因此终止已有转换。
 
 HTTP 提交仅校验短链接格式，不访问外部网络。短链接在 worker 的 `downloading` 阶段展开；排队和失败时 BV、分 P 为 `null`，网页显示分享短链接。完成摘要中的 `source` 为核验过的 BV 来源。分享跟踪参数不入库，重试会重新展开原短链接。
 
-worker 按入队时间和ID领取最早任务。它同时持有本机 `flock` 和数据库活动约束。意外启动第二个 worker 时退出码为2，不重复领取。转换仍由共享 `drum_score.convert` 的真实子进程执行。
+worker 按入队时间和ID领取最早任务。唯一调度器持有本机 `flock`，有界监督线程各自调用独立转换进程。启动恢复只执行一次，运行中的暂存恢复只处理刚停止的 task/attempt。每个 guardian 继承相同锁租约，直到全部任务树停止才允许接管。意外启动第二个 worker 时退出码为2，不重复领取。转换仍由共享 `drum_score.convert` 的真实子进程执行。
 
 | 当前状态 | 取消或重启行为 |
 | --- | --- |
@@ -91,11 +91,11 @@ worker 启动及每轮领取前清理到期文件，默认轮询间隔0.25秒。
 | `--retained-mib` | 4096 | attempts目录全部普通文件的逻辑字节总额，含结果、运行暂存与未知文件。 |
 | `--max-temp-mib` | 1024 | 单次转换临时额度，同时是准入预留量。 |
 
-入队、重试及worker领取要求 `used + max_temp <= retained` 且空闲空间至少 `min_free + max_temp`。运行时约每200ms检查 `used <= retained` 和空闲底线，超额以 `storage_full` 明确失败并停止进程树，不删除未到期结果。若总额和预留都设1024MiB，第一份结果之后将拒收，直到结果到期；总额2048MiB允许约1024MiB留存结果和1024MiB执行预留。数值为逻辑字节，稀疏文件、数据库及已打开删除文件仍由空闲检查兜住，采样不等同硬配额。
+入队、重试及worker领取要求 `used + (active + 1) * max_temp <= retained` 且空闲空间至少 `min_free + (active + 1) * max_temp`，其中 active 包含 `running/cancelling/finishing`。全额预留与已落盘字节重复计入，偏保守；预留检查和领取处于同一事务。活动预留耗尽时领取保留任务排队；无活动任务仍空间不足则记录 `storage_full` 失败。运行时约每200ms检查 `used <= retained` 和空闲底线，超额以 `storage_full` 明确失败并停止进程树，不删除未到期结果。若总额和预留都设1024MiB，第一份结果之后将拒收，直到结果到期；总额2048MiB允许约1024MiB留存结果和1024MiB执行预留。数值为逻辑字节，稀疏文件、数据库及已打开删除文件仍由空闲检查兜住，采样不等同硬配额。
 
 worker另接受 `--timeout`、`--max-input-mib`、`--max-rss-mib`，默认600秒、256MiB、1024MiB。`--max-temp-mib`也传入核心资源预算。当前默认值是本地候选，目标2GB主机需按现有服务余量实测及硬限额验收后使用。
 
-SQLite的 `PRAGMA user_version=1` 是当前服务schema。未版本化旧库和未知版本拒绝启动，不自动迁移任务。`managed_attempts` 保存受管根 device/inode及文件相对路径、device/inode/ctime。清理从数据根逐级打开 no-follow 目录FD并核对身份，只删除已登记文件；目录只在空时删除，符号链接和替换物保留。丢失或无法安全确认的材料宁可保留，随后计入容量并由运营者核查，不扫描其他服务目录。
+SQLite的 `PRAGMA user_version=2` 是当前服务schema。未版本化旧库和未知版本拒绝启动，不自动迁移任务。v1 备份只能用显式 `upgrade-v1` 恢复到不存在的新目录并升级，源快照保持原样，见[维护指南](maintenance.md)。`managed_attempts` 保存受管根 device/inode及文件相对路径、device/inode/ctime。清理从数据根逐级打开 no-follow 目录FD并核对身份，只删除已登记文件；目录只在空时删除，符号链接和替换物保留。丢失或无法安全确认的材料宁可保留，随后计入容量并由运营者核查，不扫描其他服务目录。
 
 备份恢复须同时保存数据库、结果和准确发行版本。复制到新目录会改变inode/ctime，恢复工具只可为经清单/hash核验且自己新建的文件登记新身份，保留原始completed_at/expires_at。直接恢复旧身份会阻止清理，不能当成完整恢复。停服备份与恢复使用 [drum-score-maintenance](maintenance.md)，配置与回滚步骤见[部署指南](deployment.md)。
 
@@ -126,3 +126,9 @@ python -m unittest discover -s tests -v
 网站专项为 `test_web`、`test_web_worker` 和 `test_product_lifecycle`。HTTP、Python、CLI的共同远端转换约束在 `tests/test_public_contracts.py`。测试只使用合成视频、随机测试凭据和外部匿名网络替身，不访问真实认证。进程测试在Linux验证 SIGTERM、SIGKILL、冻结guardian、重启、完成/取消顺序和提交回执丢失。合成成功不代替真实谱面或浏览器实际验收。
 
 停止HTTP服务和worker后，可保留专用数据目录并切回独立旧checkout和虚拟环境。不要让旧版本打开未知数据库schema，不通过删除用户目录进行回滚。安装与页面资源变更仅在独立环境中生效，不改用户全局配置。
+
+## 并行部署前提
+
+仓库默认不表示生产已开放八路。web 和 worker 必须使用一致的存储预算；每任务 RSS 额度不等于整个 unit 内存额度，调度器、监督线程、所有转换树和 guardian 都计入 unit cgroup。八路不能沿用现有 512 MiB `MemoryMax`、100% `CPUQuota` 和 `TasksMax=64` 就宣称通过。目标配置与验收见[容量方案](capacity-plan.md)。
+
+成功 manifest 的 `metrics.phase_seconds` 与交付摘要 `resources.phase_seconds` 记录准备、下载、探测、采样、配准、合成和分页的实际单调时钟耗时。它们不包含排队和最终监督器发布开销，不能与端到端等待混用。

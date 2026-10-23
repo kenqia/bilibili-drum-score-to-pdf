@@ -247,9 +247,9 @@ def connect(tree, budget, *, writable=False):
     return db
 
 
-def validate(db, budget):
+def validate(db, budget, *, schema_version=SCHEMA_VERSION):
     budget.check()
-    validate_schema(db)
+    validate_schema(db, version=schema_version)
     pages = db.execute("PRAGMA page_count").fetchone()[0]
     page_size = db.execute("PRAGMA page_size").fetchone()[0]
     if pages * page_size > DB_LIMIT:
@@ -316,9 +316,9 @@ def validate(db, budget):
     return rows
 
 
-def result_files(tree, db, budget, *, owned=False):
+def result_files(tree, db, budget, *, owned=False, schema_version=SCHEMA_VERSION):
     files = []
-    for row in validate(db, budget):
+    for row in validate(db, budget, schema_version=schema_version):
         if row["state"] not in ("complete", "finishing"):
             continue
         if not all(
@@ -686,12 +686,12 @@ def release_identity():
     )
 
 
-def verified_files(source, budget):
+def verified_files(source, budget, *, schema_version=SCHEMA_VERSION):
     manifest = source.read_json("snapshot.json", budget)
     if (
         set(manifest) != {"format", "schema", "created_at", "release", "files"}
         or manifest["format"] != FORMAT
-        or manifest["schema"] != SCHEMA_VERSION
+        or manifest["schema"] != schema_version
     ):
         raise MaintenanceError("invalid_snapshot")
     release = manifest["release"]
@@ -745,7 +745,7 @@ def verified_files(source, budget):
             raise MaintenanceError("invalid_snapshot")
     db = connect(source, budget)
     try:
-        selected = result_files(source, db, budget)
+        selected = result_files(source, db, budget, schema_version=schema_version)
     finally:
         db.close()
     if listed != {
@@ -780,6 +780,7 @@ def restore(
     backup_root,
     output,
     *,
+    upgrade_from_v1=False,
     timeout=60,
     max_bytes=4096 * 1024**2,
     max_files=8192,
@@ -790,7 +791,7 @@ def restore(
         raise MaintenanceError("incomplete_snapshot")
     source = Tree(backup_root)
     try:
-        files = verified_files(source, budget)
+        files = verified_files(source, budget, schema_version=1 if upgrade_from_v1 else SCHEMA_VERSION)
         with destination(source, output, budget) as target:
             budget.check(sum(entry["bytes"] for entry in files), len(files), target.fd)
             for entry in files:
@@ -798,6 +799,18 @@ def restore(
                     raise MaintenanceError("source_changed")
             db = connect(target, budget, writable=True)
             try:
+                if upgrade_from_v1:
+                    # Only mutate the private, fully verified destination copy.
+                    db.execute("BEGIN IMMEDIATE")
+                    try:
+                        validate_schema(db, version=1)
+                        db.execute("DROP INDEX single_active")
+                        db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+                        validate_schema(db)
+                        db.commit()
+                    except BaseException:
+                        db.rollback()
+                        raise
                 result_files(target, db, budget)
                 register_restored(target, db, budget)
                 result_files(target, db, budget, owned=True)
@@ -805,6 +818,11 @@ def restore(
                 db.close()
             with os.fdopen(target.open("tasks.sqlite3"), "rb") as stream:
                 os.fsync(stream.fileno())
+        if upgrade_from_v1:
+            # The copied SQLite bytes changed; report the published version,
+            # never present old snapshot hashes as hashes of the upgraded DB.
+            return dict(status="complete", operation="upgrade-v1", schema=SCHEMA_VERSION,
+                        source_schema=1, source_unchanged=True)
         return report("restore", files)
     finally:
         source.close()
@@ -816,7 +834,7 @@ def main(argv=None):
         description="停服窗口中的完整备份、只读核验与恢复到新目录。",
     )
     commands = parser.add_subparsers(dest="operation", required=True)
-    for name in ("backup", "verify", "restore"):
+    for name in ("backup", "verify", "restore", "upgrade-v1"):
         child = commands.add_parser(name)
         child.add_argument("--timeout", type=float, default=60)
         child.add_argument("--max-mib", type=float, default=4096)
@@ -847,7 +865,7 @@ def main(argv=None):
         elif args.operation == "verify":
             result = verify(args.backup_root, **options)
         else:
-            result = restore(args.backup_root, args.output, **options)
+            result = restore(args.backup_root, args.output, upgrade_from_v1=args.operation == "upgrade-v1", **options)
     except Exception as error:
         code = (
             error.code if isinstance(error, MaintenanceError) else "maintenance_failed"

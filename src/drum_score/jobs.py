@@ -11,6 +11,7 @@ import time
 import re
 import stat
 import math
+import threading
 
 from .public_video import InputError, video_origin
 
@@ -46,6 +47,9 @@ class Jobs:
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or
                not math.isfinite(v) or v <= 0 for v in values) or job_temp_bytes > retained_bytes:
             raise ValueError('无效的服务资源参数。')
+        # SQLite has one writer. Serialize this scheduler's short connections
+        # locally instead of letting eight supervisors compete in SQLite's busy loop.
+        self._transaction_lock = threading.RLock()
         self.root = controlled_root(root)
         identity = self.root.stat()
         self.root_identity = (identity.st_dev, identity.st_ino)
@@ -71,21 +75,27 @@ class Jobs:
                 validate_schema(db)
 
     @contextmanager
-    def transaction(self):
-        db = sqlite3.connect(self.database, timeout=1, isolation_level=None)
-        db.row_factory = sqlite3.Row
-        try:
-            db.execute('BEGIN IMMEDIATE')
-            yield db
-            db.commit()
-        except sqlite3.OperationalError:
-            db.rollback()
-            raise JobError('service_busy', '服务正在处理其他请求，请稍后重试。', 503) from None
-        except BaseException:
-            db.rollback()
-            raise
-        finally:
-            db.close()
+    def transaction(self, *, write=True):
+        with self._transaction_lock:
+            db = sqlite3.connect(self.database, timeout=1, isolation_level=None)
+            db.row_factory = sqlite3.Row
+            try:
+                db.execute('BEGIN IMMEDIATE' if write else 'BEGIN')
+                yield db
+                db.commit()
+            except sqlite3.OperationalError as error:
+                db.rollback()
+                # Only real SQLite lock errors are safe to retry. An unknown
+                # commit acknowledgement may already have changed durable state.
+                code = getattr(error, 'sqlite_errorcode', 0) & 0xff
+                if code in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                    raise JobError('service_busy', '服务正在处理其他请求，请稍后重试。', 503) from None
+                raise JobError('database_unavailable', '数据库操作未完成，请稍后重试。', 503) from None
+            except BaseException:
+                db.rollback()
+                raise
+            finally:
+                db.close()
 
     def authorize(self, db, task, capability):
         row = db.execute('SELECT * FROM tasks WHERE id=?', (task,)).fetchone()
@@ -101,11 +111,11 @@ class Jobs:
             raise JobError('expired', '结果已到期，请重新提交来源链接。', 410)
 
     def admit(self, db, ip_key):
-        self.capacity(reserve=True)
         if db.execute("SELECT 1 FROM tasks WHERE ip_key=? AND state IN ('queued','running','cancelling','finishing')", (ip_key,)).fetchone():
             raise JobError('ip_busy', '此网络已有一个未完成任务，请等待或取消后重试。', 429)
         if db.execute("SELECT COUNT(*) FROM tasks WHERE state='queued'").fetchone()[0] >= 10:
             raise JobError('queue_full', '等待队列已满，请稍后重试。', 429)
+        self.capacity(reserve=True, db=db)
 
     def enqueue(self, url, ip):
         try:
@@ -122,7 +132,7 @@ class Jobs:
         return {'id': task, 'capability': capability, 'link': f'/task/{task}#{capability}'}
 
     def view(self, task, capability):
-        with self.transaction() as db:
+        with self.transaction(write=False) as db:
             row = self.authorize(db, task, capability)
             self.check_live(row)
             position = db.execute("SELECT COUNT(*) FROM tasks WHERE state='queued' AND (queued_at<? OR (queued_at=? AND id<=?))",
@@ -163,7 +173,7 @@ class Jobs:
                 raise ValueError('任务目录不能是符号链接。')
         return path
 
-    def capacity(self, *, reserve=False):
+    def capacity(self, *, reserve=False, db=None):
         # Count even unrecognized files, never delete live results to admit work.
         total = 0
         if (self.root / 'attempts').is_symlink():
@@ -178,7 +188,15 @@ class Jobs:
                     pass
         free = os.statvfs(self.root)
         available = free.f_bavail * free.f_frsize
-        reservation = self.job_temp_bytes if reserve else 0
+        reservation = 0
+        if reserve:
+            if db is None:
+                with self.transaction() as connection:
+                    return self.capacity(reserve=True, db=connection)
+            active = db.execute("SELECT COUNT(*) FROM tasks WHERE state IN ('running','cancelling','finishing')").fetchone()[0]
+            # Conservatively reserve the whole budget, including bytes already
+            # materialized, for every active attempt and the proposed next one.
+            reservation = (active + 1) * self.job_temp_bytes
         if total + reservation > self.retained_bytes or available < self.min_free_bytes + reservation:
             raise JobError('storage_full', '服务存储空间不足，请稍后重试。', 503)
         return total
@@ -263,13 +281,14 @@ class Jobs:
                 os.close(descriptor)
 
 
-    def recover_staging(self):
+    def recover_staging(self, row=None):
         from .owned_tree import remove_owned_tree
 
         with self.transaction() as db:
-            managed = [
-                dict(row) for row in db.execute("SELECT * FROM managed_attempts")
-            ]
+            managed = [dict(item) for item in db.execute(
+                "SELECT * FROM managed_attempts" + (" WHERE task=? AND attempt=?" if row else ""),
+                (row['id'], row['attempt']) if row else (),
+            )]
         for item in managed:
             entries = json.loads(item["files"])
             marker = next(
@@ -456,16 +475,21 @@ class Jobs:
         for item in managed:
             self.remove_files(item, json.loads(item['files']))
 
-    def claim(self):
+    def claim(self, *, concurrency=1):
+        if isinstance(concurrency, bool) or not isinstance(concurrency, int) or not 1 <= concurrency <= 8:
+            raise ValueError("并行度必须是 1 至 8 的整数。")
         with self.transaction() as db:
-            if db.execute("SELECT 1 FROM tasks WHERE state IN ('running','cancelling','finishing')").fetchone():
+            active = db.execute("SELECT COUNT(*) FROM tasks WHERE state IN ('running','cancelling','finishing')").fetchone()[0]
+            if active >= concurrency:
                 return None
             row = db.execute("SELECT * FROM tasks WHERE state='queued' ORDER BY queued_at,id LIMIT 1").fetchone()
             if row is None:
                 return None
             try:
-                self.capacity(reserve=True)
+                self.capacity(reserve=True, db=db)
             except JobError as error:
+                if active:
+                    return None  # Retain FIFO waiting while active reservations consume space.
                 db.execute("UPDATE tasks SET state='failed',stage='failed',error_code=?,error_message=?,expires_at=? WHERE id=?",
                     (error.code, error.message, time.time() + self.diagnostic_seconds, row['id']))
                 return None
@@ -479,12 +503,12 @@ class Jobs:
                 (stage, row['id'], row['attempt']))
 
     def cancelled(self, row):
-        with self.transaction() as db:
+        with self.transaction(write=False) as db:
             current = db.execute('SELECT state,attempt FROM tasks WHERE id=?', (row['id'],)).fetchone()
             return current is None or current['attempt'] != row['attempt'] or current['state'] != 'running'
 
     def publishing(self, row):
-        with self.transaction() as db:
+        with self.transaction(write=False) as db:
             current = db.execute('SELECT state,attempt FROM tasks WHERE id=?', (row['id'],)).fetchone()
             return current is not None and current['attempt'] == row['attempt'] and current['state'] in ('finishing', 'complete')
 

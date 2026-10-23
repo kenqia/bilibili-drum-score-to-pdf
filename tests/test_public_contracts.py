@@ -546,7 +546,7 @@ class MaintenancePublicContracts(unittest.TestCase):
                             args += ['--max-mib', '.001']
                         else:
                             with sqlite3.connect(source / 'tasks.sqlite3') as db:
-                                db.execute('PRAGMA user_version=2')
+                                db.execute('PRAGMA user_version=999')
                         before = {p.relative_to(source).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in source.rglob('*') if p.is_file()}
                         result = subprocess.run([sys.executable, '-m', 'drum_score.maintenance', operation, *args, '--min-free-mib', '1'], env=env, capture_output=True, text=True, timeout=5)
                         self.assertEqual(result.returncode, 2, result.stdout)
@@ -556,8 +556,89 @@ class MaintenancePublicContracts(unittest.TestCase):
                         self.assertEqual({p.relative_to(source).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in source.rglob('*') if p.is_file()}, before)
                         if boundary == 'schema':
                             with sqlite3.connect(source / 'tasks.sqlite3') as db:
-                                db.execute('PRAGMA user_version=1')
+                                db.execute('PRAGMA user_version=2')
 
+
+    def test_explicit_v1_upgrade_copies_verified_snapshot_and_keeps_source_unchanged(self):
+        import hashlib
+        import os
+        import sqlite3
+        import tempfile
+        from drum_score.jobs import Jobs
+        from drum_score.maintenance import backup
+        from drum_score.schema import V1_STATEMENTS
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            jobs = Jobs(root / 'service', min_free_bytes=1)
+            task = jobs.enqueue('https://www.bilibili.com/video/BV1rH4y1R7Rk', '192.0.2.1')
+            from drum_score.core import artifact
+            from drum_score.worker import validate_result
+            row = jobs.claim()
+            result = jobs.register_attempt(row) / 'result'
+            result.mkdir()
+            (result / 'score.pdf').write_bytes(b'%PDF-synthetic-upgrade')
+            for index in range(1, 3):
+                (result / f'page-{index}.png').write_bytes(b'synthetic-page-' + bytes([index]))
+            delivery = dict(status='complete', reliable=False, warnings=[],
+                            pdf=artifact(result, result / 'score.pdf'),
+                            pages=[artifact(result, result / f'page-{index}.png') for index in range(1, 3)],
+                            source={}, program={}, resources={},
+                            retention={'can_reconstruct_from_retained_sources': False})
+            (result / 'manifest.json').write_text(json.dumps(delivery))
+            jobs.remember_result(row, delivery)
+            jobs.finishing(row, validate_result(jobs, row))
+            jobs.settle(row, 'complete')
+            queued = jobs.enqueue('https://www.bilibili.com/video/BV1rH4y1R7Rk', '192.0.2.2')
+            queued_before = jobs.view(queued['id'], queued['capability'])
+            expected = jobs.view(task['id'], task['capability'])
+            saved = root / 'snapshot'
+            backup(jobs.root, saved, services_stopped=True, min_free_bytes=1)
+            with sqlite3.connect(saved / 'tasks.sqlite3') as db:
+                db.execute(V1_STATEMENTS[-1])
+                db.execute('PRAGMA user_version=1')
+            manifest = json.loads((saved / 'snapshot.json').read_text())
+            manifest['schema'] = 1
+            entry = next(item for item in manifest['files'] if item['path'] == 'tasks.sqlite3')
+            entry.update(bytes=(saved / 'tasks.sqlite3').stat().st_size,
+                         sha256=hashlib.sha256((saved / 'tasks.sqlite3').read_bytes()).hexdigest())
+            (saved / 'snapshot.json').write_text(json.dumps(manifest))
+            before = {p.relative_to(saved).as_posix(): p.read_bytes() for p in saved.rglob('*') if p.is_file()}
+            env = {**os.environ, 'PYTHONPATH': os.pathsep.join(sys.path)}
+            output = root / 'upgraded'
+            args = [sys.executable, '-m', 'drum_score.maintenance', 'upgrade-v1',
+                    '--backup-root', str(saved), '--output', str(output), '--min-free-mib', '1']
+            response = subprocess.run(args, env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(response.returncode, 0, response.stdout + response.stderr)
+            self.assertEqual(json.loads(response.stdout)['schema'], 2)
+            self.assertEqual(Jobs(output).view(task['id'], task['capability']), expected)
+            self.assertEqual({p.relative_to(saved).as_posix(): p.read_bytes() for p in saved.rglob('*') if p.is_file()}, before)
+            second = subprocess.run(args, env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(second.returncode, 2)
+            self.assertNotIn(str(root), second.stdout + second.stderr)
+            self.assertEqual(Jobs(output).view(task['id'], task['capability']), expected)
+            recovered = Jobs(output)
+            self.assertEqual(recovered.view(queued['id'], queued['capability']), queued_before)
+            for index, reference in enumerate(delivery['pages'], 1):
+                fd, _ = recovered.open_artifact(task['id'], task['capability'], index)
+                with os.fdopen(fd, 'rb') as stream:
+                    self.assertEqual(hashlib.sha256(stream.read()).hexdigest(), reference['sha256'])
+            restored_result = output / result.relative_to(jobs.root)
+            self.assertNotEqual((restored_result / 'score.pdf').stat().st_ino, (result / 'score.pdf').stat().st_ino)
+            from unittest.mock import patch
+            with patch('drum_score.jobs.time.time', return_value=expected['expires_at'] + 1):
+                recovered.cleanup()
+            self.assertFalse(restored_result.exists())
+            self.assertTrue((result / 'score.pdf').exists())
+            # A hash-matching but unknown old schema cannot be upgraded.
+            with sqlite3.connect(saved / 'tasks.sqlite3') as db:
+                db.execute('CREATE TABLE unknown(value TEXT)')
+            entry.update(bytes=(saved / 'tasks.sqlite3').stat().st_size,
+                         sha256=hashlib.sha256((saved / 'tasks.sqlite3').read_bytes()).hexdigest())
+            (saved / 'snapshot.json').write_text(json.dumps(manifest))
+            args[args.index('--output') + 1] = str(root / 'refused')
+            response = subprocess.run(args, env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(response.returncode, 2)
+            self.assertFalse((root / 'refused').exists())
 
     def test_maintenance_entries_preserve_ten_page_names_and_refuse_invalid_sequences(self):
         import hashlib

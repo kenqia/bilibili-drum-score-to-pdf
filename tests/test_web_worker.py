@@ -33,7 +33,8 @@ def download(origin, target):
     if mode == 'wait':
         child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(3600)'])
         (fixture / 'writers').write_text(str(os.getpid()) + ',' + str(child.pid))
-        while not (fixture / 'release').exists():
+        (fixture / ('waiting-' + str(os.getpid()))).write_text(str(target) + '\\n' + str(child.pid))
+        while not (fixture / 'release').exists() and not (fixture / ('release-' + str(os.getpid()))).exists():
             time.sleep(.02)
         child.terminate()
         child.wait()
@@ -104,8 +105,11 @@ class WebsiteWorker(unittest.TestCase):
         task = response.json()
         return task['id'], {'Authorization': 'Bearer ' + task['capability']}
 
-    def worker(self, *, once=False):
+    def worker(self, *, once=False, concurrency=1):
         args = [sys.executable, '-m', 'drum_score.worker', '--data-root', str(self.data), '--poll-interval', '.02']
+        args += ['--concurrency', str(concurrency)]
+        if concurrency > 1:
+            args += ['--max-temp-mib', '64', '--retained-mib', '4096']
         if once:
             args.append('--once')
         process = subprocess.Popen(args, env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -125,6 +129,115 @@ class WebsiteWorker(unittest.TestCase):
                 return result
             time.sleep(.03)
         self.fail('Timed out waiting for public worker/process behavior')
+
+    def test_eight_real_tasks_overlap_and_cancel_or_completion_preserves_other_attempts(self):
+        (self.network / 'mode').write_text('wait')
+        tasks = []
+        for index in range(8):
+            with TestClient(create_app(self.data), client=(f'198.51.100.{index + 1}', 2000)) as other:
+                tasks.append(self.submit(other))
+        worker = self.worker(concurrency=8)
+        markers = self.until(lambda: list(self.network.glob('waiting-*')) if len(list(self.network.glob('waiting-*'))) == 8 else None, timeout=40)
+        self.assertTrue(all(self.state(task, auth)['state'] == 'running' for task, auth in tasks))
+        # Shared IP policy stays enforced while different IPs execute together.
+        with TestClient(create_app(self.data), client=('198.51.100.1', 2000)) as same:
+            response = same.post('/api/tasks', json={'url': 'https://www.bilibili.com/video/BV1rH4y1R7Rk'})
+            self.assertEqual(response.status_code, 429)
+            self.assertEqual(response.json()['error']['code'], 'ip_busy')
+        first, first_auth = tasks[0]
+        self.client.post(f'/api/tasks/{first}/cancel', headers=first_auth)
+        self.until(lambda: self.state(first, first_auth)['state'] == 'cancelled')
+        second, second_auth = tasks[1]
+        marker = next(marker for marker in markers if second in marker.read_text())
+        (self.network / marker.name.replace('waiting-', 'release-')).touch()
+        self.until(lambda: self.state(second, second_auth)['state'] == 'complete', timeout=40)
+        # Completion's staging recovery must leave all six other live trees intact.
+        for task, auth in tasks[2:]:
+            self.assertEqual(self.state(task, auth)['state'], 'running')
+            self.assertTrue(list((self.data / 'attempts' / task).rglob('.drum-score-job-*')))
+            marker = next(marker for marker in markers if task in marker.read_text())
+            self.assertTrue(self.alive(int(marker.name.removeprefix('waiting-'))))
+        (self.network / 'release').touch()
+        self.until(lambda: all(self.state(task, auth)['state'] == 'complete' for task, auth in tasks[1:]), timeout=60)
+        for task, auth in tasks[1:]:
+            self.assertEqual(self.client.get(f'/api/tasks/{task}/pdf', headers=auth).status_code, 200)
+            for page in range(1, self.state(task, auth)['result']['page_count'] + 1):
+                self.assertEqual(self.client.get(f'/api/tasks/{task}/pages/{page}', headers=auth).status_code, 200)
+        self.assertEqual(list(self.data.rglob('.drum-score-*')), [])
+        worker.terminate()
+        self.assertEqual(worker.wait(timeout=15), 0)
+
+    def test_lost_claim_commit_ack_exits_for_recovery_instead_of_leaking_active_slot(self):
+        with (self.network / 'sitecustomize.py').open('a') as startup:
+            startup.write("""
+import sqlite3, os
+from pathlib import Path
+fixture = Path(os.environ['SYNTHETIC_NETWORK_ROOT'])
+original_connect = sqlite3.connect
+class ClaimFault(sqlite3.Connection):
+    def execute(self, sql, *args, **kwargs):
+        if sql.startswith("UPDATE tasks SET state='running'"):
+            self.claim_written = True
+        return super().execute(sql, *args, **kwargs)
+    def commit(self):
+        super().commit()
+        if getattr(self, 'claim_written', False) and (fixture / 'trap-claim').exists():
+            raise sqlite3.OperationalError('synthetic unknown commit acknowledgement')
+def connect(database, *args, **kwargs):
+    if str(database).endswith('tasks.sqlite3'):
+        kwargs.setdefault('factory', ClaimFault)
+    return original_connect(database, *args, **kwargs)
+sqlite3.connect = connect
+""")
+        (self.network / 'trap-claim').touch()
+        task, auth = self.submit()
+        self.assertEqual(self.worker(concurrency=8).wait(timeout=10), 2)
+        self.assertEqual(self.state(task, auth)['state'], 'running')
+        (self.network / 'trap-claim').unlink()
+        self.assertEqual(self.worker(once=True).wait(timeout=10), 0)
+        self.assertEqual(self.state(task, auth)['state'], 'interrupted')
+        self.assertEqual(list(self.data.rglob('.drum-score-*')), [])
+
+    def test_external_writer_does_not_abort_parallel_tasks_when_scheduler_poll_is_busy(self):
+        import sqlite3
+        (self.network / 'mode').write_text('wait')
+        tasks = []
+        for index in range(2):
+            with TestClient(create_app(self.data), client=(f'198.51.100.{index + 1}', 2000)) as other:
+                tasks.append(self.submit(other))
+        worker = self.worker(concurrency=2)
+        self.until(lambda: len(list(self.network.glob('waiting-*'))) == 2)
+        writer = sqlite3.connect(self.data / 'tasks.sqlite3', isolation_level=None)
+        try:
+            writer.execute('BEGIN IMMEDIATE')
+            time.sleep(1.3)  # Exceeds the declared one-second SQLite busy timeout.
+            self.assertIsNone(worker.poll())
+            self.assertTrue(all(self.state(task, auth)['state'] == 'running' for task, auth in tasks))
+        finally:
+            writer.rollback()
+            writer.close()
+        (self.network / 'release').touch()
+        self.until(lambda: all(self.state(task, auth)['state'] == 'complete' for task, auth in tasks), timeout=40)
+        worker.terminate()
+        self.assertEqual(worker.wait(timeout=15), 0)
+
+    def test_parallel_sigterm_stops_all_trees_without_claiming_next_task(self):
+        (self.network / 'mode').write_text('wait')
+        tasks = []
+        for index in range(3):
+            with TestClient(create_app(self.data), client=(f'198.51.100.{index + 1}', 2000)) as other:
+                tasks.append(self.submit(other))
+        worker = self.worker(concurrency=2)
+        markers = self.until(lambda: list(self.network.glob('waiting-*')) if len(list(self.network.glob('waiting-*'))) == 2 else None)
+        worker.terminate()
+        self.assertEqual(worker.wait(timeout=15), 0)
+        for task, auth in tasks[:2]:
+            self.assertEqual(self.state(task, auth)['state'], 'interrupted')
+        self.assertEqual(self.state(*tasks[2])['state'], 'queued')
+        for marker in markers:
+            self.assertFalse(self.alive(int(marker.name.removeprefix('waiting-'))))
+            self.assertFalse(self.alive(int(marker.read_text().splitlines()[1])))
+        self.assertEqual(list(self.data.rglob('.drum-score-*')), [])
 
     def test_real_conversion_survives_http_restart_and_downloads_every_page(self):
         task, auth = self.submit()
@@ -154,6 +267,10 @@ class WebsiteWorker(unittest.TestCase):
         self.assertFalse((manifest.parent / 'samples').exists())
         self.assertFalse((manifest.parent / 'longshot.png').exists())
         self.assertFalse(result['retention']['can_reconstruct_from_retained_sources'])
+        phases = result['resources']['phase_seconds']
+        self.assertEqual(set(phases), {'preparing', 'downloading', 'probing', 'sampling', 'registering', 'composing', 'paginating'})
+        self.assertTrue(all(value >= 0 for value in phases.values()))
+        self.assertLessEqual(sum(phases.values()), result['elapsed_seconds'])
         self.assertTrue(result['samples'])
         for frame in result['samples']:
             self.assertFalse(frame['retained'])
@@ -241,6 +358,10 @@ class WebsiteWorker(unittest.TestCase):
         self.assertEqual(self.state(task, auth)['state'], 'interrupted')
 
     def guardian(self, worker):
+        return next(iter(self.guardians(worker)), None)
+
+    def guardians(self, worker):
+        found = []
         lock = (self.data / 'worker.lock').stat()
         for entry in Path('/proc').glob('[0-9]*'):
             if int(entry.name) == worker.pid:
@@ -252,10 +373,51 @@ class WebsiteWorker(unittest.TestCase):
                 for descriptor in (entry / 'fd').iterdir():
                     metadata = descriptor.stat()
                     if (metadata.st_dev, metadata.st_ino) == (lock.st_dev, lock.st_ino):
-                        return int(entry.name)
+                        found.append(int(entry.name))
+                        break
             except (FileNotFoundError, PermissionError, ProcessLookupError):
                 continue
-        return None
+        return found
+
+    def test_parallel_guardians_each_keep_restart_locked_until_both_trees_stop(self):
+        (self.network / 'mode').write_text('wait')
+        tasks = []
+        for index in range(2):
+            with TestClient(create_app(self.data), client=(f'198.51.100.{index + 1}', 2000)) as other:
+                tasks.append(self.submit(other))
+        worker = self.worker(concurrency=2)
+        markers = self.until(lambda: list(self.network.glob('waiting-*')) if len(list(self.network.glob('waiting-*'))) == 2 else None)
+        guardians = self.until(lambda: self.guardians(worker) if len(self.guardians(worker)) == 2 else None)
+        for pid in guardians:
+            os.kill(pid, signal.SIGSTOP)
+        try:
+            worker.kill()
+            worker.wait(timeout=5)
+            self.assertEqual(self.worker(once=True).wait(timeout=5), 2)
+            os.kill(guardians[0], signal.SIGCONT)
+            self.until(lambda: not self.alive(guardians[0]))
+            self.assertEqual(self.worker(once=True).wait(timeout=5), 2)
+            self.assertTrue(all(self.state(task, auth)['state'] == 'running' for task, auth in tasks))
+        finally:
+            for pid in guardians:
+                if self.alive(pid):
+                    os.kill(pid, signal.SIGCONT)
+        self.until(lambda: all(not self.alive(pid) for pid in guardians))
+        (self.network / 'mode').write_text('ready')
+        self.assertEqual(self.worker(once=True).wait(timeout=10), 0)
+        self.assertTrue(all(self.state(task, auth)['state'] == 'interrupted' for task, auth in tasks))
+        for marker in markers:
+            self.assertFalse(self.alive(int(marker.name.removeprefix('waiting-'))))
+            self.assertFalse(self.alive(int(marker.read_text().splitlines()[1])))
+        self.assertEqual(list(self.data.rglob('.drum-score-*')), [])
+
+    def test_once_with_eight_slots_still_processes_at_most_one_task(self):
+        task, auth = self.submit()
+        with TestClient(create_app(self.data), client=('198.51.100.2', 2000)) as other:
+            queued, queued_auth = self.submit(other)
+        self.assertEqual(self.worker(once=True, concurrency=8).wait(timeout=30), 0)
+        self.assertEqual(self.state(task, auth)['state'], 'complete')
+        self.assertEqual(self.state(queued, queued_auth)['state'], 'queued')
 
     def test_sigkill_guardian_holds_lock_until_cleanup_then_restart_marks_interrupted(self):
         task, auth, worker, writers = self.waiting()
@@ -364,6 +526,39 @@ sqlite3.connect = connect
         (self.network / 'trap-finishing').unlink()
         self.assertEqual(self.worker(once=True).wait(timeout=15), 0)
         self.assertEqual(self.state(task, auth)['state'], 'complete')
+        self.assertEqual(self.client.get(f'/api/tasks/{task}/pdf', headers=auth).status_code, 200)
+
+    def test_parallel_lost_commit_ack_stops_other_tree_and_recovers_both_decisions(self):
+        fault = DATABASE_FAULT.replace(
+            "class Connection(sqlite3.Connection):",
+            "class Connection(sqlite3.Connection):\n    def execute(self, sql, *args, **kwargs):\n        if sql.startswith(\"UPDATE tasks SET state='finishing'\"):\n            self.finishing_written = True\n        return super().execute(sql, *args, **kwargs)")
+        fault = fault.replace("if (fixture / 'trap-finishing').exists():", "if (fixture / 'trap-finishing').exists() and getattr(self, 'finishing_written', False):")
+        fault = fault.replace("(fixture / 'finishing-committed').write_text('durable')", "raise sqlite3.OperationalError('synthetic lost acknowledgement')")
+        with (self.network / 'sitecustomize.py').open('a') as startup:
+            startup.write(fault)
+        (self.network / 'trap-finishing').touch()
+        (self.network / 'mode').write_text('wait')
+        task, auth = self.submit()
+        with TestClient(create_app(self.data), client=('198.51.100.2', 2000)) as other:
+            second, second_auth = self.submit(other)
+        worker = self.worker(concurrency=2)
+        markers = self.until(lambda: list(self.network.glob('waiting-*')) if len(list(self.network.glob('waiting-*'))) == 2 else None)
+        marker = next(item for item in markers if task in item.read_text())
+        (self.network / marker.name.replace('waiting-', 'release-')).touch()
+        self.assertEqual(worker.wait(timeout=30), 2)
+        decision = self.state(task, auth)
+        self.assertEqual(decision['state'], 'finishing')
+        self.assertEqual(self.state(second, second_auth)['state'], 'interrupted')
+        for item in markers:
+            self.assertFalse(self.alive(int(item.name.removeprefix('waiting-'))))
+            self.assertFalse(self.alive(int(item.read_text().splitlines()[1])))
+        (self.network / 'trap-finishing').unlink()
+        self.assertEqual(self.worker(once=True).wait(timeout=15), 0)
+        completed = self.state(task, auth)
+        self.assertEqual(completed['state'], 'complete')
+        self.assertEqual(completed['completed_at'], decision['completed_at'])
+        self.assertEqual(completed['expires_at'], decision['expires_at'])
+        self.assertEqual(self.state(second, second_auth)['state'], 'interrupted')
         self.assertEqual(self.client.get(f'/api/tasks/{task}/pdf', headers=auth).status_code, 200)
 
     def test_authenticated_open_fd_survives_unlink_but_new_expired_requests_fail(self):

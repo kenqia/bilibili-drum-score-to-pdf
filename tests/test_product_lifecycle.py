@@ -59,6 +59,44 @@ class ProductLifecycle(unittest.TestCase):
                     Jobs(target)
                 self.assertEqual((target / 'tasks.sqlite3').read_bytes(), before)
 
+    def test_concurrent_claims_enforce_eight_slots_and_keep_same_ip_serial(self):
+        from concurrent.futures import ThreadPoolExecutor
+        tasks = [self.jobs.enqueue(LINK, f'192.0.2.{i}') for i in range(10)]
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            rows = list(pool.map(lambda _: self.jobs.claim(concurrency=8), range(10)))
+        claimed = [row for row in rows if row]
+        self.assertEqual(len(claimed), 8)
+        self.assertEqual(len({row['attempt'] for row in claimed}), 8)
+        self.assertEqual({row['id'] for row in claimed}, {task['id'] for task in tasks[:8]})
+        with self.assertRaises(JobError) as caught:
+            self.jobs.enqueue(LINK, '192.0.2.0')
+        self.assertEqual(caught.exception.code, 'ip_busy')
+        self.jobs.settle(claimed[0], 'failed', 'synthetic', 'synthetic')
+        self.assertEqual(self.jobs.claim(concurrency=8)['id'], tasks[8]['id'])
+
+    def test_status_and_cancel_checks_do_not_request_a_write_lock(self):
+        task = self.jobs.enqueue(LINK, '192.0.2.1')
+        row = self.jobs.claim()
+        writer = sqlite3.connect(self.jobs.database, isolation_level=None)
+        try:
+            writer.execute('BEGIN IMMEDIATE')
+            self.assertEqual(self.jobs.view(task['id'], task['capability'])['state'], 'running')
+            self.assertFalse(self.jobs.cancelled(row))
+            self.assertFalse(self.jobs.publishing(row))
+        finally:
+            writer.rollback()
+            writer.close()
+
+    def test_active_reservations_keep_next_task_queued_until_space_is_released(self):
+        self.jobs.retained_bytes = 256
+        tasks = [self.jobs.enqueue(LINK, f'192.0.2.{i}') for i in range(3)]
+        first = self.jobs.claim(concurrency=8)
+        self.jobs.claim(concurrency=8)
+        self.assertIsNone(self.jobs.claim(concurrency=8))
+        self.assertEqual(self.jobs.view(tasks[2]['id'], tasks[2]['capability'])['state'], 'queued')
+        self.jobs.settle(first, 'cancelled')
+        self.assertEqual(self.jobs.claim(concurrency=8)['id'], tasks[2]['id'])
+
     def test_expiry_cleanup_preserves_open_download_and_never_refreshes_deadline(self):
         created, row, result = self.complete()
         view = self.jobs.view(created['id'], created['capability'])

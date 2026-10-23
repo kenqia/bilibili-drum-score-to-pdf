@@ -109,7 +109,15 @@ def _convert(source, output, *, progress=None, limits=None, cancel=None):
         raise ConversionError('resource_limit', '来源文件超过输入大小限制。')
     output.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
-    emit = progress or (lambda stage: None)
+    notify = progress or (lambda stage: None)
+    phase_seconds = {}
+    current_phase, phase_started = 'preparing', started
+    def emit(stage):
+        nonlocal current_phase, phase_started
+        now = time.monotonic()
+        phase_seconds[current_phase] = phase_seconds.get(current_phase, 0) + now - phase_started
+        current_phase, phase_started = stage, now
+        notify(stage)
     try:
         with tempfile.TemporaryDirectory(prefix='.drum-score-', dir=output.parent) as temporary:
             work = Path(temporary)
@@ -138,6 +146,8 @@ def _convert(source, output, *, progress=None, limits=None, cancel=None):
             result = _process(local, result_dir, metadata, emit, budget)
             if digest(local) != source_hash:
                 raise ConversionError('source_changed', '处理期间来源发生变化，未发布结果。')
+            phase_seconds[current_phase] = phase_seconds.get(current_phase, 0) + time.monotonic() - phase_started
+            result['metrics']['phase_seconds'] = dict(phase_seconds)
             result.update(schema_version=1, status='complete', reliable=False,
                           program=_program_identity(),
                           source={**origin, 'sha256': source_hash, 'bytes': local.stat().st_size,

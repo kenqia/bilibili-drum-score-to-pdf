@@ -308,7 +308,8 @@ def _run(source, output, *, progress=None, limits=None, cancel=None):
             if result is None or process.is_alive() or process.exitcode != 0:
                 raise ConversionError('conversion_failed', '转换进程异常退出，未发布结果。')
             budget.check(force_disk=True)
-            result['resources'] = {'limits': budget.limits, 'peak_sampled_tree_rss_bytes': peak_rss or None,
+            result['resources'] = {'limits': budget.limits,
+                'phase_seconds': result['metrics'].get('phase_seconds', {}), 'peak_sampled_tree_rss_bytes': peak_rss or None,
                 'peak_observed_temp_bytes': max(peak_disk, budget._peak_temp),
                 'memory_enforcement': 'sampled_process_tree', 'sample_interval_seconds': .02,
                 'disk_sample_interval_seconds': .2,

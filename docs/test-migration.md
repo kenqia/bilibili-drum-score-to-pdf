@@ -418,3 +418,7 @@ env -u PYTHONPATH /home/kenqia/issue73-installed-venv/bin/python /home/kenqia/is
 | Python、CLI、HTTP 的公开契约 | `test_public_contracts` 的共同矩阵承接成功、依赖缺失、非公共目标和失败不发布；HTTP 仍只接收公开链接。 |
 
 所有新增测试只使用合成标记、离线 DNS/HTTP 边界和假 CLI，不读取用户凭据，不作为真实云端转换通过的替代证据。
+
+## 八路并行改造
+
+原串行 worker 测试保留，用默认并行度 1 继续验证第二调度器拒绝、10 等待加 1 活动、取消与恢复。新增八路真实进程重叠、多 guardian 持锁、并行停止、回执丢失隔离、原子名额和空间预留测试。未知 schema 合成标记从版本 2 改为 999，避免与新版本冲突，仍保留未知版本拒绝及源不变断言。`upgrade-v1` 另验证多页结果 hash、原期限、新 inode 与清理；没有删除旧测试。

@@ -8,6 +8,8 @@ import os
 import signal
 import stat
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from .core import ConversionError, convert
 from .jobs import JobError, Jobs
@@ -106,70 +108,97 @@ def recover(jobs):
         jobs.settle(row, 'interrupted', 'interrupted', '处理进程已中断，可显式重试。')
 
 
-def run(jobs, *, once=False, poll_interval=.25, limits=None):
+def execute_attempt(jobs, row, stopping, descriptor, limits):
     from .supervision import guardian_lease, service_attempt
-    stopping = False
+    # ContextVars are bound separately in every supervisor thread.
+    with guardian_lease(descriptor):
+        try:
+            attempt = jobs.register_attempt(row)
+            next_capacity = 0
+            def cancelled():
+                nonlocal next_capacity
+                if time.monotonic() >= next_capacity:
+                    next_capacity = time.monotonic() + .2
+                    try:
+                        jobs.capacity()
+                    except JobError as error:
+                        raise ConversionError(error.code, error.message) from None
+                return stopping.is_set() or jobs.cancelled(row)
+            with service_attempt(jobs, row):
+                convert(json.loads(row['source'])['url'], attempt / 'result',
+                    progress=lambda stage: jobs.stage(row, stage) if stage != 'complete' else None,
+                    cancel=cancelled, limits={**(limits or {}), 'temp_bytes': jobs.job_temp_bytes})
+            validate_result(jobs, row)
+            summary = retain_delivery(jobs, row)
+            jobs.capacity()
+            if jobs.finishing(row, summary):
+                jobs.settle(row, 'complete')
+            else:
+                jobs.discard(row)
+                jobs.settle(row, 'cancelled')
+        except ConversionError as error:
+            cancelled = jobs.cancelled(row)
+            jobs.discard(row)
+            if cancelled:
+                jobs.settle(row, 'cancelled')
+            elif error.code == 'cancelled':
+                jobs.settle(row, 'interrupted', 'interrupted', '处理进程已中断，可显式重试。')
+                stopping.set()
+            else:
+                message = str(error).replace('请提供清晰的本地视频。', '请检查公开视频是否可匿名访问，或更换清晰、完整的纵向滚谱。')
+                jobs.settle(row, 'failed', error.code, message)
+        except Exception:
+            # Never expose paths, network output, database or OS exception text.
+            # A lost commit acknowledgement may already have made finishing durable.
+            if jobs.publishing(row):
+                raise JobError('publication_pending', '发布决定已保存，重启后恢复。') from None
+            jobs.discard(row)
+            jobs.settle(row, 'failed', 'conversion_failed', '转换失败，可检查来源后重试。')
+    jobs.recover_staging(row)
+
+
+def run(jobs, *, once=False, poll_interval=.25, limits=None, concurrency=1):
+    if isinstance(concurrency, bool) or not isinstance(concurrency, int) or not 1 <= concurrency <= 8:
+        raise ValueError('并行度必须是 1 至 8 的整数。')
+    stopping = threading.Event()
     def stop(*args):
-        nonlocal stopping
-        stopping = True
+        stopping.set()
     previous = {signum: signal.signal(signum, stop) for signum in (signal.SIGTERM, signal.SIGINT)}
     try:
-        with worker_lock(jobs) as descriptor, guardian_lease(descriptor):
+        with worker_lock(jobs) as descriptor:
             recover(jobs)
-            while not stopping:
+            if once:
                 jobs.cleanup()
-                row = jobs.claim()
-                if row is None:
-                    if once:
-                        return 0
-                    time.sleep(poll_interval)
-                    continue
+                row = None if stopping.is_set() else jobs.claim(concurrency=concurrency)
+                if row is not None:
+                    execute_attempt(jobs, row, stopping, descriptor, limits)
+                jobs.cleanup()
+                return 0
+            # Keep the lease until all supervisors and their guardians stop.
+            with ThreadPoolExecutor(max_workers=concurrency) as pool:
+                pending = set()
                 try:
-                    attempt = jobs.register_attempt(row)
-                    next_capacity = 0
-                    def cancelled():
-                        nonlocal next_capacity
-                        if time.monotonic() >= next_capacity:
-                            next_capacity = time.monotonic() + .2
-                            try:
-                                jobs.capacity()
-                            except JobError as error:
-                                raise ConversionError(error.code, error.message) from None
-                        return stopping or jobs.cancelled(row)
-                    with service_attempt(jobs, row):
-                        convert(json.loads(row['source'])['url'], attempt / 'result',
-                            progress=lambda stage: jobs.stage(row, stage) if stage != 'complete' else None,
-                            cancel=cancelled, limits={**(limits or {}), 'temp_bytes': jobs.job_temp_bytes})
-                    validate_result(jobs, row)
-                    summary = retain_delivery(jobs, row)
-                    jobs.capacity()
-                    if jobs.finishing(row, summary):
-                        jobs.settle(row, 'complete')
-                    else:
-                        jobs.discard(row)
-                        jobs.settle(row, 'cancelled')
-                except ConversionError as error:
-                    cancelled = jobs.cancelled(row)
-                    jobs.discard(row)
-                    if cancelled:
-                        jobs.settle(row, 'cancelled')
-                    elif error.code == 'cancelled':
-                        jobs.settle(row, 'interrupted', 'interrupted', '处理进程已中断，可显式重试。')
-                        stopping = True
-                    else:
-                        message = str(error).replace('请提供清晰的本地视频。', '请检查公开视频是否可匿名访问，或更换清晰、完整的纵向滚谱。')
-                        jobs.settle(row, 'failed', error.code, message)
-                except Exception:
-                    # Never expose paths, network output, database or OS exception text.
-                    # A lost commit acknowledgement may already have made finishing durable.
-                    if jobs.publishing(row):
-                        raise JobError('publication_pending', '发布决定已保存，重启后恢复。') from None
-                    jobs.discard(row)
-                    jobs.settle(row, 'failed', 'conversion_failed', '转换失败，可检查来源后重试。')
-                jobs.recover_staging()
-                jobs.cleanup()
-                if once:
-                    return 0
+                    while not stopping.is_set() or pending:
+                        done = {future for future in pending if future.done()}
+                        pending -= done
+                        for future in done:
+                            future.result()  # Lost publication acknowledgements stop the scheduler.
+                        try:
+                            jobs.cleanup()
+                            while not stopping.is_set() and len(pending) < concurrency:
+                                row = jobs.claim(concurrency=concurrency)
+                                if row is None:
+                                    break
+                                pending.add(pool.submit(execute_attempt, jobs, row, stopping, descriptor, limits))
+                        except JobError as error:
+                            if error.code != 'service_busy':
+                                raise
+                            # A competing HTTP write is transient; never stop
+                            # all running conversions just because polling was busy.
+                        if pending or not stopping.is_set():
+                            time.sleep(poll_interval)
+                finally:
+                    stopping.set()
     finally:
         for signum, handler in previous.items():
             signal.signal(signum, handler)
@@ -177,8 +206,9 @@ def run(jobs, *, once=False, poll_interval=.25, limits=None):
 
 
 def main(argv=None):
-    parser = PublicParser(prog='drum-score-worker', description='串行处理匿名网站持久队列。')
+    parser = PublicParser(prog='drum-score-worker', description='有界并行处理匿名网站持久队列。')
     parser.add_argument('--data-root', required=True)
+    parser.add_argument('--concurrency', type=int, choices=range(1, 9), default=1, help='同时执行的转换任务数，1至8，默认1')
     parser.add_argument('--once', action='store_true', help='处理至多一个任务后退出')
     parser.add_argument('--poll-interval', type=float, default=.25)
     from .service_limits import add_storage_arguments, storage_options, add_conversion_arguments, conversion_options
@@ -188,7 +218,7 @@ def main(argv=None):
     if not .01 <= args.poll_interval <= 60:
         parser.error('poll-interval 必须在 0.01 至 60 秒之间')
     try:
-        return run(Jobs(args.data_root, **storage_options(args)), once=args.once, poll_interval=args.poll_interval, limits=conversion_options(args))
+        return run(Jobs(args.data_root, **storage_options(args)), once=args.once, poll_interval=args.poll_interval, limits=conversion_options(args), concurrency=args.concurrency)
     except (JobError, OSError, ValueError, ConversionError):
         return 2
 

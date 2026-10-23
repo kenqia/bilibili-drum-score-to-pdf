@@ -276,7 +276,7 @@ class Maintenance(unittest.TestCase):
             else:
                 with sqlite3.connect(database) as db:
                     db.execute(
-                        "PRAGMA user_version=2"
+                        "PRAGMA user_version=999"
                         if variant == "schema"
                         else ("CREATE TABLE sqliteXextra(value TEXT)" if variant == "sqlite-prefix" else "CREATE VIEW unknown AS SELECT 1")
                     )
