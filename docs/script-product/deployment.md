@@ -197,4 +197,6 @@ runuser -u drum-score -- /srv/drum-score/current/venv/bin/drum-score-maintenance
 
 ## 可选的预算并行配置
 
-默认 unit 保留一路和原资源预算。2026-10-23 的显式并行候选位于 `deploy/systemd/profiles/`，需要先核验新 wheel、完成 v1 快照到 v2 新根的恢复，再安装匹配的 web/worker drop-in。它扩大共享内存与进程数上限，保留总 CPU、Swap、磁盘和任务期限保护。不能只把 `--concurrency` 改为 8，也不能将 profile 直接用于旧库。配置值、私有验收端口、公开步骤和回滚见[并行切换候选](parallel-rollout.md)。当前正式服务未安装这些 profile。
+默认 unit 保留一路和原资源预算。2026-10-23 的显式并行配置位于 `deploy/systemd/profiles/`，对应当时 v2 数据根和发行；当时已获授权的上线结果见[正式切换记录](../experiments/2026-10-23-parallel-deployment.md)。配置保留总 CPU、Swap、磁盘和任务期限保护，不能只把 `--concurrency` 改为 8。
+
+当前防滥用源码要求 v3，不能直接打开 profile 中的旧 v2 数据根，也不能仅替换 wheel。新的生产切换尚未执行，需另行授权停服快照、显式 `upgrade-v2` 到新根和匹配的 unit 路径变更。先保留现有发行、数据根、配置和核验快照，按[维护指南](maintenance.md)升级，在隔离端口验证额度、暂停、原结果与期限后再开放。旧并行切换清单不能代替本轮 v3 切换授权。

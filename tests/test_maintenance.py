@@ -34,7 +34,7 @@ class Maintenance(unittest.TestCase):
         self.temp.cleanup()
 
     def invoke(self, operation, *args):
-        defaults = () if "--min-free-mib" in args else ("--min-free-mib", "1")
+        defaults = () if "--min-free-mib" in args or operation in ('pause-submissions', 'resume-submissions') else ("--min-free-mib", "1")
         return subprocess.run(
             [
                 sys.executable,
@@ -73,6 +73,122 @@ class Maintenance(unittest.TestCase):
         self.assertEqual(restored.view(task["id"], task["capability"]), before)
         self.assertFalse((restored.root / "worker.lock").exists())
         self.assertEqual(self.jobs.view(task["id"], task["capability"]), before)
+
+    def test_snapshot_preserves_quota_and_pause_and_control_refuses_unknown_roots(self):
+        from unittest.mock import patch
+        from drum_score.jobs import JobError
+        with patch('drum_score.jobs.time.time', return_value=1800000000):
+            for _ in range(10):
+                task = self.jobs.enqueue('https://www.bilibili.com/video/BV1rH4y1R7Rk', '192.0.2.1')
+                self.jobs.cancel(task['id'], task['capability'])
+            result = self.invoke('pause-submissions', '--data-root', self.data)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            backup = self.root / 'paused-backup'
+            self.assertEqual(self.invoke('backup', '--data-root', self.data, '--output', backup,
+                                        '--services-stopped').returncode, 0)
+            restored = self.root / 'restored'
+            self.assertEqual(self.invoke('restore', '--backup-root', backup, '--output', restored).returncode, 0)
+            recovered = Jobs(restored)
+            with self.assertRaises(JobError) as caught:
+                recovered.enqueue('https://www.bilibili.com/video/BV1rH4y1R7Rk', '192.0.2.2')
+            self.assertEqual(caught.exception.code, 'submissions_paused')
+            self.assertEqual(self.invoke('resume-submissions', '--data-root', restored).returncode, 0)
+            with self.assertRaises(JobError) as caught:
+                recovered.enqueue('https://www.bilibili.com/video/BV1rH4y1R7Rk', '192.0.2.1')
+            self.assertEqual(caught.exception.code, 'submission_limit')
+            self.assertEqual(caught.exception.retry_after_seconds, 600)
+        for operation in ('pause-submissions', 'resume-submissions'):
+            missing = self.root / 'missing'
+            result = self.invoke(operation, '--data-root', missing)
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse(missing.exists())
+            # Operational controls have no backup resource arguments.
+
+    def test_emergency_pause_works_when_database_exceeds_snapshot_size_limit(self):
+        from drum_score.jobs import JobError
+        from drum_score.maintenance import DB_LIMIT
+        # Free SQLite pages from normal growth are retained in the file.
+        with sqlite3.connect(self.jobs.database) as db:
+            db.execute('CREATE TABLE synthetic_padding(value BLOB)')
+            db.execute('INSERT INTO synthetic_padding VALUES(zeroblob(?))', (DB_LIMIT,))
+            db.execute('DROP TABLE synthetic_padding')
+        self.assertGreater(self.jobs.database.stat().st_size, DB_LIMIT)
+        paused = self.invoke('pause-submissions', '--data-root', self.data)
+        self.assertEqual(paused.returncode, 0, paused.stdout + paused.stderr)
+        with self.assertRaises(JobError) as caught:
+            self.jobs.enqueue('https://www.bilibili.com/video/BV1rH4y1R7Rk', '192.0.2.1')
+        self.assertEqual(caught.exception.code, 'submissions_paused')
+        self.assertEqual(self.invoke('resume-submissions', '--data-root', self.data).returncode, 0)
+        task = self.jobs.enqueue('https://www.bilibili.com/video/BV1rH4y1R7Rk', '192.0.2.1')
+        self.assertEqual(self.jobs.view(task['id'], task['capability'])['state'], 'queued')
+
+    def test_invalid_submission_events_are_refused_before_backup_or_restore_publication(self):
+        import hashlib
+        saved = self.root / 'valid-events-snapshot'
+        self.assertEqual(self.invoke('backup', '--data-root', self.data, '--output', saved,
+                                    '--services-stopped').returncode, 0)
+        for index, (ip_key, admitted_at) in enumerate((('a' * 64, 'SYNTHETIC_TEXT'),
+            ('a' * 64, float('inf')), ('a' * 64, -float('inf')), ('bad-ip-key', 1800000000))):
+            with self.subTest(index=index):
+                changed = self.root / f'invalid-event-{index}'
+                shutil.copytree(saved, changed)
+                with sqlite3.connect(changed / 'tasks.sqlite3') as db:
+                    db.execute('INSERT INTO submission_events VALUES(?,?)', (ip_key, admitted_at))
+                manifest = json.loads((changed / 'snapshot.json').read_text())
+                entry = next(item for item in manifest['files'] if item['path'] == 'tasks.sqlite3')
+                entry.update(bytes=(changed / 'tasks.sqlite3').stat().st_size,
+                             sha256=hashlib.sha256((changed / 'tasks.sqlite3').read_bytes()).hexdigest())
+                (changed / 'snapshot.json').write_text(json.dumps(manifest))
+                before = {p.name: p.read_bytes() for p in changed.iterdir()}
+                for operation, options in (
+                    ('verify', ('--backup-root', changed)),
+                    ('restore', ('--backup-root', changed, '--output', self.root / f'restored-{index}')),
+                    ('backup', ('--data-root', changed, '--output', self.root / f'backup-{index}', '--services-stopped'))):
+                    self.assertEqual(self.invoke(operation, *options).returncode, 2)
+                self.assertFalse((self.root / f'restored-{index}').exists())
+                self.assertFalse((self.root / f'backup-{index}').exists())
+                self.assertEqual({p.name: p.read_bytes() for p in changed.iterdir()}, before)
+
+    def test_explicit_v2_upgrade_preserves_task_deadlines_and_source_snapshot(self):
+        import hashlib
+        from drum_score.schema import SCHEMA_VERSION
+        task = self.jobs.enqueue('https://www.bilibili.com/video/BV1rH4y1R7Rk', '192.0.2.1')
+        self.jobs.cancel(task['id'], task['capability'])
+        before = self.jobs.view(task['id'], task['capability'])
+        saved = self.root / 'v2-snapshot'
+        self.assertEqual(self.invoke('backup', '--data-root', self.data, '--output', saved,
+                                    '--services-stopped').returncode, 0)
+        with sqlite3.connect(saved / 'tasks.sqlite3') as db:
+            db.execute('DROP TABLE submission_events')
+            db.execute('DROP TABLE submission_control')
+            db.execute('DROP INDEX task_expiry')
+            db.execute('PRAGMA user_version=2')
+        manifest = json.loads((saved / 'snapshot.json').read_text())
+        manifest['schema'] = 2
+        entry = next(item for item in manifest['files'] if item['path'] == 'tasks.sqlite3')
+        entry.update(bytes=(saved / 'tasks.sqlite3').stat().st_size,
+                     sha256=hashlib.sha256((saved / 'tasks.sqlite3').read_bytes()).hexdigest())
+        (saved / 'snapshot.json').write_text(json.dumps(manifest))
+        source = {p.name: p.read_bytes() for p in saved.iterdir()}
+        with self.assertRaises(ValueError):
+            Jobs(saved)
+        output = self.root / 'upgraded'
+        result = self.invoke('upgrade-v2', '--backup-root', saved, '--output', output)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)['schema'], SCHEMA_VERSION)
+        self.assertEqual(json.loads(result.stdout)['source_schema'], 2)
+        recovered = Jobs(output)
+        self.assertEqual(recovered.view(task['id'], task['capability']), before)
+        self.assertEqual({p.name: p.read_bytes() for p in saved.iterdir()}, source)
+        self.assertEqual(self.invoke('upgrade-v2', '--backup-root', saved, '--output', output).returncode, 2)
+        with sqlite3.connect(saved / 'tasks.sqlite3') as db:
+            db.execute('CREATE TABLE unknown(value TEXT)')
+        entry.update(bytes=(saved / 'tasks.sqlite3').stat().st_size,
+                     sha256=hashlib.sha256((saved / 'tasks.sqlite3').read_bytes()).hexdigest())
+        (saved / 'snapshot.json').write_text(json.dumps(manifest))
+        invalid = self.root / 'invalid-upgrade'
+        self.assertEqual(self.invoke('upgrade-v2', '--backup-root', saved, '--output', invalid).returncode, 2)
+        self.assertFalse(invalid.exists())
 
     def test_complete_pages_and_interrupted_state_restore_with_original_expiry(self):
         from score_fixtures import score_frame, video_from_image

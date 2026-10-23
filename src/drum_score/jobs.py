@@ -18,12 +18,14 @@ from .public_video import InputError, video_origin
 
 UNFINISHED = ('queued', 'running', 'cancelling', 'finishing')
 ACTIVE = ('running', 'cancelling', 'finishing')
+IDENTITY_RETENTION_SECONDS = 30 * 86400
 from .schema import SCHEMA_VERSION, SCHEMA_STATEMENTS, validate_schema
 
 
 class JobError(Exception):
-    def __init__(self, code, message, status=409):
+    def __init__(self, code, message, status=409, *, retry_after_seconds=None):
         self.code, self.message, self.status = code, message, status
+        self.retry_after_seconds = retry_after_seconds
         super().__init__(message)
 
 
@@ -70,6 +72,7 @@ class Jobs:
             if not tables:
                 for statement in SCHEMA_STATEMENTS:
                     db.execute(statement)
+                db.execute('INSERT INTO submission_control VALUES(1,0)')
                 db.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
             else:
                 validate_schema(db)
@@ -110,7 +113,19 @@ class Jobs:
         if row['state'] == 'expired' or (row['expires_at'] is not None and row['expires_at'] <= time.time()):
             raise JobError('expired', '结果已到期，请重新提交来源链接。', 410)
 
-    def admit(self, db, ip_key):
+    def admit(self, db, ip_key, now):
+        control = db.execute('SELECT paused FROM submission_control WHERE id=1').fetchone()
+        if control is None or control['paused'] != 0:
+            raise JobError('submissions_paused', '服务暂时停止接收新任务，请稍后再试。已有任务和结果访问不受影响。', 503)
+        wait = 0
+        for seconds, count in ((600, 10), (86400, 100)):
+            event = db.execute('SELECT admitted_at FROM submission_events WHERE ip_key=? AND admitted_at>? ORDER BY admitted_at DESC LIMIT 1 OFFSET ?',
+                (ip_key, now - seconds, count - 1)).fetchone()
+            if event:
+                wait = max(wait, math.ceil(event['admitted_at'] + seconds - now))
+        if wait:
+            raise JobError('submission_limit', f'此网络提交次数已达上限，请在 {wait} 秒后重试。', 429,
+                retry_after_seconds=wait)
         if db.execute("SELECT 1 FROM tasks WHERE ip_key=? AND state IN ('queued','running','cancelling','finishing')", (ip_key,)).fetchone():
             raise JobError('ip_busy', '此网络已有一个未完成任务，请等待或取消后重试。', 429)
         if db.execute("SELECT COUNT(*) FROM tasks WHERE state='queued'").fetchone()[0] >= 10:
@@ -123,12 +138,14 @@ class Jobs:
         except (InputError, TypeError, AttributeError):
             raise JobError('invalid_bilibili_url', '请提供公开 HTTPS B站 BV 链接或 b23.tv 短链接，分 P 使用单个正整数 p。', 422) from None
         task, capability = secrets.token_urlsafe(24), secrets.token_urlsafe(32)
-        now = time.time()
         with self.transaction() as db:
+            now = time.time()
             ip_key = sha256(ip.encode()).hexdigest()
-            self.admit(db, ip_key)
+            self.admit(db, ip_key, now)
             db.execute('INSERT INTO tasks(id,capability_hash,source,ip_key,state,stage,created_at,queued_at) VALUES(?,?,?,?,?,?,?,?)',
                 (task, sha256(capability.encode()).hexdigest(), json.dumps(source), ip_key, 'queued', 'queued', now, now))
+            db.execute('DELETE FROM submission_events WHERE admitted_at<=?', (now - 86400,))
+            db.execute('INSERT INTO submission_events VALUES(?,?)', (ip_key, now))
         return {'id': task, 'capability': capability, 'link': f'/task/{task}#{capability}'}
 
     def view(self, task, capability):
@@ -159,9 +176,12 @@ class Jobs:
             if row['state'] not in ('failed', 'cancelled', 'interrupted'):
                 raise JobError('not_retryable', '只有失败、取消或中断的任务可以重试。')
             ip_key = sha256(ip.encode()).hexdigest()
-            self.admit(db, ip_key)
+            now = time.time()
+            self.admit(db, ip_key, now)
             db.execute("UPDATE tasks SET state='queued',stage='queued',ip_key=?,queued_at=?,attempt=NULL,summary=NULL,error_code=NULL,error_message=NULL,completed_at=NULL,expires_at=NULL WHERE id=?",
-                (ip_key, time.time(), task))
+                (ip_key, now, task))
+            db.execute('DELETE FROM submission_events WHERE admitted_at<=?', (now - 86400,))
+            db.execute('INSERT INTO submission_events VALUES(?,?)', (ip_key, now))
         return self.view(task, capability)
 
     def attempt_root(self, task, attempt):
@@ -459,9 +479,10 @@ class Jobs:
         # Expiry/auth/open share SQLite serialization. Existing FDs survive unlink.
         now = time.time()
         with self.transaction() as db:
+            db.execute('DELETE FROM submission_events WHERE admitted_at<=?', (now - 86400,))
             db.execute("""UPDATE tasks SET state='expired',stage='expired',summary=NULL,
                 error_code=NULL,error_message=NULL,source='{}',ip_key=''
-                WHERE expires_at<=? AND state NOT IN ('queued','running','cancelling','finishing')""", (now,))
+                WHERE expires_at<=? AND state NOT IN ('queued','running','cancelling','finishing','expired')""", (now,))
             managed = [dict(row) for row in db.execute("""SELECT m.* FROM managed_attempts m
                 JOIN tasks t ON m.task=t.id WHERE t.state='expired' OR
                 (t.state IN ('failed','cancelled','interrupted') OR t.attempt<>m.attempt)""")]
@@ -474,6 +495,13 @@ class Jobs:
                     db.execute('UPDATE tasks SET error_code=NULL,error_message=NULL WHERE id=?', (row['id'],))
         for item in managed:
             self.remove_files(item, json.loads(item['files']))
+        # Attempt normal identity-checked cleanup before forgetting old identities.
+        # Unknown or replaced files remain on disk and still count toward capacity.
+        with self.transaction() as db:
+            cutoff = now - IDENTITY_RETENTION_SECONDS
+            db.execute("""DELETE FROM managed_attempts WHERE task IN
+                (SELECT id FROM tasks WHERE state='expired' AND expires_at<=?)""", (cutoff,))
+            db.execute("DELETE FROM tasks WHERE state='expired' AND expires_at<=?", (cutoff,))
 
     def claim(self, *, concurrency=1):
         if isinstance(concurrency, bool) or not isinstance(concurrency, int) or not 1 <= concurrency <= 8:

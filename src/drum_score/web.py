@@ -89,7 +89,12 @@ def create_app(data_root, *, trusted_proxies=(), retention_seconds=86400, **stor
 
     @app.exception_handler(JobError)
     async def job_error(request, error):
-        return JSONResponse({'error': {'code': error.code, 'message': error.message}}, status_code=error.status)
+        body = {'code': error.code, 'message': error.message}
+        headers = {}
+        if error.retry_after_seconds is not None:
+            body['retry_after_seconds'] = error.retry_after_seconds
+            headers['Retry-After'] = str(error.retry_after_seconds)
+        return JSONResponse({'error': body}, status_code=error.status, headers=headers)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request, error):

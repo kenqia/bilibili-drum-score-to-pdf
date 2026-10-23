@@ -116,6 +116,20 @@ class ProductLifecycle(unittest.TestCase):
             self.assertEqual(caught.exception.code, 'expired')
         os.close(descriptor)
 
+    def test_paused_submissions_do_not_block_completed_downloads_or_change_expiry(self):
+        from drum_score.maintenance import set_submissions_paused
+        from fastapi.testclient import TestClient
+        from drum_score.web import create_app
+        task, _, _ = self.complete()
+        before = self.jobs.view(task['id'], task['capability'])
+        self.assertTrue(set_submissions_paused(self.jobs.root, paused=True)['paused'])
+        with TestClient(create_app(self.jobs.root), client=('192.0.2.2', 2000)) as client:
+            auth = {'Authorization': 'Bearer ' + task['capability']}
+            self.assertEqual(client.get('/api/tasks/' + task['id'], headers=auth).json(), before)
+            self.assertEqual(client.get('/api/tasks/' + task['id'] + '/pdf', headers=auth).content, b'%PDF-synthetic')
+            self.assertEqual(client.get('/api/tasks/' + task['id'] + '/pages/1', headers=auth).content, b'synthetic page')
+            self.assertEqual(client.post('/api/tasks', json={'url': LINK}).status_code, 503)
+
     def test_cleanup_preserves_unknown_files_replaced_inodes_and_external_symlinks(self):
         created, row, result = self.complete()
         (result / 'unknown.txt').write_text('user sentinel')

@@ -112,7 +112,7 @@ python3.12 -m venv .venv
 处理 B站链接还需要固定版本的 BBDownNext 解析器。完整说明：
 
 - [安装指南](docs/install.md) · [转换参数](docs/script-product/conversion.md)
-- [网站运行](docs/script-product/website.md) · [部署](docs/script-product/deployment.md) · [备份与恢复](docs/script-product/maintenance.md)
+- [网站运行](docs/script-product/website.md) · [防滥用规则](docs/script-product/abuse-prevention.md) · [部署](docs/script-product/deployment.md) · [备份与恢复](docs/script-product/maintenance.md)
 - [Skill 安装](docs/skill-install.md) · [Skill 验证](docs/skill-verification.md)
 - [测试与验证](docs/verification.md) · [全部文档](docs/README.md)
 

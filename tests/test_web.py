@@ -58,6 +58,23 @@ class WebsiteHTTP(unittest.TestCase):
                     self.assertEqual(bad.headers['cache-control'], 'no-store')
         self.assertNotIn(created['capability'], state.text)
 
+    def test_cancel_does_not_refund_rolling_quota_and_restart_does_not_reset_it(self):
+        with patch('drum_score.jobs.time.time', return_value=1800000000) as clock:
+            for _ in range(10):
+                task, headers, _ = self.submit()
+                self.assertEqual(self.client.post('/api/tasks/' + task + '/cancel', headers=headers).status_code, 200)
+            with TestClient(create_app(self.root), client=('203.0.113.1', 1234)) as restarted:
+                blocked = restarted.post('/api/tasks', json={'url': LINK})
+                self.assertEqual(blocked.status_code, 429)
+                self.assertEqual(blocked.json()['error']['code'], 'submission_limit')
+                self.assertEqual(blocked.headers['retry-after'], '600')
+                self.assertEqual(blocked.json()['error']['retry_after_seconds'], 600)
+                clock.return_value += 599
+                blocked = restarted.post('/api/tasks', json={'url': LINK})
+                self.assertEqual(blocked.headers['retry-after'], '1')
+                clock.return_value += 1
+                self.submit(restarted)
+
     def test_atomic_queue_limit_and_shared_network_limit_ignore_forged_proxy(self):
         def submit(index):
             with TestClient(self.app, client=(f'203.0.113.{index + 1}', 1000)) as client:

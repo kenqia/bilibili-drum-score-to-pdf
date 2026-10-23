@@ -48,7 +48,9 @@ HTTP 接受公开 HTTPS BV 链接或 b23.tv 短链接，只做本地格式校验
 
 服务暂存根在启动子进程前登记 ownership marker 与根 device/inode，整服务树终止后只恢复清理身份匹配的确切私有根。未知根、attempt 外文件和替换 marker 保留。备份/恢复在排他发布前 fsync 所有嵌套目录，核验拒绝未知 schema、额外文件、链接与特殊文件。具体命令见[维护指南](script-product/maintenance.md)。
 
-服务 schema 显式使用 SQLite `user_version=2`，拒绝旧库及未知版本，v1 仅通过显式 `upgrade-v1` 核验备份并升级到新目录，见[维护指南](script-product/maintenance.md)。`managed_attempts` 记录 task/attempt、受管根 device/inode，以及生成文件的相对路径、device/inode/ctime。清理从数据根经 no-follow 目录 FD 遍历，只 unlink 身份仍匹配的文件，未知文件和替换物保留。目录只在空时移除。恢复到新目录必须先核验备份清单/hash，再登记工具自己新建的文件身份；数据库旧 inode/ctime 不可直接当作新副本所有权。
+服务 schema 显式使用 SQLite `user_version=3`，拒绝自动打开旧库及未知版本。v1、v2 快照分别通过显式 `upgrade-v1`、`upgrade-v2` 核验后升级到新目录，见[维护指南](script-product/maintenance.md)。`managed_attempts` 记录 task/attempt、受管根 device/inode，以及生成文件的相对路径、device/inode/ctime。清理从数据根经 no-follow 目录 FD 遍历，只 unlink 身份仍匹配的文件，未知文件和替换物保留。目录只在空时移除。恢复到新目录必须先核验备份清单/hash，再登记工具自己新建的文件身份；数据库旧 inode/ctime 不可直接当作新副本所有权。
+
+`submission_events` 保存成功入队的 IP 摘要和时间，提交、重试、额度检查在同一短写事务中完成。最近十分钟限十次，最近二十四小时限一百次，取消不退次数，不设置全站每日额度。过期计数在成功入队及 worker 清理时删除；重启和同版本备份恢复保留计数。`submission_control` 保存运营者暂停接收新任务的状态，暂停不影响领取既有队列和访问结果。任务身份在原到期时刻后再保留三十天，正常受管清理后删除身份及其受管登记，未知残留文件保持原样。具体契约见[防滥用方案](script-product/abuse-prevention.md)。
 
 到期状态与认证打开文件共用事务序列。到期先拒绝新访问，再物理 unlink，Linux 已打开 FD 可继续读完。worker 每次轮询及启动恢复后执行清理。结果默认 24 小时，失败/取消/中断默认 1 小时；仅存脱敏错误码和信息，错误文字全局限额 8MiB。到期行只保留用于到期响应的任务身份，不保留来源、结果摘要或诊断文字。
 

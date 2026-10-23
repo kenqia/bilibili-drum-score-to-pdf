@@ -16,7 +16,7 @@ import time
 
 from .arguments import PublicParser
 from .public_video import video_origin
-from .schema import SCHEMA_VERSION, validate_schema
+from .schema import SCHEMA_VERSION, ABUSE_STATEMENTS, validate_schema
 from .owned_tree import remove_owned_tree
 
 FORMAT = 1
@@ -220,7 +220,7 @@ class Tree:
         return f"/proc/self/fd/{self.fd}/tasks.sqlite3"
 
 
-def connect(tree, budget, *, writable=False):
+def connect(tree, budget, *, writable=False, snapshot_limit=True):
     budget.check()
     for suffix in ("-wal", "-shm", "-journal"):
         try:
@@ -230,7 +230,7 @@ def connect(tree, budget, *, writable=False):
         else:
             os.close(fd)
     with os.fdopen(tree.open("tasks.sqlite3"), "rb") as check:
-        if os.fstat(check.fileno()).st_size > DB_LIMIT:
+        if snapshot_limit and os.fstat(check.fileno()).st_size > DB_LIMIT:
             raise MaintenanceError("maintenance_limit")
     db = sqlite3.connect(
         "file:" + tree.database() + "?mode=" + ("rw" if writable else "ro"),
@@ -256,6 +256,14 @@ def validate(db, budget, *, schema_version=SCHEMA_VERSION):
         raise MaintenanceError("maintenance_limit")
     if db.execute("PRAGMA integrity_check(1)").fetchall()[0][0] != "ok":
         raise MaintenanceError("invalid_snapshot")
+    if schema_version == 3:
+        for event in db.execute('SELECT ip_key,admitted_at FROM submission_events'):
+            budget.check()
+            if (not isinstance(event['ip_key'], str)
+                or not re.fullmatch(r'[0-9a-f]{64}', event['ip_key'])
+                or not isinstance(event['admitted_at'], (int, float))
+                or not math.isfinite(event['admitted_at'])):
+                raise MaintenanceError('invalid_snapshot')
     rows = [
         dict(row)
         for row in db.execute("SELECT * FROM tasks LIMIT ?", (budget.max_files + 1,))
@@ -781,17 +789,21 @@ def restore(
     output,
     *,
     upgrade_from_v1=False,
+    upgrade_from_v2=False,
     timeout=60,
     max_bytes=4096 * 1024**2,
     max_files=8192,
     min_free_bytes=2048 * 1024**2,
 ):
+    if upgrade_from_v1 and upgrade_from_v2:
+        raise MaintenanceError('invalid_request')
+    source_version = 1 if upgrade_from_v1 else 2 if upgrade_from_v2 else SCHEMA_VERSION
     budget = Budget(timeout, max_bytes, max_files, min_free_bytes)
     if Path(backup_root).name.startswith(".drum-maintenance-"):
         raise MaintenanceError("incomplete_snapshot")
     source = Tree(backup_root)
     try:
-        files = verified_files(source, budget, schema_version=1 if upgrade_from_v1 else SCHEMA_VERSION)
+        files = verified_files(source, budget, schema_version=source_version)
         with destination(source, output, budget) as target:
             budget.check(sum(entry["bytes"] for entry in files), len(files), target.fd)
             for entry in files:
@@ -799,12 +811,16 @@ def restore(
                     raise MaintenanceError("source_changed")
             db = connect(target, budget, writable=True)
             try:
-                if upgrade_from_v1:
+                if source_version != SCHEMA_VERSION:
                     # Only mutate the private, fully verified destination copy.
                     db.execute("BEGIN IMMEDIATE")
                     try:
-                        validate_schema(db, version=1)
-                        db.execute("DROP INDEX single_active")
+                        validate_schema(db, version=source_version)
+                        if source_version == 1:
+                            db.execute("DROP INDEX single_active")
+                        for statement in ABUSE_STATEMENTS:
+                            db.execute(statement)
+                        db.execute('INSERT INTO submission_control VALUES(1,0)')
                         db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
                         validate_schema(db)
                         db.commit()
@@ -818,13 +834,33 @@ def restore(
                 db.close()
             with os.fdopen(target.open("tasks.sqlite3"), "rb") as stream:
                 os.fsync(stream.fileno())
-        if upgrade_from_v1:
+        if source_version != SCHEMA_VERSION:
             # The copied SQLite bytes changed; report the published version,
             # never present old snapshot hashes as hashes of the upgraded DB.
-            return dict(status="complete", operation="upgrade-v1", schema=SCHEMA_VERSION,
-                        source_schema=1, source_unchanged=True)
+            return dict(status="complete", operation=f"upgrade-v{source_version}", schema=SCHEMA_VERSION,
+                        source_schema=source_version, source_unchanged=True)
         return report("restore", files)
     finally:
+        source.close()
+
+
+def set_submissions_paused(data_root, *, paused):
+    """Change admission under the same SQLite write barrier used by submissions."""
+    budget = Budget(10, DB_LIMIT, 1, 1)
+    source = Tree(data_root)
+    db = None
+    try:
+        # Admission control must remain available when growth exceeds the
+        # offline snapshot size limit. Keep path, schema and time bounds.
+        db = connect(source, budget, writable=True, snapshot_limit=False)
+        db.execute('BEGIN IMMEDIATE')
+        validate_schema(db)
+        db.execute('UPDATE submission_control SET paused=? WHERE id=1', (int(paused),))
+        db.commit()
+        return dict(status='complete', operation='pause-submissions' if paused else 'resume-submissions', paused=paused)
+    finally:
+        if db is not None:
+            db.close()
         source.close()
 
 
@@ -834,7 +870,10 @@ def main(argv=None):
         description="停服窗口中的完整备份、只读核验与恢复到新目录。",
     )
     commands = parser.add_subparsers(dest="operation", required=True)
-    for name in ("backup", "verify", "restore", "upgrade-v1"):
+    for name in ("pause-submissions", "resume-submissions"):
+        child = commands.add_parser(name)
+        child.add_argument('--data-root', required=True)
+    for name in ("backup", "verify", "restore", "upgrade-v1", "upgrade-v2"):
         child = commands.add_parser(name)
         child.add_argument("--timeout", type=float, default=60)
         child.add_argument("--max-mib", type=float, default=4096)
@@ -849,13 +888,15 @@ def main(argv=None):
             child.add_argument("--output", required=True)
     args = parser.parse_args(argv)
     try:
-        options = dict(
+        options = {} if args.operation in ('pause-submissions', 'resume-submissions') else dict(
             timeout=args.timeout,
             max_bytes=args.max_mib * 1024**2,
             max_files=args.max_files,
             min_free_bytes=args.min_free_mib * 1024**2,
         )
-        if args.operation == "backup":
+        if args.operation in ('pause-submissions', 'resume-submissions'):
+            result = set_submissions_paused(args.data_root, paused=args.operation == 'pause-submissions')
+        elif args.operation == "backup":
             result = backup(
                 args.data_root,
                 args.output,
@@ -865,7 +906,8 @@ def main(argv=None):
         elif args.operation == "verify":
             result = verify(args.backup_root, **options)
         else:
-            result = restore(args.backup_root, args.output, upgrade_from_v1=args.operation == "upgrade-v1", **options)
+            result = restore(args.backup_root, args.output, upgrade_from_v1=args.operation == "upgrade-v1",
+                             upgrade_from_v2=args.operation == "upgrade-v2", **options)
     except Exception as error:
         code = (
             error.code if isinstance(error, MaintenanceError) else "maintenance_failed"
