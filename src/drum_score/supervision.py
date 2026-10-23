@@ -95,8 +95,46 @@ def _processes(root_pid, root_identity=None):
         records.get(pid, (0, 0, '', 0))[1] for pid in descendants)
 
 
+def _stat(pid):
+    try:
+        return (Path('/proc') / str(pid) / 'stat').read_text().rsplit(') ', 1)[1].split()
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _kill_groups(tracked):
+    """SIGKILL each tracked group leader's whole group and track its members.
+
+    A leader killed on its own cannot run its group cleanup, which would
+    orphan members it started itself, such as a downloader's child process.
+    """
+    groups = set()
+    for pid, start_time in list(tracked.items()):
+        fields = _stat(pid)
+        if fields and fields[19] == start_time and fields[2] == str(pid):
+            groups.add(pid)
+    if not groups:
+        return
+    for entry in Path('/proc').glob('[0-9]*'):
+        fields = _stat(entry.name)
+        if fields and int(fields[2]) in groups:
+            tracked.setdefault(int(entry.name), fields[19])
+    for group in groups:
+        try:
+            os.killpg(group, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
 def _stop(process, tracked, *, root_identity=None, wait_until_stopped=False):
     same_root = root_identity is None or _identity(process.pid) == root_identity
+    if same_root and process.pid and Path('/proc').is_dir():
+        # The sampling loop may not have seen processes started just before
+        # cancellation. Record the live tree before the root stops existing.
+        descendants, _ = _processes(process.pid, root_identity)
+        for pid, identity_value in descendants.items():
+            tracked.setdefault(pid, identity_value)
+        _kill_groups(tracked)
     if same_root and process.is_alive() and hasattr(os, 'killpg') and process.pid:
         try:
             os.killpg(process.pid, signal.SIGKILL)
