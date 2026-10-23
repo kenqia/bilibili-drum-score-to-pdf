@@ -7,7 +7,7 @@ import signal
 import sys
 import time
 
-from .supervision import _processes
+from .supervision import _kill_groups, _processes
 
 
 def main():
@@ -26,6 +26,10 @@ def main():
                 if os.read(descriptor, 1):
                     return 0
                 break
+        descendants, _ = _processes(worker, root_identity)
+        for pid, identity_value in descendants.items():
+            tracked.setdefault(pid, identity_value)
+        _kill_groups(tracked)
         deadline = time.monotonic() + 2
         while True:
             descendants, _ = _processes(worker, root_identity)
