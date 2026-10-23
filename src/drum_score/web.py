@@ -172,7 +172,8 @@ def create_app(data_root, *, trusted_proxies=(), retention_seconds=86400, **stor
 
     @app.get('/assets/{name}')
     def asset(name: str):
-        types = {'app.js': 'text/javascript', 'style.css': 'text/css'}
+        types = {'app.js': 'text/javascript', 'style.css': 'text/css', 'icon.svg': 'image/svg+xml',
+                 'example-video.jpg': 'image/jpeg', 'example-page.jpg': 'image/jpeg'}
         if name not in types:
             raise JobError('not_found', '资源不存在。', 404)
         return Response((assets / name).read_bytes(), media_type=types[name])

@@ -27,4 +27,4 @@ packages = ["drum_score"]
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
-drum_score = ["static/*.html", "static/*.css", "static/*.js"]
+drum_score = ["static/*.html", "static/*.css", "static/*.js", "static/*.svg", "static/*.jpg"]

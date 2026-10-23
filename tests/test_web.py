@@ -129,6 +129,11 @@ class WebsiteHTTP(unittest.TestCase):
             self.assertEqual(response.headers['referrer-policy'], 'no-referrer')
         self.assertEqual(self.client.get('/assets/app.js').status_code, 200)
         self.assertEqual(self.client.get('/assets/style.css').status_code, 200)
+        for name, kind in (('icon.svg', 'image/svg+xml'), ('example-video.jpg', 'image/jpeg'),
+                           ('example-page.jpg', 'image/jpeg')):
+            response = self.client.get('/assets/' + name)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.headers['content-type'], kind)
         self.assertEqual(self.client.get('/assets/../worker.py').status_code, 404)
         self.assertEqual(self.client.get('/api/tasks').status_code, 405)
 
