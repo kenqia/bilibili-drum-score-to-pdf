@@ -194,3 +194,7 @@ runuser -u drum-score -- /srv/drum-score/current/venv/bin/drum-score-maintenance
 ## 验证状态
 
 本地 unit 静态语法、独立 loopback nginx 及合成证书演练，与实际 systemd 沙箱、cgroup、服务器匿名下载、真实 TLS 和现有网站回归分别记录。最终证据见[验证指南](../verification.md)。没有服务器写入授权和目标机结果时，#74 与公开上线保持未完成。
+
+## 可选的预算并行配置
+
+默认 unit 保留一路和原资源预算。2026-10-23 的显式并行候选位于 `deploy/systemd/profiles/`，需要先核验新 wheel、完成 v1 快照到 v2 新根的恢复，再安装匹配的 web/worker drop-in。它扩大共享内存与进程数上限，保留总 CPU、Swap、磁盘和任务期限保护。不能只把 `--concurrency` 改为 8，也不能将 profile 直接用于旧库。配置值、私有验收端口、公开步骤和回滚见[并行切换候选](parallel-rollout.md)。当前正式服务未安装这些 profile。
