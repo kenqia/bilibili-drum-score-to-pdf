@@ -14,11 +14,13 @@ python3.12 -m venv /tmp/drum-score-env
 /tmp/drum-score-env/bin/drum-score /absolute/path/input.mp4 --output /absolute/path/new-result
 ```
 
-安装复制所需代码，运行不依赖源码仓库的当前目录。公开链接使用规范 HTTPS BV URL，分 P 通过单个正整数 `p` 指定：
+安装复制所需代码，运行不依赖源码仓库的当前目录。公开链接接受规范 HTTPS BV URL 或 `https://b23.tv/…` 短链接，分 P 通过完整或展开后的 BV URL 中单个正整数 `p` 指定：
 
 ```sh
 drum-score 'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=1' --output /absolute/path/new-result
 ```
+
+短链接在受监督的匿名获取子进程中展开，最多 5 次跳转、每次网络操作超时 10 秒，并受整个转换时限和取消约束。仅允许 HTTPS b23.tv 与最终 BV 视频，逐跳核对公共 DNS，连接固定已核验 IP 并验证原 TLS 主机名。不读取响应正文、Cookie 或用户代理配置。非视频、失效、登录跳转和循环返回 `short_link_unavailable`。最终 manifest 的来源记录展开后的 BV、分 P 和实际视频信息。Python 和 CLI 只接收链接本身；网页可从分享文案中提取链接。
 
 程序使用固定 BBDownNext 2.3.0 解析匿名播放信息，替代 yt-dlp。安装与平台要求见[安装指南](../install.md)。不读取用户 Cookie、登录态、模型认证或下载器用户配置；不使用 VPN，也不继承用户代理。输出目录必须不存在；失败后换新目录或重试，不覆盖来源及已有结果。删除独立虚拟环境即可撤销安装，不修改全局配置。
 

@@ -111,7 +111,7 @@ class Jobs:
         try:
             source = video_origin(url)
         except (InputError, TypeError, AttributeError):
-            raise JobError('invalid_bilibili_url', '请提供公开 HTTPS B站 BV 链接，分 P 使用单个正整数 p。', 422) from None
+            raise JobError('invalid_bilibili_url', '请提供公开 HTTPS B站 BV 链接或 b23.tv 短链接，分 P 使用单个正整数 p。', 422) from None
         task, capability = secrets.token_urlsafe(24), secrets.token_urlsafe(32)
         now = time.time()
         with self.transaction() as db:

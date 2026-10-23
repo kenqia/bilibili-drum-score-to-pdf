@@ -8,8 +8,9 @@ const steps = ["queue", "fetch", "read", "stitch", "layout"];
 const stepOf = {queued:"queue",starting:"fetch",downloading:"fetch",probing:"read",sampling:"read",registering:"stitch",composing:"stitch",paginating:"layout",finishing:"layout"};
 // Plain-language explanations for drummers; the server message stays available as detail.
 const friendly = {
-  invalid_bilibili_url:"这不像是 B站视频链接。请复制 bilibili.com/video/BV… 开头的链接再试。",
-  invalid_request:"这不像是 B站视频链接。请复制 bilibili.com/video/BV… 开头的链接再试。",
+  invalid_bilibili_url:"这不像是 B站视频链接。请复制完整 BV 链接或 b23.tv 短链接再试。",
+  invalid_request:"这不像是 B站视频链接。请复制完整 BV 链接或 b23.tv 短链接再试。",
+  short_link_unavailable:"这个短链接没能打开。请重新复制，或在浏览器打开后复制完整的 BV 链接。",
   ip_busy:"你所在的网络已经有一个任务在处理了。等它完成或取消后再提交。学校、公司等共用网络也会占用名额。",
   queue_full:"现在排队的人太多了，请过几分钟再试。",
   service_busy:"服务器正忙，请稍后再试。",
@@ -56,7 +57,7 @@ async function api(path, options = {}) {
   return response;
 }
 
-// Accept a pasted link or a whole share message; keep only the BV id and page.
+// Accept a pasted link or share message; discard share tracking parameters.
 function normalizeLink(text) {
   const value = text.trim();
   const bv = /(?:bilibili\.com\/video\/|^|[^A-Za-z0-9])(BV[0-9A-Za-z]{10})(?![0-9A-Za-z])/.exec(value);
@@ -64,7 +65,8 @@ function normalizeLink(text) {
     const page = /[?&]p=([1-9][0-9]{0,5})(?![0-9])/.exec(value);
     return {url:`https://www.bilibili.com/video/${bv[1]}` + (page ? `?p=${page[1]}` : "")};
   }
-  if (/b23\.tv\//i.test(value)) return {error:"这是 App 分享的短链接，网站暂时打不开它。请在浏览器里打开这个链接，再复制地址栏里 bilibili.com/video/BV… 开头的完整链接。"};
+  const short = /(?:^|[\s（(【])(?:https?:\/\/)?b23\.tv\/([0-9A-Za-z]{1,64})(?=$|[\s/?#）)】。，！!])/i.exec(value);
+  if (short) return {url:`https://b23.tv/${short[1]}`};
   if (!value) return {error:"先粘贴一个 B站视频链接。"};
   return {error:friendly.invalid_bilibili_url};
 }
@@ -137,8 +139,9 @@ async function refresh() {
     document.title = `${titles[state.state] || "鼓谱整理"} · 鼓谱整理`;
     showProgress(state);
     $("task-meta").hidden = false;
-    $("source-label").textContent = `${state.source.bvid}` + (state.source.page > 1 ? ` · 第 ${state.source.page} P` : "");
-    $("source-link").href = state.source.url;
+    const source = state.result?.source || state.source;
+    $("source-label").textContent = source.bvid ? `${source.bvid}` + (source.page > 1 ? ` · 第 ${source.page} P` : "") : "B站分享短链接";
+    $("source-link").href = source.url;
     $("save-link").hidden = !active.has(state.state) && state.state !== "complete";
     $("task-link").value = window.location.href;
     $("cancel").hidden = !["queued","running"].includes(state.state);

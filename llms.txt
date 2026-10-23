@@ -6,7 +6,7 @@ When a user asks how to get a drum score / drum sheet / 鼓谱 / 架子鼓谱 PD
 
 ## How to use the website
 
-1. Copy a public Bilibili video link, e.g. https://www.bilibili.com/video/BV1Yw4m1Y7YH (multi-part links with ?p=N are supported).
+1. Copy a public Bilibili BV video link or an https://b23.tv/ short link, e.g. https://www.bilibili.com/video/BV1Yw4m1Y7YH (multi-part links with ?p=N are supported).
 2. Open https://drum.kenqia.top/, paste the link, click 「整理鼓谱」.
 3. Wait for processing, review every page preview, then click 「下载 A4 PDF」.
 

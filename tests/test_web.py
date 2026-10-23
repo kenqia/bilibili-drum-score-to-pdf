@@ -97,6 +97,17 @@ class WebsiteHTTP(unittest.TestCase):
         with self.assertRaises(ValueError):
             create_app(self.root, trusted_proxies=('*',))
 
+    def test_short_link_enqueues_without_external_resolution(self):
+        with patch('socket.getaddrinfo', side_effect=AssertionError('HTTP must only enqueue')):
+            response = self.client.post('/api/tasks', json={'url': 'https://b23.tv/Synthetic7?share_source=test'})
+        self.assertEqual(response.status_code, 201)
+        created = response.json()
+        auth = {'Authorization': 'Bearer ' + created['capability']}
+        state = self.client.get('/api/tasks/' + created['id'], headers=auth).json()
+        self.assertEqual(state['state'], 'queued')
+        self.assertEqual(state['source']['url'], 'https://b23.tv/Synthetic7')
+        self.assertIsNone(state['source']['bvid'])
+
     def test_retry_uses_original_capability_and_current_ip_quota(self):
         task, headers, _ = self.submit()
         self.client.post('/api/tasks/' + task + '/cancel', headers=headers)
