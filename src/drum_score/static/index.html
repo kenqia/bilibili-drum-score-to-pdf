@@ -5,23 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#17213a">
-  <title>鼓谱整理：把 B站鼓谱视频变成可打印的 A4 PDF</title>
-  <meta name="description" content="粘贴 B站鼓谱视频链接，自动拼接滚动的谱面，整理成能打印、能放上谱架的 A4 PDF。免费，无需注册，无需安装，手机电脑都能用。">
+  <title>视频鼓谱转 PDF · 支持 B站与 YouTube</title>
+  <meta name="description" content="粘贴 B站或 YouTube 鼓谱视频链接，自动拼接滚动的谱面，整理成能打印、能放上谱架的 A4 PDF。免费，无需注册，无需安装，手机电脑都能用。">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="鼓谱整理：把 B站鼓谱视频变成可打印的 A4 PDF">
+  <meta property="og:title" content="视频鼓谱转 PDF · 支持 B站与 YouTube">
   <meta property="og:description" content="粘贴链接，等一会儿，下载 PDF。免费，无需注册。">
   <meta property="og:url" content="https://drum.kenqia.top/">
   <meta property="og:image" content="https://drum.kenqia.top/assets/example-page.jpg">
   <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/style.css">
   <script src="/assets/app.js" defer></script>
-  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"鼓谱整理","url":"https://drum.kenqia.top/","applicationCategory":"MultimediaApplication","operatingSystem":"Web","inLanguage":"zh-CN","description":"把 B站滚动鼓谱视频整理成可打印的 A4 PDF。","offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"}}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"视频鼓谱转 PDF","url":"https://drum.kenqia.top/","applicationCategory":"MultimediaApplication","operatingSystem":"Web","inLanguage":"zh-CN","description":"把 B站或 YouTube 滚动鼓谱视频整理成可打印的 A4 PDF。","offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"}}</script>
 </head>
 <body>
   <a class="skip" href="#main">跳到主要内容</a>
   <header class="bar">
     <div class="bar-inner">
-      <a class="brand" href="/"><img src="/assets/icon.svg" alt="" width="28" height="28">鼓谱整理</a>
+      <a class="brand" href="/"><img src="/assets/icon.svg" alt="" width="28" height="28">视频鼓谱转 PDF</a>
       <nav class="bar-nav" id="landing-nav" aria-label="页面导航"><a href="#how">怎么用</a><a href="#fit">适合的视频</a><a href="#faq">常见问题</a></nav>
     </div>
   </header>
@@ -32,14 +32,14 @@
       <div class="stage-inner">
         <div class="pitch">
           <h1 id="hero-title">把视频里的鼓谱，<br>放到谱架上。</h1>
-          <p class="lede">粘贴 B站鼓谱视频的链接，自动把滚动的谱面一行行接好，排成能打印的 A4 PDF。不用再暂停截图、一张张拼。</p>
+          <p class="lede">粘贴 B站或 YouTube 鼓谱视频的链接，自动把滚动的谱面一行行接好，排成能打印的 A4 PDF。不用再暂停截图、一张张拼。</p>
           <form id="submit-form" class="submit" novalidate>
-            <label for="source">B站视频链接</label>
+            <label for="source">B站或 YouTube 视频链接</label>
             <div class="field">
               <input id="source" name="url" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="2048" placeholder="https://www.bilibili.com/video/BV…" aria-describedby="source-help submit-error">
               <button id="submit-button" type="submit">整理鼓谱</button>
             </div>
-            <p id="source-help" class="hint">支持完整 BV 链接和 App 分享的 b23.tv 短链接，也可以直接粘贴分享文案。多 P 视频会按展开后的链接处理。</p>
+            <p id="source-help" class="hint">支持 BV、b23.tv、YouTube watch、youtu.be 和 Shorts 单视频链接，也可粘贴分享文案。YouTube 按整条视频处理，忽略时间戳和播放列表参数。</p>
             <p id="submit-error" class="alert" role="alert" hidden></p>
           </form>
           <p class="promise">免费 · 无需注册 · 手机电脑都能用</p>
@@ -56,7 +56,7 @@
       <section class="block" id="how" aria-labelledby="how-title">
         <h2 id="how-title">三步拿到鼓谱</h2>
         <ol class="steps">
-          <li><b>复制链接</b><span>复制浏览器里的 BV 链接，或 App 分享的 b23.tv 短链接。整段分享文案也可以粘贴。</span></li>
+          <li><b>复制链接</b><span>复制 B站或 YouTube 的单视频链接。整段分享文案也可以粘贴。</span></li>
           <li><b>粘贴提交</b><span>粘贴到上面的输入框，点「整理鼓谱」。页面会给你一条专属链接，关掉也不影响处理。</span></li>
           <li><b>检查下载</b><span>整理好后每一页都会显示出来。对照看一遍，点「下载 PDF」就能打印。</span></li>
         </ol>
@@ -74,12 +74,12 @@
       <section class="block" id="faq" aria-labelledby="faq-title">
         <h2 id="faq-title">常见问题</h2>
         <div class="faq">
-          <details><summary>要花钱或者注册吗？</summary><p>都不用。不需要登录 B站，也不会读取你的任何账号信息。</p></details>
+          <details><summary>要花钱或者注册吗？</summary><p>都不用。不需要登录 B站或 YouTube，也不会读取你的账号信息。</p></details>
           <details><summary>要等多久？</summary><p>看视频长短和排队人数。页面会显示你排在第几位、正在做哪一步。</p></details>
           <details><summary>结果能保存多久？</summary><p>完成后保留 24 小时，过期会自动删除，记得及时下载。视频本身处理完就会清理，不会留在服务器上。</p></details>
           <details><summary>谱子一定准确吗？</summary><p>网站只是把视频画面拼接排版，不会改动或重新识别音符。原视频的水印、模糊和播放进度线可能会保留。极少数拼接问题也可能没被发现，演奏前请对照原视频快速核对。</p></details>
           <details><summary>为什么说我还有任务在进行？</summary><p>同一个网络同时只能有一个没完成的任务。学校、公司或家里共用网络时会互相占用，等前一个完成或取消后再试。</p></details>
-          <details><summary>能上传手机里的视频吗？</summary><p>暂时只支持 B站公开视频链接。</p></details>
+          <details><summary>能上传手机里的视频吗？</summary><p>网站接受 B站与 YouTube 公共视频链接，暂不支持上传。YouTube 获取可能因服务器网络或机器人验证失败。</p></details>
           <details><summary>能转成 MIDI 或重新打谱吗？</summary><p>不能。这里的目标是忠实保留原谱面。</p></details>
         </div>
       </section>

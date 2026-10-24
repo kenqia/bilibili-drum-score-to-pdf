@@ -98,3 +98,11 @@ v1、v2 合成快照分别经显式命令升级到 v3，核对原完成/到期�
 命令、失败过程、准确 wheel hash、审阅和本地证据见[防滥用验证记录](experiments/2026-10-24-abuse-prevention.md)。本轮未访问生产或执行部署，不能把本地 schema v3 与合成验证当作线上防护已生效。
 
 随后用户明确要求 push 并部署，已于同日 17:04 +0800 完成正式 v2 到 v3 切换。目标机隔离预检、正式 unit 私有端口的滚动额度/重试/重启/暂停验收、两路真实在线转换和六份 PDF/预览 hash 核验通过，原二百零二条记录完成与期限保持不变。公网提交/查询/取消通过，三十次服务器 HTTPS 探针及 WSL 独立探针均为 200，无 OOM 和自动重启。旧发行、数据、快照和 profile 副本保留，详见[防滥用部署记录](experiments/2026-10-24-abuse-deployment.md)。
+
+## YouTube 本地接入
+
+2026-10-24，Python 3.12.12 下运行 `python -m unittest discover -s tests -v`，222 项通过，耗时 189.982 秒。新增合成验证覆盖 YouTube 链接、受限来源拒绝、原生轨完整性、DNS/目标域、gzip 正文上限、运行环境隔离、备份恢复及 Python/CLI/HTTP 完整发布。首次全回归的取消任务用例出现一次缺少 `state` 字段，单独重跑及完整重跑通过，未定位首次原因；原失败日志保留，不以重跑替代原因判断。
+
+离线 CI 重放通过，基础/web 两份 wheel 独立安装的 CLI、实际 HTTP 提交/取消和 worker 启动通过。两份安装均从仓库外完成合成转换，来源与全部 PDF/预览 hash 匹配。wheel 三十个包文件与源码字节一致，依赖冲突检查通过。JavaScript 语法及链接规范化检查通过，未运行真实浏览器视觉验收。未配置静态类型检查器；本轮未修改或重跑独立 Skill。
+
+经本机现有代理，受保护获取 API 成功下载一条完整 4K YouTube 视频。两条真实鼓谱来源仍返回 `youtube_challenge`，没有真实 YouTube 鼓谱 PDF、页面或音乐验收。准确 wheel hash、命令、失败与本地证据见[YouTube 获取试验](experiments/2026-10-24-youtube-acquisition.md)。本轮未推送或部署，正式网站的历史 B站验收不能替代 YouTube 出网验证。

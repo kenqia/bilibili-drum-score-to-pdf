@@ -9,7 +9,7 @@
 | Skill | `skills/bilibili-drum-score-to-pdf/` 自带脚本和 references，不导入网站包。安装见 [Skill 指南](skill-install.md)。 | 独立任务 `record.json`、Agent 看图和版本绑定的终稿审阅；可选重绘/矢量按本包协议执行。 |
 | 程序与网站 | `src/drum_score/` 由 `pyproject.toml` 打包，不加载 Skill。Python、CLI 与网站共用 `drum_score.convert`。 | CLI manifest 或网站 SQLite 队列/attempt；自动发布保持 `reliable=false`，不需要 Agent 审批。 |
 
-Skill 按自己的 requirements 使用原有匿名获取工具；网站使用固定 BBDownNext 2.3.0 直连元数据入口。两套环境不互相安装依赖、共享任务目录或迁移任务。共享的只是仓库导航、许可证和通用 CI 工具。
+Skill 按自己的 requirements 使用原有匿名获取工具；网站的 B站路径使用固定 BBDownNext 2.3.0 直连元数据入口，YouTube 使用网站独立的固定 yt-dlp、EJS 和 Deno。两套环境不互相安装依赖、共享任务目录或迁移任务。共享的只是仓库导航、许可证和通用 CI 工具。
 
 Skill 默认长截图、可安全执行的局部去水印、完整谱行分页及全部页面查看；恢复规则见 [Skill 阶段指南](agents/stage-recovery-layout.md)，验证见 [Skill 验证](skill-verification.md)。以下模块、状态及事务规则只属于程序与网站。
 
@@ -21,7 +21,7 @@ Skill 默认长截图、可安全执行的局部去水印、完整谱行分页�
 | --- | --- |
 | `core.py`、`imaging.py` | 输入预算、来源 hash、原生采样、位移配准、保守合成与完整条带分页。 |
 | `supervision.py`、`guardian.py` | 独立转换进程、采样资源监督、取消与异常树清理。初始 PID/start-time 固定，后续观察不替换已有身份。 |
-| `public_video.py`、`short_links.py`、`anonymous_backend.py`、`bbdown_cli.py`、`bbdown_network.py`、`anonymous_network.py` | 固定 BBDownNext 2.3.0 匿名解析与直连获取，公共 DNS/TLS、重定向与同流备份、完整曲长和实测媒体校验。 |
+| `public_video.py`、`short_links.py`、`anonymous_backend.py`、`bbdown_cli.py`、`bbdown_network.py`、`youtube_backend.py`、`anonymous_network.py` | B站固定 BBDownNext 2.3.0 直连解析，YouTube 固定 yt-dlp 匿名解析；公共 DNS/TLS、重定向与同流备份、完整曲长和实测媒体校验。 |
 | `video_seek.py` | 有限时 FFmpeg 解码、实际 PTS/time_base、原生运动摘要和临时帧清理。 |
 | `cli.py`、`arguments.py` | JSON 与参数适配；非法输入不反射载荷、路径或原始异常。 |
 | `web.py`、`static/` | 同源网页、能力认证、真实阶段及 FD 分块下载。 |
@@ -42,7 +42,7 @@ Linux 取消时先以 SIGSTOP 停驻已登记进程，再反复扫描和停驻�
 
 ## 网站事务与数据
 
-HTTP 接受公开 HTTPS BV 链接或 b23.tv 短链接，只做本地格式校验和入队。短链接在受监督获取进程中展开至 BV 视频，重计算由独立 worker 调度器执行，`--concurrency` 配置 1 至 8 路，默认 1。每个监督线程调用独立的转换进程及 guardian。SQLite 短 `BEGIN IMMEDIATE` 事务原子检查活动名额与空间预留，部分唯一索引限制每 IP 一个未完成任务；全站最多 10 个等待任务。只读状态与取消轮询不申请写锁，同一调度器内的短事务串行协调，清理或领取轮询的短暂数据库忙不会终止全部活动转换。随机任务 ID 与 256 位能力凭据独立生成；SQLite 只存凭据摘要。IP 限流不代表所有权。
+HTTP 接受公开 HTTPS BV、b23.tv 或 YouTube 单视频链接，只做本地格式校验和入队。短链接在受监督获取进程中展开至 BV 视频，重计算由独立 worker 调度器执行，`--concurrency` 配置 1 至 8 路，默认 1。每个监督线程调用独立的转换进程及 guardian。SQLite 短 `BEGIN IMMEDIATE` 事务原子检查活动名额与空间预留，部分唯一索引限制每 IP 一个未完成任务；全站最多 10 个等待任务。只读状态与取消轮询不申请写锁，同一调度器内的短事务串行协调，清理或领取轮询的短暂数据库忙不会终止全部活动转换。随机任务 ID 与 256 位能力凭据独立生成；SQLite 只存凭据摘要。IP 限流不代表所有权。
 
 转换排他发布到私有 attempt/result 后，worker 核对 PDF 和全部预览，清理线上原生帧及长图并更新 manifest，再持久保存 `finishing` 决定及完成/到期时间。此后取消不撤销结果。重启核验同一决定，恢复完成而不延长保留期；未作完成决定的活动任务标为 `interrupted`，只允许显式重试。
 
@@ -57,6 +57,8 @@ HTTP 接受公开 HTTPS BV 链接或 b23.tv 短链接，只做本地格式校验
 入队、重试与领取要求 `used + (active + 1) * max_temp <= retained` 且空闲空间至少 `min_free + (active + 1) * max_temp`。运行时约每 200ms 检查当前逻辑用量和空闲底线。`used` 包含 attempts 中全部普通文件及未知文件，不提前删除有效结果换取名额。采样额度不能代替 cgroup 或文件系统硬限额。
 
 ## 安全与范围
+
+YouTube 的匿名范围、客户端回退、IPv4 与代理、响应上限及安装要求见 [YouTube 获取](script-product/youtube.md)。B站依旧直连；YouTube 可继承标准 HTTPS 代理变量，代理认证不转发给源站。
 
 匿名获取不加载用户 Cookie、netrc、下载器配置、插件或模型认证。初始 URL、每次重定向、每个媒体候选均校验公共地址和支持的 HTTPS 域；实际连接固定已核验 IP，同时保持原 TLS 主机名。代理认证不转发到源站；签名 URL 和原始异常不写入产物或公开日志。允许的 API 回退、分 P、完整时长与媒体尺寸检查保留。
 

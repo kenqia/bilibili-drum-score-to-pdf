@@ -19,17 +19,21 @@ def public_target(url):
         raise InputError('unsafe_media_target', '获取目标不符合安全要求。请提供清晰的本地视频。') from None
 
 
-def public_addresses(host):
-    addresses = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+def public_addresses(host, *, family=socket.AF_UNSPEC):
+    addresses = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM, family=family)
     if not addresses or any(not ipaddress.ip_address(item[4][0]).is_global for item in addresses):
         raise InputError('unsafe_media_target', '获取目标解析到非公开地址。请提供清晰的本地视频。')
     return addresses
 
 
 class PublicHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, *args, resolver=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.resolve = resolver or (lambda host: public_addresses(host))
+
     def connect(self):
         origin = self._tunnel_host or self.host
-        addresses = public_addresses(origin)
+        addresses = self.resolve(origin)
         # Each attempt uses an already validated numeric IP. An unavailable
         # IPv6 route must not prevent trying a reachable public IPv4 address.
         tunnel_host = self._tunnel_host
@@ -65,16 +69,25 @@ class PublicHTTPSConnection(http.client.HTTPSConnection):
 
 
 class PublicHTTPSHandler(urllib.request.HTTPSHandler):
+    def __init__(self, *, context=None, resolver=None):
+        super().__init__(context=context)
+        self.resolve = resolver
+
     def https_open(self, request):
-        return self.do_open(PublicHTTPSConnection, request, context=self._context)
+        return self.do_open(lambda *args, **kwargs: PublicHTTPSConnection(
+            *args, resolver=self.resolve, **kwargs), request, context=self._context)
 
 
 class PublicRedirect(urllib.request.HTTPRedirectHandler):
     max_redirections = 5
     max_repeats = 2
 
+    def __init__(self, check_target=public_target, resolver=None):
+        self.check_target = check_target
+        self.resolve = resolver or (lambda host: public_addresses(host))
+
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        public_addresses(public_target(newurl))
+        self.resolve(self.check_target(newurl))
         redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
         if redirected:
             redirected.remove_header('Proxy-authorization')
@@ -82,10 +95,14 @@ class PublicRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class PublicTransport:
-    def __init__(self, *, direct=False):
+    def __init__(self, *, direct=False, check_target=public_target, resolver=None):
         # ProxyHandler follows the environment without persisting or logging it.
         proxy = urllib.request.ProxyHandler({}) if direct else urllib.request.ProxyHandler()
-        self.opener = urllib.request.build_opener(proxy, PublicHTTPSHandler(context=ssl.create_default_context()), PublicRedirect())
+        self.check_target = check_target
+        self.resolve = resolver or (lambda host: public_addresses(host))
+        self.opener = urllib.request.build_opener(proxy,
+            PublicHTTPSHandler(context=ssl.create_default_context(), resolver=self.resolve),
+            PublicRedirect(check_target, resolver=self.resolve))
         self.http_status = None
         self.proxy_connect_status = None
         self.failure = None
@@ -101,7 +118,7 @@ class PublicTransport:
                       else 'wbi' if '/wbi/' in parsed.path or parsed.path.endswith('/nav')
                       else 'webpage')
         try:
-            public_addresses(public_target(url))
+            self.resolve(self.check_target(url))
             clean = {k: v for k, v in (headers or {}).items() if k.lower() not in {'cookie', 'authorization', 'proxy-authorization', 'accept-encoding'}}
             clean['Accept-Encoding'] = 'identity'
             return self.opener.open(urllib.request.Request(url, data=data, headers=clean), timeout=20)

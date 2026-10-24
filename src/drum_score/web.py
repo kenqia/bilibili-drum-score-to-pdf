@@ -98,7 +98,7 @@ def create_app(data_root, *, trusted_proxies=(), retention_seconds=86400, **stor
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request, error):
-        return JSONResponse({'error': {'code': 'invalid_request', 'message': '请仅提交公开 HTTPS B站 BV 链接或 b23.tv 短链接。'}}, status_code=422)
+        return JSONResponse({'error': {'code': 'invalid_request', 'message': '请仅提交公开 HTTPS B站 BV、b23.tv 或 YouTube 单视频链接。'}}, status_code=422)
 
     def peer(request):
         try:

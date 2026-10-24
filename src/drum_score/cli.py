@@ -6,7 +6,7 @@ from .core import ConversionError, convert
 
 def main(argv=None):
     parser = PublicParser(prog='drum-score', description='把固定比例白底纵向滚动鼓谱视频整理为 A4 PDF。')
-    parser.add_argument('source', help='本地视频、公开 HTTPS B站 BV 链接或 b23.tv 短链接')
+    parser.add_argument('source', help='本地视频、公开 HTTPS B站 BV、b23.tv 或 YouTube 单视频链接')
     parser.add_argument('--output', required=True, help='必须不存在的新结果目录')
     parser.add_argument('--timeout', type=float, default=600, help='包含获取与发布的总秒数，默认600')
     parser.add_argument('--max-input-mib', type=float, default=256, help='来源大小上限MiB，默认256')

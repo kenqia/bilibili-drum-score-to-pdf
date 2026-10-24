@@ -1,5 +1,7 @@
 # YouTube 匿名获取试验
 
+本文按阶段保留失败与后续进展。前两轮未接入；第三轮已下载成功并完成本地接入，详见末节。正式网站未部署本轮代码。
+
 2026-10-24，WSL Ubuntu 本地直连试验未通过。yt-dlp 在 90 秒总期限后停止，没有生成视频文件。程序、CLI 和网站尚未接入 YouTube，网页不能声明已经支持。
 
 ## 已确认的实施范围
@@ -125,3 +127,51 @@ PATH="$PWD/work/engineering/2026-10-23-parallel/venv312/bin:$PATH" \
 [Invidious FAQ](https://docs.invidious.io/faq/)说明，默认播放仍由客户端访问 Google 视频域，启用视频代理才由实例转发。因此镜像页面可打开不等于国内环境可以获取视频。[yt-dlp 的 YouTube 说明](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#youtube)也区分网络、客户端与 PO Token 等限制；本次没有把机器人验证直接诊断为缺少 PO Token。
 
 后续优先在另一个受控、允许匿名下载的出口复测 yt-dlp，或另行评估受控下载节点。公共镜像仍可作为手动备选研究，现有两项探测不足以承诺可靠性。没有切换代理节点、读取 Cookie、引入账号认证或操作服务器。产品接入与前端支持声明继续等待成功下载证据。本节只补充试验文档，未重跑程序全回归或 Skill 测试；上一轮 212 项回归结果不能视为本节的 YouTube 验收。
+
+## 第三轮：重试成功与本地接入
+
+用户要求再试一次后，继续使用现有 `127.0.0.1:7890` 代理和原固定依赖，不修改代理节点或读取登录态。基线为 `2790f0b0e68260643f3dfd2da3dc5fe4fb763c23`。临时证据为 `/tmp/drum-youtube-retry-ONqQbPBJ`，长期本地证据为 `work/engineering/2026-10-24-youtube/`。
+
+| 请求 | 实测结果 |
+| --- | --- |
+| 原 `jNQXAC9IVRw`、默认客户端重试 | 4.274 秒，身份/机器人验证，无媒体 |
+| 原视频、android_vr 且跳过网页等请求 | 5.482 秒，身份/机器人验证，无媒体 |
+| 原视频、web_embedded | 2.755 秒，身份/机器人验证，无媒体 |
+| 另一公开视频 `dQw4w9WgXcQ`、web_embedded | 12.996 秒，退出 0，下载及 FFprobe 成功 |
+
+另一公开视频的初次两次尝试误写成只有十位的 `dQw4w9WgXc`，被解析器拒绝；其中一次归类为 `incomplete_response`。这是试验输入错误，修正后才得到上表成功结果，不把这两次无效请求当作平台或网络失败证据。
+
+成功试验限定 360p、32 MiB，取得完整视频文件 5685561 字节、640×360 AV1、213.040 秒，SHA256 为 `5ce491450aaf704a59652896965d96e36cf9250822f6f1be8482c93f362d2eb4`。它只验证下载能力，不是鼓谱或音乐验收。
+
+按先前确认的顺序继续接入程序、CLI 和网站。YouTube 只注册自己的 extractor，先尝试 web_embedded，失败后尝试默认客户端；B站保留 BBDownNext。复用原生轨选取、完整曲长/实测分辨率/解码与受限传输。独立 Skill、仓库名称、Python distribution 名称保持不变。
+
+项目安全路径最初发现本机 YouTube DNS 混合返回公共 IPv4 与非公共 IPv6，按旧全地址规则拒绝。YouTube 后续限定 IPv4，仍验证该地址族全部回答并固定公共数值 IP、验证原域 TLS，重定向再次核验；没有忽略私网回答或关闭保护。元数据与媒体均支持标准 HTTPS 代理变量。安装与范围见 [YouTube 指南](../script-product/youtube.md)。
+
+受保护获取路径先在 32 MiB 的小额试验中因最高原生轨超额而受控拒绝。随后一次 400 MiB/180 秒试验匿名解析失败，最终同预算的新试验成功取得完整最高原生轨：
+
+| 项目 | 实测值 |
+| --- | --- |
+| API | `public_video.acquire`，未替换网络或解析器 |
+| 规范来源 | `https://www.youtube.com/watch?v=dQw4w9WgXcQ` |
+| 总耗时 | 141.816 秒 |
+| 文件大小 | 358608461 字节 |
+| 原生视频 | VP9，3840×2160，25 fps |
+| 完整时长 | 元数据 213 秒，FFprobe 213.040 秒 |
+| 文件 SHA256 | `dbe621f8efea33f941d330202c7da4b68f141be0baceb37b2a3058684b0660c6` |
+| 来源记录 | `kind=youtube`、视频 ID、yt-dlp 版本、匿名标记、原生选轨、曲长容差 |
+
+保留的原始文件为本地证据目录中的 `source-youtube-dQw4w9WgXcQ.mp4`，与临时获取文件建立硬链接后核对 hash。另保留脱敏元数据和 `native-source.json`。本次显式使用 400 MiB 获取额度，仅验证独立获取 API；不声称这个 4K/约 342 MiB 视频符合转换默认 256 MiB 和约 420 万像素限制，没有静默降分辨率。
+
+通过一次 `ytsearch3` 找到两条真实《小星星》鼓谱候选，分别使用正式 `convert` 入口测试：`nu9ckSrP-ic` 在 27.172 秒后、`9RwL9af9-Do` 在 29.228 秒后均返回 `youtube_challenge`，无 PDF 发布。结果分别保存为 `real-result.json` 与 `real-short-result.json`。因此真实 YouTube 鼓谱全流程验收仍未通过，没有真实鼓谱页面可查看，也没有新的 PTS/音乐逐符号验收。
+
+本地前端说明 B站与 YouTube，规范化 watch/youtu.be/Shorts，保留 B站分 P；时间戳和播放列表不改变整条 YouTube 来源。真实网络仍可能风控失败，页面与文档保留此限制。没有部署或推送本轮变更。
+
+### 本地验证
+
+程序独立环境执行 `python -m unittest discover -s tests -v`，最终 222 项通过，189.982 秒。首次完整执行有一项取消任务测试因响应缺少 `state` 报错，单独重跑和完整重跑均通过，原因未确定，保留 `regression.log` 与 `regression-final.log`。新增九项 YouTube 测试和三入口公开契约均通过；合成 extractor/媒体不冒称真实网络或音乐验收。
+
+执行 `python ci/verify_script_product.py --output work/engineering/2026-10-24-youtube/replay` 通过，重复转换 PDF 字节一致，输出已存在与资源超额均受控拒绝。JavaScript 语法、六种规范化/拒绝场景、Ruff E701/E702、Python 编译和 `git diff --check` 通过。没有配置静态类型检查器，没有执行浏览器视觉验收或独立 Skill 回归。
+
+从准确源码构建 wheel，三十个包文件逐字节一致，SHA256 为 `855f5a90a65f2a360c2732d873e849e13cdd55ee3698e91902b04fe73099c1fc`。基础与 web extra 分别安装到本地独立环境，依赖冲突检查通过；从仓库外执行 CLI 帮助和合成转换，全部 PDF/预览 hash 与来源 hash 匹配，保持 `reliable=false`。web 环境实际启动安装后的 HTTP CLI，验证首页 YouTube 说明、规范来源提交、查询、取消与独立 worker 启动。报告为 `wheel.json`、`installation.json`、`installed-conversion.json`。本轮没有执行完整 sdist 安装验收。
+
+复核范围覆盖输入规范化、两个后端分流、公共域/DNS/TLS/重定向保护、代理头与认证隔离、响应大小和原生媒体完整性。此前审阅发现 YouTube 整秒时长与 0.5 秒容差冲突，已改为显式 1 秒并增加接受小数尾部、拒绝截断的验证。续跑中派发的独立审查未返回有效代码审查报告，因此这里只记录主执行者自查，未发现新增待修问题，不声称独立双轴审阅通过。
