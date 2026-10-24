@@ -199,4 +199,4 @@ runuser -u drum-score -- /srv/drum-score/current/venv/bin/drum-score-maintenance
 
 默认 unit 保留一路和原资源预算。2026-10-23 的显式并行配置位于 `deploy/systemd/profiles/`，对应当时 v2 数据根和发行；当时已获授权的上线结果见[正式切换记录](../experiments/2026-10-23-parallel-deployment.md)。配置保留总 CPU、Swap、磁盘和任务期限保护，不能只把 `--concurrency` 改为 8。
 
-当前防滥用源码要求 v3，不能直接打开 profile 中的旧 v2 数据根，也不能仅替换 wheel。新的生产切换尚未执行，需另行授权停服快照、显式 `upgrade-v2` 到新根和匹配的 unit 路径变更。先保留现有发行、数据根、配置和核验快照，按[维护指南](maintenance.md)升级，在隔离端口验证额度、暂停、原结果与期限后再开放。旧并行切换清单不能代替本轮 v3 切换授权。
+当前防滥用源码要求 v3，不能直接打开 profile 中的旧 v2 数据根，也不能仅替换 wheel。2026-10-24 用户明确授权后，已完成停服快照、显式 `upgrade-v2` 到新根和匹配的 unit 路径变更，保留原发行、数据根、配置和核验快照。额度、暂停、原期限及两路真实转换在私有端口验收后恢复公网；本轮结果与回滚材料见[防滥用部署记录](../experiments/2026-10-24-abuse-deployment.md)。后续生产变更仍按实际范围授权，不能将本轮授权无限扩张。
