@@ -93,3 +93,35 @@ PATH="$PWD/work/engineering/2026-10-23-parallel/venv312/bin:$PATH" \
 212 项通过，耗时 154.534 秒，无跳过。日志保存在临时试验目录的 `regression.log`。这些测试验证当前 B站产品回归，不是 YouTube 接入通过的证据。
 
 本轮仅新增本文档，没有程序变更，因此没有新增 TDD 用例或静态类型检查。文档 JSON 与实际 `result.json` 逐字段一致，确认没有 `probe.*` 媒体产物，试验下载器和 Deno 无残留进程。Standards 与 Spec 两个独立审阅均为零发现。未运行 Skill 回归、wheel 安装或生产验收。
+
+## 后续：经现有本地代理与镜像试验
+
+用户随后明确要求尝试非直连或 YouTube 镜像。本节替代前文“没有代理试验授权”的后续限制，只授权本地临时网络试验；不代表部署或修改服务器网络授权。试验时 HEAD 为 `adeeb8498a1765b202431f74260821f64b7bfe1c`。
+
+原 `/tmp/drum-score-youtube-dntge58x` 已不存在，因此重建 `/tmp/drum-youtube-proxy-VccOg2Vi`。仍使用 Python 3.12.12、yt-dlp 2026.10.21、yt-dlp-ejs 0.8.0 和 Deno 2.9.8，实际版本与 Deno 文件摘要均核对一致。GitHub CLI 下载 Deno 时返回 EOF，改为经现有本地代理从同一官方 Release HTTPS 地址下载成功。
+
+仅检查标准代理变量中的地址字段和几个本地端口，不读取代理配置、订阅、凭据或浏览器登录态。发现无认证的本地 HTTP 代理 `127.0.0.1:7890` 可连接。所有试验使用该明确地址，不修改全局网络或代理配置；试验子进程仍使用空白 HOME 和干净环境。
+
+通过显式 urllib `ProxyHandler` 请求同一个 YouTube 视频页面，返回 HTTP 200，读取前 1024 字节，耗时 0.793 秒。这只证明页面可达，不代表媒体可下载。
+
+下载命令沿用上文隔离参数，增加 `--proxy http://127.0.0.1:7890` 与 `--fragment-retries 0`，选轨改为 `bestvideo[height<=360][ext=mp4]/best[height<=360]`。保持 32 MiB 下载上限、10 秒 socket timeout 和零次重试；外层期限为 120 秒，超时按独立进程组终止。本次两次均正常返回失败，没有触发总期限。第二次仅额外指定 `--extractor-args youtube:player_client=android_vr`，验证另一种匿名客户端。
+
+| 下载方式 | 耗时 | 退出码 | 脱敏错误分类 | 媒体文件 |
+| --- | --- | --- | --- | --- |
+| 显式代理、默认客户端 | 6.303 秒 | 1 | `authentication_or_bot_challenge`、`bot_challenge` | 无 |
+| 同一代理、android_vr 客户端 | 6.505 秒 | 1 | `authentication_or_bot_challenge`、`bot_challenge` | 无 |
+
+分类来自 stderr 中身份确认及机器人提示的固定关键词匹配，原始输出只在内存处理，没有保存 Cookie、签名地址或响应正文。临时 `result.json` 和 `android-vr-result.json` 保存脱敏摘要。没有下载文件，因此仍未进行 FFprobe、转换或真实鼓谱验收。当前证据表明该代理可以打开视频页面，但这两次匿名下载遭遇机器人验证，不能笼统归为“国内网络不通”或“yt-dlp 不支持 YouTube”。
+
+镜像备选只探测 [Invidious 官方实例列表](https://docs.invidious.io/instances/)中的两个实例，各请求一次 `/api/v1/videos/jNQXAC9IVRw`，最多读取 128 KiB 加一个检测字节，socket timeout 为 10 秒。多地址尝试可能使实际总耗时超过 socket timeout；这不是外层总期限。没有批量采集或尝试绕过实例认证。
+
+| 实例 | 直连 | 经本地代理 |
+| --- | --- | --- |
+| `invidious.nerdvpn.de` | `URLError`，20.084 秒 | HTTP 401，1.185 秒 |
+| `invidious.tiekoetter.com` | `URLError`，20.087 秒 | HTTP 403，1.642 秒 |
+
+两次直连仅记录了异常类型，没有保存内部原因，不能把它们写成确定的超时或具体拦截。经代理的接口均未取得可用视频 JSON，401/403 也不能推断为整个实例对所有浏览器永久不可用。脱敏结果在临时 `mirrors.json`、`mirrors-proxy.json`。没有取得媒体，不能把公共镜像认定为已可用后端。
+
+[Invidious FAQ](https://docs.invidious.io/faq/)说明，默认播放仍由客户端访问 Google 视频域，启用视频代理才由实例转发。因此镜像页面可打开不等于国内环境可以获取视频。[yt-dlp 的 YouTube 说明](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#youtube)也区分网络、客户端与 PO Token 等限制；本次没有把机器人验证直接诊断为缺少 PO Token。
+
+后续优先在另一个受控、允许匿名下载的出口复测 yt-dlp，或另行评估受控下载节点。公共镜像仍可作为手动备选研究，现有两项探测不足以承诺可靠性。没有切换代理节点、读取 Cookie、引入账号认证或操作服务器。产品接入与前端支持声明继续等待成功下载证据。本节只补充试验文档，未重跑程序全回归或 Skill 测试；上一轮 212 项回归结果不能视为本节的 YouTube 验收。
