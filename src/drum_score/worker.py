@@ -111,7 +111,7 @@ def recover(jobs):
         jobs.settle(row, 'interrupted', 'interrupted', '处理进程已中断，可显式重试。')
 
 
-def execute_attempt(jobs, row, stopping, descriptor, limits):
+def execute_attempt(jobs, row, stopping, descriptor, limits, cache=None):
     from .supervision import guardian_lease, service_attempt
     # ContextVars are bound separately in every supervisor thread.
     with guardian_lease(descriptor):
@@ -128,10 +128,22 @@ def execute_attempt(jobs, row, stopping, descriptor, limits):
                         raise ConversionError(error.code, error.message) from None
                 return stopping.is_set() or jobs.cancelled(row)
             with service_attempt(jobs, row):
-                convert(json.loads(row['source'])['url'], attempt / 'result',
-                    options=json.loads(row['options']),
-                    progress=lambda stage: jobs.stage(row, stage) if stage != 'complete' else None,
-                    cancel=cancelled, limits={**(limits or {}), 'temp_bytes': jobs.job_temp_bytes})
+                url = json.loads(row['source'])['url']
+                options = json.loads(row['options'])
+                arguments = dict(progress=lambda stage: jobs.stage(row, stage) if stage != 'complete' else None,
+                    cancel=cancelled, limits={**(limits or {}), 'temp_bytes': jobs.job_temp_bytes}, options=options)
+                if cache is not None and json.loads(row['source'])['kind'] != 'youtube':
+                    from .core import ResourceBudget
+                    from .supervision import run as supervised
+                    deadline = time.monotonic() + ResourceBudget(limits).limits['wall_seconds']
+                    with cache.source(url, attempt, cancelled, deadline, progress=lambda stage: jobs.stage(row, stage)) as prepared:
+                        jobs.recover_staging(row)
+                        arguments['limits']['wall_seconds'] = max(.001, deadline-time.monotonic())
+                        prepared['_preparation']['elapsed_seconds'] = ResourceBudget(limits).limits['wall_seconds'] - max(0, deadline-time.monotonic())
+                        prepared['_preparation']['original_wall_seconds'] = ResourceBudget(limits).limits['wall_seconds']
+                        supervised(url, attempt / 'result', prepared=prepared, **arguments)
+                else:
+                    convert(url, attempt / 'result', **arguments)
             validate_result(jobs, row)
             summary = retain_delivery(jobs, row)
             jobs.capacity()
@@ -168,14 +180,17 @@ def run(jobs, *, once=False, poll_interval=.25, limits=None, concurrency=1):
     def stop(*args):
         stopping.set()
     previous = {signum: signal.signal(signum, stop) for signum in (signal.SIGTERM, signal.SIGINT)}
+    cache = None
     try:
         with worker_lock(jobs) as descriptor:
             recover(jobs)
+            from .video_cache import VideoCache
+            cache = VideoCache(jobs, descriptor, stopping, limits)
             if once:
                 jobs.cleanup()
                 row = None if stopping.is_set() else jobs.claim(concurrency=concurrency)
                 if row is not None:
-                    execute_attempt(jobs, row, stopping, descriptor, limits)
+                    execute_attempt(jobs, row, stopping, descriptor, limits, cache)
                 jobs.cleanup()
                 return 0
             # Keep the lease until all supervisors and their guardians stop.
@@ -188,12 +203,13 @@ def run(jobs, *, once=False, poll_interval=.25, limits=None, concurrency=1):
                         for future in done:
                             future.result()  # Lost publication acknowledgements stop the scheduler.
                         try:
+                            cache.cleanup()
                             jobs.cleanup()
                             while not stopping.is_set() and len(pending) < concurrency:
                                 row = jobs.claim(concurrency=concurrency)
                                 if row is None:
                                     break
-                                pending.add(pool.submit(execute_attempt, jobs, row, stopping, descriptor, limits))
+                                pending.add(pool.submit(execute_attempt, jobs, row, stopping, descriptor, limits, cache))
                         except JobError as error:
                             if error.code != 'service_busy':
                                 raise
@@ -204,6 +220,8 @@ def run(jobs, *, once=False, poll_interval=.25, limits=None, concurrency=1):
                 finally:
                     stopping.set()
     finally:
+        if cache is not None:
+            cache.close()
         for signum, handler in previous.items():
             signal.signal(signum, handler)
     return 0

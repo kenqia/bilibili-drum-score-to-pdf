@@ -9,7 +9,7 @@ from .public_video import InputError, MAX_BYTES, checked_media_url
 from .anonymous_network import PublicTransport
 
 
-def download(origin, staging):
+def inspect_source(origin, staging):
     from .bbdown_cli import inspect
     details = inspect(origin, staging)
     play = details.pop('play')
@@ -53,11 +53,20 @@ def download(origin, staging):
     info = {'formats': formats, 'duration': details['duration'],
             'http_headers': {'Referer': origin['url'], 'Origin': 'https://www.bilibili.com',
                              'User-Agent': 'Mozilla/5.0'}}
-    return download_formats(info, staging, origin=origin,
-        backend_details={'backend': 'BBDownNext', 'backend_version': '2.3.0',
+    return dict(origin=origin, info=info, backend_details={'backend': 'BBDownNext', 'backend_version': '2.3.0',
             'backend_build': details['backend_build'], 'backend_sha256': details['backend_sha256'],
             'acquisition_route': 'bbdown_direct', 'cid': details['cid'], 'aid': details['aid']},
-        transport=PublicTransport(direct=True), max_bytes=MAX_BYTES, check_url=checked_media_url)
+        )
+
+
+def download_inspected(inspection, staging, *, max_bytes=MAX_BYTES):
+    return download_formats(inspection['info'], staging, origin=inspection['origin'],
+        backend_details=inspection['backend_details'], transport=PublicTransport(direct=True),
+        max_bytes=max_bytes, check_url=checked_media_url)
+
+
+def download(origin, staging):
+    return download_inspected(inspect_source(origin, staging), staging, max_bytes=MAX_BYTES)
 
 
 def download_formats(info, staging, *, origin, backend_details, transport, max_bytes, check_url,
@@ -87,11 +96,25 @@ def download_formats(info, staging, *, origin, backend_details, transport, max_b
                 check_url(address)
                 total = 0
                 with transport.open(address, {**info.get('http_headers', {}), **fmt.get('http_headers', {})}) as response, destination.open('wb') as target:
+                    version = fmt.get('_cache_version')
+                    if version:
+                        import hashlib
+                        from urllib.parse import urlsplit
+                        parsed = urlsplit(address)
+                        resource_hash = hashlib.sha256((parsed.hostname + parsed.path).encode()).hexdigest()
+                        if resource_hash != version['resource_sha256']:
+                            raise InputError('cache_resource_changed', '备用媒体需要重新验证缓存版本。')
+                        etag = response.headers.get('ETag', '')
+                        if (hashlib.sha256(etag.encode()).hexdigest() != version['etag_sha256']
+                                or response.headers.get('Content-Length') != str(version['bytes'])):
+                            raise InputError('source_changed', '媒体版本在获取期间发生变化。')
                     while block := response.read(min(1024 * 1024, max_bytes + 1 - total)):
                         total += len(block)
                         if total > max_bytes:
                             raise InputError('download_too_large', '视频超过大小上限。请提供清晰的本地视频。')
                         target.write(block)
+                    if version and total != version['bytes']:
+                        raise InputError('source_changed', '媒体实收长度与已验证版本不一致。')
                 transport.stage = 'probe'
                 probe = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,codec_name,r_frame_rate:format=duration', '-of', 'json', str(destination)], capture_output=True, timeout=30)
                 metadata = json.loads(probe.stdout)

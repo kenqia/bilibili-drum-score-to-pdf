@@ -26,7 +26,7 @@ Skill 默认长截图、可安全执行的局部去水印、完整谱行分页�
 | `cli.py`、`arguments.py` | JSON 与参数适配；非法输入不反射载荷、路径或原始异常。 |
 | `web.py`、`static/` | 同源网页、能力认证、真实阶段及 FD 分块下载。 |
 | `schema.py`、`maintenance.py`、`owned_tree.py` | 共享已知 schema、停服快照、完整性核验、新身份恢复及有界私有根清理。 |
-| `jobs.py`、`worker.py`、`service_limits.py` | SQLite 队列、排他 worker、发布决定、存储准入、保留期和受管清理。 |
+| `jobs.py`、`worker.py`、`service_limits.py`、`video_cache.py`、`source_preparation.py`、`managed_cache_files.py` | SQLite 队列、排他 worker、发布决定、存储准入、保留期和受管清理。 |
 
 程序与网站模块位于同一 Python 包；wheel 不包含 Skill、实验视频或机器认证。基础依赖与网站可选依赖由 `pyproject.toml` 定义。
 
@@ -67,3 +67,6 @@ YouTube 的匿名范围、客户端回退、IPv4 与代理、响应上限及安�
 匿名获取不加载用户 Cookie、netrc、下载器配置、插件或模型认证。初始 URL、每次重定向、每个媒体候选均校验公共地址和支持的 HTTPS 域；实际连接固定已核验 IP，同时保持原 TLS 主机名。代理认证不转发到源站；签名 URL 和原始异常不写入产物或公开日志。允许的 API 回退、分 P、完整时长与媒体尺寸检查保留。
 
 程序与网站的支持范围和具体资源参数见[转换契约](script-product/conversion.md)及[网站运行](script-product/website.md)。这些入口不执行模型编排、重绘、轮廓转描、MIDI 或人工批准；Skill 的可选路线只在其独立工作流内执行。历史实验和现有安装保留，不自动迁移任务。
+
+
+视频缓存在单一worker租约内协调，获取进程树独立于各任务转换树。来源预检、强版本核验、全额在途预留、持有FD和精确文件身份决定是否可复用及何时清理。缓存、结果与实验留存分别管理，默认缓存24小时/1GiB，命中不续期。v4登记和快照恢复规则见[网站运行](script-product/website.md)和[维护指南](script-product/maintenance.md)。

@@ -25,6 +25,8 @@ from score_fixtures import score_frame, video_from_image
 BACKEND = '''from pathlib import Path
 import os, shutil, subprocess, sys, time
 MAX_BYTES = 2 * 1024**3
+def inspect_source(origin, target):
+    return {'origin':origin,'info':{'formats':[],'duration':2.0},'backend_details':{'cid':origin['page']}}
 def download(origin, target):
     fixture = Path(os.environ['SYNTHETIC_NETWORK_ROOT'])
     mode = (fixture / 'mode').read_text()
@@ -78,7 +80,7 @@ class WebsiteWorker(unittest.TestCase):
         self.network.mkdir()
         video_from_image(score_frame(), self.network)
         (self.network / 'network_fixture.py').write_text(BACKEND)
-        (self.network / 'sitecustomize.py').write_text("from drum_score import anonymous_backend\nfrom network_fixture import download\nanonymous_backend.download = download\n")
+        (self.network / 'sitecustomize.py').write_text("from drum_score import anonymous_backend\nfrom network_fixture import download, inspect_source\nanonymous_backend.download = download\nanonymous_backend.inspect_source = inspect_source\n")
         (self.network / 'mode').write_text('ready')
         self.client = TestClient(create_app(self.data), client=('192.0.2.10', 2000))
         self.processes = []

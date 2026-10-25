@@ -424,3 +424,10 @@ env -u PYTHONPATH /home/kenqia/issue73-installed-venv/bin/python /home/kenqia/is
 ## 八路并行改造
 
 原串行 worker 测试保留，用默认并行度 1 继续验证第二调度器拒绝、10 等待加 1 活动、取消与恢复。新增八路真实进程重叠、多 guardian 持锁、并行停止、回执丢失隔离、原子名额和空间预留测试。未知 schema 合成标记从版本 2 改为 999，避免与新版本冲突，仍保留未知版本拒绝及源不变断言。`upgrade-v1` 另验证多页结果 hash、原期限、新 inode 与清理；没有删除旧测试。
+
+
+## Issue #85 缓存获取边界
+
+旧`test_web_worker.BACKEND`只替换匿名下载，新增来源预检后会意外调用真实BBDown。该fixture现同时提供匿名元数据检查，明确返回无可证明媒体版本，继续原有普通下载与独立进程树验证。维护恢复fixture和公开入口的停滞解码fixture同步提供该预检；原断言保留。真实BBDown公开入口测试继续使用外部假可执行文件和匿名HTTP响应，并更新预检使调用次数增加一次的断言。
+
+新增`test_video_cache`在HTTP提交、真实worker、真实文件及维护CLI验证缓存。`NETWORK`只替换匿名元数据/HTTP边界，实际版本解析、传输大小/完整性核验、ffprobe、转换、schema与清理照常执行。覆盖强/弱ETag、命中/并发/取消、固定期限、在途预留、路径替换、半发布崩溃及新身份恢复；不把这些合成结果记作真实音乐校对。

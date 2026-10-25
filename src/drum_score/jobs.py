@@ -44,11 +44,12 @@ def controlled_root(path):
 class Jobs:
     def __init__(self, root, *, retention_seconds=86400, diagnostic_seconds=3600,
                  diagnostic_bytes=8 * 1024**2, min_free_bytes=512 * 1024**2,
-                 retained_bytes=4 * 1024**3, job_temp_bytes=1024**3):
+                 retained_bytes=4 * 1024**3, job_temp_bytes=1024**3,
+                 cache_bytes=1024**3, cache_retention_seconds=86400):
         values = (retention_seconds, diagnostic_seconds, diagnostic_bytes,
-                  min_free_bytes, retained_bytes, job_temp_bytes)
+                  min_free_bytes, retained_bytes, job_temp_bytes, cache_bytes, cache_retention_seconds)
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or
-               not math.isfinite(v) or v <= 0 for v in values) or job_temp_bytes > retained_bytes:
+               not math.isfinite(v) or v <= 0 for v in values) or job_temp_bytes > retained_bytes or cache_bytes > 1024**3:
             raise ValueError('无效的服务资源参数。')
         # SQLite has one writer. Serialize this scheduler's short connections
         # locally instead of letting eight supervisors compete in SQLite's busy loop.
@@ -62,6 +63,8 @@ class Jobs:
         self.min_free_bytes = int(min_free_bytes)
         self.retained_bytes = int(retained_bytes)
         self.job_temp_bytes = int(job_temp_bytes)
+        self.cache_bytes = int(cache_bytes)
+        self.cache_retention_seconds = cache_retention_seconds
         self.database = self.root / 'tasks.sqlite3'
         if self.database.is_symlink():
             raise ValueError('任务数据库不能是符号链接。')
@@ -205,7 +208,10 @@ class Jobs:
         total = 0
         if (self.root / 'attempts').is_symlink():
             raise JobError('storage_unavailable', '服务存储目录不可用，请联系运营者。', 503)
-        for directory, dirs, files in os.walk(self.root / 'attempts', followlinks=False):
+        for directory, dirs, files in os.walk(self.root, followlinks=False):
+            if Path(directory) == self.root:
+                dirs[:] = [name for name in dirs if name in ('attempts', 'cache')]
+                files = []
             for name in files:
                 try:
                     info = (Path(directory) / name).lstat()
@@ -215,7 +221,14 @@ class Jobs:
                     pass
         free = os.statvfs(self.root)
         available = free.f_bavail * free.f_frsize
-        reservation = 0
+        if (self.root / 'cache').is_symlink():
+            raise JobError('storage_unavailable', '缓存目录不可用。', 503)
+        if db is None:
+            with self.transaction(write=False) as connection:
+                shared = connection.execute('SELECT COALESCE(SUM(reservation_bytes+media_bytes),0) FROM video_cache').fetchone()[0]
+        else:
+            shared = db.execute('SELECT COALESCE(SUM(reservation_bytes+media_bytes),0) FROM video_cache').fetchone()[0]
+        reservation = shared
         if reserve:
             if db is None:
                 with self.transaction() as connection:
@@ -223,7 +236,7 @@ class Jobs:
             active = db.execute("SELECT COUNT(*) FROM tasks WHERE state IN ('running','cancelling','finishing')").fetchone()[0]
             # Conservatively reserve the whole budget, including bytes already
             # materialized, for every active attempt and the proposed next one.
-            reservation = (active + 1) * self.job_temp_bytes
+            reservation += (active + 1) * self.job_temp_bytes
         if total + reservation > self.retained_bytes or available < self.min_free_bytes + reservation:
             raise JobError('storage_full', '服务存储空间不足，请稍后重试。', 503)
         return total
