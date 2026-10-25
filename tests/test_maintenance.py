@@ -202,9 +202,9 @@ class Maintenance(unittest.TestCase):
         attempt = self.jobs.register_attempt(row)
         from PIL import Image, ImageDraw
 
-        image = Image.new("RGB", (640, 2400), "white")
+        image = Image.new("RGB", (640, 4800), "white")
         drawing = ImageDraw.Draw(image)
-        for top in range(100, 2350, 280):
+        for top in range(100, 4750, 280):
             for line in range(5):
                 drawing.line((25, top + 8 * line, 615, top + 8 * line), fill="black")
             drawing.ellipse((90, top + 12, 100, top + 20), fill="black")

@@ -254,7 +254,7 @@ class Jobs:
             raise
 
 
-    def remember_staging(self, row, root):
+    def remember_staging(self, row, root, *, print_layout=False):
         if (
             root.parent != self.attempt_root(row["id"], row["attempt"])
             or not re.fullmatch(r"\.drum-score-job-[a-z0-9_]+", root.name)
@@ -272,6 +272,8 @@ class Jobs:
             try:
                 info = root.lstat()
                 value = dict(name=root.name, device=info.st_dev, inode=info.st_ino)
+                if print_layout:
+                    value['print_layout'] = True
                 fd = os.open(
                     ".staging-ownership.json",
                     os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
@@ -301,7 +303,7 @@ class Jobs:
                 os.close(descriptor)
 
 
-    def recover_staging(self, row=None):
+    def recover_staging(self, row=None, *, print_locked=False):
         from .owned_tree import remove_owned_tree
 
         with self.transaction() as db:
@@ -334,9 +336,19 @@ class Jobs:
                     ):
                         continue
                     value = json.loads(stream.read(4097))
-                if set(value) != {"name", "device", "inode"} or not re.fullmatch(
+                if set(value) not in ({"name", "device", "inode"}, {"name", "device", "inode", "print_layout"}) or not re.fullmatch(
                     r"\.drum-score-job-[a-z0-9_]+", value["name"]
                 ):
+                    continue
+                if value.get('print_layout') and not print_locked:
+                    from .relayout import slot
+                    try:
+                        with slot(self):
+                            self.recover_staging({'id': item['task'], 'attempt': item['attempt']},
+                                                 print_locked=True)
+                    except JobError as error:
+                        if error.code != 'service_busy':
+                            raise
                     continue
                 if not remove_owned_tree(
                     descriptor, value["name"], (value["device"], value["inode"])
@@ -390,7 +402,16 @@ class Jobs:
             db.execute('UPDATE managed_attempts SET files=? WHERE task=? AND attempt=?',
                        (json.dumps(entries), row['id'], row['attempt']))
 
-    def remove_files(self, managed, entries):
+    def remove_files(self, managed, entries, *, print_locked=False):
+        if not print_locked and any(entry[0] == '.staging-ownership.json' for entry in entries):
+            from .relayout import slot
+            try:
+                with slot(self):
+                    return self.remove_files(managed, entries, print_locked=True)
+            except JobError as error:
+                if error.code == 'service_busy':
+                    return
+                raise
         # Every unlink is relative to no-follow directory FDs and recorded inodes.
         try:
             root = self.attempt_root(managed['task'], managed['attempt'])

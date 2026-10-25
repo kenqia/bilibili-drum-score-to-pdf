@@ -140,3 +140,15 @@ python -m unittest discover -s tests -v
 仓库默认不表示生产已开放八路。web 和 worker 必须使用一致的存储预算；每任务 RSS 额度不等于整个 unit 内存额度，调度器、监督线程、所有转换树和 guardian 都计入 unit cgroup。八路不能沿用现有 512 MiB `MemoryMax`、100% `CPUQuota` 和 `TasksMax=64` 就宣称通过。目标配置与验收见[容量方案](capacity-plan.md)。
 
 成功 manifest 的 `metrics.phase_seconds` 与交付摘要 `resources.phase_seconds` 记录准备、下载、探测、采样、配准、合成和分页的实际单调时钟耗时。它们不包含排队和最终监督器发布开销，不能与端到端等待混用。
+
+## 在线人数与临时打印设置
+
+首页和任务页显示“当前约 N 人在线”。同一浏览器多标签共用独立随机访客 ID，每二十秒发送心跳，服务移除六十秒无心跳的记录；后台标签页受浏览器节流影响，数字是近似值。ID 只用于统计，不含任务访问凭据，不记录浏览历史。禁用浏览器存储时显示暂不可用。HTTP 重启后重新累计。
+
+结果页支持 A4、A3、A5 纵向纸张与每页目标行数，默认自动。点击“应用设置”后重新生成 PDF 和全部预览，页数可以增加或减少，不重新获取、解码或拼接视频。程序自动计算统一比例和行间距，不能安全拆分的连续行组保持完整；超出目标时提示实际行数。默认输出也使用紧凑行组排版，短谱、连续边框等情况仍可能有底部留白。
+
+临时结果仅在当前页面预览和下载，刷新、关闭或重新打开任务链接后回到默认版本。复制链接始终指向默认结果，不保存调整历史，不延长任务期限。生成失败保留上一份可用结果。已有任务没有兼容或迁移保证。
+
+POST /api/presence 接收 visitor 字段，值为三十二位小写十六进制随机 ID，返回 online 计数，无需任务凭据。心跳存储最多四千零九十六个活跃 ID。
+
+POST /api/tasks/{id}/layout 需要原任务能力凭据，接收 paper 和 rows。paper 为 A4、A3、A5，默认 A4；rows 可为 null 或 1 至 16 的整数。返回 page_count、paper、target_rows、actual_rows、adjusted、message 以及 base64 的 pdf 和按顺序排列的 pages。PDF 与全部预览在同一次响应内完整交付，失败返回标准 error，不修改默认结果。单服务最多一个重排任务，忙时 503；总期限九十秒、最多六十四页、JSON 上限三十二 MiB。依赖现有 Poppler 安装中的 pdfimages、pdftoppm。实现和资源限制见[排版设计](print-layout-design.md)。

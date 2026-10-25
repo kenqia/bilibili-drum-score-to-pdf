@@ -424,3 +424,7 @@ env -u PYTHONPATH /home/kenqia/issue73-installed-venv/bin/python /home/kenqia/is
 ## 八路并行改造
 
 原串行 worker 测试保留，用默认并行度 1 继续验证第二调度器拒绝、10 等待加 1 活动、取消与恢复。新增八路真实进程重叠、多 guardian 持锁、并行停止、回执丢失隔离、原子名额和空间预留测试。未知 schema 合成标记从版本 2 改为 999，避免与新版本冲突，仍保留未知版本拒绝及源不变断言。`upgrade-v1` 另验证多页结果 hash、原期限、新 inode 与清理；没有删除旧测试。
+
+## 可调整打印排版
+
+2026-10-24，默认 PDF 从连续条带改为完整行组紧凑排列。test_static_video_produces_complete_a4_pages_and_actual_source_records 将单图尺寸恒等断言迁为所有实际嵌入图的完整非白像素集合恒等，并保留原来源、PTS、页面比例等断言。test_continuous_pages_preserve_gray_spacing_detached_marks_and_pale_short_ending 保留跨页统一比例、完整来源范围、灰背景和彩色记号，将一页一图假设迁为按实际嵌入顺序逐像素重建原图；没有删除测试。不可拆分行组仍核验完整单图。维护备份多页测试的合成谱面扩至十七行，继续实际验证多页恢复，不把更紧凑的一页结果当作多页证据。新增 test_print_layout 和公开 HTTP 契约覆盖页数增减、重复谱行、彩色记号、源结果不变和期限。

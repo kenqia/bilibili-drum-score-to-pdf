@@ -22,6 +22,7 @@
   <header class="bar">
     <div class="bar-inner">
       <a class="brand" href="/"><img src="/assets/icon.svg" alt="" width="28" height="28">视频鼓谱转 PDF</a>
+      <span id="online-count" class="hint" aria-live="off">在线人数连接中</span>
       <nav class="bar-nav" id="landing-nav" aria-label="页面导航"><a href="#how">怎么用</a><a href="#fit">适合的视频</a><a href="#faq">常见问题</a></nav>
     </div>
   </header>
@@ -108,6 +109,19 @@
         <section id="result" hidden aria-labelledby="preview-title">
           <div class="result-head"><h2 id="preview-title">全部页面</h2><p id="expiry" class="hint"></p></div>
           <div class="check"><p>谱面由程序自动拼接，没有人工校对。打印前请对照原视频翻一遍。</p><ul id="warnings"></ul></div>
+          <form id="layout-form" class="print-settings" aria-labelledby="layout-title">
+            <h3 id="layout-title">打印排版</h3>
+            <div class="print-fields">
+              <label for="paper">纸张尺寸<select id="paper"><option>A4</option><option>A3</option><option>A5</option></select></label>
+              <div class="row-setting"><label for="rows-auto"><input id="rows-auto" type="checkbox" checked>自动安排每页行数</label>
+                <label for="row-slider">每页目标行数</label>
+                <div class="row-controls"><input id="row-slider" type="range" min="1" max="16" value="6" disabled><input id="row-number" type="number" min="1" max="16" value="6" aria-label="每页目标行数" disabled></div>
+              </div>
+            </div>
+            <div class="actions"><button id="apply-layout" type="submit">应用设置</button><button id="reset-layout" type="button" class="quiet">恢复自动排版</button></div>
+            <p class="hint">调整只在当前页面生效，保存的链接始终打开默认版本。刷新后恢复默认排版。</p>
+            <p id="layout-status" role="status" aria-live="polite"></p>
+          </form>
           <div id="previews" class="previews"></div>
           <button id="reload-previews" type="button" class="quiet" hidden>重新加载预览</button>
         </section>

@@ -1,13 +1,9 @@
 """Conservative automatic score region, adjacent registration and whole groups."""
 import math
-import subprocess
 
 import cv2
 import numpy as np
 from PIL import Image
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import ImageReader
 
 from .video_seek import ConversionError
 from .registration import profile_of, shift_candidates, pick
@@ -134,7 +130,7 @@ def compose(paths, region, placements, output):
     result.close()
 
 
-def system_groups(image):
+def system_groups(image, *, detailed=False):
     width, height = image.size
     rows = []
     counts = np.zeros(height, dtype=np.int64)
@@ -173,7 +169,7 @@ def system_groups(image):
             gap = max(gaps, key=len)
             boundaries.append(begin + int(gap[len(gap) // 2]))
     boundaries.append(height)
-    return list(zip(boundaries[:-1], boundaries[1:])), len(staffs)
+    return list(zip(boundaries[:-1], boundaries[1:])), staffs if detailed else len(staffs)
 
 
 def _page_strips(groups, capacity):
@@ -203,30 +199,7 @@ def _page_strips(groups, capacity):
 
 
 def paginate(longshot, output):
+    from .print_layout import render
     with Image.open(longshot) as image:
-        groups, staff_count = system_groups(image)
-        page_width, page_height = A4
-        margin = 12
-        scale = min((page_width - 2 * margin) / image.width,
-                    (page_height - 2 * margin) / max(end - start for start, end in groups))
-        capacity = (page_height - 2 * margin) / scale
-        strips = _page_strips(groups, capacity)
-        pdf = output / 'score.pdf'
-        document = canvas.Canvas(str(pdf), pagesize=A4, invariant=1)
-        for index, (start, end) in enumerate(strips):
-            part = image.crop((0, start, image.width, end))
-            document.drawImage(ImageReader(part), (page_width - image.width * scale) / 2,
-                               page_height - margin - part.height * scale,
-                               width=image.width * scale, height=part.height * scale)
-            document.showPage()
-            part.close()
-        document.save()
-    try:
-        subprocess.run(['pdftoppm', '-png', '-scale-to', '1400', str(pdf), str(output / 'page')],
-                       check=True, capture_output=True, timeout=180)
-    except (OSError, subprocess.SubprocessError):
-        raise ConversionError('preview_failed', '无法生成全部页面预览，未发布 PDF。') from None
-    pages = sorted(output.glob('page-*.png'))
-    if len(pages) != len(strips):
-        raise ConversionError('preview_failed', '页面预览不完整，未发布 PDF。')
-    return pdf, pages, strips, staff_count
+        layout = render(image, output)
+    return output / 'score.pdf', sorted(output.glob('page-*.png')), layout['page_regions'], layout['staff_count']

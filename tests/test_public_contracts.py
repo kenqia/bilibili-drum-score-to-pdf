@@ -12,6 +12,52 @@ MAINTENANCE_ENTRIES = ('backup', 'verify', 'restore')
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    def test_http_temporary_layout_is_independent_complete_and_does_not_extend_expiry(self):
+        import base64
+        import hashlib
+        from unittest.mock import patch
+        import test_web_worker as web_fixture
+        fixture = web_fixture.WebsiteWorker(methodName='runTest')
+        fixture.setUp()
+        try:
+            # Full white lossless source has safe gaps; the general fixture's
+            # dark paper border intentionally binds its three rows into one group.
+            from PIL import Image, ImageDraw
+            image = Image.new('RGB', (640, 900), 'white')
+            draw = ImageDraw.Draw(image)
+            for top in (70, 330, 590):
+                for line in range(5):
+                    draw.line((20, top + line * 8, 620, top + line * 8), fill='black')
+            image.save(fixture.network / 'layout.png')
+            subprocess.run(['ffmpeg', '-v', 'error', '-y', '-loop', '1', '-i', str(fixture.network / 'layout.png'),
+                '-t', '1', '-r', '2', '-c:v', 'ffv1', '-f', 'matroska', str(fixture.network / 'input.mp4')], check=True)
+            created = fixture.client.post('/api/tasks', json={'url': 'https://www.bilibili.com/video/BV1rH4y1R7Rk'}).json()
+            task = created['id']
+            headers = {'Authorization': 'Bearer ' + created['capability']}
+            self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
+            before = fixture.state(task, headers)
+            self.assertEqual(before['state'], 'complete', before)
+            original = fixture.client.get('/api/tasks/' + task + '/pdf', headers=headers).content
+            for paper, rows, count in [('A4', 1, 3), ('A3', 3, 1), ('A5', 2, 2)]:
+                response = fixture.client.post('/api/tasks/' + task + '/layout', headers=headers,
+                                               json={'paper': paper, 'rows': rows})
+                self.assertEqual(response.status_code, 200, response.text[:300])
+                result = response.json()
+                self.assertEqual(result['page_count'], count)
+                self.assertEqual(len(result['pages']), count)
+                self.assertTrue(base64.b64decode(result['pdf']).startswith(b'%PDF'))
+                self.assertTrue(all(base64.b64decode(page).startswith(b'\x89PNG') for page in result['pages']))
+            self.assertEqual(fixture.state(task, headers), before)
+            self.assertEqual(hashlib.sha256(original).hexdigest(), before['result']['pdf']['sha256'])
+            self.assertEqual(fixture.client.get('/api/tasks/' + task + '/pdf', headers=headers).content, original)
+            self.assertEqual(fixture.client.post('/api/tasks/' + task + '/layout', json={}).status_code, 404)
+            for settings in ({'paper': 'A0'}, {'rows': 0}, {'rows': True}, {'rows': 17}, {'direction': 'landscape'}):
+                self.assertEqual(fixture.client.post('/api/tasks/' + task + '/layout', headers=headers, json=settings).status_code, 422)
+            with patch('drum_score.jobs.time.time', return_value=before['expires_at'] + 1):
+                self.assertEqual(fixture.client.post('/api/tasks/' + task + '/layout', headers=headers, json={}).status_code, 410)
+        finally:
+            fixture.tearDown()
+
     @unittest.skipUnless(sys.platform == 'linux', 'Linux website process contract')
     def test_youtube_entries_publish_canonical_source_and_all_previews(self):
         import hashlib
