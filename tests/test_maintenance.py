@@ -149,6 +149,44 @@ class Maintenance(unittest.TestCase):
                 self.assertFalse((self.root / f'backup-{index}').exists())
                 self.assertEqual({p.name: p.read_bytes() for p in changed.iterdir()}, before)
 
+    def test_explicit_v3_upgrade_and_options_snapshot_roundtrip_preserve_deadlines(self):
+        from drum_score.schema import SCHEMA_VERSION
+        options = {'start_seconds': .5, 'end_seconds': 1.5,
+                   'region_percent': [5, 4, 95, 95], 'ignore_fixed_overlays': False}
+        task = self.jobs.enqueue('https://www.bilibili.com/video/BV1rH4y1R7Rk', '192.0.2.1', options=options)
+        self.jobs.cancel(task['id'], task['capability'])
+        before = self.jobs.view(task['id'], task['capability'])
+        saved = self.root / 'options-snapshot'
+        result = self.invoke('backup', '--data-root', self.data, '--output', saved, '--services-stopped')
+        self.assertEqual(result.returncode, 0, result.stdout)
+        restored = self.root / 'options-restored'
+        self.assertEqual(self.invoke('restore', '--backup-root', saved, '--output', restored).returncode, 0)
+        self.assertEqual(Jobs(restored).view(task['id'], task['capability']), before)
+        # Model an actual old snapshot, whose exact v3 schema has no options column.
+        with sqlite3.connect(saved / 'tasks.sqlite3') as db:
+            db.execute('ALTER TABLE tasks DROP COLUMN options')
+            db.execute('PRAGMA user_version=3')
+        manifest = json.loads((saved / 'snapshot.json').read_text())
+        manifest['schema'] = 3
+        entry = next(item for item in manifest['files'] if item['path'] == 'tasks.sqlite3')
+        entry.update(bytes=(saved / 'tasks.sqlite3').stat().st_size,
+                     sha256=hashlib.sha256((saved / 'tasks.sqlite3').read_bytes()).hexdigest())
+        (saved / 'snapshot.json').write_text(json.dumps(manifest))
+        original = {p.name: p.read_bytes() for p in saved.iterdir()}
+        with self.assertRaises(ValueError):
+            Jobs(saved)
+        output = self.root / 'v3-upgraded'
+        result = self.invoke('upgrade-v3', '--backup-root', saved, '--output', output)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)['schema'], SCHEMA_VERSION)
+        recovered = Jobs(output).view(task['id'], task['capability'])
+        self.assertEqual(recovered['completed_at'], before['completed_at'])
+        self.assertEqual(recovered['expires_at'], before['expires_at'])
+        self.assertEqual(recovered['options'], {'start_seconds': 0, 'end_seconds': None,
+                          'region_percent': None, 'ignore_fixed_overlays': True})
+        self.assertEqual({p.name: p.read_bytes() for p in saved.iterdir()}, original)
+        self.assertEqual(self.invoke('upgrade-v3', '--backup-root', saved, '--output', output).returncode, 2)
+
     def test_explicit_v2_upgrade_preserves_task_deadlines_and_source_snapshot(self):
         import hashlib
         from drum_score.schema import SCHEMA_VERSION
@@ -159,6 +197,7 @@ class Maintenance(unittest.TestCase):
         self.assertEqual(self.invoke('backup', '--data-root', self.data, '--output', saved,
                                     '--services-stopped').returncode, 0)
         with sqlite3.connect(saved / 'tasks.sqlite3') as db:
+            db.execute('ALTER TABLE tasks DROP COLUMN options')
             db.execute('DROP TABLE submission_events')
             db.execute('DROP TABLE submission_control')
             db.execute('DROP INDEX task_expiry')

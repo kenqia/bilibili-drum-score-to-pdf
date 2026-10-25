@@ -86,13 +86,38 @@ function normalizeLink(text) {
   return {error:friendly.invalid_bilibili_url};
 }
 
+$("region-mode").addEventListener("change", () => {
+  const manual = $("region-mode").value === "manual";
+  $("manual-region").hidden = !manual;
+  $("manual-region").disabled = !manual;
+});
+
+function conversionOptions() {
+  const readNumber = (id, empty = null) => {
+    const input = $(id);
+    if (input.value.trim() === "" && !input.validity.badInput) return empty;
+    const value = input.valueAsNumber;
+    if (!Number.isFinite(value)) { input.focus(); throw new Error("请填写有效的有限数值。"); }
+    return value;
+  };
+  const start = readNumber("start-seconds", 0), end = readNumber("end-seconds");
+  if (start < 0 || (end !== null && end <= start)) throw new Error("开始时间须不小于零，结束时间须大于开始时间。");
+  let region = null;
+  if ($("region-mode").value === "manual") {
+    region = ["left", "top", "right", "bottom"].map(side => readNumber("region-" + side));
+    if (region.some(value => value === null || value < 0 || value > 100) || region[0] >= region[2] || region[1] >= region[3])
+      throw new Error("谱区边界须为0到100的百分比，右边界大于左边界，下边界大于上边界。");
+  }
+  return {start_seconds:start, end_seconds:end, region_percent:region, ignore_fixed_overlays:$("ignore-fixed-overlays").checked};
+}
+
 $("submit-form").addEventListener("submit", async (event) => {
   event.preventDefault(); $("submit-error").hidden = true;
   const link = normalizeLink($("source").value);
   if (link.error) { $("submit-error").textContent = link.error; $("submit-error").hidden = false; $("source").focus(); return; }
   $("submit-button").disabled = true; $("submit-button").textContent = "正在提交…";
   try {
-    const response = await api("/api/tasks", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({url:link.url})});
+    const response = await api("/api/tasks", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({url:link.url, options:conversionOptions()})});
     const created = await response.json(); window.location.assign(created.link);
   } catch (error) {
     showError("submit-error", error.code, error.message);
@@ -144,7 +169,12 @@ async function refresh() {
     $("task-title").textContent = titles[state.state] || "正在读取任务";
     let description = stages[state.stage] || "";
     if (state.state === "queued") description = state.queue_position > 1 ? `前面还有 ${state.queue_position - 1} 个任务。关掉页面也会继续排队。` : "马上轮到你了。关掉页面也会继续。";
-    if (state.state === "complete") description = `一共 ${state.result.page_count} 页 A4。先翻一遍预览，没问题就下载。`;
+    if (state.state === "complete") {
+      description = `一共 ${state.result.page_count} 页 A4。先翻一遍预览，没问题就下载。`;
+      const selected = state.result.conversion;
+      if (selected?.is_excerpt) description = `选段 ${selected.effective_range_seconds[0]} 至 ${selected.effective_range_seconds[1]} 秒。` + description;
+      if (selected?.options.region_percent) description += ` 手动谱区：${selected.options.region_percent.join("、")}%。`;
+    }
     if (state.state === "cancelled") description = "已经停止，临时文件也清理了。需要的话可以重新整理。";
     if (state.state === "interrupted") description = "服务器重启打断了处理。点「重新整理」继续。";
     if (state.state === "failed") description = "";

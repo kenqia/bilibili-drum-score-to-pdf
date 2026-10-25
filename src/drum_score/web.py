@@ -18,6 +18,7 @@ from .jobs import JobError, Jobs
 class Submission(BaseModel):
     model_config = ConfigDict(extra='forbid')
     url: str = Field(max_length=2048)
+    options: dict = Field(default_factory=dict)
 
 
 class BodyLimit:
@@ -122,7 +123,13 @@ def create_app(data_root, *, trusted_proxies=(), retention_seconds=86400, **stor
 
     @app.post('/api/tasks', status_code=201)
     def submit(body: Submission, request: Request):
-        return jobs.enqueue(body.url, peer(request))
+        from .conversion_options import normalize_options
+        from .core import ConversionError
+        try:
+            normalize_options(body.options)
+        except ConversionError as error:
+            raise JobError(error.code, str(error), 422) from None
+        return jobs.enqueue(body.url, peer(request), options=body.options)
 
     @app.get('/api/tasks/{task}')
     def status(task: str, request: Request):

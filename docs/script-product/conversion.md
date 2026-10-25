@@ -14,7 +14,7 @@ python3.12 -m venv /tmp/drum-score-env
 /tmp/drum-score-env/bin/drum-score /absolute/path/input.mp4 --output /absolute/path/new-result
 ```
 
-安装复制所需代码，运行不依赖源码仓库的当前目录。公开链接也接受 [YouTube 单视频](youtube.md)，包括 watch、youtu.be 和 Shorts，忽略时间戳与播放列表参数，处理整条视频。B站接受规范 HTTPS BV URL 或 `https://b23.tv/…` 短链接，分 P 通过完整或展开后的 BV URL 中单个正整数 `p` 指定：
+安装复制所需代码，运行不依赖源码仓库的当前目录。公开链接也接受 [YouTube 单视频](youtube.md)，包括 watch、youtu.be 和 Shorts，忽略链接中的时间戳与播放列表参数，默认处理整条视频。使用下面的显式参数选择区间。B站接受规范 HTTPS BV URL 或 `https://b23.tv/…` 短链接，分 P 通过完整或展开后的 BV URL 中单个正整数 `p` 指定：
 
 ```sh
 drum-score 'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=1' --output /absolute/path/new-result
@@ -45,6 +45,30 @@ except ConversionError as error:
 `manifest.json` 与 Python 返回值及 CLI 成功标准输出相同。`program` 记录发行版本与包内直接子级 Python 源码文件的 SHA-256，不包含网站静态资源，不能当成整个发行产物的 hash，未安装包的源码运行以 `unknown` 表示未知发行版本。CLI 失败退出码为 2，JSON 包含 `status=failed` 和 `error.code/message`。错误不返回第三方原始异常、签名媒体地址或本地私有路径。
 
 输出父目录创建或临时目录分配失败时，Python 抛出 `ConversionError`，CLI 返回 `conversion_failed` JSON 和退出码 2。临时目录清理失败不会覆盖已有具体错误码，也不会撤回已完整发布的成功结果。
+
+## 时间范围与手动谱区
+
+Python 的 `convert` 接收可选 `options` 字典，CLI 与网站使用相同语义：
+
+| 字段 | 默认值 | 范围 |
+| --- | --- | --- |
+| `start_seconds` | `0` | 有限秒数，不小于零且小于完整来源时长。 |
+| `end_seconds` | `null` | 留空到结尾；填写时须大于开始且不超过完整时长。 |
+| `region_percent` | `null` | 自动谱区，或完整画面的 `[left, top, right, bottom]` 百分比。 |
+| `ignore_fixed_overlays` | `true` | 是否自动忽略固定覆盖物对配准的影响。合成保留原始RGB与署名。 |
+
+手动区域以完整画面左上角为原点，向右、向下增加，边界在0到100之间，右和下分别大于左和上。换算为原画面像素时向下取整，矩形须至少有一个像素。类型、非有限值、反向或空区间在提交时拒绝；实际时长与像素边界在取得媒体后核验。不接受未知字段或数值字符串。
+
+例如，整理第15至75秒，并手动保留完整画面的左5%、上10%、右95%、下90%之间区域：
+
+```sh
+drum-score /absolute/path/input.mp4 --output /absolute/path/new-result \
+  --start-seconds 15 --end-seconds 75 --region-percent 5 10 95 90
+```
+
+`--no-ignore-fixed-overlays` 关闭固定覆盖物忽略。时间区间使用左闭右开 `[start, end)`，保留区间内首帧、常规采样及实际最后一帧。原生帧仍记录来源的实际PTS与time_base，不从零重新赋时。`conversion.options` 记录规范化参数，`conversion.effective_range_seconds` 记录实际区间，`conversion.is_excerpt=true` 明确结果为选段。`source.sha256` 与 `source.metadata` 始终指完整来源，不把选段当作完整原曲。
+
+完整原来源超过600秒时，在匿名媒体传输前拒绝，选择短片段不能绕过；恰好600秒允许继续完整性核验。本地来源也按完整时长检查。此限制不替代下载后的实测时长、尺寸与来源hash核验。
 
 ## 资源预算
 

@@ -12,6 +12,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from . import video_seek
 from . import public_video
+from .conversion_options import normalize_options, resolve_options
 
 ConversionError = video_seek.ConversionError
 NOTICE = '图像处理自动整理，未经音乐校对；可能保留模糊、水印、播放标记或未检测出的拼接问题。'
@@ -81,17 +82,19 @@ def _program_identity():
             'source_sha256': source_hash.hexdigest()}
 
 
-def convert(source, output, *, progress=None, limits=None, cancel=None):
+def convert(source, output, *, options=None, progress=None, limits=None, cancel=None):
+    options = normalize_options(options)
     from .supervision import run
-    return run(source, output, progress=progress, limits=limits, cancel=cancel)
+    return run(source, output, options=options, progress=progress, limits=limits, cancel=cancel)
 
 
-def _convert(source, output, *, progress=None, limits=None, cancel=None):
+def _convert(source, output, *, options=None, progress=None, limits=None, cancel=None):
     """Publish PDF, all previews and provenance together into a new directory.
 
     ``progress`` receives real stage names. Errors never include raw network
     addresses or third-party exception text. Existing output paths are refused.
     """
+    options = normalize_options(options)
     output = Path(output).absolute()
     if output.exists() or output.is_symlink():
         raise ConversionError('output_exists', '结果路径已存在，请选择新的目录。')
@@ -143,7 +146,7 @@ def _convert(source, output, *, progress=None, limits=None, cancel=None):
                 raise ConversionError('resource_limit', '来源文件超过输入大小限制。')
             source_hash = digest(local)
             metadata = video_seek.probe_video(local)
-            result = _process(local, result_dir, metadata, emit, budget)
+            result = _process(local, result_dir, metadata, emit, budget, options)
             if digest(local) != source_hash:
                 raise ConversionError('source_changed', '处理期间来源发生变化，未发布结果。')
             phase_seconds[current_phase] = phase_seconds.get(current_phase, 0) + time.monotonic() - phase_started
@@ -191,10 +194,11 @@ def _publish(source, output):
         raise ConversionError('publication_unavailable', '系统不支持独占原子发布。')
 
 
-def _process(source, output, metadata, emit, budget):
+def _process(source, output, metadata, emit, budget, options):
     from . import imaging
     if metadata['duration'] > 600 or metadata['width'] * metadata['height'] > 4_200_000:
         raise ConversionError('resource_limit', '视频超出时长或像素限制。')
+    start, end, manual_region = resolve_options(options, metadata)
     emit('sampling')
     budget.check()
     frames = output / 'samples'
@@ -210,8 +214,10 @@ def _process(source, output, metadata, emit, budget):
             image.save(path, compress_level=1)
             paths.append(path)
             references.append(artifact(output, path))
-        records = reader.sample_records(.5, consume, verify_motion=True)
-        tail_record, tail_image = reader.read_record()
+        records = reader.sample_records(.5, consume, verify_motion=True, start=start, end=end)
+        if not records:
+            raise ConversionError('invalid_request', '所选区间没有可解码的原生帧。')
+        tail_record, tail_image = reader.read_record(end=end)
         try:
             if tail_record['timestamp'] > records[-1]['timestamp']:
                 consume(len(paths), tail_image)
@@ -226,14 +232,16 @@ def _process(source, output, metadata, emit, budget):
     samples = [{**reference, **record, 'kind': 'native_frame'}
                for reference, record in zip(references, records)]
     emit('registering')
-    region = imaging.detect_region(paths[::max(1, len(paths) // 60)])
+    region = manual_region if manual_region is not None else imaging.detect_region(paths[::max(1, len(paths) // 60)])
     placements = imaging.register(paths, region, observations=records)
     emit('composing')
     longshot = output / 'longshot.png'
     imaging.compose(paths, region, placements, longshot)
     emit('paginating')
     pdf, pages, strips, staffs = imaging.paginate(longshot, output)
-    return {'warnings': [{'code': 'not_musically_proofread', 'message': NOTICE}],
+    return {'conversion': {'options': options, 'effective_range_seconds': [start, end],
+                           'is_excerpt': start > 0 or end < metadata['duration']},
+            'warnings': [{'code': 'not_musically_proofread', 'message': NOTICE}],
             'pdf': artifact(output, pdf), 'pages': [artifact(output, page) for page in pages],
             'longshot': {**artifact(output, longshot), 'kind': 'derived_image'},
             'samples': samples, 'placements': placements, 'region': list(region),
