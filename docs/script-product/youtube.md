@@ -1,6 +1,6 @@
 # YouTube 单视频获取
 
-程序、CLI 和网站使用 yt-dlp 获取匿名 YouTube 单视频。B站继续使用 BBDownNext，独立 Skill 不变。此能力已加入本地代码，尚未部署到正式网站。网络可达不代表 YouTube 一定允许匿名下载，机器人验证会导致任务失败。
+程序、CLI 和网站使用 yt-dlp 获取匿名 YouTube 单视频。B站继续使用 BBDownNext，独立 Skill 不变。2026-10-25 已随打印排版版本部署代码及固定依赖，但目标机真实来源探测返回 `public_api_unavailable`，YouTube 获取尚未通过线上验收。网络可达不代表 YouTube 一定允许匿名下载，机器人验证会导致任务失败。见[部署记录](../experiments/2026-10-25-print-deployment.md)。
 
 ## 输入范围
 

@@ -1,6 +1,6 @@
 # 本地运行匿名鼓谱网站
 
-YouTube 的 Deno 安装、代理、支持格式及失败限制见 [YouTube 获取](youtube.md)。新增代码尚未部署到正式网站。
+YouTube 的 Deno 安装、代理、支持格式及失败限制见 [YouTube 获取](youtube.md)。2026-10-25 已部署在线人数与临时打印排版；真实 B站转换及公网排版验收通过，YouTube 真实获取仍未通过。见[部署记录](../experiments/2026-10-25-print-deployment.md)。
 
 网站代码接受公开 HTTPS B站 BV、b23.tv 和 YouTube 单视频链接，将任务交给独立 worker，完成后显示全部 A4 预览并提供 PDF 下载。无需账号或邀请码。网页不支持本地上传，不调用模型。`complete` 表示完整产物已发布，结果仍为 `reliable=false`，未经音乐校对。
 
