@@ -22,6 +22,12 @@ OPTIONS_COLUMN = "options TEXT NOT NULL DEFAULT '{}'"
 SCHEMA_STATEMENTS = (V3_STATEMENTS[0][:-1] + ', ' + OPTIONS_COLUMN + ')', *V3_STATEMENTS[1:])
 
 
+CACHE_STATEMENTS = (
+    "CREATE TABLE video_cache (key TEXT PRIMARY KEY, source TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('filling','ready','unavailable')), reservation_bytes INTEGER NOT NULL CHECK(reservation_bytes>=0), media_bytes INTEGER NOT NULL DEFAULT 0 CHECK(media_bytes>=0), sha256 TEXT, full_duration REAL, width INTEGER, height INTEGER, published_at REAL, expires_at REAL, root_name TEXT NOT NULL UNIQUE, storage TEXT NOT NULL DEFAULT 'cache' CHECK(storage IN ('cache','attempts')), device INTEGER NOT NULL, inode INTEGER NOT NULL, files TEXT NOT NULL DEFAULT '[]')",
+)
+SCHEMA_STATEMENTS = (*SCHEMA_STATEMENTS, *CACHE_STATEMENTS)
+
+
 def normalized_sql(sql):
     # SQL keywords ignore case. Quoted string values in partial indexes do not.
     return " ".join(

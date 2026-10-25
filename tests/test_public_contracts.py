@@ -12,6 +12,15 @@ MAINTENANCE_ENTRIES = ('backup', 'verify', 'restore')
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    def test_worker_rejects_cache_budget_above_one_gib(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as temporary:
+            result = subprocess.run([sys.executable, '-m', 'drum_score.worker',
+                '--data-root', str(Path(temporary) / 'service'), '--once', '--cache-mib', '1025'],
+                capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse((Path(temporary) / 'service').exists())
+
     def test_advanced_options_reject_invalid_types_and_ranges_at_public_entries(self):
         import tempfile
         from fastapi.testclient import TestClient
@@ -273,7 +282,9 @@ class ScriptPublicContracts(unittest.TestCase):
                 'def download(origin,target):\n'
                 ' shutil.copyfile(os.environ["SYNTHETIC_DECODER_SOURCE"],target/"video.mp4")\n'
                 ' return {"title":"Synthetic deadline fixture","authenticated":False}\n'
-                'anonymous_backend.download=download\n')
+                'anonymous_backend.download=download\n'
+                'def inspect_source(origin,target):\n return {"origin":origin,"info":{"formats":[],"duration":1.0},"backend_details":{"cid":1}}\n'
+                'anonymous_backend.inspect_source=inspect_source\n')
             for name, body in {
                 'ffprobe': 'import json\nprint(json.dumps({"streams":[{"width":2,"height":2,"avg_frame_rate":"1/1"}],"format":{"duration":"1"}}))\n',
                 'ffmpeg': 'import os,sys,time\nfrom pathlib import Path\n'
@@ -572,7 +583,7 @@ class ScriptPublicContracts(unittest.TestCase):
                     self.assertTrue(result['pages'])
                     self.assertIn('not_musically_proofread', {warning['code'] for warning in result['warnings']})
                     self.assertEqual(list(fixture.root.rglob('.drum-score-*')), [])
-            self.assertEqual((fixture.network / 'bbdown-invocations').read_text().splitlines(), ['inspect'] * len(REMOTE_SCRIPT_ENTRIES))
+            self.assertEqual((fixture.network / 'bbdown-invocations').read_text().splitlines(), ['inspect'] * (len(REMOTE_SCRIPT_ENTRIES) + 1))
             self.assertEqual(hashlib.sha256((fixture.network / 'input.mp4').read_bytes()).hexdigest(), source_hash)
         finally:
             fixture.tearDown()
@@ -909,6 +920,7 @@ class MaintenancePublicContracts(unittest.TestCase):
                     backup(jobs.root, saved, services_stopped=True, min_free_bytes=1)
                     with sqlite3.connect(saved / 'tasks.sqlite3') as db:
                         db.execute('ALTER TABLE tasks DROP COLUMN options')
+                        db.execute('DROP TABLE video_cache')
                         db.execute('DROP TABLE submission_events')
                         db.execute('DROP TABLE submission_control')
                         db.execute('DROP INDEX task_expiry')
