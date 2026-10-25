@@ -62,11 +62,14 @@ def remove(data_root, root, row, entries):
                 except FileNotFoundError:
                     pass
             # Only expected empty directories can be removed; unknown files survive.
-            try: os.rmdir('payload', dir_fd=descriptor)
-            except OSError: pass
+            try:
+                os.rmdir('payload', dir_fd=descriptor)
+            except OSError:
+                pass
         with directory(data_root, root.parent, {'device': root.parent.stat().st_dev, 'inode': root.parent.stat().st_ino}) as parent:
             current = os.stat(root.name, dir_fd=parent, follow_symlinks=False)
-            if (current.st_dev,current.st_ino) != (row['device'],row['inode']): return False
+            if (current.st_dev,current.st_ino) != (row['device'],row['inode']):
+                return False
             os.rmdir(root.name, dir_fd=parent)
         return True
     except FileNotFoundError:

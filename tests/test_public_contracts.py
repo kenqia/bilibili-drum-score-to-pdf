@@ -12,6 +12,55 @@ MAINTENANCE_ENTRIES = ('backup', 'verify', 'restore')
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'linux', 'Real cached worker and disposable print process')
+    def test_cached_selected_result_keeps_presence_print_and_retry_contracts(self):
+        import base64
+        import hashlib
+        import test_web_worker as web_fixture
+        from test_video_cache import NETWORK
+        fixture = web_fixture.WebsiteWorker(methodName='runTest')
+        fixture.setUp()
+        try:
+            (fixture.network / 'sitecustomize.py').write_text(NETWORK)
+            options = {'start_seconds': .5, 'end_seconds': 1.5,
+                       'region_percent': [5, 4, 95, 95], 'ignore_fixed_overlays': False}
+            url = 'https://www.bilibili.com/video/BV1rH4y1R7Rk'
+            for visitor in ('a' * 32, 'b' * 32):
+                reply = fixture.client.post('/api/presence', json={'visitor': visitor})
+                self.assertEqual(reply.status_code, 200)
+            self.assertEqual(reply.json()['online'], 2)
+            first = fixture.client.post('/api/tasks', json={'url': url}).json()
+            self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
+            first_auth = {'Authorization': 'Bearer ' + first['capability']}
+            cached = fixture.state(first['id'], first_auth)
+            self.assertEqual(cached['state'], 'complete', cached)
+            second = fixture.client.post('/api/tasks', json={'url': url, 'options': options}).json()
+            auth = {'Authorization': 'Bearer ' + second['capability']}
+            fixture.client.post('/api/tasks/' + second['id'] + '/cancel', headers=auth)
+            retry = fixture.client.post('/api/tasks/' + second['id'] + '/retry', headers=auth)
+            self.assertEqual(retry.json()['options'], options)
+            self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
+            before = fixture.state(second['id'], auth)
+            self.assertEqual(before['state'], 'complete', before)
+            self.assertEqual(before['result']['source']['cache']['status'], 'hit')
+            self.assertEqual(before['result']['source']['cache']['expires_at'], cached['result']['source']['cache']['expires_at'])
+            self.assertEqual(before['result']['conversion']['options'], options)
+            self.assertTrue(before['result']['conversion']['is_excerpt'])
+            self.assertFalse(before['result']['reliable'])
+            self.assertEqual((fixture.network / 'fetches').read_text().splitlines(), ['fetch'])
+            pdf = fixture.client.get('/api/tasks/' + second['id'] + '/pdf', headers=auth).content
+            self.assertEqual(hashlib.sha256(pdf).hexdigest(), before['result']['pdf']['sha256'])
+            relayout = fixture.client.post('/api/tasks/' + second['id'] + '/layout', headers=auth,
+                                          json={'paper': 'A3', 'rows': 3})
+            self.assertEqual(relayout.status_code, 200, relayout.text[:200])
+            self.assertTrue(base64.b64decode(relayout.json()['pdf']).startswith(b'%PDF'))
+            self.assertTrue(all(base64.b64decode(page).startswith(b'\x89PNG') for page in relayout.json()['pages']))
+            self.assertEqual(fixture.state(second['id'], auth), before)
+            self.assertEqual(fixture.client.get('/api/tasks/' + second['id'] + '/pdf', headers=auth).content, pdf)
+            self.assertEqual(fixture.client.post('/api/presence', json={'visitor': 'a' * 32}).json()['online'], 2)
+        finally:
+            fixture.tearDown()
+
     def test_worker_rejects_cache_budget_above_one_gib(self):
         import tempfile
         with tempfile.TemporaryDirectory() as temporary:
@@ -108,6 +157,9 @@ class ScriptPublicContracts(unittest.TestCase):
         import test_web_worker as web_fixture
         fixture = web_fixture.WebsiteWorker(methodName='runTest')
         fixture.setUp()
+        # This test rewrites equal-length startup code within one timestamp tick.
+        # Every child must load the new pinned synthetic backend digest.
+        fixture.env['PYTHONDONTWRITEBYTECODE'] = '1'
         try:
             marker = fixture.network / 'media-opened'
             from bbdown_fixture import fixture_config, install_fake_bbdown
@@ -332,7 +384,7 @@ class ScriptPublicContracts(unittest.TestCase):
                 'def inspect_source(origin,target):\n return {"origin":origin,"info":{"formats":[],"duration":1.0},"backend_details":{"cid":1}}\n'
                 'anonymous_backend.inspect_source=inspect_source\n')
             for name, body in {
-                'ffprobe': 'import json\nprint(json.dumps({"streams":[{"width":2,"height":2,"avg_frame_rate":"1/1"}],"format":{"duration":"1"}}))\n',
+                'ffprobe': 'import json\nprint(json.dumps({"streams":[{"width":640,"height":520,"avg_frame_rate":"1/1"}],"format":{"duration":"1"}}))\n',
                 'ffmpeg': 'import os,sys,time\nfrom pathlib import Path\n'
                     'if "-h" in sys.argv:\n print("-fps_mode mode");sys.exit(0)\n'
                     'Path(os.environ["SYNTHETIC_DECODER_MARKER"]).write_text(str(os.getpid()))\n'
