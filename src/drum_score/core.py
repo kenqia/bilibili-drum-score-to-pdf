@@ -237,7 +237,8 @@ def _process(source, output, metadata, emit, budget, options):
     finally:
         reader.close()
     emit('registering')
-    region = manual_region if manual_region is not None else imaging.detect_region(paths[::max(1, len(paths) // 60)])
+    region = manual_region if manual_region is not None else imaging.detect_region(
+        paths[::max(1, len(paths) // 60)], budget_check=budget.check)
     from .registration_flow import register_refined
     from .fixed_overlays import detect as detect_fixed_overlays
     invalid, overlay_comparisons = (detect_fixed_overlays(paths, region, budget.check)

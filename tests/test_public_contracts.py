@@ -12,6 +12,112 @@ MAINTENANCE_ENTRIES = ('backup', 'verify', 'restore')
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    def test_automatic_region_selects_staff_panel_and_preserves_its_edges(self):
+        import tempfile
+        from PIL import Image, ImageDraw, ImageChops
+        import drum_score
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = Image.new('RGB', (1000, 600), 'black')
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((20, 50, 500, 550), fill='white')
+            draw.rectangle((650, 50, 950, 550), fill='white')
+            draw.text((652, 53), 'TITLE / AUTHOR', fill='blue')
+            draw.rectangle((652, 535, 948, 540), fill='red')
+            for top in (100, 200, 300, 400):
+                for line in range(5):
+                    draw.line((665, top + line * 8, 935, top + line * 8), fill='black', width=2)
+                draw.ellipse((700, top + 10, 710, top + 18), fill='black')
+            image.save(root / 'source.png')
+            source = root / 'source.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-loop', '1', '-i', str(root / 'source.png'),
+                '-t', '2', '-r', '5', '-c:v', 'ffv1', str(source)], check=True)
+            result = drum_score.convert(source, root / 'result')
+            self.assertEqual(result['status'], 'complete')
+            self.assertFalse(result['reliable'])
+            self.assertEqual(result['staff_count'], 4)
+            left, top, right, bottom = result['region']
+            self.assertLessEqual(left, 650)
+            self.assertLessEqual(top, 50)
+            self.assertGreaterEqual(right, 951)
+            self.assertGreaterEqual(bottom, 551)
+            self.assertGreater(left, 500)
+            with Image.open(root / 'result' / result['longshot']['path']) as actual:
+                self.assertIsNone(ImageChops.difference(actual.crop(
+                    (650 - left, 50 - top, 951 - left, 551 - top)),
+                    image.crop((650, 50, 951, 551))).getbbox())
+
+    def test_automatic_region_requires_temporal_support_and_rejects_two_score_panels(self):
+        import tempfile
+        from PIL import Image, ImageDraw
+        import drum_score
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for ambiguous in (False, True):
+                with self.subTest(ambiguous=ambiguous):
+                    for index in range(8):
+                        image = Image.new('RGB', (1000, 600), 'black')
+                        draw = ImageDraw.Draw(image)
+                        draw.rectangle((20, 50, 500, 550), fill='white')
+                        draw.rectangle((650, 50, 950, 550), fill='white')
+                        panels = [(665, 935)]
+                        if ambiguous or index == 0:
+                            panels.append((35, 485))
+                        for left, right in panels:
+                            for top in (100, 200, 300, 400):
+                                for line in range(5):
+                                    draw.line((left, top + line * 8, right, top + line * 8),
+                                              fill='black', width=2)
+                                draw.ellipse((left + 35, top + 10, left + 45, top + 18), fill='black')
+                        image.save(root / f'frame-{index:02d}.png')
+                    source = root / f'{ambiguous}.mkv'
+                    subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '4', '-i',
+                        str(root / 'frame-%02d.png'), '-c:v', 'ffv1', str(source)], check=True)
+                    output = root / f'result-{ambiguous}'
+                    if ambiguous:
+                        with self.assertRaises(drum_score.ConversionError) as caught:
+                            drum_score.convert(source, output)
+                        self.assertEqual(caught.exception.code, 'unsupported_layout')
+                        self.assertFalse(output.exists())
+                    else:
+                        result = drum_score.convert(source, output)
+                        self.assertEqual(result['status'], 'complete')
+                        self.assertEqual(result['staff_count'], 4)
+                        self.assertGreater(result['region'][0], 500)
+
+    def test_automatic_region_keeps_uncertain_single_late_staff_observation(self):
+        import tempfile
+        from PIL import Image, ImageDraw
+        import drum_score
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for index in range(40):
+                image = Image.new('RGB', (1000, 600), 'black')
+                draw = ImageDraw.Draw(image)
+                draw.rectangle((20, 50, 500, 550), fill='white')
+                draw.rectangle((650, 50, 950, 550), fill='white')
+                if index == 35:
+                    for top in (100, 200, 300, 400):
+                        for line in range(5):
+                            draw.line((665, top + line * 8, 935, top + line * 8), fill='black', width=2)
+                        draw.ellipse((700, top + 10, 710, top + 18), fill='black')
+                image.save(root / f'frame-{index:02d}.png')
+            source = root / 'source.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '10', '-i',
+                str(root / 'frame-%02d.png'), '-c:v', 'ffv1', str(source)], check=True)
+            # The existing registration stage cannot join this abrupt blank/
+            # score/blank sequence. Automatic selection must reach the same
+            # conservative discontinuity as manual selection, rather than
+            # wrongly rejecting a short score absent at the seven probes.
+            for name, options in (('auto', None), ('manual',
+                    {'region_percent': [64.7, 7.833333333333333, 95.3, 92.16666666666667]})):
+                with self.subTest(entry=name):
+                    with self.assertRaises(drum_score.ConversionError) as caught:
+                        drum_score.convert(source, root / name, options=options)
+                    self.assertEqual(caught.exception.code, 'discontinuity')
+                    self.assertFalse((root / name).exists())
+
+
     def test_worker_rejects_cache_budget_above_one_gib(self):
         import tempfile
         with tempfile.TemporaryDirectory() as temporary:
