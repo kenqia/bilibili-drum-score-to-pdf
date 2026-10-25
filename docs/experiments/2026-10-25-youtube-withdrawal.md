@@ -31,4 +31,14 @@ git diff HEAD --check
 
 ## 部署证据
 
-本地证据为 `work/engineering/2026-10-25-youtube-withdraw/`。部署结果、保留材料及公网验收将在实际执行后补入本节。未知文件、其他线程实验和用户任务原样保留。
+撤回与历史任务保护分别提交为 `54e00e4`、`49451892d953b71bb60023e2b8a09af74b92272c`，均已推送到 `origin/codex/parallel-conversions`。最终 wheel 与后一个提交的应用文件一致。前一中间提交未部署。
+
+北京时间 11:31:51 停止 web，确认 worker 排空后停止 worker，用旧发行创建备份 `/var/backups/drum-score/backup-before-withdraw-20261025-033150`。旧、新两份维护入口分别核验该备份，确认历史 YouTube 记录不会破坏后续备份。保留 schema 3 和原数据根 `/var/lib/drum-score-restore/abuse-v3-20261024`，原 279 条记录完成与到期时刻完全一致。原子切换 current 后，11:31:56 两服务均正常启动；没有修改 unit、资源预算、DNS、TLS、nginx 或其他服务。
+
+公网实际 Chromium 验证首页无 YouTube 文案，粘贴 YouTube 链接在网页被拒绝，三类 YouTube 链接直接请求 HTTP 均为 422 `invalid_bilibili_url`。同一浏览器随后提交真实 B站 `BV1rH4y1R7Rk?p=1`，52.136 秒完成。默认两页调整为 A5、每页目标两行后生成六页，全部预览、实际下载、刷新恢复默认、原 PDF 字节及期限不变、手机无溢出、无 pageerror 均通过。此为真实获取与产品交互验收，没有新的逐符号音乐校对。
+
+后续独立 HTTPS 探针 20/20 为 200，最慢 0.200 秒。正式 web 内存峰值 100806656 字节，MemoryHigh 五次、max/oom/oom_kill 均为零；worker 峰值 211267584 字节，内存事件均为零。两个服务无自动重启，nginx、zju-search 保持 active。离线合成重放通过且 PDF 字节相等，不作为真实音乐证据。
+
+旧发行 `/srv/drum-score/releases/print-c4115c64ed7858aa`、原数据、核验备份及新发行 `rollback/` 中的旧 current/profile 均保留，未触发回滚。临时预检服务已停止。若新版本出现故障，可停 web、排空并停 worker，将 current 原子切回旧发行，保留同一数据根；这会恢复 YouTube 入口，应仅在明确需要回滚时执行。不得用旧备份覆盖新任务或刷新其期限。
+
+本地证据为 `work/engineering/2026-10-25-youtube-withdraw/`，包含 regression/rejection/archive 及失败日志、最终构建、离线 replay、prepare/preflight/deploy 脚本与结果、`deployment.json`、公网浏览器报告、截图和临时 PDF。截图遮蔽本轮能力链接，测试凭据只在进程内持有。未知文件、其他线程实验和用户任务原样保留。
