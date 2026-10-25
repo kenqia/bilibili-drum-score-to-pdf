@@ -112,3 +112,26 @@ Python 3.12.12 下第三次完整发现 251 项全部通过，用时 347.734 秒
 | one-conversion-failure | 7.487 | 8 | 986767360 | 39 | 1 | 1901 | 8 | 1050477 |
 
 ready 媒体峰值 420929 字节，cache 路径普通文件峰值 441081 字节，attempt 路径普通文件峰值 3831108 字节。环境无 cgroup 硬限额，成本与目标机限制仍按前文解释。
+
+## 最终构建与独立安装结果
+
+在干净提交 `fe782152d9d937acae951cf989e742e88f1abfc1` 无缓存构建 wheel 和 sdist。该提交仅增加验证文档，全部 40 个包文件 hash 与已验证应用提交 `332d689` 逐项相同。wheel 及 sdist 内每个源码包文件、静态资源和 `pyproject.toml` 均逐字节核对；未混入 Skill、实验媒体或认证文件。
+
+| 产物 | SHA-256 |
+| --- | --- |
+| wheel | `fcd55f8a810bbc3549bd4af1329ba3f88d7a51c8152f161c64023cecf32abed4` |
+| sdist | `7d9cef89aaa22b4244413da876829fd77456dac4f39a0f04e651683d08032652` |
+
+两份全新独立环境基础安装和 web extra 安装均通过依赖冲突检查，从仓库外执行实际 Python 与 `drum-score` CLI 转换。Python 选择 `[0.5,1.5)`、完整手动区域且关闭固定覆盖物，验证实际 PTS/time_base、来源 hash、三行谱面、PDF 和全部预览 hash、不覆盖已有结果。CLI 另以默认完整区间转换。基础环境确认没有 FastAPI/Uvicorn，两环境确认没有 yt-dlp/EJS，安装包路径均落在对应 site-packages，全部 40 个文件再次与源码逐字节核对。
+
+web 安装实际启动 localhost HTTP 服务和独立安装的 worker，两个选段任务均完成；媒体只获取一次，第二项 hit，缓存 expires_at 不变。两位在线访客保持为两位，A3 每页一行返回三页临时结果，默认任务状态、PDF 和原期限保持。停服后实际运行 `drum-score-maintenance backup`、`verify`、`restore`，全部默认 PDF/预览与 ready cache 的 hash 相同，任务完成/到期和缓存发布/到期时刻保持，恢复登记的每份文件使用新 inode/ctime 并与实际文件逐项相符。未知 schema 999 被拒绝。
+
+安装证据根为 `/tmp/drum-issue82-context/86/build-final/`。`identity.json` 记录源码、构建提交、tree、wheel/sdist hash、全部 40 个文件 hash 和两份安装报告。`base-smoke/report.json`、`web-smoke/report.json` 记录实际结果，安装与依赖日志分别保留。以下命令已实际完成：
+
+```sh
+PATH=/tmp/drum-issue82-env/bin:$PATH python /tmp/drum-issue82-context/86/build_install.py \
+  --checkout /home/kenqia/my_folder/bilibili-drum-issue86 \
+  --output /tmp/drum-issue82-context/86/build-final
+```
+
+该脚本在构建和安装命令中清除源码 `PYTHONPATH`、`PYTHONHOME` 和 `UV_PROJECT_ENVIRONMENT`，安装验证只注入外部合成传输启动目录，不导入仓库测试。两份安装的合成来源各自生成无损媒体，其容器 hash 可不同；每份来源在自己转换前后保持一致。最终真实来源和浏览器结果验收由 Root 使用此 wheel 另行记录，本节不将 HTTP smoke 当作浏览器验收。
