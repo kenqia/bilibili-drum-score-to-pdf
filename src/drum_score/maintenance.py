@@ -16,7 +16,7 @@ import time
 
 from .arguments import PublicParser
 from .public_video import video_origin
-from .schema import SCHEMA_VERSION, ABUSE_STATEMENTS, OPTIONS_COLUMN, validate_schema
+from .schema import SCHEMA_VERSION, ABUSE_STATEMENTS, OPTIONS_COLUMN, CACHE_STATEMENTS, validate_schema
 from .owned_tree import remove_owned_tree
 
 FORMAT = 1
@@ -345,6 +345,63 @@ def stored_origin_valid(origin):
     return origin == video_origin(origin.get('url'))
 
 
+def cache_files(tree, db, budget, *, owned=False):
+    files = []
+    for record in db.execute('SELECT * FROM video_cache'):
+        row = dict(record)
+        budget.check(count=len(files)+1)
+        if (row['state'] != 'ready' or row['storage'] != 'cache' or row['reservation_bytes'] != 0
+            or not re.fullmatch(r'[0-9a-f]{64}', row['key'])
+            or not re.fullmatch(r'[A-Za-z0-9_-]{20,64}', row['root_name'])
+            or not re.fullmatch(r'[0-9a-f]{64}', row['sha256'] or '')
+            or type(row['media_bytes']) is not int or row['media_bytes'] <= 0
+            or type(row['width']) is not int or row['width'] <= 0
+            or type(row['height']) is not int or row['height'] <= 0
+            or any(type(row[k]) not in (int,float) or not math.isfinite(row[k]) for k in ('full_duration','published_at','expires_at'))
+            or not 0 < row['full_duration'] <= 600 or row['expires_at'] <= row['published_at']):
+            raise MaintenanceError('invalid_cache_snapshot')
+        source = json.loads(row['source'], object_pairs_hook=unique_object)
+        allowed = {'kind','bvid','page','url','authenticated','cid','aid','version','backend','backend_version',
+            'backend_build','backend_sha256','acquisition_route','anonymous','full_duration','single_file_fallback',
+            'actual_video','format_attempts','backup_used','selected_format'}
+        if not isinstance(source,dict) or set(source)-allowed or len(row['source']) > 16384:
+            raise MaintenanceError('invalid_cache_snapshot')
+        canonical = video_origin(source.get('url'))
+        if canonical['kind'] != 'bilibili' or any(source.get(k) != v for k,v in canonical.items()):
+            raise MaintenanceError('invalid_cache_snapshot')
+        version = source.get('version')
+        if (not isinstance(version,dict) or set(version) != {'etag_sha256','resource_sha256','bytes','format_id'}
+            or any(not re.fullmatch(r'[0-9a-f]{64}',version.get(k,'')) for k in ('etag_sha256','resource_sha256'))
+            or version['bytes'] != row['media_bytes']):
+            raise MaintenanceError('invalid_cache_snapshot')
+        entries = json.loads(row['files'], object_pairs_hook=unique_object)
+        if not isinstance(entries,list) or len(entries) != 2 or {e[0] for e in entries} != {'payload/video.mp4','payload/manifest.json'}:
+            raise MaintenanceError('invalid_cache_snapshot')
+        prefix = 'cache/' + row['root_name'] + '/'
+        if owned:
+            with tree.parent(prefix+'payload/video.mp4') as (payload_fd,_):
+                root_fd = os.open('..',os.O_RDONLY|os.O_DIRECTORY,dir_fd=payload_fd)
+                try:
+                    metadata = os.fstat(root_fd)
+                    if (metadata.st_dev,metadata.st_ino) != (row['device'],row['inode']):
+                        raise MaintenanceError('source_changed')
+                finally:
+                    os.close(root_fd)
+        for entry in entries:
+            if len(entry) != 4 or any(type(v) is not int or v < 0 for v in entry[1:]):
+                raise MaintenanceError('invalid_cache_snapshot')
+            name = prefix + entry[0]
+            with os.fdopen(tree.open(name),'rb') as stream:
+                metadata = os.fstat(stream.fileno())
+            if owned and [metadata.st_dev,metadata.st_ino,metadata.st_ctime_ns] != entry[1:]:
+                raise MaintenanceError('source_changed')
+            item = digest_copy(tree,None,name,budget)
+            if entry[0] == 'payload/video.mp4' and (item['sha256'] != row['sha256'] or item['bytes'] != row['media_bytes']):
+                raise MaintenanceError('invalid_cache_snapshot')
+            files.append(item)
+    return files
+
+
 def result_files(tree, db, budget, *, owned=False, schema_version=SCHEMA_VERSION):
     files = []
     for row in validate(db, budget, schema_version=schema_version):
@@ -443,6 +500,8 @@ def result_files(tree, db, budget, *, owned=False, schema_version=SCHEMA_VERSION
                     info.st_ctime_ns,
                 ]:
                     raise MaintenanceError("source_changed")
+    if schema_version >= 4:
+        files += cache_files(tree,db,budget,owned=owned)
     return files
 
 
@@ -486,6 +545,22 @@ def register_restored(tree, db, budget):
                     json.dumps(entries),
                 ),
             )
+        for record in db.execute('SELECT * FROM video_cache').fetchall():
+            row = dict(record)
+            prefix = 'cache/' + row['root_name'] + '/'
+            entries = []
+            for name in ('payload/video.mp4','payload/manifest.json'):
+                with os.fdopen(tree.open(prefix+name),'rb') as stream:
+                    metadata = os.fstat(stream.fileno())
+                entries.append([name,metadata.st_dev,metadata.st_ino,metadata.st_ctime_ns])
+            with tree.parent(prefix+'payload/video.mp4') as (payload_fd,_):
+                root_fd = os.open('..',os.O_RDONLY|os.O_DIRECTORY,dir_fd=payload_fd)
+                try:
+                    metadata = os.fstat(root_fd)
+                finally:
+                    os.close(root_fd)
+            db.execute('UPDATE video_cache SET device=?,inode=?,files=? WHERE key=?',
+                (metadata.st_dev,metadata.st_ino,json.dumps(entries),row['key']))
         db.commit()
     except BaseException:
         db.rollback()
@@ -749,7 +824,7 @@ def verified_files(source, budget, *, schema_version=SCHEMA_VERSION):
         name = entry["path"]
         parts(name)
         if name != "tasks.sqlite3" and not re.fullmatch(
-            r"attempts/[A-Za-z0-9_-]{20,64}/[A-Za-z0-9_-]{20,64}/result/(?:score\.pdf|manifest\.json|page-0*[1-9][0-9]*\.png)",
+            r"(?:attempts/[A-Za-z0-9_-]{20,64}/[A-Za-z0-9_-]{20,64}/result/(?:score\.pdf|manifest\.json|page-0*[1-9][0-9]*\.png)|cache/[A-Za-z0-9_-]{20,64}/payload/(?:video\.mp4|manifest\.json))",
             name,
         ):
             raise MaintenanceError("invalid_snapshot")
@@ -847,6 +922,8 @@ def restore(
                                 db.execute(statement)
                             db.execute('INSERT INTO submission_control VALUES(1,0)')
                         db.execute('ALTER TABLE tasks ADD COLUMN ' + OPTIONS_COLUMN)
+                        for statement in CACHE_STATEMENTS:
+                            db.execute(statement)
                         db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
                         validate_schema(db)
                         db.commit()

@@ -430,3 +430,13 @@ env -u PYTHONPATH /home/kenqia/issue73-installed-venv/bin/python /home/kenqia/is
 ## 可调整打印排版
 
 2026-10-24，默认 PDF 从连续条带改为完整行组紧凑排列。test_static_video_produces_complete_a4_pages_and_actual_source_records 将单图尺寸恒等断言迁为所有实际嵌入图的完整非白像素集合恒等，并保留原来源、PTS、页面比例等断言。test_continuous_pages_preserve_gray_spacing_detached_marks_and_pale_short_ending 保留跨页统一比例、完整来源范围、灰背景和彩色记号，将一页一图假设迁为按实际嵌入顺序逐像素重建原图；没有删除测试。不可拆分行组仍核验完整单图。维护备份多页测试的合成谱面扩至十七行，继续实际验证多页恢复，不把更紧凑的一页结果当作多页证据。新增 test_print_layout 和公开 HTTP 契约覆盖页数增减、重复谱行、彩色记号、源结果不变和期限。
+
+
+
+## Issue #85 缓存获取边界
+
+旧`test_web_worker.BACKEND`只替换匿名下载，新增来源预检后会意外调用真实BBDown。该fixture现同时提供匿名元数据检查，明确返回无可证明媒体版本，继续原有普通下载与独立进程树验证。维护恢复fixture和公开入口的停滞解码fixture同步提供该预检；原断言保留。真实BBDown公开入口测试继续使用外部假可执行文件和匿名HTTP响应，并更新预检使调用次数增加一次的断言。
+
+新增`test_video_cache`在HTTP提交、真实worker、真实文件及维护CLI验证缓存。`NETWORK`只替换匿名元数据/HTTP边界，实际版本解析、传输大小/完整性核验、ffprobe、转换、schema与清理照常执行。覆盖强/弱ETag、命中/并发/取消、固定期限、在途预留、路径替换、半发布崩溃及新身份恢复；不把这些合成结果记作真实音乐校对。
+
+配准的细黑边回归 `test_proven_thin_video_borders_do_not_join_all_printable_systems` 将至少两页的旧分页假设迁为 PDF 至少包含两个独立行组图片；紧凑排版可以一页容纳这些行组。原始谱区、长图逐像素和边缘彩色记号保留断言不变。

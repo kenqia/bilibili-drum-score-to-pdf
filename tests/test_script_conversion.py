@@ -496,7 +496,11 @@ Path.read_text = read
                 str(root / 'border-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
             result = drum_score.convert(source, root / 'result')
             self.assertEqual(result['region'], [2, 0, 642, 520])
-            self.assertGreaterEqual(len(result['pages']), 2)
+            # Compact printing may fit all groups on one page; the borders
+            # must still leave independently printable system images.
+            subprocess.run(['pdfimages', '-png', str(root / 'result' / result['pdf']['path']),
+                str(root / 'border-embedded')], check=True, capture_output=True)
+            self.assertGreaterEqual(len(list(root.glob('border-embedded-*.png'))), 2)
             with Image.open(root / 'result' / result['longshot']['path']) as actual:
                 self.assertEqual(actual.size, sheet.size)
                 self.assertIsNone(ImageChops.difference(actual.crop((0, 100, 570, 1420)),

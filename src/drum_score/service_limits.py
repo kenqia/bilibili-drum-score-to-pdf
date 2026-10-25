@@ -7,14 +7,17 @@ def add_storage_arguments(parser):
     parser.add_argument('--diagnostic-seconds', type=float, default=3600, help='失败/取消/中断诊断保留秒数，默认3600')
     parser.add_argument('--diagnostic-mib', type=float, default=8, help='全局脱敏诊断文字额度MiB，默认8')
     parser.add_argument('--min-free-mib', type=float, default=512, help='磁盘可用空间保留底线MiB，默认512')
-    parser.add_argument('--retained-mib', type=float, default=4096, help='任务目录总逻辑字节额度MiB，默认4096')
+    parser.add_argument('--retained-mib', type=float, default=4096, help='任务与缓存总逻辑字节额度MiB，默认4096')
     parser.add_argument('--max-temp-mib', type=float, default=1024, help='单次暂存上限与准入预留MiB，默认1024')
+    parser.add_argument('--cache-mib', type=float, default=1024, help='媒体缓存含在途额度MiB，最大及默认1024')
+    parser.add_argument('--cache-retention-seconds', type=float, default=86400, help='缓存发布后保留秒数，命中不续期')
 
 
 def storage_options(args):
     return dict(retention_seconds=args.retention_seconds, diagnostic_seconds=args.diagnostic_seconds,
         diagnostic_bytes=args.diagnostic_mib * 1024**2, min_free_bytes=args.min_free_mib * 1024**2,
-        retained_bytes=args.retained_mib * 1024**2, job_temp_bytes=args.max_temp_mib * 1024**2)
+        retained_bytes=args.retained_mib * 1024**2, job_temp_bytes=args.max_temp_mib * 1024**2, cache_bytes=args.cache_mib * 1024**2,
+        cache_retention_seconds=args.cache_retention_seconds)
 
 
 def add_conversion_arguments(parser):

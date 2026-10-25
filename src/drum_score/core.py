@@ -88,7 +88,7 @@ def convert(source, output, *, options=None, progress=None, limits=None, cancel=
     return run(source, output, options=options, progress=progress, limits=limits, cancel=cancel)
 
 
-def _convert(source, output, *, options=None, progress=None, limits=None, cancel=None):
+def _convert(source, output, *, options=None, progress=None, limits=None, cancel=None, prepared=None):
     """Publish PDF, all previews and provenance together into a new directory.
 
     ``progress`` receives real stage names. Errors never include raw network
@@ -127,7 +127,12 @@ def _convert(source, output, *, options=None, progress=None, limits=None, cancel
             budget.check()
             result_dir = work / 'result'
             result_dir.mkdir()
-            if remote:
+            if prepared is not None and not prepared.get('bypass'):
+                local = Path(prepared['path'])
+                origin = prepared['origin']
+                if digest(local) != prepared['sha256']:
+                    raise ConversionError('source_changed', '缓存来源发生变化，未发布结果。')
+            elif remote:
                 budget.check()
                 emit('downloading')
                 acquisition = work / 'acquisition'
@@ -136,6 +141,8 @@ def _convert(source, output, *, options=None, progress=None, limits=None, cancel
                     local, origin = public_video.acquire(source, acquisition,
                         timeout=max(.1, budget.deadline - time.monotonic()),
                         max_bytes=int(budget.limits['input_bytes']))
+                    if prepared and prepared.get('bypass'):
+                        origin['cache'] = {'status': prepared.get('bypass_reason', 'bypass_version'), 'published_at': None, 'expires_at': None}
                 except public_video.InputError as error:
                     raise ConversionError(error.code, str(error)) from None
             else:

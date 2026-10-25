@@ -188,6 +188,7 @@ class Maintenance(unittest.TestCase):
         # Model an actual old snapshot, whose exact v3 schema has no options column.
         with sqlite3.connect(saved / 'tasks.sqlite3') as db:
             db.execute('ALTER TABLE tasks DROP COLUMN options')
+            db.execute('DROP TABLE video_cache')
             db.execute('PRAGMA user_version=3')
         manifest = json.loads((saved / 'snapshot.json').read_text())
         manifest['schema'] = 3
@@ -221,6 +222,7 @@ class Maintenance(unittest.TestCase):
                                     '--services-stopped').returncode, 0)
         with sqlite3.connect(saved / 'tasks.sqlite3') as db:
             db.execute('ALTER TABLE tasks DROP COLUMN options')
+            db.execute('DROP TABLE video_cache')
             db.execute('DROP TABLE submission_events')
             db.execute('DROP TABLE submission_control')
             db.execute('DROP INDEX task_expiry')
@@ -616,7 +618,7 @@ class Maintenance(unittest.TestCase):
         video_from_image(score_frame(), network)
         (network / "network_fixture.py").write_text(BACKEND)
         (network / "sitecustomize.py").write_text(
-            "from drum_score import anonymous_backend\nfrom network_fixture import download\nanonymous_backend.download=download\n"
+            "from drum_score import anonymous_backend\nfrom network_fixture import download, inspect_source\nanonymous_backend.download=download\nanonymous_backend.inspect_source=inspect_source\n"
         )
         (network / "mode").write_text("ready")
         tools = self.root / "tools"

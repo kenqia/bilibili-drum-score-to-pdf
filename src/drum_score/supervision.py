@@ -39,7 +39,7 @@ def guardian_lease(descriptor):
         _guardian_lock.reset(token)
 
 
-def _worker(source, output, limits, connection, temporary, parent_pid, ready, options=None):
+def _worker(source, output, limits, connection, temporary, parent_pid, ready, options=None, prepared=None, operation="convert", inspection=None, register=None):
     if hasattr(os, 'setsid'):
         os.setsid()
     signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -52,18 +52,28 @@ def _worker(source, output, limits, connection, temporary, parent_pid, ready, op
     os.environ.update(TMPDIR=temporary, OMP_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1',
                       MKL_NUM_THREADS='1', NUMEXPR_NUM_THREADS='1')
     tempfile.tempdir = temporary
+    source_descriptor = None
     try:
         ready.wait()
+        if prepared is not None and '_fd' in prepared:
+            source_descriptor = prepared['_fd'].detach()
+            prepared['path'] = f'/proc/{os.getpid()}/fd/{source_descriptor}'
         import cv2
         cv2.setNumThreads(1)
-        result = _convert(source, output, options=options, limits=limits, progress=lambda stage:
-                          connection.send(('stage', stage)) if stage != 'complete' else None)
+        if operation != 'convert':
+            from .source_preparation import prepare
+            result = prepare(operation, source, output, limits, inspection)
+        else:
+            result = _convert(source, output, options=options, limits=limits, prepared=prepared, progress=lambda stage:
+                              connection.send(('stage', stage)) if stage != 'complete' else None)
         connection.send(('result', result))
     except ConversionError as error:
         connection.send(('error', (error.code, str(error))))
     except BaseException:
         connection.send(('error', ('conversion_failed', '转换进程异常退出，未发布结果。')))
     finally:
+        if source_descriptor is not None:
+            os.close(source_descriptor)
         connection.close()
 
 
@@ -206,11 +216,11 @@ def _stop(process, tracked, *, root_identity=None, wait_until_stopped=False):
         time.sleep(.01)
 
 
-def run(source, output, *, options=None, progress=None, limits=None, cancel=None):
+def run(source, output, *, options=None, progress=None, limits=None, cancel=None, prepared=None, operation="convert", inspection=None, register=None):
     # Directory setup and context-manager cleanup are filesystem operations too.
     # Keep them inside the same public error boundary as the worker lifecycle.
     try:
-        return _run(source, output, options=options, progress=progress, limits=limits, cancel=cancel)
+        return _run(source, output, options=options, progress=progress, limits=limits, cancel=cancel, prepared=prepared, operation=operation, inspection=inspection, register=register)
     except KeyboardInterrupt:
         raise ConversionError('cancelled', '转换已取消，未发布结果。') from None
     except ConversionError:
@@ -219,7 +229,7 @@ def run(source, output, *, options=None, progress=None, limits=None, cancel=None
         raise ConversionError('conversion_failed', '转换进程异常退出，未发布结果。') from None
 
 
-def _run(source, output, *, options=None, progress=None, limits=None, cancel=None):
+def _run(source, output, *, options=None, progress=None, limits=None, cancel=None, prepared=None, operation="convert", inspection=None, register=None):
     started = time.monotonic()
     budget = ResourceBudget(limits, cancel)
     lease = _guardian_lock.get()
@@ -243,7 +253,11 @@ def _run(source, output, *, options=None, progress=None, limits=None, cancel=Non
         budget.root = root
         parent, child = context.Pipe(duplex=False)
         ready = context.Event()
-        process = context.Process(target=_worker, args=(source, root / 'complete', budget.limits, child, temporary, os.getpid(), ready, options))
+        if prepared is not None and '_descriptor' in prepared:
+            from multiprocessing.reduction import DupFd
+            prepared = dict(prepared)
+            prepared['_fd'] = DupFd(prepared.pop('_descriptor'))
+        process = context.Process(target=_worker, args=(source, root / 'complete', budget.limits, child, temporary, os.getpid(), ready, options, prepared, operation, inspection))
         guardian = None
         guardian_write = None
         previous_term = None
@@ -308,6 +322,8 @@ def _run(source, output, *, options=None, progress=None, limits=None, cancel=Non
             if result is None or process.is_alive() or process.exitcode != 0:
                 raise ConversionError('conversion_failed', '转换进程异常退出，未发布结果。')
             budget.check(force_disk=True)
+            if operation == 'inspect':
+                return result  # Private URLs stay in the pipe, never a manifest.
             result['resources'] = {'limits': budget.limits,
                 'phase_seconds': result['metrics'].get('phase_seconds', {}), 'peak_sampled_tree_rss_bytes': peak_rss or None,
                 'peak_observed_temp_bytes': max(peak_disk, budget._peak_temp),
@@ -315,8 +331,13 @@ def _run(source, output, *, options=None, progress=None, limits=None, cancel=Non
                 'disk_sample_interval_seconds': .2,
                 'opencv_threads': 1, 'numeric_thread_environment': 1}
             result['elapsed_seconds'] = time.monotonic() - started
+            if prepared and prepared.get('_preparation'):
+                result['resources']['source_preparation'] = prepared['_preparation']
+                result['elapsed_seconds'] += prepared['_preparation']['elapsed_seconds']
             (root / 'complete' / 'manifest.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
             budget.check(force_disk=True)
+            if register is not None:
+                register(root / 'complete')
             _publish(root / 'complete', output)
             published = True
         except KeyboardInterrupt:

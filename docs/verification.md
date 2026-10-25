@@ -30,6 +30,8 @@ Windows CI 运行原生工具检查、跨宿主解码、公开入口共同约束
 
 `tests/test_acquisition_lifecycle.py` 和 `tests/test_web_worker.py` 使用真实独立进程与 OS 信号。离线网络只替换外部传输边界；阶段 marker 必须证明测试确实进入待停止阶段。PID 复用测试替换 `/proc` 观测后检查真实 sentinel 进程，不能只断言调用了 mock。
 
+`tests/test_video_cache.py`通过HTTP、真实worker、媒体文件和维护CLI验证缓存版本、实际下载数、并发及取消、期限、容量、持有FD、身份替换和半发布恢复。版本协议观察与本轮red/green证据见[视频缓存实验](experiments/2026-10-25-issue85-video-cache.md)。合成传输测试不代表真实网络下载或音乐校对。
+
 `tests/test_product_lifecycle.py` 覆盖 schema 拒绝、期限不刷新、到期文件清理、已打开 FD、容量准入、诊断限额、文件身份与 symlink 边界、同大小产物损坏。worker 的崩溃恢复必须覆盖发布前后，未登记的用户文件保留。
 
 `tests/test_maintenance.py` 覆盖一致快照、完整多页结果、正式 worker 恢复、原期限及新身份清理、锁与真实 HTTP 写屏障、schema/路径/文件完整性、容量/期限，以及复制、清单写入、发布前的实际 SIGKILL。ENOSPC、子目录 fsync 与发布后父目录 fsync 使用仅作用于合成子进程的外部 I/O 故障注入，不代表真实断电。整服务树 SIGKILL 包含 guardian，恢复须清理确切受管临时根，保留未知根、attempt 文件及身份替换物。

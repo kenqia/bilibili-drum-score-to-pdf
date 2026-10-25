@@ -26,7 +26,7 @@ Skill 默认长截图、可安全执行的局部去水印、完整谱行分页�
 | `cli.py`、`arguments.py` | JSON 与参数适配；非法输入不反射载荷、路径或原始异常。 |
 | `web.py`、`static/` | 同源网页、能力认证、真实阶段及 FD 分块下载。 |
 | `schema.py`、`maintenance.py`、`owned_tree.py` | 共享已知 schema、停服快照、完整性核验、新身份恢复及有界私有根清理。 |
-| `jobs.py`、`worker.py`、`service_limits.py` | SQLite 队列、排他 worker、发布决定、存储准入、保留期和受管清理。 |
+| `jobs.py`、`worker.py`、`service_limits.py`、`video_cache.py`、`source_preparation.py`、`managed_cache_files.py` | SQLite 队列、排他 worker、发布决定、存储准入、保留期和受管清理。 |
 
 程序与网站模块位于同一 Python 包；wheel 不包含 Skill、实验视频或机器认证。基础依赖与网站可选依赖由 `pyproject.toml` 定义。
 
@@ -69,3 +69,7 @@ HTTP 接受公开 HTTPS BV 链接或 b23.tv 短链接，只做本地格式校验
 ## 在线人数与临时打印排版
 
 HTTP 服务使用有界内存心跳统计近似访客，浏览器随机 ID 与任务能力凭据分离。默认 PDF 按完整行组紧凑排列。结果页重新排版从已经核验且合法打开的默认 PDF 提取嵌入图片，不调用媒体获取或转换队列；独立受限进程和 guardian 处理临时材料，结果与全部预览一次返回，服务端不持久化排版版本。任务数据库、原结果和原期限保持不变。参数及限制见[排版设计](script-product/print-layout-design.md)。
+
+
+
+视频缓存在单一worker租约内协调，获取进程树独立于各任务转换树。来源预检、强版本核验、全额在途预留、持有FD和精确文件身份决定是否可复用及何时清理。缓存、结果与实验留存分别管理，默认缓存24小时/1GiB，命中不续期。v4登记和快照恢复规则见[网站运行](script-product/website.md)和[维护指南](script-product/maintenance.md)。
