@@ -206,13 +206,14 @@ def _process(source, output, metadata, emit, budget, options):
     if metadata['duration'] > 600 or metadata['width'] * metadata['height'] > 4_200_000:
         raise ConversionError('resource_limit', '视频超出时长或像素限制。')
     start, end, manual_region = resolve_options(options, metadata)
-    emit('sampling')
     budget.check()
     frames = output / 'samples'
     frames.mkdir()
     paths = []
-    references = []
     metrics = {'decode_elapsed': 0, 'seek_count': 0, 'decoded_reported_frames': 0, 'peak_temp_disk': 0}
+    from .visual_preflight import inspect as visual_preflight
+    preflight = visual_preflight(source, metadata, metrics, budget.check, start=start, end=end)
+    emit('sampling')
     reader = video_seek.VideoReader(source, metadata, metrics)
     try:
         def consume(index, image):
@@ -220,7 +221,6 @@ def _process(source, output, metadata, emit, budget, options):
             path = frames / f'{index:05d}.png'
             image.save(path, compress_level=1)
             paths.append(path)
-            references.append(artifact(output, path))
         records = reader.sample_records(.5, consume, verify_motion=True, start=start, end=end)
         if not records:
             raise ConversionError('invalid_request', '所选区间没有可解码的原生帧。')
@@ -236,11 +236,37 @@ def _process(source, output, metadata, emit, budget, options):
             tail_image.close()
     finally:
         reader.close()
-    samples = [{**reference, **record, 'kind': 'native_frame'}
-               for reference, record in zip(references, records)]
     emit('registering')
     region = manual_region if manual_region is not None else imaging.detect_region(paths[::max(1, len(paths) // 60)])
-    placements = imaging.register(paths, region, observations=records)
+    from .registration_flow import register_refined
+    from .fixed_overlays import detect as detect_fixed_overlays
+    invalid, overlay_comparisons = (detect_fixed_overlays(paths, region, budget.check)
+        if options['ignore_fixed_overlays'] else (None, 0))
+    refinement_reader = video_seek.VideoReader(source, metadata, metrics)
+    supplemental = 0
+    def refine(timestamp):
+        nonlocal supplemental
+        budget.check()
+        record, image = refinement_reader.read_record(timestamp)
+        try:
+            path = frames / f'refined-{supplemental:05d}.png'
+            supplemental += 1
+            image.save(path, compress_level=1)
+            budget.check(force_disk=True)
+            return path, record
+        finally:
+            image.close()
+    try:
+        placements, registration = register_refined(paths, region, records, refine, budget.check, invalid=invalid)
+        registration.update(invalid_pixels=int(invalid.sum()) if invalid is not None else 0, overlay_comparisons=overlay_comparisons)
+    finally:
+        refinement_reader.close()
+    samples = [{**artifact(output, path), **record, 'kind': 'native_frame'}
+               for path, record in zip(paths, records)]
+    registration['match_region'] = list(region)
+    if manual_region is None:
+        from .score_borders import trim as trim_score_borders
+        region = trim_score_borders([paths[item['sample']] for item in placements], region, budget.check)
     emit('composing')
     longshot = output / 'longshot.png'
     imaging.compose(paths, region, placements, longshot)
@@ -253,4 +279,4 @@ def _process(source, output, metadata, emit, budget, options):
             'longshot': {**artifact(output, longshot), 'kind': 'derived_image'},
             'samples': samples, 'placements': placements, 'region': list(region),
             'page_regions': [list(strip) for strip in strips], 'staff_count': staffs,
-            'metrics': metrics}
+            'metrics': metrics, 'registration': registration, 'preflight': preflight}

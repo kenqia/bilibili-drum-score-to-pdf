@@ -1,5 +1,4 @@
 """Acquisition and decoding protections retained across workflow replacement."""
-import json
 import os
 import sys
 import time
@@ -76,7 +75,9 @@ class MediaBoundaryTests(unittest.TestCase):
             preserved.mkdir()
             (preserved / 'score.pdf').write_bytes(b'user result')
             metrics = []
+            before_debit = []
             def fail(reader, interval, consume, **kwargs):
+                before_debit.append(dict(reader.metrics))
                 reader.metrics['decode_elapsed'] += 60
                 reader.metrics['seek_count'] += 1
                 metrics.append(dict(reader.metrics))
@@ -84,8 +85,8 @@ class MediaBoundaryTests(unittest.TestCase):
             with patch.object(VideoReader, 'sample_records', fail):
                 with self.assertRaises(ConversionError):
                     _convert(video, base / 'new-result')
-            self.assertEqual(metrics[0]['decode_elapsed'], 60)
-            self.assertEqual(metrics[0]['seek_count'], 1)
+            self.assertEqual(metrics[0]['decode_elapsed'] - before_debit[0]['decode_elapsed'], 60)
+            self.assertEqual(metrics[0]['seek_count'] - before_debit[0]['seek_count'], 1)
             self.assertFalse((base / 'new-result').exists())
             self.assertEqual((preserved / 'score.pdf').read_bytes(), b'user result')
             self.assertEqual(video.read_bytes(), before)
