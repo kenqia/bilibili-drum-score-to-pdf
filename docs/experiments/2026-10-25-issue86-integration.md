@@ -83,10 +83,55 @@ git diff --check
 
 缓存 ready 媒体峰值为 420929 字节，cache 路径普通文件峰值为 441079 字节，attempt 路径普通文件峰值为 3847766 字节。各波保留完整阶段 timeline、文件用量、ready/reservation/filling、空闲磁盘及逐任务资源。热缓存八项全部为 hit，expires_at 逐项等于冷缓存发布期限。冷缓存 leader 被取消后共享获取继续，七项成功；最后两波各有七项成功。共 40 项完成，全部保留五行和实际补帧请求证据。
 
-## 最终源码回归结果
+## 审查修复前的源码回归结果
 
 Python 3.12.12 下第三次完整发现 251 项全部通过，用时 347.734 秒，没有跳过，完整日志为 `regression-final-2.log`。此轮包含修复后的两份测试 fixture、新增公开组合测试，以及 AST 等价的缓存格式修改。此前 19 项期限和缓存定向验证用时 90.685 秒通过，日志为 `targeted-final.log`。连续八次时长公开矩阵与最终完整回归分别记录，不省略前两次失败。
 
 离线 CI 合成重放通过，用时 2.304 秒，输出在 `ci-replay-final/`，命令状态在 `final-verify.json`。该文件中的第二项仍为第二次完整回归的真实失败记录，最终完整回归结果以 `regression-final-2.log` 为准。Ruff 0.14.14 的 E701/E702、Python 编译、JavaScript 语法和 `git diff --check` 均通过。最终分片仍为 126 和 125 项，测试修复没有改变发现集合。
 
-本提交先交付源验证，最终 wheel 构建、基础/web 独立安装与安装后真实来源/浏览器验证等待独立审查结论后执行。前文安装段描述已准备的验证脚本，不表示这些安装检查已经通过。
+此阶段先交付源验证。审查后重新执行的完整回归、容量和最终安装结果见下节，旧的 251 项与旧源容量只作历史证据。
+## 自动选区审查后的最终验证
+
+独立审查在合成双面板来源复现了较大空白面板抢占谱区，修复与红绿记录见[自动谱区审查修复](2026-10-25-issue82-region-review.md)。集成提交 `332d6893c30b162d82603622f0b4b3aedf1e072b` 改变 `core.py` 和 `imaging.py`，通过多个已采样原生帧的五线结构和有效纸面候选判断自动谱区，并在各候选和帧检查预算。旧的 251 项回归、旧源容量和旧 wheel 都不作为该提交的最终验证。
+
+该修复未用保留集调参。新的双面板改善由合成来源证明，不把它归因到此前已恢复的真实开发来源。Root 后续额外尝试的真实选段仍为 `discontinuity`，没有已完成的真实遮罩改善产物。最终安装后的真实来源和浏览器验证另由 Root 完成，不与本页合成 HTTP smoke 混称。
+
+最终应用提交 `332d689` 的新鲜完整回归为 254 项全部通过，耗时 349.703 秒，无跳过，日志为 `review-regression-final.log`。离线 CI 重放重新通过，耗时 2.478 秒，输出为 `review-ci-final/`。完整调度命令及退出状态保存在 `review-final-verify.json`。确定性分片重新核对为 127 加 127 项，交集为空且并集等于完整发现，记录为 `review-shard-check.json`。Ruff 0.14.14 E701/E702、Python 编译、JavaScript 语法和 `git diff --check` 均重新通过。`review-source-files.json` 冻结最终全部 40 个包文件 hash。
+
+最终应用的八波容量在 `review-capacity-final/report.json` 再次全部通过，输入、参数和采样方法与前述相同，源码提交明确绑定 `332d689`，并保存全部包文件 hash。40 项完成、一项取消、两项受控失败；40 项均有实际补帧请求，热缓存八项期限逐项不变。该新跑覆盖自动候选新增的逐帧预算检查，未将旧源实验当作最终源验证。
+
+| 波次 | 墙钟秒 | 运行重叠峰值 | RSS 峰值 | 线程峰值 | 媒体获取数 | 媒体读取字节 | Range 次数 | 在途预留峰值 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| baseline-0 | 2.094 | 1 | 250699776 | 10 | 1 | 34919 | 1 | 1083495 |
+| baseline-1 | 2.036 | 1 | 214003712 | 10 | 1 | 34919 | 1 | 1083495 |
+| baseline-2 | 2.001 | 1 | 221347840 | 10 | 1 | 34919 | 1 | 1083495 |
+| cold-cancel-leader | 5.632 | 8 | 1029472256 | 37 | 1 | 34919 | 8 | 1083495 |
+| warm | 5.801 | 8 | 1078263808 | 39 | 0 | 0 | 8 | 0 |
+| independent-identities | 8.746 | 8 | 683724800 | 50 | 8 | 279352 | 8 | 4333980 |
+| one-preflight-failure | 6.168 | 7 | 967548928 | 40 | 0 | 0 | 7 | 0 |
+| one-conversion-failure | 7.487 | 8 | 986767360 | 39 | 1 | 1901 | 8 | 1050477 |
+
+ready 媒体峰值 420929 字节，cache 路径普通文件峰值 441081 字节，attempt 路径普通文件峰值 3831108 字节。环境无 cgroup 硬限额，成本与目标机限制仍按前文解释。
+
+## 最终构建与独立安装结果
+
+在干净提交 `fe782152d9d937acae951cf989e742e88f1abfc1` 无缓存构建 wheel 和 sdist。该提交仅增加验证文档，全部 40 个包文件 hash 与已验证应用提交 `332d689` 逐项相同。wheel 及 sdist 内每个源码包文件、静态资源和 `pyproject.toml` 均逐字节核对；未混入 Skill、实验媒体或认证文件。
+
+| 产物 | SHA-256 |
+| --- | --- |
+| wheel | `fcd55f8a810bbc3549bd4af1329ba3f88d7a51c8152f161c64023cecf32abed4` |
+| sdist | `7d9cef89aaa22b4244413da876829fd77456dac4f39a0f04e651683d08032652` |
+
+两份全新独立环境基础安装和 web extra 安装均通过依赖冲突检查，从仓库外执行实际 Python 与 `drum-score` CLI 转换。Python 选择 `[0.5,1.5)`、完整手动区域且关闭固定覆盖物，验证实际 PTS/time_base、来源 hash、三行谱面、PDF 和全部预览 hash、不覆盖已有结果。CLI 另以默认完整区间转换。基础环境确认没有 FastAPI/Uvicorn，两环境确认没有 yt-dlp/EJS，安装包路径均落在对应 site-packages，全部 40 个文件再次与源码逐字节核对。
+
+web 安装实际启动 localhost HTTP 服务和独立安装的 worker，两个选段任务均完成；媒体只获取一次，第二项 hit，缓存 expires_at 不变。两位在线访客保持为两位，A3 每页一行返回三页临时结果，默认任务状态、PDF 和原期限保持。停服后实际运行 `drum-score-maintenance backup`、`verify`、`restore`，全部默认 PDF/预览与 ready cache 的 hash 相同，任务完成/到期和缓存发布/到期时刻保持，恢复登记的每份文件使用新 inode/ctime 并与实际文件逐项相符。未知 schema 999 被拒绝。
+
+安装证据根为 `/tmp/drum-issue82-context/86/build-final/`。`identity.json` 记录源码、构建提交、tree、wheel/sdist hash、全部 40 个文件 hash 和两份安装报告。`base-smoke/report.json`、`web-smoke/report.json` 记录实际结果，安装与依赖日志分别保留。以下命令已实际完成：
+
+```sh
+PATH=/tmp/drum-issue82-env/bin:$PATH python /tmp/drum-issue82-context/86/build_install.py \
+  --checkout /home/kenqia/my_folder/bilibili-drum-issue86 \
+  --output /tmp/drum-issue82-context/86/build-final
+```
+
+该脚本在构建和安装命令中清除源码 `PYTHONPATH`、`PYTHONHOME` 和 `UV_PROJECT_ENVIRONMENT`，安装验证只注入外部合成传输启动目录，不导入仓库测试。两份安装的合成来源各自生成无损媒体，其容器 hash 可不同；每份来源在自己转换前后保持一致。最终真实来源和浏览器结果验收由 Root 使用此 wheel 另行记录，本节不将 HTTP smoke 当作浏览器验收。
