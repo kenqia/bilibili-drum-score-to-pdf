@@ -9,10 +9,11 @@ from .video_seek import ConversionError
 from .registration import profile_of, shift_candidates, pick, LOCAL_GOOD
 
 
-def detect_region(paths):
+def detect_region(paths, *, budget_check=lambda: None):
     """Aggregate paper frequency without retaining a stack of native images."""
     frequency = None
     for path in paths:
+        budget_check()
         with Image.open(path) as image:
             width, height = image.size
             image.thumbnail((640, 640))
@@ -33,12 +34,54 @@ def detect_region(paths):
     count, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
     if count < 2:
         raise ConversionError('unsupported_layout', '未找到固定白底谱区。')
-    x, y, w, h, area = stats[1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])]
-    if area < mask.size * .05:
-        raise ConversionError('unsupported_layout', '未找到足够大的固定白底谱区。')
     sx, sy = width / mask.shape[1], height / mask.shape[0]
-    return (max(0, math.floor(x * sx) - 3), max(0, math.floor(y * sy) - 3),
-            min(width, math.ceil((x + w) * sx) + 3), min(height, math.ceil((y + h) * sy) + 3))
+    candidates = []
+    for x, y, w, h, area in stats[1:]:
+        if area < mask.size * .05:
+            continue
+        candidates.append((max(0, math.floor(x * sx) - 3),
+            max(0, math.floor(y * sy) - 3),
+            min(width, math.ceil((x + w) * sx) + 3),
+            min(height, math.ceil((y + h) * sy) + 3)))
+    # Paper connectivity establishes the entire viewport, including titles and
+    # marginal marks. Staff structure validates that viewport, never crops it.
+    # Distributed native frames distinguish a stable score from a transient
+    # white panel. Multiple supported panels remain ambiguous regardless of area.
+    observations = sorted(set(np.linspace(0, len(paths) - 1,
+                                         min(7, len(paths)), dtype=int).tolist()))
+    support = [0] * len(candidates)
+
+    def observe(index):
+        budget_check()
+        with Image.open(paths[index]) as image:
+            for candidate, region in enumerate(candidates):
+                budget_check()
+                with image.crop(region) as crop:
+                    try:
+                        system_groups(crop)
+                    except ConversionError as error:
+                        if error.code != 'unsupported_layout':
+                            raise
+                    else:
+                        support[candidate] += 1
+
+    for index in observations:
+        observe(index)
+    if max(support, default=0) < 2:
+        # A short or late score may fall between the distributed observations.
+        # Inspect remaining already-sampled frames before deciding uncertainty.
+        for index in range(len(paths)):
+            if index not in observations:
+                observe(index)
+    # With no observed staff, a sole paper candidate remains uncertain and
+    # continues through normal registration/pagination instead of pre-rejection.
+    minimum = min(2, max(support, default=0))
+    supported = [region for region, count in zip(candidates, support)
+                 if count >= minimum]
+    if len(supported) != 1:
+        raise ConversionError('unsupported_layout', '无法从多帧五线结构唯一确认固定白底谱区。')
+    return supported[0]
+
 
 
 def _profile(image, invalid=None):
