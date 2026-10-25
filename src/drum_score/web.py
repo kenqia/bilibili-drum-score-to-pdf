@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
 
 from .jobs import JobError, Jobs
 
@@ -19,6 +20,17 @@ class Submission(BaseModel):
     model_config = ConfigDict(extra='forbid')
     url: str = Field(max_length=2048)
     options: dict = Field(default_factory=dict)
+
+
+class LayoutSettings(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    paper: Literal['A4', 'A3', 'A5'] = 'A4'
+    rows: int | None = Field(default=None, ge=1, le=16, strict=True)
+
+
+class Heartbeat(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    visitor: str = Field(pattern=r'^[a-f0-9]{32}$')
 
 
 class BodyLimit:
@@ -75,6 +87,8 @@ class ArtifactResources:
 
 def create_app(data_root, *, trusted_proxies=(), retention_seconds=86400, **storage):
     jobs = Jobs(data_root, retention_seconds=retention_seconds, **storage)
+    from .presence import Presence
+    presence = Presence()
     proxies = frozenset(ipaddress.ip_address(value) for value in trusted_proxies)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(BodyLimit)
@@ -99,7 +113,7 @@ def create_app(data_root, *, trusted_proxies=(), retention_seconds=86400, **stor
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request, error):
-        return JSONResponse({'error': {'code': 'invalid_request', 'message': '请仅提交公开 HTTPS B站 BV、b23.tv 或 YouTube 单视频链接。'}}, status_code=422)
+        return JSONResponse({'error': {'code': 'invalid_request', 'message': '请求参数无效，请检查链接或排版设置。'}}, status_code=422)
 
     def peer(request):
         try:
@@ -120,6 +134,16 @@ def create_app(data_root, *, trusted_proxies=(), retention_seconds=86400, **stor
     def capability(request):
         value = request.headers.get('authorization', '')
         return value[7:] if re.fullmatch(r'Bearer [A-Za-z0-9_-]{1,128}', value) else ''
+
+    @app.post('/api/presence')
+    def heartbeat(body: Heartbeat):
+        return presence.heartbeat(body.visitor)
+
+    @app.post('/api/tasks/{task}/layout')
+    def layout(task: str, body: LayoutSettings, request: Request):
+        from .relayout import delivery
+        return Response(delivery(jobs, task, capability(request), body.paper, body.rows),
+                        media_type='application/json')
 
     @app.post('/api/tasks', status_code=201)
     def submit(body: Submission, request: Request):

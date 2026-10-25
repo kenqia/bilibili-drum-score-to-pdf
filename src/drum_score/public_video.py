@@ -1,4 +1,4 @@
-"""Anonymous Bilibili and YouTube input; signed addresses stay private."""
+"""Anonymous public Bilibili input. Signed addresses stay within private acquisition."""
 from pathlib import Path
 import re
 import multiprocessing
@@ -25,23 +25,6 @@ def video_origin(url):
         if any(ord(character) < 33 for character in url):
             raise ValueError
         parsed = urlsplit(url)
-        if parsed.hostname in {'www.youtube.com', 'youtube.com', 'youtu.be'}:
-            if (parsed.scheme != 'https' or parsed.username is not None
-                    or parsed.password is not None or parsed.port not in {None, 443}):
-                raise ValueError
-            if parsed.hostname == 'youtu.be':
-                match = re.fullmatch(r'/([A-Za-z0-9_-]{11})/?', parsed.path)
-                identity = match.group(1) if match else ''
-            elif parsed.path == '/watch':
-                identities = parse_qs(parsed.query, keep_blank_values=True).get('v', [])
-                identity = identities[0] if len(identities) == 1 else ''
-            else:
-                match = re.fullmatch(r'/shorts/([A-Za-z0-9_-]{11})/?', parsed.path)
-                identity = match.group(1) if match else ''
-            if not re.fullmatch(r'[A-Za-z0-9_-]{11}', identity):
-                raise ValueError
-            return {'kind': 'youtube', 'video_id': identity,
-                    'url': f'https://www.youtube.com/watch?v={identity}', 'authenticated': False}
         if (parsed.scheme == 'https' and parsed.hostname == 'b23.tv'
                 and parsed.username is None and parsed.password is None
                 and parsed.port in {None, 443}
@@ -58,7 +41,7 @@ def video_origin(url):
         bvid = match.group(1)
         return {'kind': 'bilibili', 'bvid': bvid, 'page': page, 'url': f'https://www.bilibili.com/video/{bvid}?p={page}', 'authenticated': False}
     except ValueError:
-        raise InputError('invalid_bilibili_url', '请提供 HTTPS B站 BV、b23.tv 或 YouTube 单视频链接；也可提供清晰的本地视频。') from None
+        raise InputError('invalid_bilibili_url', '请提供 HTTPS B站 BV 链接或 https://b23.tv/… 短链接，分 P 使用单个正整数 p；也可提供清晰的本地视频。') from None
 
 
 def checked_media_url(url):
@@ -101,13 +84,10 @@ def _worker(url, staging, publication, connection, parent_pid, max_bytes=MAX_BYT
         from . import anonymous_backend
         # A caller may tighten the backend's existing ceiling, never relax it.
         anonymous_backend.MAX_BYTES = min(anonymous_backend.MAX_BYTES, max_bytes)
+        download = anonymous_backend.download
         from .short_links import resolve
         origin = resolve(url)
-        if origin['kind'] == 'youtube':
-            from .youtube_backend import download
-            details = download(origin, Path(staging), max_bytes=max_bytes)
-        else:
-            details = anonymous_backend.download(origin, Path(staging))
+        details = download(origin, Path(staging))
         # Copy/fsync is part of the same worker deadline. Its temporary file lives
         # beside the result directory, so even SIGKILL leaves no partial in it.
         with (Path(publication) / 'video.mp4').open('wb') as destination, (Path(staging) / 'video.mp4').open('rb') as downloaded:
@@ -172,9 +152,7 @@ def acquire(url, output, timeout=ACQUISITION_SECONDS, *, max_bytes=MAX_BYTES):
                 raise error
             origin = result['origin']
             output.mkdir(parents=True, exist_ok=True)
-            filename = (f"youtube-{origin['video_id']}.mp4" if origin['kind'] == 'youtube'
-                        else f"{origin['bvid']}-p{origin['page']}.mp4")
-            source = output / filename
+            source = output / f"{origin['bvid']}-p{origin['page']}.mp4"
             if source.exists():
                 raise InputError('source_exists', '结果目录已有下载视频，请选择新的结果目录。', origin)
             try:

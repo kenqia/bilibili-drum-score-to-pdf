@@ -97,18 +97,28 @@ class ScriptPublicContracts(unittest.TestCase):
     @unittest.skipUnless(sys.platform == 'linux', 'Forked anonymous acquisition')
     def test_full_source_duration_limit_precedes_media_even_with_short_selection(self):
         import test_web_worker as web_fixture
-        from youtube_fixture import startup
         fixture = web_fixture.WebsiteWorker(methodName='runTest')
         fixture.setUp()
         try:
             marker = fixture.network / 'media-opened'
-            boundary = startup(fixture.network / 'input.mp4').replace("'duration': 2,", "'duration': 601,")
+            from bbdown_fixture import fixture_config, install_fake_bbdown
+            config = fixture_config()
+            config['view']['pages'][1]['duration'] = 601
+            config['play']['timelength'] = 601000
+            binary, digest = install_fake_bbdown(fixture.network, config)
+            boundary = ("import io,os,socket,urllib.request\nfrom pathlib import Path\n"
+                "from drum_score import bbdown_cli\n"
+                "bbdown_cli.METADATA_SHA256=" + repr(digest) + "\n"
+                "os.environ['PATH']=" + repr(str(binary.parent)) + "+os.pathsep+os.environ['PATH']\n"
+                "socket.getaddrinfo=lambda *a,**k:[(socket.AF_INET,socket.SOCK_STREAM,6,'',('8.8.8.8',443))]\n"
+                "urllib.request.OpenerDirector.open=lambda *a,**k:io.BytesIO(Path("
+                + repr(str(fixture.network / 'input.mp4')) + ").read_bytes())\n")
             boundary += f"\noriginal_open=urllib.request.OpenerDirector.open\ndef checked_open(*a,**k):\n Path({str(marker)!r}).write_text('media')\n return original_open(*a,**k)\nurllib.request.OpenerDirector.open=checked_open\n"
             (fixture.network / 'sitecustomize.py').write_text(boundary)
             runner = fixture.network / 'duration-core.py'
             runner.write_text("import sys,json\nfrom drum_score import convert,ConversionError\n"
                 "if __name__=='__main__':\n try: convert(sys.argv[1],sys.argv[2],options={'end_seconds':1})\n except ConversionError as e: print(json.dumps({'error':{'code':e.code}})); sys.exit(2)\n")
-            url = 'https://youtu.be/dQw4w9WgXcQ'
+            url = 'https://www.bilibili.com/video/BV1b5411x7Ku?p=2'
             for entry in REMOTE_SCRIPT_ENTRIES:
                 with self.subTest(entry=entry):
                     if entry == 'script_http':
@@ -129,7 +139,10 @@ class ScriptPublicContracts(unittest.TestCase):
                     self.assertFalse(marker.exists(), 'duration rejection must happen before media transfer')
             # Exactly 600 reaches media verification. The 2-second fixture is
             # then rejected for integrity, proving 600 itself was permitted.
-            (fixture.network / 'sitecustomize.py').write_text(boundary.replace("'duration': 601,", "'duration': 600,"))
+            config['view']['pages'][1]['duration'] = 600
+            config['play']['timelength'] = 600000
+            _, boundary_digest = install_fake_bbdown(fixture.network, config)
+            (fixture.network / 'sitecustomize.py').write_text(boundary.replace(digest, boundary_digest))
             process = subprocess.run([sys.executable, str(runner), url, str(fixture.root / 'boundary')],
                                      env=fixture.env, capture_output=True, text=True, timeout=30)
             self.assertEqual(json.loads(process.stdout)['error']['code'], 'incomplete_video')
@@ -165,51 +178,80 @@ class ScriptPublicContracts(unittest.TestCase):
             self.assertIn('完整画面', response.text)
             self.assertIn('百分比', response.text)
 
-    @unittest.skipUnless(sys.platform == 'linux', 'Linux website process contract')
-    def test_youtube_entries_publish_canonical_source_and_all_previews(self):
+    def test_withdrawn_youtube_urls_are_rejected_before_acquisition(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from fastapi.testclient import TestClient
+        from drum_score import convert, ConversionError
+        from drum_score.web import create_app
+        urls = ('https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                'https://youtu.be/dQw4w9WgXcQ',
+                'https://www.youtube.com/shorts/dQw4w9WgXcQ')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with TestClient(create_app(root / 'service'), client=('192.0.2.10', 12345)) as client:
+                for index, url in enumerate(urls):
+                    with self.subTest(url=url):
+                        output = root / ('result-' + str(index))
+                        with patch('drum_score.public_video.acquire') as acquire:
+                            with self.assertRaises(ConversionError) as error:
+                                convert(url, output)
+                            self.assertEqual(error.exception.code, 'invalid_bilibili_url')
+                            acquire.assert_not_called()
+                        self.assertFalse(output.exists())
+                        process = subprocess.run([sys.executable, '-m', 'drum_score', url,
+                            '--output', str(output)], capture_output=True, text=True, timeout=15)
+                        self.assertNotEqual(process.returncode, 0)
+                        self.assertEqual(json.loads(process.stdout)['error']['code'], 'invalid_bilibili_url')
+                        self.assertFalse(output.exists())
+                        response = client.post('/api/tasks', json={'url': url})
+                        self.assertEqual(response.status_code, 422)
+                        self.assertEqual(response.json()['error']['code'], 'invalid_bilibili_url')
+
+    def test_http_temporary_layout_is_independent_complete_and_does_not_extend_expiry(self):
+        import base64
         import hashlib
+        from unittest.mock import patch
         import test_web_worker as web_fixture
-        from youtube_fixture import startup
         fixture = web_fixture.WebsiteWorker(methodName='runTest')
         fixture.setUp()
         try:
-            video = fixture.network / 'input.mp4'
-            (fixture.network / 'sitecustomize.py').write_text(startup(video))
-            runner = fixture.network / 'youtube-core.py'
-            runner.write_text("import sys,json\nfrom drum_score import convert\n"
-                              "if __name__=='__main__': print(json.dumps(convert(sys.argv[1],sys.argv[2])))\n")
-            url = 'https://youtube.com/shorts/dQw4w9WgXcQ?t=30&list=ignored'
-            for entry in REMOTE_SCRIPT_ENTRIES:
-                with self.subTest(entry=entry):
-                    if entry == 'script_http':
-                        task = fixture.client.post('/api/tasks', json={'url': url}).json()
-                        auth = {'Authorization': 'Bearer ' + task['capability']}
-                        self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
-                        state = fixture.state(task['id'], auth)
-                        self.assertEqual(state['state'], 'complete', state)
-                        result = state['result']
-                        pdf = fixture.client.get('/api/tasks/' + task['id'] + '/pdf', headers=auth).content
-                        for index, page in enumerate(result['pages'], 1):
-                            content = fixture.client.get('/api/tasks/' + task['id'] + '/pages/' + str(index), headers=auth).content
-                            self.assertEqual(hashlib.sha256(content).hexdigest(), page['sha256'])
-                    else:
-                        output = fixture.root / ('youtube-' + entry)
-                        args = ([sys.executable, str(runner), url, str(output)] if entry == 'script_core'
-                                else [sys.executable, '-m', 'drum_score', url, '--output', str(output)])
-                        process = subprocess.run(args, env=fixture.env, capture_output=True, text=True, timeout=30)
-                        self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
-                        result = json.loads(process.stdout)
-                        pdf = (output / result['pdf']['path']).read_bytes()
-                    self.assertEqual(result['status'], 'complete')
-                    self.assertFalse(result['reliable'])
-                    self.assertEqual(result['source']['kind'], 'youtube')
-                    self.assertEqual(result['source']['video_id'], 'dQw4w9WgXcQ')
-                    self.assertEqual(result['source']['url'], 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
-                    self.assertEqual(result['source']['sha256'], hashlib.sha256(video.read_bytes()).hexdigest())
-                    self.assertEqual(result['source']['backend'], 'yt-dlp')
-                    self.assertFalse(result['source']['authenticated'])
-                    self.assertNotIn('SYNTHETIC_DO_NOT_PUBLISH', json.dumps(result))
-                    self.assertEqual(hashlib.sha256(pdf).hexdigest(), result['pdf']['sha256'])
+            # Full white lossless source has safe gaps; the general fixture's
+            # dark paper border intentionally binds its three rows into one group.
+            from PIL import Image, ImageDraw
+            image = Image.new('RGB', (640, 900), 'white')
+            draw = ImageDraw.Draw(image)
+            for top in (70, 330, 590):
+                for line in range(5):
+                    draw.line((20, top + line * 8, 620, top + line * 8), fill='black')
+            image.save(fixture.network / 'layout.png')
+            subprocess.run(['ffmpeg', '-v', 'error', '-y', '-loop', '1', '-i', str(fixture.network / 'layout.png'),
+                '-t', '1', '-r', '2', '-c:v', 'ffv1', '-f', 'matroska', str(fixture.network / 'input.mp4')], check=True)
+            created = fixture.client.post('/api/tasks', json={'url': 'https://www.bilibili.com/video/BV1rH4y1R7Rk'}).json()
+            task = created['id']
+            headers = {'Authorization': 'Bearer ' + created['capability']}
+            self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
+            before = fixture.state(task, headers)
+            self.assertEqual(before['state'], 'complete', before)
+            original = fixture.client.get('/api/tasks/' + task + '/pdf', headers=headers).content
+            for paper, rows, count in [('A4', 1, 3), ('A3', 3, 1), ('A5', 2, 2)]:
+                response = fixture.client.post('/api/tasks/' + task + '/layout', headers=headers,
+                                               json={'paper': paper, 'rows': rows})
+                self.assertEqual(response.status_code, 200, response.text[:300])
+                result = response.json()
+                self.assertEqual(result['page_count'], count)
+                self.assertEqual(len(result['pages']), count)
+                self.assertTrue(base64.b64decode(result['pdf']).startswith(b'%PDF'))
+                self.assertTrue(all(base64.b64decode(page).startswith(b'\x89PNG') for page in result['pages']))
+            self.assertEqual(fixture.state(task, headers), before)
+            self.assertEqual(hashlib.sha256(original).hexdigest(), before['result']['pdf']['sha256'])
+            self.assertEqual(fixture.client.get('/api/tasks/' + task + '/pdf', headers=headers).content, original)
+            self.assertEqual(fixture.client.post('/api/tasks/' + task + '/layout', json={}).status_code, 404)
+            for settings in ({'paper': 'A0'}, {'rows': 0}, {'rows': True}, {'rows': 17}, {'direction': 'landscape'}):
+                self.assertEqual(fixture.client.post('/api/tasks/' + task + '/layout', headers=headers, json=settings).status_code, 422)
+            with patch('drum_score.jobs.time.time', return_value=before['expires_at'] + 1):
+                self.assertEqual(fixture.client.post('/api/tasks/' + task + '/layout', headers=headers, json={}).status_code, 410)
         finally:
             fixture.tearDown()
 
@@ -416,7 +458,7 @@ class ScriptPublicContracts(unittest.TestCase):
             if 'drum_score.web' in modules:
                 from fastapi.testclient import TestClient
                 from drum_score.web import create_app
-                with TestClient(create_app(root / 'service')) as client:
+                with TestClient(create_app(root / 'service'), client=('192.0.2.10', 12345)) as client:
                     def snapshot():
                         return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                                 for p in root.rglob('*') if p.is_file()}

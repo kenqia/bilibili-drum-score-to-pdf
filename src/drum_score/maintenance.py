@@ -312,7 +312,7 @@ def validate(db, budget, *, schema_version=SCHEMA_VERSION):
         if not isinstance(origin, dict) or (
             origin != {}
             if row["state"] == "expired"
-            else origin != video_origin(origin.get("url"))
+            else not stored_origin_valid(origin)
         ):
             raise MaintenanceError("invalid_snapshot")
         if schema_version >= 4:
@@ -331,6 +331,18 @@ def validate(db, budget, *, schema_version=SCHEMA_VERSION):
         ):
             raise MaintenanceError("invalid_snapshot")
     return rows
+
+
+def stored_origin_valid(origin):
+    # Read-only compatibility for records created before YouTube was withdrawn.
+    # This does not participate in submission, retry validation or acquisition.
+    if origin.get('kind') == 'youtube':
+        identity = origin.get('video_id')
+        return (isinstance(identity, str) and re.fullmatch(r'[A-Za-z0-9_-]{11}', identity)
+                and origin == {'kind': 'youtube', 'video_id': identity,
+                               'url': 'https://www.youtube.com/watch?v=' + identity,
+                               'authenticated': False})
+    return origin == video_origin(origin.get('url'))
 
 
 def result_files(tree, db, budget, *, owned=False, schema_version=SCHEMA_VERSION):

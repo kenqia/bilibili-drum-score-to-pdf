@@ -1,8 +1,8 @@
 # 本地运行匿名鼓谱网站
 
-YouTube 的 Deno 安装、代理、支持格式及失败限制见 [YouTube 获取](youtube.md)。新增代码尚未部署到正式网站。
+2026-10-25 已撤回 YouTube 接入。在线人数与临时打印排版保留，任务数据与原期限不变，见[撤回记录](../experiments/2026-10-25-youtube-withdrawal.md)。
 
-网站代码接受公开 HTTPS B站 BV、b23.tv 和 YouTube 单视频链接，将任务交给独立 worker，完成后显示全部 A4 预览并提供 PDF 下载。无需账号或邀请码。网页不支持本地上传，不调用模型。`complete` 表示完整产物已发布，结果仍为 `reliable=false`，未经音乐校对。
+网站接受公开 HTTPS B站 BV 链接和 b23.tv 短链接，将任务交给独立 worker，完成后显示全部 A4 预览并提供 PDF 下载。无需账号或邀请码。网页不支持本地上传，不调用模型。`complete` 表示完整产物已发布，结果仍为 `reliable=false`，未经音乐校对。
 
 本页面向 Ubuntu/WSL 上的运行与集成验证。2026-10-24，正式站点已完成防滥用 v3 切换，目标机配置、验收及保留材料见[部署记录](../experiments/2026-10-24-abuse-deployment.md)。其他主机仍须独立验证资源硬限制、代理和公开部署。
 
@@ -148,3 +148,15 @@ python -m unittest discover -s tests -v
 `POST /api/tasks` 接受 `{"url":"https://www.bilibili.com/video/BV…","options":{"start_seconds":15,"end_seconds":75,"region_percent":[5,10,95,90],"ignore_fixed_overlays":true}}`。省略 `options` 保持默认提交兼容。基础输入无效返回422；取得媒体后发现区间或像素区域无效则任务明确失败。队列、worker及显式重试保留参数，状态响应的 `options` 可核对原提交。完成结果的 `conversion` 记录选段和手动区域，页面明确标记选段秒数。
 
 服务使用显式schema v4，拒绝直接打开v3数据库。停服后使用旧程序生成并验证v3快照，再通过新程序的 `upgrade-v3 --backup-root /absolute/path/v3-snapshot --output /absolute/path/new-v4-root` 升级到新目录。源快照、原数据根和原完成/到期时间不变。回滚使用旧程序及保留的原v3目录或快照；不把新v4数据交给旧程序。升级与维护保护见[维护指南](maintenance.md)。
+
+## 在线人数与临时打印设置
+
+首页和任务页显示“当前约 N 人在线”。同一浏览器多标签共用独立随机访客 ID，每二十秒发送心跳，服务移除六十秒无心跳的记录；后台标签页受浏览器节流影响，数字是近似值。ID 只用于统计，不含任务访问凭据，不记录浏览历史。禁用浏览器存储时显示暂不可用。HTTP 重启后重新累计。
+
+结果页支持 A4、A3、A5 纵向纸张与每页目标行数，默认自动。点击“应用设置”后重新生成 PDF 和全部预览，页数可以增加或减少，不重新获取、解码或拼接视频。程序自动计算统一比例和行间距，不能安全拆分的连续行组保持完整；超出目标时提示实际行数。默认输出也使用紧凑行组排版，短谱、连续边框等情况仍可能有底部留白。
+
+临时结果仅在当前页面预览和下载，刷新、关闭或重新打开任务链接后回到默认版本。复制链接始终指向默认结果，不保存调整历史，不延长任务期限。生成失败保留上一份可用结果。已有任务没有兼容或迁移保证。
+
+POST /api/presence 接收 visitor 字段，值为三十二位小写十六进制随机 ID，返回 online 计数，无需任务凭据。心跳存储最多四千零九十六个活跃 ID。
+
+POST /api/tasks/{id}/layout 需要原任务能力凭据，接收 paper 和 rows。paper 为 A4、A3、A5，默认 A4；rows 可为 null 或 1 至 16 的整数。返回 page_count、paper、target_rows、actual_rows、adjusted、message 以及 base64 的 pdf 和按顺序排列的 pages。PDF 与全部预览在同一次响应内完整交付，失败返回标准 error，不修改默认结果。单服务最多一个重排任务，忙时 503；总期限九十秒、最多六十四页、JSON 上限三十二 MiB。依赖现有 Poppler 安装中的 pdfimages、pdftoppm。实现和资源限制见[排版设计](print-layout-design.md)。

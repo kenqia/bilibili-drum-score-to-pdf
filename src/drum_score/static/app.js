@@ -8,8 +8,8 @@ const steps = ["queue", "fetch", "read", "stitch", "layout"];
 const stepOf = {queued:"queue",starting:"fetch",downloading:"fetch",probing:"read",sampling:"read",registering:"stitch",composing:"stitch",paginating:"layout",finishing:"layout"};
 // Plain-language explanations for drummers; the server message stays available as detail.
 const friendly = {
-  invalid_bilibili_url:"请复制完整 B站 BV、b23.tv 或 YouTube 单视频链接再试。",
-  invalid_request:"请复制完整 B站 BV、b23.tv 或 YouTube 单视频链接再试。",
+  invalid_bilibili_url:"这不像是 B站视频链接。请复制完整 BV 链接或 b23.tv 短链接再试。",
+  invalid_request:"这不像是 B站视频链接。请复制完整 BV 链接或 b23.tv 短链接再试。",
   short_link_unavailable:"这个短链接没能打开。请重新复制，或在浏览器打开后复制完整的 BV 链接。",
   ip_busy:"你所在的网络已经有一个任务在处理了。等它完成或取消后再提交。学校、公司等共用网络也会占用名额。",
   queue_full:"现在排队的人太多了，请过几分钟再试。",
@@ -22,7 +22,6 @@ const friendly = {
   download_too_large:"视频文件太大了。目前支持 10 分钟以内、4K 以下的视频。",
   http_unavailable:"拿不到这个视频。它可能需要登录、是会员专享、有地区限制或者已经下架。",
   public_api_unavailable:"拿不到这个视频。它可能需要登录、是会员专享、有地区限制或者已经下架。",
-  youtube_challenge:"YouTube 要求机器人或身份验证。请稍后重试，或换一个无需登录的公开视频。",
   unsupported_stream:"这个视频的格式暂时处理不了。",
   undecodable_video:"视频读取失败。可以点「重新整理」再试一次。",
   decode_failed:"视频读取失败。可以点「重新整理」再试一次。",
@@ -33,7 +32,10 @@ const friendly = {
   not_found:"找不到这个任务。请打开提交时保存的完整链接。"
 };
 let taskId, capability, timer, previewLoaded = false;
+let layoutBusy = false;
+let temporaryPDF = null, defaultPageCount = 0, expiresAt = 0, layoutGeneration = 0;
 const blobs = [];
+let previewGeneration = 0;
 
 function showError(box, code, raw) {
   const text = friendly[code] || raw || "出了点问题，请稍后再试。";
@@ -68,21 +70,7 @@ function normalizeLink(text) {
   }
   const short = /(?:^|[\s（(【])(?:https?:\/\/)?b23\.tv\/([0-9A-Za-z]{1,64})(?=$|[\s/?#）)】。，！!])/i.exec(value);
   if (short) return {url:`https://b23.tv/${short[1]}`};
-  const youtube = /https:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/[^\s<>"'）)】。，！!]+/i.exec(value);
-  if (youtube) {
-    try {
-      const url = new URL(youtube[0]);
-      let id;
-      if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443")) throw new Error();
-      if (url.hostname === "youtu.be") id = /^\/([A-Za-z0-9_-]{11})\/?$/.exec(url.pathname)?.[1];
-      else if (["youtube.com", "www.youtube.com"].includes(url.hostname)) {
-        if (url.pathname === "/watch" && url.searchParams.getAll("v").length === 1) id = url.searchParams.get("v");
-        else id = /^\/shorts\/([A-Za-z0-9_-]{11})\/?$/.exec(url.pathname)?.[1];
-      }
-      if (/^[A-Za-z0-9_-]{11}$/.test(id || "")) return {url:`https://www.youtube.com/watch?v=${id}`};
-    } catch (_) {}
-  }
-  if (!value) return {error:"先粘贴一个 B站或 YouTube 视频链接。"};
+  if (!value) return {error:"先粘贴一个 B站视频链接。"};
   return {error:friendly.invalid_bilibili_url};
 }
 
@@ -126,20 +114,33 @@ $("submit-form").addEventListener("submit", async (event) => {
 });
 
 async function loadPreviews(count) {
+  const generation = ++previewGeneration;
+  const layout = layoutGeneration, created = [], figures = [];
   $("reload-previews").hidden = true;
-  $("previews").replaceChildren();
-  for (const url of blobs.splice(0)) URL.revokeObjectURL(url);
   try {
     for (let page = 1; page <= count; page++) {
-      const response = await api(`/api/tasks/${taskId}/pages/${page}`);
-      const url = URL.createObjectURL(await response.blob()); blobs.push(url);
-      const figure = document.createElement("figure");
-      const image = document.createElement("img"); image.src = url; image.alt = `鼓谱第 ${page} 页，共 ${count} 页`; image.decoding = "async";
-      const caption = document.createElement("figcaption"); caption.textContent = `第 ${page} 页 / 共 ${count} 页`;
-      figure.append(image, caption); $("previews").append(figure);
+      const response = await api("/api/tasks/" + taskId + "/pages/" + page);
+      const url = URL.createObjectURL(await response.blob()); created.push(url);
+      const figure = document.createElement("figure"), image = document.createElement("img");
+      image.src = url; image.alt = "鼓谱第 " + page + " 页，共 " + count + " 页";
+      await image.decode();
+      const caption = document.createElement("figcaption"); caption.textContent = "第 " + page + " 页 / 共 " + count + " 页";
+      figure.append(image, caption); figures.push(figure);
     }
+    if (generation !== previewGeneration || layout !== layoutGeneration) {
+      for (const url of created) URL.revokeObjectURL(url);
+      return;
+    }
+    for (const url of blobs.splice(0)) URL.revokeObjectURL(url);
+    blobs.push(...created); $("previews").replaceChildren(...figures);
     previewLoaded = true;
-  } catch (error) { showError("task-error", "", "预览没加载出来。" + error.message); $("reload-previews").hidden = false; }
+    return true;
+  } catch (error) {
+    for (const url of created) URL.revokeObjectURL(url);
+    if (generation === previewGeneration && layout === layoutGeneration) {
+      showError("task-error", "", "预览没加载出来。" + error.message); $("reload-previews").hidden = false;
+    }
+  }
 }
 
 function showProgress(state) {
@@ -185,15 +186,17 @@ async function refresh() {
     showProgress(state);
     $("task-meta").hidden = false;
     const source = state.result?.source || state.source;
-    $("source-label").textContent = source.video_id ? `YouTube · ${source.video_id}` : source.bvid ? `${source.bvid}` + (source.page > 1 ? ` · 第 ${source.page} P` : "") : "B站分享短链接";
+    const withdrawnSource = source.kind === "youtube";
+    $("source-label").textContent = withdrawnSource ? "历史 YouTube 任务（接入已撤回）" : source.bvid ? `${source.bvid}` + (source.page > 1 ? ` · 第 ${source.page} P` : "") : "B站分享短链接";
     $("source-link").href = source.url;
     $("save-link").hidden = !active.has(state.state) && state.state !== "complete";
     $("task-link").value = window.location.href;
     $("cancel").hidden = !["queued","running"].includes(state.state);
-    $("retry").hidden = !["failed","cancelled","interrupted"].includes(state.state);
+    $("retry").hidden = withdrawnSource || !["failed","cancelled","interrupted"].includes(state.state);
     $("download").hidden = state.state !== "complete";
     $("result").hidden = state.state !== "complete";
     if (state.state === "complete") {
+      defaultPageCount = state.result.page_count; expiresAt = state.expires_at;
       $("expiry").textContent = formatExpiry(state.expires_at);
       $("warnings").replaceChildren();
       for (const warning of state.result.warnings) {
@@ -201,7 +204,7 @@ async function refresh() {
         const item = document.createElement("li"); item.textContent = warning.message; $("warnings").append(item);
       }
       if (!previewLoaded) await loadPreviews(state.result.page_count);
-      $("reload-previews").onclick = () => loadPreviews(state.result.page_count);
+      $("reload-previews").onclick = () => { if (!temporaryPDF) loadPreviews(defaultPageCount); };
     }
     if (active.has(state.state)) timer = setTimeout(refresh, 1500);
   } catch (error) {
@@ -225,7 +228,8 @@ $("download").addEventListener("click", async () => {
   const label = $("download").textContent;
   $("download").disabled = true; $("download").textContent = "正在下载…"; $("task-error").hidden = true;
   try {
-    const response = await api(`/api/tasks/${taskId}/pdf`);
+    if (expiresAt && Date.now() >= expiresAt * 1000) throw new Error("结果已过期，请重新提交。");
+    const response = temporaryPDF ? new Response(temporaryPDF) : await api("/api/tasks/" + taskId + "/pdf");
     if (Number(response.headers.get("Content-Length")) > 256 * 1024 * 1024) throw new Error("PDF 超过 256 MiB，浏览器无法下载。");
     const url = URL.createObjectURL(await response.blob());
     const link = document.createElement("a"); link.href = url; link.download = "鼓谱.pdf"; link.click();
@@ -238,7 +242,7 @@ $("copy-link").addEventListener("click", async () => {
   catch (_) { $("task-link").focus(); $("task-link").select(); $("copy-status").textContent = "已选中链接，请手动复制。"; }
 });
 window.addEventListener("pagehide", () => { clearTimeout(timer); for (const url of blobs) URL.revokeObjectURL(url); });
-window.addEventListener("pageshow", (event) => { if (event.persisted && taskId && capability) { previewLoaded = false; refresh(); } });
+window.addEventListener("pageshow", (event) => { if (event.persisted && taskId && capability) { restoreDefault(); } });
 
 const match = /^\/task\/([A-Za-z0-9_-]+)$/.exec(window.location.pathname);
 if (match) {
@@ -248,3 +252,108 @@ if (match) {
   if (/^[A-Za-z0-9_-]{43}$/.test(capability)) refresh();
   else { $("task-title").textContent = "链接不完整"; $("task-description").textContent = "请打开提交时保存的完整链接，# 号后面的部分也要带上。"; }
 }
+
+function decodedBlob(encoded, type) {
+  const bytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
+  return new Blob([bytes], {type});
+}
+function rowInput(value) {
+  const count = Math.min(16, Math.max(1, Number(value) || 1));
+  $("row-slider").value = count; $("row-number").value = count;
+}
+$("row-slider").addEventListener("input", () => rowInput($("row-slider").value));
+$("row-number").addEventListener("change", () => rowInput($("row-number").value));
+$("rows-auto").addEventListener("change", () => {
+  $("row-slider").disabled = $("rows-auto").checked;
+  $("row-number").disabled = $("rows-auto").checked;
+});
+$("layout-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (layoutBusy) return;
+  layoutBusy = true;
+  const generation = ++layoutGeneration;
+  previewGeneration++;
+  $("apply-layout").disabled = true;
+  $("layout-status").textContent = "正在重新排版，完成前可继续查看和下载上一份结果…";
+  const created = [];
+  try {
+    const response = await api('/api/tasks/' + taskId + '/layout', {method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({paper:$("paper").value, rows:$("rows-auto").checked ? null : Number($("row-number").value)})});
+    if (Number(response.headers.get("Content-Length")) > 32 * 1024 * 1024) throw new Error("排版结果过大。");
+    const result = await response.json();
+    if (result.pages.length !== result.page_count) throw new Error("预览不完整，请重试。");
+    const pdf = decodedBlob(result.pdf, "application/pdf");
+    const figures = await Promise.all(result.pages.map(async (page, index) => {
+      const url = URL.createObjectURL(decodedBlob(page, "image/png")); created.push(url);
+      const figure = document.createElement("figure"), image = document.createElement("img"), caption = document.createElement("figcaption");
+      image.src = url; image.alt = '鼓谱第 ' + (index + 1) + ' 页，共 ' + result.page_count + ' 页';
+      await image.decode();
+      caption.textContent = '第 ' + (index + 1) + ' 页 / 共 ' + result.page_count + ' 页';
+      figure.append(image, caption); return figure;
+    }));
+    if (generation !== layoutGeneration) { for (const url of created) URL.revokeObjectURL(url); return; }
+    for (const url of blobs.splice(0)) URL.revokeObjectURL(url);
+    blobs.push(...created); temporaryPDF = pdf;
+    $("previews").replaceChildren(...figures); previewLoaded = true;
+    $("reload-previews").hidden = true;
+    $("task-description").textContent = '一共 ' + result.page_count + ' 页 ' + result.paper + '。当前为临时排版，可预览后下载。';
+    $("layout-status").textContent = result.message;
+    $("previews").scrollIntoView({block:"start"});
+  } catch (error) {
+    for (const url of created) URL.revokeObjectURL(url);
+    if (generation === layoutGeneration) $("layout-status").textContent = error.message + " 上一份结果已保留。";
+  } finally { layoutBusy = false; $("apply-layout").disabled = false; }
+});
+async function restoreDefault() {
+  const generation = ++layoutGeneration;
+  $("reset-layout").disabled = true;
+  $("layout-status").textContent = "正在加载默认排版…";
+  try {
+    const state = await (await api("/api/tasks/" + taskId)).json();
+    if (generation !== layoutGeneration || state.state !== "complete") return;
+    const loaded = await loadPreviews(state.result.page_count);
+    if (!loaded || generation !== layoutGeneration) {
+      if (generation === layoutGeneration) $("layout-status").textContent = "默认预览未能完整加载，上一份结果已保留。";
+      return;
+    }
+    temporaryPDF = null;
+    defaultPageCount = state.result.page_count; expiresAt = state.expires_at;
+    $("paper").value = "A4"; $("rows-auto").checked = true;
+    $("row-slider").disabled = true; $("row-number").disabled = true;
+    $("task-description").textContent = "一共 " + defaultPageCount + " 页 A4。先翻一遍预览，没问题就下载。";
+    $("layout-status").textContent = "已恢复默认自动排版。";
+  } catch (error) {
+    if (generation === layoutGeneration) $("layout-status").textContent = error.message + " 上一份结果已保留。";
+  } finally { $("reset-layout").disabled = false; }
+}
+$("reset-layout").addEventListener("click", restoreDefault);
+
+let presenceTimer, visitor;
+function visitorIdentity() {
+try {
+  visitor = localStorage.getItem("drum-visitor");
+  if (!/^[a-f0-9]{32}$/.test(visitor || "")) {
+    visitor = Array.from(crypto.getRandomValues(new Uint8Array(16)), (v) => v.toString(16).padStart(2, "0")).join("");
+    localStorage.setItem("drum-visitor", visitor);
+  }
+} catch (_) { visitor = null; }
+}
+async function heartbeat() {
+  clearTimeout(presenceTimer);
+  if (!visitor) { $("online-count").textContent = "在线人数暂不可用"; return; }
+  try {
+    const response = await fetch("/api/presence", {method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({visitor}), cache:"no-store", credentials:"omit", referrerPolicy:"no-referrer"});
+    if (!response.ok) throw new Error();
+    const result = await response.json();
+    $("online-count").textContent = '当前约 ' + result.online + ' 人在线';
+  } catch (_) { $("online-count").textContent = "在线人数暂不可用"; }
+  presenceTimer = setTimeout(heartbeat, 20000);
+}
+window.addEventListener("pagehide", () => { clearTimeout(presenceTimer); layoutGeneration++; });
+window.addEventListener("pageshow", async () => {
+  if (navigator.locks) await navigator.locks.request("drum-visitor", visitorIdentity);
+  else visitorIdentity();
+  heartbeat();
+});
+document.addEventListener("visibilitychange", () => { if (!document.hidden) heartbeat(); });
