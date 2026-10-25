@@ -122,6 +122,29 @@ class Maintenance(unittest.TestCase):
         task = self.jobs.enqueue('https://www.bilibili.com/video/BV1rH4y1R7Rk', '192.0.2.1')
         self.assertEqual(self.jobs.view(task['id'], task['capability'])['state'], 'queued')
 
+    def test_withdrawn_youtube_record_can_be_backed_up_without_reenabling_submission(self):
+        from drum_score.jobs import JobError
+        task = self.jobs.enqueue('https://www.bilibili.com/video/BV1rH4y1R7Rk', '192.0.2.1')
+        row = self.jobs.claim()
+        self.jobs.settle(row, 'failed', 'public_api_unavailable', 'Synthetic failure')
+        origin = {'kind': 'youtube', 'video_id': 'dQw4w9WgXcQ',
+                  'url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'authenticated': False}
+        with self.jobs.transaction() as db:
+            db.execute('UPDATE tasks SET source=? WHERE id=?', (json.dumps(origin), task['id']))
+        before = self.jobs.view(task['id'], task['capability'])
+        saved = self.root / 'withdrawn-youtube-backup'
+        for operation, args in [('backup', ('--data-root', self.data, '--output', saved, '--services-stopped')),
+                                ('verify', ('--backup-root', saved)),
+                                ('restore', ('--backup-root', saved, '--output', self.root / 'restored-youtube'))]:
+            process = self.invoke(operation, *args)
+            self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+        restored = Jobs(self.root / 'restored-youtube')
+        self.assertEqual(restored.view(task['id'], task['capability']), before)
+        with self.assertRaises(JobError):
+            restored.enqueue(origin['url'], '192.0.2.2')
+        with self.assertRaises(JobError):
+            restored.retry(task['id'], task['capability'], '192.0.2.2')
+
     def test_invalid_submission_events_are_refused_before_backup_or_restore_publication(self):
         import hashlib
         saved = self.root / 'valid-events-snapshot'

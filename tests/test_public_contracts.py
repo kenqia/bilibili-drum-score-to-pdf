@@ -12,6 +12,37 @@ MAINTENANCE_ENTRIES = ('backup', 'verify', 'restore')
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    def test_withdrawn_youtube_urls_are_rejected_before_acquisition(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from fastapi.testclient import TestClient
+        from drum_score import convert, ConversionError
+        from drum_score.web import create_app
+        urls = ('https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                'https://youtu.be/dQw4w9WgXcQ',
+                'https://www.youtube.com/shorts/dQw4w9WgXcQ')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with TestClient(create_app(root / 'service'), client=('192.0.2.10', 12345)) as client:
+                for index, url in enumerate(urls):
+                    with self.subTest(url=url):
+                        output = root / ('result-' + str(index))
+                        with patch('drum_score.public_video.acquire') as acquire:
+                            with self.assertRaises(ConversionError) as error:
+                                convert(url, output)
+                            self.assertEqual(error.exception.code, 'invalid_bilibili_url')
+                            acquire.assert_not_called()
+                        self.assertFalse(output.exists())
+                        process = subprocess.run([sys.executable, '-m', 'drum_score', url,
+                            '--output', str(output)], capture_output=True, text=True, timeout=15)
+                        self.assertNotEqual(process.returncode, 0)
+                        self.assertEqual(json.loads(process.stdout)['error']['code'], 'invalid_bilibili_url')
+                        self.assertFalse(output.exists())
+                        response = client.post('/api/tasks', json={'url': url})
+                        self.assertEqual(response.status_code, 422)
+                        self.assertEqual(response.json()['error']['code'], 'invalid_bilibili_url')
+
     def test_http_temporary_layout_is_independent_complete_and_does_not_extend_expiry(self):
         import base64
         import hashlib
@@ -261,7 +292,7 @@ class ScriptPublicContracts(unittest.TestCase):
             if 'drum_score.web' in modules:
                 from fastapi.testclient import TestClient
                 from drum_score.web import create_app
-                with TestClient(create_app(root / 'service')) as client:
+                with TestClient(create_app(root / 'service'), client=('192.0.2.10', 12345)) as client:
                     def snapshot():
                         return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                                 for p in root.rglob('*') if p.is_file()}

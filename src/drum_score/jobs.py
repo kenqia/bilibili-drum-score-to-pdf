@@ -175,6 +175,8 @@ class Jobs:
             self.check_live(row)
             if row['state'] not in ('failed', 'cancelled', 'interrupted'):
                 raise JobError('not_retryable', '只有失败、取消或中断的任务可以重试。')
+            if json.loads(row['source']).get('kind') == 'youtube':
+                raise JobError('invalid_bilibili_url', 'YouTube 接入已撤回，请提供 B站链接。', 422)
             ip_key = sha256(ip.encode()).hexdigest()
             now = time.time()
             self.admit(db, ip_key, now)

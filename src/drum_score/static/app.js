@@ -156,12 +156,13 @@ async function refresh() {
     showProgress(state);
     $("task-meta").hidden = false;
     const source = state.result?.source || state.source;
-    $("source-label").textContent = source.bvid ? `${source.bvid}` + (source.page > 1 ? ` · 第 ${source.page} P` : "") : "B站分享短链接";
+    const withdrawnSource = source.kind === "youtube";
+    $("source-label").textContent = withdrawnSource ? "历史 YouTube 任务（接入已撤回）" : source.bvid ? `${source.bvid}` + (source.page > 1 ? ` · 第 ${source.page} P` : "") : "B站分享短链接";
     $("source-link").href = source.url;
     $("save-link").hidden = !active.has(state.state) && state.state !== "complete";
     $("task-link").value = window.location.href;
     $("cancel").hidden = !["queued","running"].includes(state.state);
-    $("retry").hidden = !["failed","cancelled","interrupted"].includes(state.state);
+    $("retry").hidden = withdrawnSource || !["failed","cancelled","interrupted"].includes(state.state);
     $("download").hidden = state.state !== "complete";
     $("result").hidden = state.state !== "complete";
     if (state.state === "complete") {
