@@ -12,9 +12,15 @@ def main(argv=None):
     parser.add_argument('--max-input-mib', type=float, default=256, help='来源大小上限MiB，默认256')
     parser.add_argument('--max-temp-mib', type=float, default=1024, help='采样临时文件额度MiB，默认1024')
     parser.add_argument('--max-rss-mib', type=float, default=1024, help='采样任务进程树RSS额度MiB，默认1024')
+    parser.add_argument('--start-seconds', type=float, default=0, help='开始时间，秒，默认0')
+    parser.add_argument('--end-seconds', type=float, help='结束时间，秒，留空到结尾')
+    parser.add_argument('--region-percent', type=float, nargs=4, metavar=('LEFT', 'TOP', 'RIGHT', 'BOTTOM'), help='完整画面左上右下百分比，0到100；默认自动谱区')
+    parser.add_argument('--no-ignore-fixed-overlays', action='store_true', help='关闭自动忽略固定覆盖物对配准的影响')
     args = parser.parse_args(argv)
     try:
-        result = convert(args.source, args.output, limits={'wall_seconds': args.timeout,
+        result = convert(args.source, args.output, options={'start_seconds': args.start_seconds,
+            'end_seconds': args.end_seconds, 'region_percent': args.region_percent,
+            'ignore_fixed_overlays': not args.no_ignore_fixed_overlays}, limits={'wall_seconds': args.timeout,
             'input_bytes': args.max_input_mib * 1024**2, 'temp_bytes': args.max_temp_mib * 1024**2,
             'rss_bytes': args.max_rss_mib * 1024**2})
     except ConversionError as error:

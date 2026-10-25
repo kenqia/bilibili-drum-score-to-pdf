@@ -39,7 +39,7 @@ def guardian_lease(descriptor):
         _guardian_lock.reset(token)
 
 
-def _worker(source, output, limits, connection, temporary, parent_pid, ready):
+def _worker(source, output, limits, connection, temporary, parent_pid, ready, options=None):
     if hasattr(os, 'setsid'):
         os.setsid()
     signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -56,7 +56,7 @@ def _worker(source, output, limits, connection, temporary, parent_pid, ready):
         ready.wait()
         import cv2
         cv2.setNumThreads(1)
-        result = _convert(source, output, limits=limits, progress=lambda stage:
+        result = _convert(source, output, options=options, limits=limits, progress=lambda stage:
                           connection.send(('stage', stage)) if stage != 'complete' else None)
         connection.send(('result', result))
     except ConversionError as error:
@@ -206,11 +206,11 @@ def _stop(process, tracked, *, root_identity=None, wait_until_stopped=False):
         time.sleep(.01)
 
 
-def run(source, output, *, progress=None, limits=None, cancel=None):
+def run(source, output, *, options=None, progress=None, limits=None, cancel=None):
     # Directory setup and context-manager cleanup are filesystem operations too.
     # Keep them inside the same public error boundary as the worker lifecycle.
     try:
-        return _run(source, output, progress=progress, limits=limits, cancel=cancel)
+        return _run(source, output, options=options, progress=progress, limits=limits, cancel=cancel)
     except KeyboardInterrupt:
         raise ConversionError('cancelled', '转换已取消，未发布结果。') from None
     except ConversionError:
@@ -219,7 +219,7 @@ def run(source, output, *, progress=None, limits=None, cancel=None):
         raise ConversionError('conversion_failed', '转换进程异常退出，未发布结果。') from None
 
 
-def _run(source, output, *, progress=None, limits=None, cancel=None):
+def _run(source, output, *, options=None, progress=None, limits=None, cancel=None):
     started = time.monotonic()
     budget = ResourceBudget(limits, cancel)
     lease = _guardian_lock.get()
@@ -243,7 +243,7 @@ def _run(source, output, *, progress=None, limits=None, cancel=None):
         budget.root = root
         parent, child = context.Pipe(duplex=False)
         ready = context.Event()
-        process = context.Process(target=_worker, args=(source, root / 'complete', budget.limits, child, temporary, os.getpid(), ready))
+        process = context.Process(target=_worker, args=(source, root / 'complete', budget.limits, child, temporary, os.getpid(), ready, options))
         guardian = None
         guardian_write = None
         previous_term = None

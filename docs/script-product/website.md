@@ -103,7 +103,7 @@ worker 启动及每轮领取前清理到期文件，默认轮询间隔0.25秒。
 
 worker另接受 `--timeout`、`--max-input-mib`、`--max-rss-mib`，默认600秒、256MiB、1024MiB。`--max-temp-mib`也传入核心资源预算。当前默认值是本地候选，目标2GB主机需按现有服务余量实测及硬限额验收后使用。
 
-SQLite 的 `PRAGMA user_version=3` 是当前服务 schema，包含持久提交计数和暂停状态。旧库和未知版本拒绝启动，不自动迁移任务。v1、v2 备份分别用显式 `upgrade-v1`、`upgrade-v2` 恢复到不存在的新目录并升级，源快照保持原样，见[维护指南](maintenance.md)。`managed_attempts` 保存受管根 device/inode及文件相对路径、device/inode/ctime。清理从数据根逐级打开 no-follow 目录FD并核对身份，只删除已登记文件；目录只在空时删除，符号链接和替换物保留。丢失或无法安全确认的材料宁可保留，随后计入容量并由运营者核查，不扫描其他服务目录。
+SQLite 的 `PRAGMA user_version=4` 是当前服务 schema，包含持久提交计数和暂停状态。旧库和未知版本拒绝启动，不自动迁移任务。v1、v2 备份分别用显式 `upgrade-v1`、`upgrade-v2` 恢复到不存在的新目录并升级，源快照保持原样，见[维护指南](maintenance.md)。`managed_attempts` 保存受管根 device/inode及文件相对路径、device/inode/ctime。清理从数据根逐级打开 no-follow 目录FD并核对身份，只删除已登记文件；目录只在空时删除，符号链接和替换物保留。丢失或无法安全确认的材料宁可保留，随后计入容量并由运营者核查，不扫描其他服务目录。
 
 备份恢复须同时保存数据库、结果和准确发行版本。复制到新目录会改变inode/ctime，恢复工具只可为经清单/hash核验且自己新建的文件登记新身份，保留原始completed_at/expires_at。直接恢复旧身份会阻止清理，不能当成完整恢复。停服备份与恢复使用 [drum-score-maintenance](maintenance.md)，配置与回滚步骤见[部署指南](deployment.md)。
 
@@ -140,3 +140,11 @@ python -m unittest discover -s tests -v
 仓库默认不表示生产已开放八路。web 和 worker 必须使用一致的存储预算；每任务 RSS 额度不等于整个 unit 内存额度，调度器、监督线程、所有转换树和 guardian 都计入 unit cgroup。八路不能沿用现有 512 MiB `MemoryMax`、100% `CPUQuota` 和 `TasksMax=64` 就宣称通过。目标配置与验收见[容量方案](capacity-plan.md)。
 
 成功 manifest 的 `metrics.phase_seconds` 与交付摘要 `resources.phase_seconds` 记录准备、下载、探测、采样、配准、合成和分页的实际单调时钟耗时。它们不包含排队和最终监督器发布开销，不能与端到端等待混用。
+
+## 高级转换选项
+
+提交表单中的**高级选项**默认折叠。开始时间默认零，结束留空表示结尾。谱区默认自动检测；选择手动后，填写相对完整画面的左、上、右、下百分比。请自行在来源网站查看画面，本站不提供来源视频播放器或预览准备流程。参数含义见[转换契约](conversion.md#时间范围与手动谱区)。
+
+`POST /api/tasks` 接受 `{"url":"https://www.bilibili.com/video/BV…","options":{"start_seconds":15,"end_seconds":75,"region_percent":[5,10,95,90],"ignore_fixed_overlays":true}}`。省略 `options` 保持默认提交兼容。基础输入无效返回422；取得媒体后发现区间或像素区域无效则任务明确失败。队列、worker及显式重试保留参数，状态响应的 `options` 可核对原提交。完成结果的 `conversion` 记录选段和手动区域，页面明确标记选段秒数。
+
+服务使用显式schema v4，拒绝直接打开v3数据库。停服后使用旧程序生成并验证v3快照，再通过新程序的 `upgrade-v3 --backup-root /absolute/path/v3-snapshot --output /absolute/path/new-v4-root` 升级到新目录。源快照、原数据根和原完成/到期时间不变。回滚使用旧程序及保留的原v3目录或快照；不把新v4数据交给旧程序。升级与维护保护见[维护指南](maintenance.md)。

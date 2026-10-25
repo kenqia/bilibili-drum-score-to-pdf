@@ -14,6 +14,7 @@ import math
 import threading
 
 from .public_video import InputError, video_origin
+from .conversion_options import normalize_options
 
 
 UNFINISHED = ('queued', 'running', 'cancelling', 'finishing')
@@ -132,7 +133,12 @@ class Jobs:
             raise JobError('queue_full', '等待队列已满，请稍后重试。', 429)
         self.capacity(reserve=True, db=db)
 
-    def enqueue(self, url, ip):
+    def enqueue(self, url, ip, *, options=None):
+        from .video_seek import ConversionError
+        try:
+            options = normalize_options(options)
+        except ConversionError as error:
+            raise JobError(error.code, str(error), 422) from None
         try:
             source = video_origin(url)
         except (InputError, TypeError, AttributeError):
@@ -142,8 +148,8 @@ class Jobs:
             now = time.time()
             ip_key = sha256(ip.encode()).hexdigest()
             self.admit(db, ip_key, now)
-            db.execute('INSERT INTO tasks(id,capability_hash,source,ip_key,state,stage,created_at,queued_at) VALUES(?,?,?,?,?,?,?,?)',
-                (task, sha256(capability.encode()).hexdigest(), json.dumps(source), ip_key, 'queued', 'queued', now, now))
+            db.execute('INSERT INTO tasks(id,capability_hash,source,ip_key,state,stage,created_at,queued_at,options) VALUES(?,?,?,?,?,?,?,?,?)',
+                (task, sha256(capability.encode()).hexdigest(), json.dumps(source), ip_key, 'queued', 'queued', now, now, json.dumps(options)))
             db.execute('DELETE FROM submission_events WHERE admitted_at<=?', (now - 86400,))
             db.execute('INSERT INTO submission_events VALUES(?,?)', (ip_key, now))
         return {'id': task, 'capability': capability, 'link': f'/task/{task}#{capability}'}
@@ -156,6 +162,7 @@ class Jobs:
                 (row['queued_at'], row['queued_at'], task)).fetchone()[0] if row['state'] == 'queued' else None
             summary = json.loads(row['summary']) if row['summary'] else None
             return {'id': task, 'state': row['state'], 'stage': row['stage'], 'source': json.loads(row['source']),
+                'options': normalize_options(json.loads(row['options'])),
                 'queue_position': position, 'created_at': row['created_at'], 'completed_at': row['completed_at'],
                 'expires_at': row['expires_at'], 'result': summary,
                 'error': {'code': row['error_code'], 'message': row['error_message']} if row['error_code'] else None}
@@ -481,7 +488,7 @@ class Jobs:
         with self.transaction() as db:
             db.execute('DELETE FROM submission_events WHERE admitted_at<=?', (now - 86400,))
             db.execute("""UPDATE tasks SET state='expired',stage='expired',summary=NULL,
-                error_code=NULL,error_message=NULL,source='{}',ip_key=''
+                error_code=NULL,error_message=NULL,source='{}',options='{}',ip_key=''
                 WHERE expires_at<=? AND state NOT IN ('queued','running','cancelling','finishing','expired')""", (now,))
             managed = [dict(row) for row in db.execute("""SELECT m.* FROM managed_attempts m
                 JOIN tasks t ON m.task=t.id WHERE t.state='expired' OR

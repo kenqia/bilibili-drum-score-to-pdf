@@ -63,6 +63,11 @@ def download(origin, staging):
 def download_formats(info, staging, *, origin, backend_details, transport, max_bytes, check_url,
                      duration_tolerance=0.5):
     """Fetch a bounded native video track and verify its measured media properties."""
+    duration = info.get('duration')
+    if type(duration) not in (int, float) or not math.isfinite(duration) or duration <= 0:
+        raise InputError('unsupported_stream', '无法核验原来源完整时长。')
+    if duration > 600:
+        raise InputError('resource_limit', '原来源视频超过600秒，选择短片段也不能绕过时长限制。')
     formats = [f for f in info.get('formats', []) if f.get('vcodec') != 'none' and f.get('url') and not f.get('fragments') and f.get('protocol', 'https') in {'https', 'http'}]
     independent = [f for f in formats if f.get('acodec') == 'none']
     candidates = independent or formats
