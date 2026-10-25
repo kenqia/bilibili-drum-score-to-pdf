@@ -36,10 +36,13 @@ def validate_result(jobs, row):
         with path.open('rb') as stream:
             if hashlib.file_digest(stream, 'sha256').hexdigest() != reference['sha256']:
                 raise ValueError('Changed artifact')
-    return {'status': 'complete', 'reliable': False, 'warnings': result['warnings'], 'page_count': len(result['pages']),
+    summary = {'status': 'complete', 'reliable': False, 'warnings': result['warnings'], 'page_count': len(result['pages']),
         'pdf': result['pdf'], 'pages': result['pages'], 'source': result['source'],
         'program': result['program'], 'resources': result['resources'],
         'retention': result.get('retention')}
+    if 'conversion' in result:
+        summary['conversion'] = result['conversion']
+    return summary
 
 
 def retain_delivery(jobs, row):
@@ -126,6 +129,7 @@ def execute_attempt(jobs, row, stopping, descriptor, limits):
                 return stopping.is_set() or jobs.cancelled(row)
             with service_attempt(jobs, row):
                 convert(json.loads(row['source'])['url'], attempt / 'result',
+                    options=json.loads(row['options']),
                     progress=lambda stage: jobs.stage(row, stage) if stage != 'complete' else None,
                     cancel=cancelled, limits={**(limits or {}), 'temp_bytes': jobs.job_temp_bytes})
             validate_result(jobs, row)

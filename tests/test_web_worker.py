@@ -648,9 +648,26 @@ sqlite3.connect = connect
         task, auth, worker, writers = self.waiting()
         with TestClient(create_app(self.data), client=('192.0.2.20', 2000)) as other:
             queued, queued_auth = self.submit(other)
-        os.kill(worker.pid, signal.SIGSTOP)
+        # Freeze between transactions. SIGSTOP during an arbitrary scheduler
+        # write can leave its SQLite lock held, making HTTP cancellation return
+        # a legitimate 503 before this test ever sends SIGTERM.
+        import sqlite3
+        with sqlite3.connect(self.data / 'tasks.sqlite3', timeout=5) as barrier:
+            barrier.execute('BEGIN EXCLUSIVE')
+            os.kill(worker.pid, signal.SIGSTOP)
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                state = (Path('/proc') / str(worker.pid) / 'stat').read_text().rsplit(') ', 1)[1].split()[0]
+                if state == 'T':
+                    break
+                time.sleep(.01)
+            else:
+                self.fail('worker did not stop at the external SQLite barrier')
+            barrier.rollback()
         try:
-            self.assertEqual(self.client.post(f'/api/tasks/{task}/cancel', headers=auth).json()['state'], 'cancelling')
+            reply = self.client.post(f'/api/tasks/{task}/cancel', headers=auth)
+            self.assertEqual(reply.status_code, 200, reply.text)
+            self.assertEqual(reply.json()['state'], 'cancelling')
             worker.terminate()
         finally:
             os.kill(worker.pid, signal.SIGCONT)

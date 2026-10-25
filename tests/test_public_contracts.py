@@ -12,6 +12,155 @@ MAINTENANCE_ENTRIES = ('backup', 'verify', 'restore')
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    def test_advanced_options_reject_invalid_types_and_ranges_at_public_entries(self):
+        import tempfile
+        from fastapi.testclient import TestClient
+        from drum_score import convert, ConversionError
+        from drum_score.web import create_app
+        invalid = ({'start_seconds': True}, {'start_seconds': -1},
+                   {'end_seconds': 0}, {'start_seconds': 2, 'end_seconds': 1},
+                   {'start_seconds': float('nan')}, {'start_seconds': 10**1000}, {'region_percent': [0, 20, 100, 20]},
+                   {'region_percent': [0, 0, 101, 100]}, {'ignore_fixed_overlays': 1},
+                   {'unknown': 1})
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with TestClient(create_app(root / 'service')) as client:
+                for options in invalid:
+                    with self.subTest(options=options):
+                        with self.assertRaises(ConversionError) as raised:
+                            convert(root / 'missing.mp4', root / 'result', options=options)
+                        self.assertEqual(raised.exception.code, 'invalid_request')
+                        if options.get('start_seconds') != options.get('start_seconds'):
+                            continue  # JSON has no non-finite number representation.
+                        reply = client.post('/api/tasks', json={'url': 'https://www.bilibili.com/video/BV1rH4y1R7Rk', 'options': options})
+                        self.assertEqual(reply.status_code, 422)
+                process = subprocess.run([sys.executable, '-m', 'drum_score', str(root / 'missing.mp4'),
+                    '--output', str(root / 'result'), '--start-seconds', '-1'],
+                    capture_output=True, text=True, timeout=10)
+                self.assertEqual(process.returncode, 2)
+                self.assertEqual(json.loads(process.stdout)['error']['code'], 'invalid_request')
+                self.assertFalse((root / 'result').exists())
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Real decoder and worker')
+    def test_selected_range_and_manual_region_reach_all_entries_and_retry(self):
+        import hashlib
+        import test_web_worker as web_fixture
+        fixture = web_fixture.WebsiteWorker(methodName='runTest')
+        fixture.setUp()
+        options = {'start_seconds': 0.5, 'end_seconds': 1.5,
+                   'region_percent': [5, 4, 95, 95], 'ignore_fixed_overlays': False}
+        try:
+            video = fixture.network / 'input.mp4'
+            runner = fixture.network / 'options-core.py'
+            runner.write_text("import sys,json\nfrom drum_score import convert\n"
+                              "if __name__=='__main__': print(json.dumps(convert(sys.argv[1],sys.argv[2],options=json.loads(sys.argv[3]))))\n")
+            for entry in REMOTE_SCRIPT_ENTRIES:
+                with self.subTest(entry=entry):
+                    if entry == 'script_http':
+                        task = fixture.client.post('/api/tasks', json={'url': 'https://www.bilibili.com/video/BV1rH4y1R7Rk', 'options': options}).json()
+                        auth = {'Authorization': 'Bearer ' + task['capability']}
+                        fixture.client.post('/api/tasks/' + task['id'] + '/cancel', headers=auth)
+                        retried = fixture.client.post('/api/tasks/' + task['id'] + '/retry', headers=auth).json()
+                        self.assertEqual(retried['options'], options)
+                        self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
+                        state = fixture.state(task['id'], auth)
+                        self.assertEqual(state['state'], 'complete', state)
+                        result = state['result']
+                    else:
+                        output = fixture.root / entry
+                        args = ([sys.executable, str(runner), str(video), str(output), json.dumps(options)]
+                                if entry == 'script_core' else [sys.executable, '-m', 'drum_score', str(video), '--output', str(output),
+                                    '--start-seconds', '.5', '--end-seconds', '1.5', '--region-percent', '5', '4', '95', '95', '--no-ignore-fixed-overlays'])
+                        process = subprocess.run(args, env=fixture.env, capture_output=True, text=True, timeout=30)
+                        self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+                        result = json.loads(process.stdout)
+                        self.assertEqual(result['region'], [64, 38, 1216, 912])
+                        times = [sample['timestamp'] for sample in result['samples']]
+                        self.assertEqual(times[0], .5)
+                        self.assertEqual(times[-1], 1.25)
+                        self.assertTrue(all(.5 <= timestamp < 1.5 for timestamp in times))
+                        self.assertTrue(all(sample['timestamp'] == sample['pts'] * sample['time_base'][0] / sample['time_base'][1] for sample in result['samples']))
+                        self.assertEqual(result['staff_count'], 3)
+                    self.assertEqual(result['conversion']['options'], options)
+                    self.assertEqual(result['conversion']['effective_range_seconds'], [.5, 1.5])
+                    self.assertTrue(result['conversion']['is_excerpt'])
+                    self.assertFalse(result['reliable'])
+                    self.assertEqual(result['source']['sha256'], hashlib.sha256(video.read_bytes()).hexdigest())
+                    self.assertEqual(result['source']['metadata']['duration'], 2)
+        finally:
+            fixture.tearDown()
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Forked anonymous acquisition')
+    def test_full_source_duration_limit_precedes_media_even_with_short_selection(self):
+        import test_web_worker as web_fixture
+        from youtube_fixture import startup
+        fixture = web_fixture.WebsiteWorker(methodName='runTest')
+        fixture.setUp()
+        try:
+            marker = fixture.network / 'media-opened'
+            boundary = startup(fixture.network / 'input.mp4').replace("'duration': 2,", "'duration': 601,")
+            boundary += f"\noriginal_open=urllib.request.OpenerDirector.open\ndef checked_open(*a,**k):\n Path({str(marker)!r}).write_text('media')\n return original_open(*a,**k)\nurllib.request.OpenerDirector.open=checked_open\n"
+            (fixture.network / 'sitecustomize.py').write_text(boundary)
+            runner = fixture.network / 'duration-core.py'
+            runner.write_text("import sys,json\nfrom drum_score import convert,ConversionError\n"
+                "if __name__=='__main__':\n try: convert(sys.argv[1],sys.argv[2],options={'end_seconds':1})\n except ConversionError as e: print(json.dumps({'error':{'code':e.code}})); sys.exit(2)\n")
+            url = 'https://youtu.be/dQw4w9WgXcQ'
+            for entry in REMOTE_SCRIPT_ENTRIES:
+                with self.subTest(entry=entry):
+                    if entry == 'script_http':
+                        task = fixture.client.post('/api/tasks', json={'url': url, 'options': {'end_seconds': 1}}).json()
+                        auth = {'Authorization': 'Bearer ' + task['capability']}
+                        self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
+                        result = fixture.state(task['id'], auth)
+                        self.assertEqual(result['state'], 'failed')
+                    else:
+                        output = fixture.root / entry
+                        args = ([sys.executable, str(runner), url, str(output)] if entry == 'script_core'
+                                else [sys.executable, '-m', 'drum_score', url, '--output', str(output), '--end-seconds', '1'])
+                        process = subprocess.run(args, env=fixture.env, capture_output=True, text=True, timeout=30)
+                        self.assertEqual(process.returncode, 2, process.stdout + process.stderr)
+                        result = json.loads(process.stdout)
+                        self.assertFalse(output.exists())
+                    self.assertEqual(result['error']['code'], 'resource_limit', result)
+                    self.assertFalse(marker.exists(), 'duration rejection must happen before media transfer')
+            # Exactly 600 reaches media verification. The 2-second fixture is
+            # then rejected for integrity, proving 600 itself was permitted.
+            (fixture.network / 'sitecustomize.py').write_text(boundary.replace("'duration': 601,", "'duration': 600,"))
+            process = subprocess.run([sys.executable, str(runner), url, str(fixture.root / 'boundary')],
+                                     env=fixture.env, capture_output=True, text=True, timeout=30)
+            self.assertEqual(json.loads(process.stdout)['error']['code'], 'incomplete_video')
+            self.assertTrue(marker.exists())
+        finally:
+            fixture.tearDown()
+
+    def test_advanced_form_defaults_are_folded_and_editable_without_source_player(self):
+        import tempfile
+        from html.parser import HTMLParser
+        from fastapi.testclient import TestClient
+        from drum_score.web import create_app
+        class Form(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.tags = []
+            def handle_starttag(self, tag, attributes):
+                self.tags.append((tag, dict(attributes)))
+        with tempfile.TemporaryDirectory() as temporary, TestClient(create_app(Path(temporary))) as client:
+            form = Form()
+            response = client.get('/')
+            self.assertEqual(response.status_code, 200)
+            form.feed(response.text)
+            fields = {attrs.get('id'): attrs for tag, attrs in form.tags if tag in ('input', 'select', 'details')}
+            self.assertNotIn('open', fields['advanced-options'])
+            self.assertEqual(fields['start-seconds']['value'], '0')
+            self.assertNotIn('value', fields['end-seconds'])
+            self.assertIn('checked', fields['ignore-fixed-overlays'])
+            for name in ('start-seconds', 'end-seconds', 'region-left', 'region-top', 'region-right', 'region-bottom'):
+                self.assertEqual(fields[name]['type'], 'number')
+                self.assertNotIn('readonly', fields[name])
+            self.assertFalse(any(tag in ('video', 'iframe') for tag, _ in form.tags))
+            self.assertIn('完整画面', response.text)
+            self.assertIn('百分比', response.text)
+
     @unittest.skipUnless(sys.platform == 'linux', 'Linux website process contract')
     def test_youtube_entries_publish_canonical_source_and_all_previews(self):
         import hashlib
@@ -759,6 +908,7 @@ class MaintenancePublicContracts(unittest.TestCase):
                     saved = root / 'snapshot'
                     backup(jobs.root, saved, services_stopped=True, min_free_bytes=1)
                     with sqlite3.connect(saved / 'tasks.sqlite3') as db:
+                        db.execute('ALTER TABLE tasks DROP COLUMN options')
                         db.execute('DROP TABLE submission_events')
                         db.execute('DROP TABLE submission_control')
                         db.execute('DROP INDEX task_expiry')

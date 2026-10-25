@@ -15,7 +15,8 @@ def inspect(source, metadata, metrics, check, *, start=0, end=None):
         for fraction in (0, .15, .3, .5, .7, .85, None):
             check()
             try:
-                record, image = reader.read_record(None if fraction is None else start + (end - start) * fraction)
+                record, image = (reader.read_record(end=end) if fraction is None else
+                    reader.read_record(start + (end - start) * fraction))
             except video_seek.ConversionError as error:
                 if error.code != 'decode_failed':
                     raise

@@ -151,7 +151,7 @@ class VideoReader:
     def close(self):
         self.scratch.cleanup()
 
-    def sample_records(self, interval, consume, *, verify_motion=False):
+    def sample_records(self, interval, consume, *, verify_motion=False, start=0, end=None):
         """Stream native RGB samples and return actual source PTS, without caching video frames."""
         if not math.isfinite(interval) or interval <= 0 or self.metadata['duration'] / interval > 4096:
             raise ConversionError('invalid_request', '采样间隔无效或采样数量超出资源限制。')
@@ -165,7 +165,8 @@ class VideoReader:
         if budget <= 0:
             raise ConversionError('decode_failed', '视频解码期限已耗尽。')
         selection = f"select='isnan(prev_selected_t)+gte(t-prev_selected_t,{interval:.9f})'"
-        filters = ('split=2[keep][motion];[motion]'
+        bounds = f'trim=start={start:.9f}:end={end:.9f},' if end is not None else ''
+        filters = bounds + ('split=2[keep][motion];[motion]'
                    'scale=128:128:force_original_aspect_ratio=decrease,format=yuv444p,'
                    'signalstats,metadata@motion=print:key=lavfi.signalstats.YDIF,nullsink;'
                    '[keep]' + selection + ',showinfo@sample'
@@ -243,12 +244,14 @@ class VideoReader:
         record, image = self.read_record(timestamp)
         return record["timestamp"], image
 
-    def read_record(self, timestamp=None):
+    def read_record(self, timestamp=None, *, end=None):
         tail = timestamp is None
-        start = max(0, self.metadata['duration'] - 1) if tail else timestamp
+        end = self.metadata['duration'] if end is None else end
+        start = max(0, end - 1) if tail else timestamp
         path = Path(self.scratch.name) / 'frame.png'
         command = ['ffmpeg', '-v', 'info', '-nostdin', '-copyts', '-ss', str(math.floor(start * 1_000_000) / 1_000_000),
-                   '-threads', '2', '-i', str(self.source), '-vf', 'showinfo', '-an', *frame_sync_args(), '-threads', '1']
+                   '-threads', '2', '-i', str(self.source), '-vf',
+                   (f'trim=end={end:.9f},showinfo' if tail else 'showinfo'), '-an', *frame_sync_args(), '-threads', '1']
         command += ['-update', '1'] if tail else ['-frames:v', '1']
         command += ['-y', str(path)]
         began = time.monotonic()

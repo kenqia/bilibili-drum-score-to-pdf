@@ -39,7 +39,29 @@
               <input id="source" name="url" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="2048" placeholder="https://www.bilibili.com/video/BV…" aria-describedby="source-help submit-error">
               <button id="submit-button" type="submit">整理鼓谱</button>
             </div>
-            <p id="source-help" class="hint">支持 BV、b23.tv、YouTube watch、youtu.be 和 Shorts 单视频链接，也可粘贴分享文案。YouTube 按整条视频处理，忽略时间戳和播放列表参数。</p>
+            <p id="source-help" class="hint">支持 BV、b23.tv、YouTube watch、youtu.be 和 Shorts 单视频链接，也可粘贴分享文案。链接中的时间戳和播放列表参数不作为选段；可在高级选项填写时间。</p>
+            <details id="advanced-options" class="advanced">
+              <summary>高级选项</summary>
+              <p class="hint">默认从零到结尾。原视频最长600秒，选择短片段也不能绕过限制。</p>
+              <div class="option-grid">
+                <label for="start-seconds">开始时间，秒<input id="start-seconds" type="number" min="0" step="any" value="0"></label>
+                <label for="end-seconds">结束时间，秒<input id="end-seconds" type="number" min="0" step="any" placeholder="留空到结尾"></label>
+              </div>
+              <label for="region-mode">谱区</label>
+              <select id="region-mode"><option value="auto">自动检测</option><option value="manual">手动指定</option></select>
+              <fieldset id="manual-region" hidden disabled>
+                <legend>完整画面边界百分比，0到100</legend>
+                <p class="hint">以完整视频画面左上角为原点，向右、向下增加。请自行在来源网站查看后填写，本站不提供来源视频预览。</p>
+                <div class="option-grid">
+                  <label for="region-left">左边界，%<input id="region-left" type="number" min="0" max="100" step="any" value="0"></label>
+                  <label for="region-top">上边界，%<input id="region-top" type="number" min="0" max="100" step="any" value="0"></label>
+                  <label for="region-right">右边界，%<input id="region-right" type="number" min="0" max="100" step="any" value="100"></label>
+                  <label for="region-bottom">下边界，%<input id="region-bottom" type="number" min="0" max="100" step="any" value="100"></label>
+                </div>
+              </fieldset>
+              <label class="option-check" for="ignore-fixed-overlays"><input id="ignore-fixed-overlays" type="checkbox" checked>自动忽略固定覆盖物对拼接的影响</label>
+              <p class="hint">仅用于计算位置，PDF保留原画面和署名。</p>
+            </details>
             <p id="submit-error" class="alert" role="alert" hidden></p>
           </form>
           <p class="promise">免费 · 无需注册 · 手机电脑都能用</p>

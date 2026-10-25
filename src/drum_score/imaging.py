@@ -77,9 +77,8 @@ def _narrow_shift(previous, profile, old_pixels, pixels, paths, index, region, i
         similarity, ink = _ink_overlap(old_pixels, pixels, delta, invalid)
         if cost <= .1 and local <= LOCAL_GOOD and similarity >= .85 and ink >= 128:
             proven.append(delta)
-    if not proven or any(abs(shift - proven[0]) > 2 for shift in proven[1:]):
+    if not proven:
         return None
-    delta = proven[0]
     # Confirm the same notation in another actual observation. This does not
     # use a speed prior to break ties between repeated music.
     if index + 1 >= len(paths):
@@ -93,10 +92,15 @@ def _narrow_shift(previous, profile, old_pixels, pixels, paths, index, region, i
     if next_shift is None:
         return None
     next_delta = max(0, int(round(next_shift)))
-    if delta + next_delta > height - minimum:
+    supported = []
+    for delta in proven:
+        if delta + next_delta <= height - minimum:
+            similarity, ink = _ink_overlap(old_pixels, following, delta + next_delta, invalid)
+            if similarity >= .85 and ink >= 128:
+                supported.append(delta)
+    if not supported or any(abs(delta - supported[0]) > 2 for delta in supported[1:]):
         return None
-    similarity, ink = _ink_overlap(old_pixels, following, delta + next_delta, invalid)
-    return delta if similarity >= .85 and ink >= 128 else None
+    return supported[0]
 
 
 def register(paths, region, *, observations=None, ignore_fixed_overlays=True,
