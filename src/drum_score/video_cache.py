@@ -104,12 +104,14 @@ class VideoCache:
                     s = p.lstat()
                 except FileNotFoundError:
                     continue
-                if stat.S_ISREG(s.st_mode): total += s.st_size
+                if stat.S_ISREG(s.st_mode):
+                    total += s.st_size
             return total + sum(r['reservation_bytes'] + r['media_bytes'] for r in self.rows() if r['storage'] == 'cache')
         # Reserve the whole bounded transfer before creating a cache media writer.
         # No second media copy is made by the preparation operation.
         for row in sorted(rows, key=lambda r: (r['expires_at'] or 0, r['published_at'] or 0)):
-            if usage() + reservation <= self.jobs.cache_bytes: break
+            if usage() + reservation <= self.jobs.cache_bytes:
+                break
             if not any(row['key'] == k or row['key'].startswith(k + '-') for k in self.active):
                 self.remove(row)
         cached = not inspection.get('_skip_cache') and bool(inspection.get('version')) and usage() + reservation <= self.jobs.cache_bytes and not any(r['key'] == key for r in self.rows())
@@ -125,8 +127,10 @@ class VideoCache:
                            (row_key, json.dumps(safe), 'filling', reservation, name, 'cache' if cached else 'attempts', info.st_dev, info.st_ino))
                 self.jobs.capacity(db=db)
         except BaseException:
-            try: root.rmdir()
-            except OSError: pass
+            try:
+                root.rmdir()
+            except OSError:
+                pass
             raise
         return root, cached, row_key
 
