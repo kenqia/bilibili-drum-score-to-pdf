@@ -465,6 +465,38 @@ Path.read_text = read
             self.assertFalse((root / 'result').exists())
             self.assertEqual(previous.read_bytes(), b'existing result')
 
+    def test_proven_thin_video_borders_do_not_join_all_printable_systems(self):
+        from score_fixtures import scrolling_video
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, sheet = scrolling_video(root)
+            for index, path in enumerate(sorted(root.glob('frame-*.png'))):
+                with Image.open(path) as frame:
+                    bordered = Image.new('RGB', (644, 520), 'black')
+                    bordered.paste(frame, (2, 0))
+                    bordered.save(root / f'border-{index:03d}.png')
+            source = root / 'border.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '1', '-i',
+                str(root / 'border-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
+            result = drum_score.convert(source, root / 'result')
+            self.assertEqual(result['region'], [2, 0, 642, 520])
+            self.assertGreaterEqual(len(result['pages']), 2)
+            with Image.open(root / 'result' / result['longshot']['path']) as actual:
+                self.assertEqual(actual.size, sheet.size)
+                self.assertIsNone(ImageChops.difference(actual.crop((0, 100, 570, 1420)),
+                    sheet.crop((0, 100, 570, 1420))).getbbox())
+
+            with Image.open(root / 'border-000.png') as marked:
+                marked.putpixel((0, 200), (0, 0, 255))
+                marked.save(root / 'border-000.png')
+            changed = root / 'edge-mark.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '1', '-i',
+                str(root / 'border-%03d.png'), '-c:v', 'ffv1', str(changed)], check=True)
+            retained = drum_score.convert(changed, root / 'retained')
+            self.assertEqual(retained['region'], [0, 0, 644, 520])
+            with Image.open(root / 'retained' / retained['longshot']['path']) as image:
+                self.assertEqual(image.getpixel((0, 200)), (0, 0, 255))
+
     def test_preflight_keeps_uncertain_intro_and_checks_distributed_native_frames(self):
         from score_fixtures import scrolling_video
         with tempfile.TemporaryDirectory() as temporary:
@@ -486,6 +518,10 @@ Path.read_text = read
             source, sheet = scrolling_video(root, offsets=list(range(0, 901, 45)))
             result = drum_score.convert(source, root / 'result')
             self.assertGreater(result['registration']['invalid_pixels'], 0)
+            disabled = drum_score.convert(source, root / 'disabled',
+                options={'ignore_fixed_overlays': False})
+            self.assertEqual(disabled['registration']['invalid_pixels'], 0)
+            self.assertEqual(disabled['registration']['overlay_comparisons'], 0)
             self.assertEqual(result['staff_count'], 7)
             with Image.open(root / 'result' / result['longshot']['path']) as actual:
                 self.assertEqual(actual.size, sheet.size)
@@ -625,6 +661,7 @@ Path.read_text = read
                             '-crf', '23', '-pix_fmt', 'yuv420p', str(source)], check=True)
             result = drum_score.convert(source, root / 'result')
             self.assertEqual(result['staff_count'], 3)
+            self.assertEqual(result['registration']['invalid_pixels'], 0)
             self.assertTrue(all(placement['offset'] == 0 for placement in result['placements']))
             with Image.open(root / 'result' / result['longshot']['path']) as longshot:
                 self.assertLessEqual(longshot.height, image.height)

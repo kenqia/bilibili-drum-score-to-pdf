@@ -81,6 +81,10 @@ class ScriptPublicContracts(unittest.TestCase):
                         self.assertTrue(all(.5 <= timestamp < 1.5 for timestamp in times))
                         self.assertTrue(all(sample['timestamp'] == sample['pts'] * sample['time_base'][0] / sample['time_base'][1] for sample in result['samples']))
                         self.assertEqual(result['staff_count'], 3)
+                        self.assertEqual(result['registration']['invalid_pixels'], 0)
+                        self.assertEqual(result['registration']['overlay_comparisons'], 0)
+                        self.assertTrue(all(.5 <= frame['timestamp'] < 1.5
+                            for frame in result['preflight']['observations']))
                     self.assertEqual(result['conversion']['options'], options)
                     self.assertEqual(result['conversion']['effective_range_seconds'], [.5, 1.5])
                     self.assertTrue(result['conversion']['is_excerpt'])

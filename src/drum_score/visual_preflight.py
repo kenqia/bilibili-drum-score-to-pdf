@@ -24,6 +24,8 @@ def inspect(source, metadata, metrics, check, *, start=0, end=None):
                 # Full sequential sampling still determines source validity.
                 continue
             try:
+                if not start <= record['timestamp'] < end:
+                    continue
                 if any((item['pts'], item['time_base']) == (record['pts'], record['time_base'])
                        for item in observations):
                     continue

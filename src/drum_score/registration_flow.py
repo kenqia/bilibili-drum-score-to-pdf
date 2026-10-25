@@ -14,17 +14,21 @@ def register_refined(paths, region, records, refine, check, *, invalid=None):
     narrow = []
     requests = 0
     evidence = []
+    resume = None
     while True:
         check()
         try:
             placements = register(paths, region, observations=records,
-                budget_check=check, invalid=invalid,
+                budget_check=check, invalid=invalid, resume=resume,
                 allow_narrow=lambda left, right: any(
                     begin <= records[left]['timestamp'] <= records[right]['timestamp'] <= end
                     for begin, end in narrow))
-            return placements, {'refinement_requests': requests, 'intervals': evidence}
+            return placements, {'refinement_requests': requests, 'intervals': evidence,
+                'transitions': [{'sample': item['sample'], **item['transition']}
+                                for item in placements if 'transition' in item]}
         except ConversionError as error:
             interval = getattr(error, 'registration_interval', None)
+            resume = getattr(error, 'registration_resume', None)
             if interval is None:
                 raise
             left, right = interval
@@ -57,9 +61,12 @@ def register_refined(paths, region, records, refine, check, *, invalid=None):
                 # Seeking can return an endpoint or the same native frame twice.
                 # Keep original decoder order, including delayed tail PTS.
                 if begin < record['timestamp'] < end and identity not in known:
+                    if additions and record['timestamp'] <= additions[-1][1]['timestamp']:
+                        # Independent increasing seeks must not hide native PTS
+                        # regression by sorting the observations after decoding.
+                        raise error
                     known.add(identity)
                     additions.append((path, {**record, 'requires_unique_registration': True}))
-            additions.sort(key=lambda pair: pair[1]['timestamp'])
             paths[right:right] = [path for path, _ in additions]
             records[right:right] = [record for _, record in additions]
             evidence.append({'start_seconds': begin, 'end_seconds': end,

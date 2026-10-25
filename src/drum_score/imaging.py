@@ -100,17 +100,20 @@ def _narrow_shift(previous, profile, old_pixels, pixels, paths, index, region, i
                 supported.append(delta)
     if not supported or any(abs(delta - supported[0]) > 2 for delta in supported[1:]):
         return None
-    return supported[0]
+    return supported[0], {'candidate_deltas': proven, 'following_delta': next_delta}
 
 
-def register(paths, region, *, observations=None, ignore_fixed_overlays=True,
-             budget_check=lambda: None, allow_narrow=True, invalid=None):
-    placements = []
-    previous, previous_pixels, position = None, None, 0
+def register(paths, region, *, observations=None,
+             budget_check=lambda: None, allow_narrow=True, invalid=None, resume=None):
+    placements = [] if resume is None else list(resume['placements'])
+    previous, previous_pixels, position = ((None, None, 0) if resume is None else
+        (resume['profile'], resume['pixels'], resume['position']))
     motion_since_previous = 0.0
     skipped_since_previous = 0
-    previous_index = None
-    for index, path in enumerate(paths):
+    previous_index = None if resume is None else resume['previous_index']
+    first = 0 if previous_index is None else previous_index + 1
+    for index in range(first, len(paths)):
+        path = paths[index]
         budget_check()
         if observations is not None:
             motion_since_previous = max(motion_since_previous,
@@ -125,6 +128,7 @@ def register(paths, region, *, observations=None, ignore_fixed_overlays=True,
                 # Exact pixels already passed paper/ink and overlap validation.
                 # Keep native-motion ambiguity checks before skipping repeated work.
                 placements.append({'sample': index, 'offset': position})
+                previous_index = index
                 motion_since_previous = 0.0
                 skipped_since_previous = 0
                 continue
@@ -134,6 +138,7 @@ def register(paths, region, *, observations=None, ignore_fixed_overlays=True,
         if paper < .5 or ink < .002:
             # Black intros and blank outros stay in provenance, not notation.
             continue
+        transition = None
         if previous is not None:
             height = len(gray)
             minimum = max(16, int(.25 * height))
@@ -144,10 +149,14 @@ def register(paths, region, *, observations=None, ignore_fixed_overlays=True,
             delta, cost = pick(candidates, .17, prefer=0, strict=False,
                                reject_ambiguity=sparse_motion)
             if delta is None and (allow_narrow(previous_index, index) if callable(allow_narrow) else allow_narrow):
-                delta = _narrow_shift(previous, profile, previous_pixels, pixels, paths, index, region, invalid)
+                content_path = _narrow_shift(previous, profile, previous_pixels, pixels, paths, index, region, invalid)
+                if content_path is not None:
+                    delta, transition = content_path
             if delta is None:
                 error = ConversionError('discontinuity', '无法可靠确认相邻采样的位移，未发布可能缺段的曲谱。')
                 error.registration_interval = (previous_index, index)
+                error.registration_resume = {'placements': placements, 'previous_index': previous_index,
+                    'position': position, 'profile': previous, 'pixels': previous_pixels}
                 raise error
             delta = max(0, int(round(delta)))
             # A similar profile is insufficient when notation in the overlap
@@ -156,9 +165,15 @@ def register(paths, region, *, observations=None, ignore_fixed_overlays=True,
             if similarity < .45 or valid_ink < 32:
                 error = ConversionError('discontinuity', '相邻画面重叠内容不一致，未发布可能缺段的曲谱。')
                 error.registration_interval = (previous_index, index)
+                error.registration_resume = {'placements': placements, 'previous_index': previous_index,
+                    'position': position, 'profile': previous, 'pixels': previous_pixels}
                 raise error
             position += delta
-        placements.append({'sample': index, 'offset': position})
+        placement = {'sample': index, 'offset': position}
+        if transition is not None:
+            placement['transition'] = {**transition, 'overlap_rows': height - delta,
+                'ink_iou': float(similarity), 'valid_ink_pixels': valid_ink}
+        placements.append(placement)
         previous, previous_pixels = profile, pixels
         previous_index = index
         motion_since_previous = 0.0

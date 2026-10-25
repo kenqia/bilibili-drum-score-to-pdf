@@ -199,7 +199,6 @@ def _process(source, output, metadata, emit, budget, options):
     if metadata['duration'] > 600 or metadata['width'] * metadata['height'] > 4_200_000:
         raise ConversionError('resource_limit', '视频超出时长或像素限制。')
     start, end, manual_region = resolve_options(options, metadata)
-    emit('sampling')
     budget.check()
     frames = output / 'samples'
     frames.mkdir()
@@ -207,6 +206,7 @@ def _process(source, output, metadata, emit, budget, options):
     metrics = {'decode_elapsed': 0, 'seek_count': 0, 'decoded_reported_frames': 0, 'peak_temp_disk': 0}
     from .visual_preflight import inspect as visual_preflight
     preflight = visual_preflight(source, metadata, metrics, budget.check, start=start, end=end)
+    emit('sampling')
     reader = video_seek.VideoReader(source, metadata, metrics)
     try:
         def consume(index, image):
@@ -256,6 +256,10 @@ def _process(source, output, metadata, emit, budget, options):
         refinement_reader.close()
     samples = [{**artifact(output, path), **record, 'kind': 'native_frame'}
                for path, record in zip(paths, records)]
+    registration['match_region'] = list(region)
+    if manual_region is None:
+        from .score_borders import trim as trim_score_borders
+        region = trim_score_borders([paths[item['sample']] for item in placements], region, budget.check)
     emit('composing')
     longshot = output / 'longshot.png'
     imaging.compose(paths, region, placements, longshot)
