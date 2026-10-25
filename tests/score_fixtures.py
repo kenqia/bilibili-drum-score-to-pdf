@@ -26,11 +26,11 @@ def score_frame(size=(1280, 960), row_count=3):
     return frame
 
 
-def video_from_image(image, directory, name='input', *, duration=2):
+def video_from_image(image, directory, name='input'):
     png = directory / f'{name}.png'
     video = directory / f'{name}.mp4'
     image.save(png)
-    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-loop', '1', '-i', str(png), '-t', str(duration), '-r', '4', '-pix_fmt', 'yuv420p', str(video)], check=True)
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-loop', '1', '-i', str(png), '-t', '2', '-r', '4', '-pix_fmt', 'yuv420p', str(video)], check=True)
     return video
 
 

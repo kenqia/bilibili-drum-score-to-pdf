@@ -58,54 +58,6 @@ class ScriptPublicContracts(unittest.TestCase):
         finally:
             fixture.tearDown()
 
-    @unittest.skipUnless(sys.platform == 'linux', 'Linux website process contract')
-    def test_youtube_entries_publish_canonical_source_and_all_previews(self):
-        import hashlib
-        import test_web_worker as web_fixture
-        from youtube_fixture import startup
-        fixture = web_fixture.WebsiteWorker(methodName='runTest')
-        fixture.setUp()
-        try:
-            video = fixture.network / 'input.mp4'
-            (fixture.network / 'sitecustomize.py').write_text(startup(video))
-            runner = fixture.network / 'youtube-core.py'
-            runner.write_text("import sys,json\nfrom drum_score import convert\n"
-                              "if __name__=='__main__': print(json.dumps(convert(sys.argv[1],sys.argv[2])))\n")
-            url = 'https://youtube.com/shorts/dQw4w9WgXcQ?t=30&list=ignored'
-            for entry in REMOTE_SCRIPT_ENTRIES:
-                with self.subTest(entry=entry):
-                    if entry == 'script_http':
-                        task = fixture.client.post('/api/tasks', json={'url': url}).json()
-                        auth = {'Authorization': 'Bearer ' + task['capability']}
-                        self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
-                        state = fixture.state(task['id'], auth)
-                        self.assertEqual(state['state'], 'complete', state)
-                        result = state['result']
-                        pdf = fixture.client.get('/api/tasks/' + task['id'] + '/pdf', headers=auth).content
-                        for index, page in enumerate(result['pages'], 1):
-                            content = fixture.client.get('/api/tasks/' + task['id'] + '/pages/' + str(index), headers=auth).content
-                            self.assertEqual(hashlib.sha256(content).hexdigest(), page['sha256'])
-                    else:
-                        output = fixture.root / ('youtube-' + entry)
-                        args = ([sys.executable, str(runner), url, str(output)] if entry == 'script_core'
-                                else [sys.executable, '-m', 'drum_score', url, '--output', str(output)])
-                        process = subprocess.run(args, env=fixture.env, capture_output=True, text=True, timeout=30)
-                        self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
-                        result = json.loads(process.stdout)
-                        pdf = (output / result['pdf']['path']).read_bytes()
-                    self.assertEqual(result['status'], 'complete')
-                    self.assertFalse(result['reliable'])
-                    self.assertEqual(result['source']['kind'], 'youtube')
-                    self.assertEqual(result['source']['video_id'], 'dQw4w9WgXcQ')
-                    self.assertEqual(result['source']['url'], 'https://www.youtube.com/watch?v=dQw4w9WgXcQ')
-                    self.assertEqual(result['source']['sha256'], hashlib.sha256(video.read_bytes()).hexdigest())
-                    self.assertEqual(result['source']['backend'], 'yt-dlp')
-                    self.assertFalse(result['source']['authenticated'])
-                    self.assertNotIn('SYNTHETIC_DO_NOT_PUBLISH', json.dumps(result))
-                    self.assertEqual(hashlib.sha256(pdf).hexdigest(), result['pdf']['sha256'])
-        finally:
-            fixture.tearDown()
-
     @unittest.skipUnless(sys.platform == 'linux', 'Ubuntu operator and HTTP contract')
     def test_operator_pause_blocks_only_admission_and_persists_across_http_restart(self):
         import os

@@ -6,7 +6,7 @@
 
 ## 前置条件
 
-需要 Python 3.12 或更新版本、FFmpeg 与 Poppler。公开 YouTube 链接另需 Deno，配置见 [YouTube 获取](script-product/youtube.md)。公开 B站链接另需固定 BBDownNext 2.3.0；本地视频转换不需要它。当前验证环境为 Python 3.12；网站 worker 使用 Ubuntu/Linux 的 `/proc`、`flock` 和文件描述符语义。Windows 只提供本地视频 CLI 与媒体工具兼容性测试，不承诺 Linux 服务生命周期。
+需要 Python 3.12 或更新版本、FFmpeg 与 Poppler。公开 B站链接另需固定 BBDownNext 2.3.0；本地视频转换不需要它。当前验证环境为 Python 3.12；网站 worker 使用 Ubuntu/Linux 的 `/proc`、`flock` 和文件描述符语义。Windows 只提供本地视频 CLI 与媒体工具兼容性测试，不承诺 Linux 服务生命周期。
 
 Ubuntu 可在自己的环境安装 `ffmpeg`、`poppler-utils`、`fonts-dejavu-core`。确认 `ffmpeg -version`、`ffprobe -version`、`pdftoppm -v` 成功。网站临时打印排版还需 `pdfimages`，通过 `pdfimages -v` 核验；普通 CLI 转换不调用它。开发验证另需 `pdfinfo`。
 

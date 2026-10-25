@@ -53,16 +53,7 @@ def download(origin, staging):
     info = {'formats': formats, 'duration': details['duration'],
             'http_headers': {'Referer': origin['url'], 'Origin': 'https://www.bilibili.com',
                              'User-Agent': 'Mozilla/5.0'}}
-    return download_formats(info, staging, origin=origin,
-        backend_details={'backend': 'BBDownNext', 'backend_version': '2.3.0',
-            'backend_build': details['backend_build'], 'backend_sha256': details['backend_sha256'],
-            'acquisition_route': 'bbdown_direct', 'cid': details['cid'], 'aid': details['aid']},
-        transport=PublicTransport(direct=True), max_bytes=MAX_BYTES, check_url=checked_media_url)
-
-
-def download_formats(info, staging, *, origin, backend_details, transport, max_bytes, check_url,
-                     duration_tolerance=0.5):
-    """Fetch a bounded native video track and verify its measured media properties."""
+    transport = PublicTransport(direct=True)
     formats = [f for f in info.get('formats', []) if f.get('vcodec') != 'none' and f.get('url') and not f.get('fragments') and f.get('protocol', 'https') in {'https', 'http'}]
     independent = [f for f in formats if f.get('acodec') == 'none']
     candidates = independent or formats
@@ -73,18 +64,18 @@ def download_formats(info, staging, *, origin, backend_details, transport, max_b
     destination = staging / 'video.mp4'
     last_error = None
     for attempt, fmt in enumerate(candidates[:3], 1):
-        if (fmt.get('filesize') or 0) > max_bytes:
+        if (fmt.get('filesize') or 0) > MAX_BYTES:
             raise InputError('download_too_large', '视频超过大小上限。请提供清晰的本地视频。')
         addresses = [fmt['url']] + list(fmt.get('backup_urls') or [])[:2]
         for backup, address in enumerate(addresses):
             try:
                 transport.stage = 'media'
-                check_url(address)
+                checked_media_url(address)
                 total = 0
                 with transport.open(address, {**info.get('http_headers', {}), **fmt.get('http_headers', {})}) as response, destination.open('wb') as target:
-                    while block := response.read(min(1024 * 1024, max_bytes + 1 - total)):
+                    while block := response.read(min(1024 * 1024, MAX_BYTES + 1 - total)):
                         total += len(block)
-                        if total > max_bytes:
+                        if total > MAX_BYTES:
                             raise InputError('download_too_large', '视频超过大小上限。请提供清晰的本地视频。')
                         target.write(block)
                 transport.stage = 'probe'
@@ -97,11 +88,13 @@ def download_formats(info, staging, *, origin, backend_details, transport, max_b
                 if decode.returncode:
                     raise ValueError
                 actual_duration = float(metadata.get('format', {}).get('duration', 'nan'))
-                if not math.isfinite(actual_duration) or abs(actual_duration - info['duration']) > duration_tolerance:
-                    raise InputError('incomplete_video', '下载文件时长与目标视频不一致。')
+                if not math.isfinite(actual_duration) or abs(actual_duration - info['duration']) > 0.5:
+                    raise InputError('incomplete_video', '下载文件时长与目标分 P 不一致。')
                 if stream['width'] < (fmt.get('width') or 0) or stream['height'] < (fmt.get('height') or 0):
-                    raise InputError('media_resolution_mismatch', '视频实测分辨率低于公开格式标记。请提供清晰的本地视频。', {**origin, **backend_details, 'anonymous': True, 'actual_video': stream})
-                return {**backend_details, 'anonymous': True,
+                    raise InputError('media_resolution_mismatch', '视频实测分辨率低于公开格式标记。请提供清晰的本地视频。', {**origin, 'backend': 'BBDownNext', 'backend_version': '2.3.0', 'anonymous': True, 'actual_video': stream})
+                return {'backend': 'BBDownNext', 'backend_version': '2.3.0', 'anonymous': True,
+                        'backend_build': details['backend_build'], 'backend_sha256': details['backend_sha256'],
+                        'acquisition_route': 'bbdown_direct', 'cid': details['cid'], 'aid': details['aid'],
                         'full_duration': info['duration'], 'single_file_fallback': not bool(independent), 'actual_video': stream,
                         'format_attempts': attempt, 'backup_used': bool(backup),
                         'selected_format': {'format_id': fmt.get('format_id'), 'width': fmt.get('width'), 'height': fmt.get('height'), 'fps': fmt.get('fps'), 'quality': fmt.get('quality')}}

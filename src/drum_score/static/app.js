@@ -8,8 +8,8 @@ const steps = ["queue", "fetch", "read", "stitch", "layout"];
 const stepOf = {queued:"queue",starting:"fetch",downloading:"fetch",probing:"read",sampling:"read",registering:"stitch",composing:"stitch",paginating:"layout",finishing:"layout"};
 // Plain-language explanations for drummers; the server message stays available as detail.
 const friendly = {
-  invalid_bilibili_url:"请复制完整 B站 BV、b23.tv 或 YouTube 单视频链接再试。",
-  invalid_request:"请复制完整 B站 BV、b23.tv 或 YouTube 单视频链接再试。",
+  invalid_bilibili_url:"这不像是 B站视频链接。请复制完整 BV 链接或 b23.tv 短链接再试。",
+  invalid_request:"这不像是 B站视频链接。请复制完整 BV 链接或 b23.tv 短链接再试。",
   short_link_unavailable:"这个短链接没能打开。请重新复制，或在浏览器打开后复制完整的 BV 链接。",
   ip_busy:"你所在的网络已经有一个任务在处理了。等它完成或取消后再提交。学校、公司等共用网络也会占用名额。",
   queue_full:"现在排队的人太多了，请过几分钟再试。",
@@ -22,7 +22,6 @@ const friendly = {
   download_too_large:"视频文件太大了。目前支持 10 分钟以内、4K 以下的视频。",
   http_unavailable:"拿不到这个视频。它可能需要登录、是会员专享、有地区限制或者已经下架。",
   public_api_unavailable:"拿不到这个视频。它可能需要登录、是会员专享、有地区限制或者已经下架。",
-  youtube_challenge:"YouTube 要求机器人或身份验证。请稍后重试，或换一个无需登录的公开视频。",
   unsupported_stream:"这个视频的格式暂时处理不了。",
   undecodable_video:"视频读取失败。可以点「重新整理」再试一次。",
   decode_failed:"视频读取失败。可以点「重新整理」再试一次。",
@@ -71,21 +70,7 @@ function normalizeLink(text) {
   }
   const short = /(?:^|[\s（(【])(?:https?:\/\/)?b23\.tv\/([0-9A-Za-z]{1,64})(?=$|[\s/?#）)】。，！!])/i.exec(value);
   if (short) return {url:`https://b23.tv/${short[1]}`};
-  const youtube = /https:\/\/(?:www\.)?(?:youtube\.com|youtu\.be)\/[^\s<>"'）)】。，！!]+/i.exec(value);
-  if (youtube) {
-    try {
-      const url = new URL(youtube[0]);
-      let id;
-      if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443")) throw new Error();
-      if (url.hostname === "youtu.be") id = /^\/([A-Za-z0-9_-]{11})\/?$/.exec(url.pathname)?.[1];
-      else if (["youtube.com", "www.youtube.com"].includes(url.hostname)) {
-        if (url.pathname === "/watch" && url.searchParams.getAll("v").length === 1) id = url.searchParams.get("v");
-        else id = /^\/shorts\/([A-Za-z0-9_-]{11})\/?$/.exec(url.pathname)?.[1];
-      }
-      if (/^[A-Za-z0-9_-]{11}$/.test(id || "")) return {url:`https://www.youtube.com/watch?v=${id}`};
-    } catch (_) {}
-  }
-  if (!value) return {error:"先粘贴一个 B站或 YouTube 视频链接。"};
+  if (!value) return {error:"先粘贴一个 B站视频链接。"};
   return {error:friendly.invalid_bilibili_url};
 }
 
@@ -171,7 +156,7 @@ async function refresh() {
     showProgress(state);
     $("task-meta").hidden = false;
     const source = state.result?.source || state.source;
-    $("source-label").textContent = source.video_id ? `YouTube · ${source.video_id}` : source.bvid ? `${source.bvid}` + (source.page > 1 ? ` · 第 ${source.page} P` : "") : "B站分享短链接";
+    $("source-label").textContent = source.bvid ? `${source.bvid}` + (source.page > 1 ? ` · 第 ${source.page} P` : "") : "B站分享短链接";
     $("source-link").href = source.url;
     $("save-link").hidden = !active.has(state.state) && state.state !== "complete";
     $("task-link").value = window.location.href;
