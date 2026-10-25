@@ -465,6 +465,65 @@ Path.read_text = read
             self.assertFalse((root / 'result').exists())
             self.assertEqual(previous.read_bytes(), b'existing result')
 
+    def test_preflight_keeps_uncertain_intro_and_checks_distributed_native_frames(self):
+        from score_fixtures import scrolling_video
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, _ = scrolling_video(root, offsets=[None, None, 0, 45, 90, 135])
+            result = drum_score.convert(source, root / 'result')
+            self.assertEqual(result['preflight']['decision'], 'continue')
+            observations = result['preflight']['observations']
+            self.assertGreaterEqual(len(observations), 3)
+            self.assertTrue(any(observation['staff_structure'] for observation in observations))
+            self.assertLess(observations[0]['timestamp'], observations[-1]['timestamp'])
+            self.assertTrue(all('pts' in observation and 'time_base' in observation
+                                for observation in observations))
+
+    def test_fixed_overlay_is_unknown_for_matching_but_kept_in_source_rgb(self):
+        from score_fixtures import scrolling_video
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, sheet = scrolling_video(root, offsets=list(range(0, 901, 45)))
+            result = drum_score.convert(source, root / 'result')
+            self.assertGreater(result['registration']['invalid_pixels'], 0)
+            self.assertEqual(result['staff_count'], 7)
+            with Image.open(root / 'result' / result['longshot']['path']) as actual:
+                self.assertEqual(actual.size, sheet.size)
+                self.assertEqual(actual.getpixel((600, 20)), (0, 0, 0))
+                # Distinctive notation away from the fixed overlay is retained.
+                self.assertIsNone(ImageChops.difference(actual.crop((0, 100, 570, 1420)),
+                    sheet.crop((0, 100, 570, 1420))).getbbox())
+
+    def test_unique_narrow_viewport_overlap_keeps_complete_source_pixels(self):
+        # Real failure BV1fbFczHE1r jumps between stationary viewports with
+        # only a short distinctive fragment in common. This is synthetic.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sheet = Image.new('RGB', (640, 970), 'white')
+            draw = ImageDraw.Draw(sheet)
+            for row, top in enumerate((100, 270, 450, 620, 800)):
+                for line in range(5):
+                    draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+                draw.text((30, top - 18), str(17 + row * 7), fill='black')
+                for note in range(7):
+                    x = 75 + note * 70 + row * 3
+                    y = top + (note + row) % 4 * 6
+                    draw.ellipse((x, y, x + 10, y + 8), fill='black')
+                    draw.line((x + 10, y - 30, x + 10, y + 5), fill='black', width=2)
+            for index, shift in enumerate((0, 0, 450, 450)):
+                with sheet.crop((0, shift, 640, shift + 520)) as frame:
+                    frame.save(root / f'snap-{index:03d}.png')
+            source = root / 'snap.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '2', '-i',
+                str(root / 'snap-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
+            result = drum_score.convert(source, root / 'result')
+            self.assertFalse(result['reliable'])
+            self.assertEqual(result['staff_count'], 5)
+            self.assertGreater(result['registration']['refinement_requests'], 0)
+            with Image.open(root / 'result' / result['longshot']['path']) as actual:
+                self.assertEqual(actual.size, sheet.size)
+                self.assertIsNone(ImageChops.difference(actual.convert('RGB'), sheet).getbbox())
+
     def test_detected_page_flip_does_not_silently_publish_only_first_page(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

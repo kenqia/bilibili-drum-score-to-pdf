@@ -10,7 +10,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 
 from .video_seek import ConversionError
-from .registration import profile_of, shift_candidates, pick
+from .registration import profile_of, shift_candidates, pick, LOCAL_GOOD
 
 
 def detect_region(paths):
@@ -45,18 +45,69 @@ def detect_region(paths):
             min(width, math.ceil((x + w) * sx) + 3), min(height, math.ceil((y + h) * sy) + 3))
 
 
-def _profile(image):
+def _profile(image, invalid=None):
     rgb = np.asarray(image)
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    return gray, profile_of(gray, np.zeros(gray.shape, dtype=bool))
+    return gray, profile_of(gray, np.zeros(gray.shape, dtype=bool) if invalid is None else invalid)
 
 
-def register(paths, region, *, observations=None):
+def _ink_overlap(old, new, delta, invalid=None):
+    """Compare real aligned ink, excluding unknown pixels in either frame."""
+    old, new = old[delta:], new[:len(new) - delta]
+    valid = np.ones(old.shape[:2], dtype=bool) if invalid is None else (
+        ~invalid[delta:] & ~invalid[:len(invalid) - delta])
+    if valid.size == 0 or valid.mean() < .5:
+        return 0.0, 0
+    a = (np.min(old, axis=2) < 180) & valid
+    b = (np.min(new, axis=2) < 180) & valid
+    union = int(np.count_nonzero(a | b))
+    return np.count_nonzero(a & b) / max(1, union), union
+
+
+def _narrow_shift(previous, profile, old_pixels, pixels, paths, index, region, invalid=None):
+    # Abrupt viewport changes can share less than a quarter of a frame.
+    # Require unique local detail and dense independent pixel agreement;
+    # a longer search alone never establishes a continuation.
+    height = len(pixels)
+    minimum = max(32, int(height * .08))
+    candidates = shift_candidates(previous, profile, -2, height - minimum, minimum, top=12)
+    proven = []
+    for cost, shift, local in candidates:
+        delta = max(0, int(round(shift)))
+        similarity, ink = _ink_overlap(old_pixels, pixels, delta, invalid)
+        if cost <= .1 and local <= LOCAL_GOOD and similarity >= .85 and ink >= 128:
+            proven.append(delta)
+    if not proven or any(abs(shift - proven[0]) > 2 for shift in proven[1:]):
+        return None
+    delta = proven[0]
+    # Confirm the same notation in another actual observation. This does not
+    # use a speed prior to break ties between repeated music.
+    if index + 1 >= len(paths):
+        return None
+    with Image.open(paths[index + 1]) as original:
+        following = np.asarray(original.convert('RGB').crop(region))
+    _, next_profile = _profile(Image.fromarray(following), invalid)
+    next_candidates = shift_candidates(profile, next_profile, -2,
+        height - max(16, height // 4), max(16, height // 4))
+    next_shift, _ = pick(next_candidates, .1, strict=True, reject_ambiguity=True)
+    if next_shift is None:
+        return None
+    next_delta = max(0, int(round(next_shift)))
+    if delta + next_delta > height - minimum:
+        return None
+    similarity, ink = _ink_overlap(old_pixels, following, delta + next_delta, invalid)
+    return delta if similarity >= .85 and ink >= 128 else None
+
+
+def register(paths, region, *, observations=None, ignore_fixed_overlays=True,
+             budget_check=lambda: None, allow_narrow=True, invalid=None):
     placements = []
     previous, previous_pixels, position = None, None, 0
     motion_since_previous = 0.0
     skipped_since_previous = 0
+    previous_index = None
     for index, path in enumerate(paths):
+        budget_check()
         if observations is not None:
             motion_since_previous = max(motion_since_previous,
                 observations[index].get('native_motion_max_luma_difference', 0.0))
@@ -64,7 +115,8 @@ def register(paths, region, *, observations=None):
         with Image.open(path) as original:
             cropped = original.convert('RGB').crop(region)
             pixels = np.asarray(cropped)
-            sparse_motion = motion_since_previous > 1.0 and skipped_since_previous > 0
+            sparse_motion = ((motion_since_previous > 1.0 and skipped_since_previous > 0)
+                or (observations is not None and observations[index].get('requires_unique_registration', False)))
             if previous_pixels is not None and not sparse_motion and np.array_equal(previous_pixels, pixels):
                 # Exact pixels already passed paper/ink and overlap validation.
                 # Keep native-motion ambiguity checks before skipping repeated work.
@@ -72,7 +124,7 @@ def register(paths, region, *, observations=None):
                 motion_since_previous = 0.0
                 skipped_since_previous = 0
                 continue
-            gray, profile = _profile(cropped)
+            gray, profile = _profile(cropped, invalid)
         paper = (gray > 190).mean()
         ink = (gray < 110).mean()
         if paper < .5 or ink < .002:
@@ -87,22 +139,24 @@ def register(paths, region, *, observations=None):
             candidates = shift_candidates(previous, profile, -2, height - minimum, minimum)
             delta, cost = pick(candidates, .17, prefer=0, strict=False,
                                reject_ambiguity=sparse_motion)
+            if delta is None and (allow_narrow(previous_index, index) if callable(allow_narrow) else allow_narrow):
+                delta = _narrow_shift(previous, profile, previous_pixels, pixels, paths, index, region, invalid)
             if delta is None:
-                raise ConversionError('discontinuity', '无法可靠确认相邻采样的位移，未发布可能缺段的曲谱。')
+                error = ConversionError('discontinuity', '无法可靠确认相邻采样的位移，未发布可能缺段的曲谱。')
+                error.registration_interval = (previous_index, index)
+                raise error
             delta = max(0, int(round(delta)))
             # A similar profile is insufficient when notation in the overlap
             # differs. This prevents hiding a known failed continuation.
-            old = previous_pixels[delta:]
-            new = pixels[:len(pixels) - delta]
-            a = np.min(old, axis=2) < 180
-            b = np.min(new, axis=2) < 180
-            union = np.count_nonzero(a | b)
-            similarity = np.count_nonzero(a & b) / max(1, union)
-            if similarity < .45:
-                raise ConversionError('discontinuity', '相邻画面重叠内容不一致，未发布可能缺段的曲谱。')
+            similarity, valid_ink = _ink_overlap(previous_pixels, pixels, delta, invalid)
+            if similarity < .45 or valid_ink < 32:
+                error = ConversionError('discontinuity', '相邻画面重叠内容不一致，未发布可能缺段的曲谱。')
+                error.registration_interval = (previous_index, index)
+                raise error
             position += delta
         placements.append({'sample': index, 'offset': position})
         previous, previous_pixels = profile, pixels
+        previous_index = index
         motion_since_previous = 0.0
         skipped_since_previous = 0
     if not placements:

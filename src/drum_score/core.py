@@ -202,6 +202,8 @@ def _process(source, output, metadata, emit, budget):
     paths = []
     references = []
     metrics = {'decode_elapsed': 0, 'seek_count': 0, 'decoded_reported_frames': 0, 'peak_temp_disk': 0}
+    from .visual_preflight import inspect as visual_preflight
+    preflight = visual_preflight(source, metadata, metrics, budget.check)
     reader = video_seek.VideoReader(source, metadata, metrics)
     try:
         def consume(index, image):
@@ -223,11 +225,32 @@ def _process(source, output, metadata, emit, budget):
             tail_image.close()
     finally:
         reader.close()
-    samples = [{**reference, **record, 'kind': 'native_frame'}
-               for reference, record in zip(references, records)]
     emit('registering')
     region = imaging.detect_region(paths[::max(1, len(paths) // 60)])
-    placements = imaging.register(paths, region, observations=records)
+    from .registration_flow import register_refined
+    from .fixed_overlays import detect as detect_fixed_overlays
+    invalid, overlay_comparisons = detect_fixed_overlays(paths, region, budget.check)
+    refinement_reader = video_seek.VideoReader(source, metadata, metrics)
+    supplemental = 0
+    def refine(timestamp):
+        nonlocal supplemental
+        budget.check()
+        record, image = refinement_reader.read_record(timestamp)
+        try:
+            path = frames / f'refined-{supplemental:05d}.png'
+            supplemental += 1
+            image.save(path, compress_level=1)
+            budget.check(force_disk=True)
+            return path, record
+        finally:
+            image.close()
+    try:
+        placements, registration = register_refined(paths, region, records, refine, budget.check, invalid=invalid)
+        registration.update(invalid_pixels=int(invalid.sum()), overlay_comparisons=overlay_comparisons)
+    finally:
+        refinement_reader.close()
+    samples = [{**artifact(output, path), **record, 'kind': 'native_frame'}
+               for path, record in zip(paths, records)]
     emit('composing')
     longshot = output / 'longshot.png'
     imaging.compose(paths, region, placements, longshot)
@@ -238,4 +261,4 @@ def _process(source, output, metadata, emit, budget):
             'longshot': {**artifact(output, longshot), 'kind': 'derived_image'},
             'samples': samples, 'placements': placements, 'region': list(region),
             'page_regions': [list(strip) for strip in strips], 'staff_count': staffs,
-            'metrics': metrics}
+            'metrics': metrics, 'registration': registration, 'preflight': preflight}
