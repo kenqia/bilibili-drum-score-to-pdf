@@ -362,9 +362,16 @@ Path.read_text = read
             self.assertTrue((output / result['pdf']['path']).is_file())
             subprocess.run(['pdfimages', '-png', str(output / result['pdf']['path']), str(root / 'embedded')],
                            check=True, capture_output=True)
-            with Image.open(root / 'embedded-000.png') as embedded:
-                self.assertEqual(embedded.size, image.size)
-                self.assertIsNone(ImageChops.difference(embedded.convert('RGB'), image).getbbox())
+            # Row packing removes blank padding, but must preserve every source
+            # pixel containing notation, including detached colored marks.
+            from collections import Counter
+            expected = Counter(pixel for pixel in image.get_flattened_data() if min(pixel) < 255)
+            actual = Counter()
+            for path in root.glob('embedded-*.png'):
+                with Image.open(path) as embedded:
+                    self.assertEqual(embedded.width, image.width)
+                    actual.update(pixel for pixel in embedded.convert('RGB').get_flattened_data() if min(pixel) < 255)
+            self.assertEqual(actual, expected)
             self.assertGreater(len(result['pages']), 0)
             for page in result['pages']:
                 with Image.open(output / page['path']) as preview:
@@ -444,9 +451,18 @@ Path.read_text = read
             for index, (start, end) in enumerate(regions):
                 if index:
                     self.assertEqual(regions[index - 1][1], start)
-                with Image.open(root / f'embedded-{index:03d}.png') as embedded:
-                    self.assertEqual(embedded.size, (640, end - start))
-                    self.assertIsNone(ImageChops.difference(embedded.convert('RGB'), image.crop((0, start, 640, end))).getbbox())
+            # This pale paper has no removable blank padding: concatenating
+            # actual embedded images must restore the complete source exactly.
+            embedded_paths = sorted(root.glob('embedded-*.png'))
+            restored = Image.new('RGB', image.size)
+            y = 0
+            for path in embedded_paths:
+                with Image.open(path) as embedded:
+                    self.assertEqual(embedded.width, image.width)
+                    restored.paste(embedded, (0, y))
+                    y += embedded.height
+            self.assertEqual(y, image.height)
+            self.assertIsNone(ImageChops.difference(restored, image).getbbox())
 
     def test_changed_source_is_rejected_without_publishing_or_touching_other_results(self):
         from score_fixtures import score_frame, video_from_image
@@ -480,7 +496,11 @@ Path.read_text = read
                 str(root / 'border-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
             result = drum_score.convert(source, root / 'result')
             self.assertEqual(result['region'], [2, 0, 642, 520])
-            self.assertGreaterEqual(len(result['pages']), 2)
+            # Compact printing may fit all groups on one page; the borders
+            # must still leave independently printable system images.
+            subprocess.run(['pdfimages', '-png', str(root / 'result' / result['pdf']['path']),
+                str(root / 'border-embedded')], check=True, capture_output=True)
+            self.assertGreaterEqual(len(list(root.glob('border-embedded-*.png'))), 2)
             with Image.open(root / 'result' / result['longshot']['path']) as actual:
                 self.assertEqual(actual.size, sheet.size)
                 self.assertIsNone(ImageChops.difference(actual.crop((0, 100, 570, 1420)),

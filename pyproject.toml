@@ -10,7 +10,7 @@ requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
   "pillow==12.3.0", "numpy==2.5.3", "opencv-python-headless==5.0.0.93",
-  "reportlab==5.0.1", "yt-dlp==2026.10.21", "yt-dlp-ejs==0.8.0",
+  "reportlab==5.0.1",
 ]
 
 [project.optional-dependencies]

@@ -312,7 +312,7 @@ def validate(db, budget, *, schema_version=SCHEMA_VERSION):
         if not isinstance(origin, dict) or (
             origin != {}
             if row["state"] == "expired"
-            else origin != video_origin(origin.get("url"))
+            else not stored_origin_valid(origin)
         ):
             raise MaintenanceError("invalid_snapshot")
         if schema_version >= 4:
@@ -331,6 +331,18 @@ def validate(db, budget, *, schema_version=SCHEMA_VERSION):
         ):
             raise MaintenanceError("invalid_snapshot")
     return rows
+
+
+def stored_origin_valid(origin):
+    # Read-only compatibility for records created before YouTube was withdrawn.
+    # This does not participate in submission, retry validation or acquisition.
+    if origin.get('kind') == 'youtube':
+        identity = origin.get('video_id')
+        return (isinstance(identity, str) and re.fullmatch(r'[A-Za-z0-9_-]{11}', identity)
+                and origin == {'kind': 'youtube', 'video_id': identity,
+                               'url': 'https://www.youtube.com/watch?v=' + identity,
+                               'authenticated': False})
+    return origin == video_origin(origin.get('url'))
 
 
 def cache_files(tree, db, budget, *, owned=False):
@@ -543,8 +555,10 @@ def register_restored(tree, db, budget):
                 entries.append([name,metadata.st_dev,metadata.st_ino,metadata.st_ctime_ns])
             with tree.parent(prefix+'payload/video.mp4') as (payload_fd,_):
                 root_fd = os.open('..',os.O_RDONLY|os.O_DIRECTORY,dir_fd=payload_fd)
-                try: metadata = os.fstat(root_fd)
-                finally: os.close(root_fd)
+                try:
+                    metadata = os.fstat(root_fd)
+                finally:
+                    os.close(root_fd)
             db.execute('UPDATE video_cache SET device=?,inode=?,files=? WHERE key=?',
                 (metadata.st_dev,metadata.st_ino,json.dumps(entries),row['key']))
         db.commit()

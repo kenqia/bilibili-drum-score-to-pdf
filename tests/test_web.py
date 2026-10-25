@@ -36,6 +36,17 @@ class WebsiteHTTP(unittest.TestCase):
         data = response.json()
         return data['id'], {'Authorization': 'Bearer ' + data['capability']}, data
 
+    def test_presence_deduplicates_and_expires_without_task_access(self):
+        with patch('drum_score.presence.monotonic', return_value=100) as clock:
+            first = self.client.post('/api/presence', json={'visitor': 'a' * 32})
+            self.assertEqual(first.json(), {'online': 1})
+            self.assertEqual(self.client.post('/api/presence', json={'visitor': 'a' * 32}).json(), {'online': 1})
+            self.assertEqual(self.client.post('/api/presence', json={'visitor': 'b' * 32}).json(), {'online': 2})
+            clock.return_value = 160
+            self.assertEqual(self.client.post('/api/presence', json={'visitor': 'b' * 32}).json(), {'online': 1})
+        self.assertEqual(self.client.post('/api/presence', json={'visitor': 'bad'}).status_code, 422)
+        self.assertEqual(first.headers['cache-control'], 'no-store')
+
     def test_private_link_persists_and_every_operation_requires_capability(self):
         task, headers, created = self.submit()
         self.assertGreaterEqual(len(created['capability']), 43)

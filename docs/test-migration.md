@@ -1,5 +1,7 @@
 # 旧测试到脚本产品的迁移记录
 
+2026-10-25 撤回 YouTube 功能时，随其移除的 `test_youtube_input.py`、`youtube_fixture.py` 和公开入口成功发布测试只针对撤回的能力。B站获取、来源完整性、网络边界、受限进程和排版测试继续保留；新公开入口测试验证 watch/youtu.be/Shorts 在 Python、CLI、HTTP 均先于获取被拒绝且不创建输出。既有 `score_fixtures.py` 的 B站原生时长断言恢复，未删除仍适用的 B站保护要求。
+
 2026-10-23 的并行修复保留累计 600 秒解码与公开入口总期限，移除单次额外 60 秒期限。新增 `test_contended_decoder_can_use_remaining_cumulative_budget` 以加速定时器和真实合成子进程复现旧限制，不把虚拟时间当作实测。`test_total_deadline_still_stops_continuous_decoder_in_each_entry` 在 Python、CLI、HTTP/worker 三入口实际进入阻塞解码，再由两秒总期限停止进程并核验清理。原累计预算与失败保护断言保留。
 
 本文是 #73 当时从 Skill 收口到程序产品的历史记录。[ADR 0007](adr/0007-independent-skill-and-website.md) 已恢复同仓库中的独立 Skill 和 `tests/skill/`。下表“专属退役”只说明当时未移入程序包的行为，不表示现在从 Skill 删除；当前分开运行的命令见 [Skill 验证](skill-verification.md)和[程序验证](verification.md)。
@@ -425,9 +427,16 @@ env -u PYTHONPATH /home/kenqia/issue73-installed-venv/bin/python /home/kenqia/is
 
 原串行 worker 测试保留，用默认并行度 1 继续验证第二调度器拒绝、10 等待加 1 活动、取消与恢复。新增八路真实进程重叠、多 guardian 持锁、并行停止、回执丢失隔离、原子名额和空间预留测试。未知 schema 合成标记从版本 2 改为 999，避免与新版本冲突，仍保留未知版本拒绝及源不变断言。`upgrade-v1` 另验证多页结果 hash、原期限、新 inode 与清理；没有删除旧测试。
 
+## 可调整打印排版
+
+2026-10-24，默认 PDF 从连续条带改为完整行组紧凑排列。test_static_video_produces_complete_a4_pages_and_actual_source_records 将单图尺寸恒等断言迁为所有实际嵌入图的完整非白像素集合恒等，并保留原来源、PTS、页面比例等断言。test_continuous_pages_preserve_gray_spacing_detached_marks_and_pale_short_ending 保留跨页统一比例、完整来源范围、灰背景和彩色记号，将一页一图假设迁为按实际嵌入顺序逐像素重建原图；没有删除测试。不可拆分行组仍核验完整单图。维护备份多页测试的合成谱面扩至十七行，继续实际验证多页恢复，不把更紧凑的一页结果当作多页证据。新增 test_print_layout 和公开 HTTP 契约覆盖页数增减、重复谱行、彩色记号、源结果不变和期限。
+
+
 
 ## Issue #85 缓存获取边界
 
 旧`test_web_worker.BACKEND`只替换匿名下载，新增来源预检后会意外调用真实BBDown。该fixture现同时提供匿名元数据检查，明确返回无可证明媒体版本，继续原有普通下载与独立进程树验证。维护恢复fixture和公开入口的停滞解码fixture同步提供该预检；原断言保留。真实BBDown公开入口测试继续使用外部假可执行文件和匿名HTTP响应，并更新预检使调用次数增加一次的断言。
 
 新增`test_video_cache`在HTTP提交、真实worker、真实文件及维护CLI验证缓存。`NETWORK`只替换匿名元数据/HTTP边界，实际版本解析、传输大小/完整性核验、ffprobe、转换、schema与清理照常执行。覆盖强/弱ETag、命中/并发/取消、固定期限、在途预留、路径替换、半发布崩溃及新身份恢复；不把这些合成结果记作真实音乐校对。
+
+配准的细黑边回归 `test_proven_thin_video_borders_do_not_join_all_printable_systems` 将至少两页的旧分页假设迁为 PDF 至少包含两个独立行组图片；紧凑排版可以一页容纳这些行组。原始谱区、长图逐像素和边缘彩色记号保留断言不变。
