@@ -35,4 +35,8 @@ PATH=/tmp/drum-issue82-env/bin:$PATH PYTHONPATH=src:tests \
 
 ## 回归状态
 
-完整程序回归和合入配准算法后的真实重复提交结果在本节补充。独立Skill没有修改，不在本票运行Skill测试；最终集成安装、八路组合及真实来源验收由Issue #86记录。
+配准算法合入前，`85-full-program.log`记录完整程序246项、238.043秒，2项失败。预算拒绝测试错误期待旧worker会输出诊断，已按既有契约改为退出码2且未创建数据根。另一个失败是实际共享获取缺陷：第二等待者看到`filling`登记时被误当成已发布来源失效，产生第二次下载。独立重现保持失败后，修正为`filling`等待者加入共享future，只有已发布`ready`失效且仍持有时独立旁路。`85-coalescing-fix-green.log`记录取消合并、过期持有、unlink持有额度及预算拒绝4项通过，16.375秒。
+
+合入配准算法`dcf092b`后，`85-post-registration-targeted.log`记录18项缓存、公开选段/区域、v3升级和缓存上限21项执行全部通过。该命令另误写一个不存在的时长方法名，loader报错，不能称整条命令成功；正确方法单独运行并保留`85-post-registration-duration.log`。编译、静态JavaScript语法和`git diff --check`通过。
+
+独立Skill没有修改，不在本票运行Skill测试。真实重复提交和最终集成安装、八路组合及完整回归由后续集成验收补充，不把已失败的首轮完整发现报告为通过。
