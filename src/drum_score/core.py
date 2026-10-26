@@ -278,11 +278,18 @@ def _process(source, output, metadata, emit, budget, options):
     emit('composing')
     longshot = output / 'longshot.png'
     imaging.compose(paths, region, placements, longshot)
+    from .observed_restoration import restore
+    restoration = restore(longshot, paths, region, placements, records, invalid,
+        match_region=registration['match_region'], check=budget.check)
+    for block in restoration['blocks']:
+        block['source_sha256'] = samples[block['source_sample']]['sha256']
     emit('paginating')
     pdf, pages, strips, staffs = imaging.paginate(longshot, output)
     return {'conversion': {'options': options, 'effective_range_seconds': [start, end],
                            'is_excerpt': start > 0 or end < metadata['duration']},
-            'warnings': [{'code': 'not_musically_proofread', 'message': NOTICE}],
+            'restoration': restoration,
+            'warnings': [{'code': 'not_musically_proofread', 'message': NOTICE},
+                {'code': 'unconfirmed_overlays_retained', 'message': '仅用同位置真实无遮挡画面恢复已确认覆盖物；无法确认的水印、彩色记号和遮挡保留，未经音乐校对。'}],
             'pdf': artifact(output, pdf), 'pages': [artifact(output, page) for page in pages],
             'longshot': {**artifact(output, longshot), 'kind': 'derived_image'},
             'samples': samples, 'placements': placements, 'region': list(region),
