@@ -531,6 +531,54 @@ Path.read_text = read
             self.assertTrue(all('pts' in observation and 'time_base' in observation
                                 for observation in observations))
 
+    def test_short_unrelated_page_between_equal_samples_is_not_silently_dropped(self):
+        from score_fixtures import score_frame
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            regular = score_frame()
+            transient = score_frame()
+            ImageDraw.Draw(transient).rectangle((150, 180, 1100, 800), fill='white')
+            for index in range(11):
+                (transient if index == 2 else regular).save(root / f'short-{index:03d}.png')
+            source = root / 'short.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '10', '-i',
+                str(root / 'short-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
+            with self.assertRaises(drum_score.ConversionError) as caught:
+                drum_score.convert(source, root / 'result')
+            self.assertEqual(caught.exception.code, 'discontinuity')
+            self.assertFalse((root / 'result').exists())
+
+    def test_gray_and_scrolling_watermarks_and_playback_effects_keep_source_pixels(self):
+        from score_fixtures import scrolling_video
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, sheet = scrolling_video(root, offsets=list(range(0, 451, 45)))
+            for mode in ('fixed_gray', 'scrolling_gray', 'playback', 'control'):
+                for index in range(11):
+                    frame = sheet.crop((0, index * 45, 640, index * 45 + 520))
+                    draw = ImageDraw.Draw(frame)
+                    if mode == 'fixed_gray':
+                        for y in (55, 165, 275, 385):
+                            draw.rectangle((150, y, 490, y + 28), fill=(155, 155, 155))
+                    elif mode == 'scrolling_gray':
+                        draw.rectangle((200, 480 - index * 45, 400, 500 - index * 45), fill=(155, 155, 155))
+                    elif mode == 'playback':
+                        draw.rectangle((150 + index * 20, 0, 165 + index * 20, 519), fill=(60, 120, 255))
+                    frame.save(root / f'{mode}-{index:03d}.png')
+                source = root / f'{mode}.mkv'
+                subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '1', '-i',
+                    str(root / f'{mode}-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
+                with self.subTest(mode=mode):
+                    result = drum_score.convert(source, root / mode)
+                    self.assertFalse(result['reliable'])
+                    self.assertEqual(result['placements'][-1]['offset'], 450)
+                    with Image.open(root / mode / result['longshot']['path']) as actual, Image.open(root / f'{mode}-000.png') as first:
+                        self.assertIsNone(ImageChops.difference(actual.crop((0, 0, 640, 520)), first).getbbox())
+                    if mode == 'fixed_gray':
+                        self.assertGreater(result['registration']['invalid_pixels'], 10000)
+                    elif mode in ('scrolling_gray', 'control'):
+                        self.assertEqual(result['registration']['invalid_pixels'], 0)
+
     def test_fixed_overlay_is_unknown_for_matching_but_kept_in_source_rgb(self):
         from score_fixtures import scrolling_video
         with tempfile.TemporaryDirectory() as temporary:
@@ -702,7 +750,7 @@ Path.read_text = read
             result = drum_score.convert(source, root / 'result')
             self.assertEqual(result['staff_count'], 3)
             self.assertTrue(all(placement['offset'] == 0 for placement in result['placements']))
-            self.assertGreater(max(sample['native_motion_max_luma_difference']
+            self.assertGreater(max(sample.get('native_motion_max_luma_difference', 0)
                                    for sample in result['samples']), 1.0)
 
     def test_native_tail_pts_regression_keeps_decoder_order_and_real_timestamps(self):

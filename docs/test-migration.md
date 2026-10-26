@@ -443,3 +443,4 @@ env -u PYTHONPATH /home/kenqia/issue73-installed-venv/bin/python /home/kenqia/is
 
 
 2026-10-26，#89 的自动主曲切片更新 `test_automatic_region_keeps_uncertain_single_late_staff_observation`：保留自动与手动谱区都能找出晚出现四行谱面的断言。旧的 blank/score/blank 必须 `discontinuity` 预期由实际四行交付和排除区间登记取代；多谱区歧义拒绝、失败不完整发布、全部采样来源及原位置重复保护继续由公开契约覆盖。
+#90保留背景闪烁反例的原生变化大于1和零位移断言。实际seek补帧没有常规采样间隔运动摘要，最大值断言仅读取具有该摘要的采样，避免把新增真实补证帧当作常规采样。

@@ -15,6 +15,39 @@ def register_refined(paths, region, records, refine, check, *, invalid=None):
     requests = 0
     evidence = []
     resume = None
+    # A native excursion larger than the endpoint difference can hide a short
+    # page. Inspect its actual peak-change frame before allowing that page to
+    # disappear between them. These seeks share the existing request budget.
+    from PIL import Image
+    import numpy as np
+    index = 1
+    while index < len(records):
+        check()
+        left, right = records[index - 1], records[index]
+        witness = right.get('native_motion_peak_change_timestamp')
+        if (witness is not None and left['timestamp'] < witness < right['timestamp']
+                and right.get('native_intermediate_frames', 0) > 0):
+            with Image.open(paths[index - 1]) as before, Image.open(paths[index]) as after:
+                a, b = before.convert('L'), after.convert('L')
+                a.thumbnail((128, 128))
+                b.thumbnail((128, 128))
+                difference = float(np.abs(np.asarray(a).astype(np.int16) - np.asarray(b)).mean())
+            if right.get('native_motion_max_luma_difference', 0) > max(1, difference * 2):
+                if (requests >= MAX_REFINEMENT_REQUESTS
+                        or len(attempted) >= MAX_REFINEMENT_INTERVALS):
+                    raise ConversionError('discontinuity', '补帧预算耗尽，短暂画面覆盖未能确认。')
+                attempted[(left['timestamp'], right['timestamp'])] = 0
+                requests += 1
+                path, record = refine(witness)
+                if not left['timestamp'] < record['timestamp'] < right['timestamp']:
+                    raise ConversionError('discontinuity', '未能取得采样间的原生变化画面。')
+                paths.insert(index, path)
+                records.insert(index, {**record, 'requires_unique_registration': True,
+                    'native_change_coverage_witness': True})
+                evidence.append({'start_seconds': left['timestamp'], 'end_seconds': right['timestamp'],
+                    'reason': 'native_change_excursion', 'requested': 1, 'added': 1})
+                index += 1
+        index += 1
     while True:
         check()
         try:

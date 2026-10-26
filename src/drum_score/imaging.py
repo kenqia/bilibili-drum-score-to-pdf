@@ -114,17 +114,26 @@ def detect_region(paths, *, budget_check=lambda: None):
 
 
 
+def _matching_invalid(rgb, invalid=None):
+    # Saturated playback effects are unknown for matching. Their original RGB
+    # remains in compose, including any real colored musical annotation.
+    chroma = rgb.max(axis=2).astype(np.int16) - rgb.min(axis=2)
+    colored = chroma > 40
+    return colored if invalid is None else colored | invalid
+
+
 def _profile(image, invalid=None):
     rgb = np.asarray(image)
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    return gray, profile_of(gray, np.zeros(gray.shape, dtype=bool) if invalid is None else invalid)
+    return gray, profile_of(gray, _matching_invalid(rgb, invalid))
 
 
 def _ink_overlap(old, new, delta, invalid=None):
     """Compare real aligned ink, excluding unknown pixels in either frame."""
+    old_invalid = _matching_invalid(old, invalid)
+    new_invalid = _matching_invalid(new, invalid)
     old, new = old[delta:], new[:len(new) - delta]
-    valid = np.ones(old.shape[:2], dtype=bool) if invalid is None else (
-        ~invalid[delta:] & ~invalid[:len(invalid) - delta])
+    valid = ~old_invalid[delta:] & ~new_invalid[:len(new)]
     if valid.size == 0 or valid.mean() < .5:
         return 0.0, 0
     a = (np.min(old, axis=2) < 180) & valid
@@ -205,6 +214,8 @@ def register(paths, region, *, observations=None,
         paper = (gray > 190).mean()
         ink = (gray < 110).mean()
         if paper < .5 or ink < .002:
+            if observations is not None and observations[index].get('native_change_coverage_witness'):
+                raise ConversionError('discontinuity', '采样间出现未能确认的短暂画面，未发布可能缺页的曲谱。')
             # Black intros and blank outros stay in provenance, not notation.
             continue
         transition = None
