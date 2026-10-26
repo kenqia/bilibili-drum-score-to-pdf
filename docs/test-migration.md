@@ -451,3 +451,8 @@ env -u PYTHONPATH /home/kenqia/issue73-installed-venv/bin/python /home/kenqia/is
 `test_gray_and_scrolling_watermarks_and_playback_effects_keep_source_pixels` 更名为 `test_proven_screen_overlays_restore_and_source_bound_marks_keep_pixels`。固定屏幕灰水印和移动窄竖光标的原像素恒等断言迁为同位置真实无遮挡原图恒等及非零恢复数，随谱水印、无覆盖物对照、最终位移、固定掩码和 `reliable=false` 断言保留。`test_observed_restoration` 另核验含真实音符的独立原图、每块精确来源像素与PTS/time_base，以及同色真实长竖记号不被擦除。没有删除测试。
 
 本次成功光标夹具在视频外边缘内缩5像素。旧夹具的光标接触外边缘且首部没有无遮挡观测，#89的边缘保护会正确拒绝它，不能将该情形继续声明为完整谱面成功。固定水印测试加入黑场片头，以核验自动范围排除后恢复块仍指向完整原采样清单的正确索引和hash。
+
+
+2026-10-26，#91 保留旧 `test_detected_page_flip_does_not_silently_publish_only_first_page` 的拒绝与不完整发布断言。该1fps案例缺少窗口内每侧两个稳定原生画面的页序证据，不能代表全部无重叠翻页必须拒绝。新增 `test_page_transitions` 经公开convert验证稳定硬切页序、20px残片的唯一完整观测替换、浅灰独有记号拒绝、回跳、短驻留页、微小独有黑记号、过渡动画及共享RGB预算耗尽。既有窄重叠、周期采样别名、原位置重复音乐与小节号细节反例继续运行，未删除测试。`test_native_page_order_and_continuity_agree_across_entries` 共同核对Python、CLI与真实HTTP worker结果语义。
+
+#91 联合验证发现整合前置 `bcaa973` 的 `test_repeated_music_with_small_measure_numbers_retains_fast_scroll_positions` 已因 #90 新增原生变化峰帧而失败。保留7行和独立原图逐像素覆盖断言，将恰好六个placement的固定列表迁移为原六个常规位置全保留、首尾与顺序不变，允许必要原生见证带来额外正确位置。新增的独立RGB唯一候选核验使用真实局部小节号像素消歧，不执行OCR、猜测数字增量或运动先验；重复候选仍拒绝。
