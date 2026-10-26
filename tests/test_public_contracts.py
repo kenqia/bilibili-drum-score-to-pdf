@@ -252,6 +252,9 @@ class ScriptPublicContracts(unittest.TestCase):
                         self.assertEqual(result['staff_count'], 3)
                         self.assertEqual(result['registration']['invalid_pixels'], 0)
                         self.assertEqual(result['registration']['overlay_comparisons'], 0)
+                        self.assertEqual(result['metrics']['sampling_interval_seconds'], .5)
+                        self.assertEqual(result['metrics']['retained_rgb_frames'], len(result['samples']))
+                        self.assertGreater(result['metrics']['retained_rgb_bytes'], 0)
                         self.assertTrue(all(.5 <= frame['timestamp'] < 1.5
                             for frame in result['preflight']['observations']))
                     self.assertEqual(result['conversion']['options'], options)

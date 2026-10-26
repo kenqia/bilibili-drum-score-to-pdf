@@ -63,6 +63,7 @@ class _MotionDiagnostics:
         self.native_count = 0
         self.values_count = 0
         self.maximum = 0.0
+        self.peak_change_pts = None
         self.last_sample_native_count = 0
         self.pending = None
         self.invalid = False
@@ -74,9 +75,10 @@ class _MotionDiagnostics:
             self.invalid = True
             return
         skipped = max(0, self.native_count - self.last_sample_native_count - 1)
-        self.samples.append((pts, self.maximum, skipped))
+        self.samples.append((pts, self.maximum, skipped, self.peak_change_pts))
         self.last_sample_native_count = self.native_count
         self.maximum = 0.0
+        self.peak_change_pts = None
         self.pending = None
 
     def drain(self, stream):
@@ -103,6 +105,8 @@ class _MotionDiagnostics:
                             continue
                         self.native = (self.native[0], difference)
                         self.values_count += 1
+                        if difference > self.maximum:
+                            self.peak_change_pts = self.native[0]
                         self.maximum = max(self.maximum, difference)
                         if self.pending is not None:
                             self._finish_sample(self.pending)
@@ -134,9 +138,13 @@ class _MotionDiagnostics:
         records = [{'pts': pts, 'time_base': self.time_base,
                     'timestamp': pts * numerator / denominator,
                     'native_motion_max_luma_difference': difference,
-                    'native_intermediate_frames': skipped}
-                   for pts, difference, skipped in self.samples]
+                    'native_intermediate_frames': skipped,
+                    'native_motion_peak_change_timestamp': (None if peak_change is None else
+                        peak_change * numerator / denominator)}
+                   for pts, difference, skipped, peak_change in self.samples]
         records[-1]['native_trailing_motion_max_luma_difference'] = self.maximum
+        records[-1]['native_trailing_peak_change_timestamp'] = (None if self.peak_change_pts is None else
+            self.peak_change_pts * numerator / denominator)
         records[-1]['native_trailing_frames'] = self.native_count - self.last_sample_native_count
         return records
 

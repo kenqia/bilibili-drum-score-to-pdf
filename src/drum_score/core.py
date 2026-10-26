@@ -222,6 +222,8 @@ def _process(source, output, metadata, emit, budget, options):
             image.save(path, compress_level=1)
             paths.append(path)
         records = reader.sample_records(.5, consume, verify_motion=True, start=start, end=end)
+        metrics['routine_rgb_frames'] = len(records)
+        metrics['sampling_interval_seconds'] = .5
         if not records:
             raise ConversionError('invalid_request', '所选区间没有可解码的原生帧。')
         tail_record, tail_image = reader.read_record(end=end)
@@ -230,6 +232,8 @@ def _process(source, output, metadata, emit, budget, options):
                 consume(len(paths), tail_image)
                 tail_record['native_motion_max_luma_difference'] = records[-1].get(
                     'native_trailing_motion_max_luma_difference', 0.0)
+                tail_record['native_motion_peak_change_timestamp'] = records[-1].get(
+                    'native_trailing_peak_change_timestamp')
                 tail_record['native_intermediate_frames'] = max(0, records[-1].get('native_trailing_frames', 0) - 1)
                 records.append(tail_record)
         finally:
@@ -262,6 +266,9 @@ def _process(source, output, metadata, emit, budget, options):
         registration.update(invalid_pixels=int(invalid.sum()) if invalid is not None else 0, overlay_comparisons=overlay_comparisons)
     finally:
         refinement_reader.close()
+    metrics['refinement_rgb_frames'] = supplemental
+    metrics['retained_rgb_frames'] = len(paths)
+    metrics['retained_rgb_bytes'] = sum(path.stat().st_size for path in paths)
     samples = [{**artifact(output, path), **record, 'kind': 'native_frame'}
                for path, record in zip(paths, records)]
     registration['match_region'] = list(region)
