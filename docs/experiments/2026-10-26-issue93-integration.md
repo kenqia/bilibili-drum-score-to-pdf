@@ -65,3 +65,19 @@ Ftn尾部另有独立分类错误。225.9至227.8秒57个实际原生帧保留�
 公开 `convert` 的黑底头像和文字结束卡合成反例1.157秒复现ambiguous_scope。无完整五线时，片段证据现在同时要求可能覆盖框外存在多数中性浅色纸白，符合固定白底谱区边界。该条件只参与分类，不扩大实际未知像素，也不放宽RGB保留。黑底片尾卡、实心封面正例及框内外黑/灰/红独有文字三项9.658秒通过。红绿证据为 `outro-card-red.log` 与 `outro-card-green.log`。真实选定帧分类检查确认完整末页保持score，原误判结束卡变为black，见 `outro-classification-fix.json`。
 
 本修复之后的完整回归、同版真实来源与选段、准确构建安装、实际HTTP/worker及Chromium仍需新鲜执行。上文保留7dd9f8c的失败与成功，不将它们改记为后续候选结果。
+
+## 最终回归发现的父亡清理竞态
+
+结束卡修复候选 `cee19a8523d6aa078d9d92f1689c12ef13a91616` 实际完整运行295项、753.457秒，一项失败，其余294项通过。`test_killed_caller_leaves_no_active_decoder_or_task_temporary_root` 在调用方被强杀、临时根已消失之后，仍观察到活动解码进程。原日志 `full-regression-final-v3.log` 保留，不计全套通过。独立复跑0.286秒通过，100次合成CLI重演也未再次复现，记录为 `killed-caller-reproduction.log` 与 `killed-caller-race-diagnosis/summary.json`，不能以重跑掩盖首次失败。
+
+根因是父亡SIGKILL让转换进程先消失，guardian的严格root身份检查会返回空树；尚未采到、且已经没有存活受管父进程的同会话后代也可能漏掉。没有通过扫描未知会话或推断复用后的PGID解决这个问题。
+
+确定性公开CLI反例只使用合成进程。ffprobe夹具在已知调用方子树中通过PID/PPID/SID/start-time找到guardian，暂停并确认T态后创建同会话子进程，保留管道，再让原ffprobe退出。强杀调用方，确认旧转换进程身份消失后恢复guardian。旧版在删除临时根后仍留下S态子进程，0.245秒复现最终清理断言失败，见 `guardian-anchor-red-v5.log`。早期夹具的缺失import错误和未充分扩大竞态的通过日志也保留，不把它们当作产品红例。
+
+最小修复在guardian握手后的ready返回处将父亡信号改为SIGSTOP，并再次核对父PID，父亡时保留原转换进程身份和会话锚点。握手前仍是SIGKILL，尚不启动解码。现有guardian继续按原PID/start-time发现、冻结、终止后代，确认写入树停止后才清理，未扩大未知进程扫描或放宽PID复用保护。
+
+权威依据为本机Linux手册 `/usr/share/man/man2/prctl.2.gz` 的 `PR_SET_PDEATHSIG` 与 `/usr/share/man/man7/signal.7.gz`。前者说明可设置任意合法父亡信号，后者说明SIGSTOP不能被捕获、屏蔽或忽略。该设置在fork子进程中清除，因此修复保留的是转换根身份，不假定解码器继承父亡信号。
+
+确定性清理、原调用方强杀、异常转换进程/独立会话、PID复用、服务守护租约和并行SIGTERM六项3.561秒全部通过，日志 `guardian-anchor-green.log`。另通过公开CLI模拟guardian在R握手前退出，确认从未启动解码器、没有发布、来源未变与临时根清理；与确定性清理两项0.483秒通过，日志 `guardian-startup-and-anchor-green.log`。握手前后切换与守护不可用边界未改为无条件后台运行。新候选完整回归、构建安装、HTTP/Chromium和真实来源验收另行记录。
+
+后代PID复用、总期限和取消清理三项2.080秒通过，日志 `guardian-identity-budget-green.log`；语法编译与diff检查通过。

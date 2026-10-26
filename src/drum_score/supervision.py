@@ -44,9 +44,11 @@ def _worker(source, output, limits, connection, temporary, parent_pid, ready, op
         os.setsid()
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    parent_death = None
     if os.name == 'posix' and Path('/proc').is_dir():
         import ctypes
-        ctypes.CDLL(None).prctl(1, signal.SIGKILL)
+        parent_death = ctypes.CDLL(None)
+        parent_death.prctl(1, signal.SIGKILL)
         if os.getppid() != parent_pid:
             os.kill(os.getpid(), signal.SIGKILL)
     os.environ.update(TMPDIR=temporary, OMP_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1',
@@ -58,6 +60,14 @@ def _worker(source, output, limits, connection, temporary, parent_pid, ready, op
         enabled.set(website)
         last_details.set({'url': prepared['origin']['url'], 'description_policy': prepared['origin'].get('description_policy')} if prepared and 'origin' in prepared else None)
         ready.wait()
+        if parent_death is not None:
+            # The guardian handshake precedes ready. Keep this exact session
+            # leader stopped on caller death until the guardian can discover
+            # and stop its descendants, including children not sampled yet.
+            if parent_death.prctl(1, signal.SIGSTOP) != 0:
+                raise ConversionError('conversion_failed', '无法建立任务清理保护，未开始转换。')
+            if os.getppid() != parent_pid:
+                os.kill(os.getpid(), signal.SIGSTOP)
         if prepared is not None and '_fd' in prepared:
             source_descriptor = prepared['_fd'].detach()
             prepared['path'] = f'/proc/{os.getpid()}/fd/{source_descriptor}'

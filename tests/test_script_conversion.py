@@ -264,6 +264,113 @@ Path.read_text = read
                 process.stdout.close()
                 process.stderr.close()
 
+    @unittest.skipUnless(Path('/proc').is_dir(), 'Linux process recovery contract')
+    def test_guardian_startup_failure_never_starts_decoder(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'source.mp4'
+            source.write_bytes(b'guardian handshake fixture')
+            (root / 'sitecustomize.py').write_text(
+                "import os,sys\nif 'drum_score.guardian' in sys.orig_argv: os._exit(23)\n")
+            binaries = root / 'bin'
+            binaries.mkdir()
+            decoder = binaries / 'ffprobe'
+            decoder.write_text(f'#!{sys.executable}\nfrom pathlib import Path\nPath(' +
+                repr(str(root / 'decoder-started')) + ").touch()\n")
+            decoder.chmod(0o755)
+            process = subprocess.run([sys.executable, '-m', 'drum_score', str(source),
+                '--output', str(root / 'result')], env={**os.environ,
+                'PATH': str(binaries) + os.pathsep + os.environ['PATH'],
+                'PYTHONPATH': os.pathsep.join([str(root), *sys.path])},
+                capture_output=True, text=True, timeout=10)
+            self.assertNotEqual(process.returncode, 0)
+            self.assertEqual(json.loads(process.stdout)['error']['code'], 'conversion_failed')
+            self.assertFalse((root / 'decoder-started').exists())
+            self.assertFalse((root / 'result').exists())
+            self.assertEqual(list(root.glob('.drum-score-*')), [])
+            self.assertEqual(source.read_bytes(), b'guardian handshake fixture')
+
+    @unittest.skipUnless(Path('/proc').is_dir(), 'Linux process recovery contract')
+    def test_paused_guardian_retains_caller_death_cleanup_identity(self):
+        import json
+        import signal
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'source.mp4'
+            source.write_bytes(b'paused guardian fixture')
+            binaries = root / 'bin'
+            binaries.mkdir()
+            decoder = binaries / 'ffprobe'
+            decoder.write_text(f'#!{sys.executable}\n' + '''import os,time,json,signal
+from pathlib import Path
+def state(pid):
+    fields=(Path('/proc')/str(pid)/'stat').read_text().rsplit(') ',1)[1].split()
+    return {'pid':pid,'parent':int(fields[1]),'group':int(fields[2]),'session':int(fields[3]),'start':fields[19],'state':fields[0]}
+worker=state(os.getppid())
+children=(Path('/proc')/str(worker['parent'])/'task'/str(worker['parent'])/'children').read_text().split()
+guardian=next(state(int(pid)) for pid in children if int(pid)!=worker['pid'] and state(int(pid))['session']==int(pid))
+os.kill(guardian['pid'],signal.SIGSTOP)
+while state(guardian['pid'])['state']!='T':
+    time.sleep(.005)
+child=os.fork()
+if child==0:
+    time.sleep(30)
+    os._exit(0)
+marker=Path(''' + repr(str(root / 'decoder.json')) + ''')
+temporary=marker.with_suffix('.tmp')
+temporary.write_text(json.dumps({'decoder':state(child),'probe':state(os.getpid()),'worker':worker,'guardian':guardian}))
+temporary.replace(marker)
+os._exit(0)
+''')
+            decoder.chmod(0o755)
+            process = subprocess.Popen([sys.executable, '-m', 'drum_score', str(source),
+                '--output', str(root / 'result')], env={**os.environ,
+                'PATH': str(binaries) + os.pathsep + os.environ['PATH'],
+                'PYTHONPATH': os.pathsep.join(sys.path)}, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            identities = None
+            def state(identity):
+                try:
+                    fields = (Path('/proc') / str(identity['pid']) / 'stat').read_text().rsplit(') ', 1)[1].split()
+                    return fields[0] if fields[19] == identity['start'] else None
+                except FileNotFoundError:
+                    return None
+            try:
+                deadline = time.monotonic() + 10
+                while not (root / 'decoder.json').exists() and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertTrue((root / 'decoder.json').exists())
+                identities = json.loads((root / 'decoder.json').read_text())
+                deadline = time.monotonic() + 3
+                while state(identities['probe']) not in (None, 'Z') and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertIn(state(identities['probe']), (None, 'Z'))
+                process.kill()
+                process.wait(timeout=5)
+                deadline = time.monotonic() + 3
+                while state(identities['worker']) not in (None, 'T') and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertIn(state(identities['worker']), (None, 'T'))
+                os.kill(identities['guardian']['pid'], signal.SIGCONT)
+                deadline = time.monotonic() + 5
+                while list(root.glob('.drum-score-*')) and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertEqual(list(root.glob('.drum-score-*')), [])
+                self.assertIn(state(identities['decoder']), (None, 'Z'), json.dumps(identities))
+                self.assertFalse((root / 'result').exists())
+                self.assertEqual(source.read_bytes(), b'paused guardian fixture')
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
+                if identities:
+                    if state(identities['guardian']) == 'T':
+                        os.kill(identities['guardian']['pid'], signal.SIGCONT)
+                    for name in ('decoder', 'probe', 'worker'):
+                        if state(identities[name]) not in (None, 'Z'):
+                            os.kill(identities[name]['pid'], signal.SIGKILL)
+                process.stdout.close()
+                process.stderr.close()
+
     def test_cancelled_conversion_does_not_publish_or_leave_staging(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
