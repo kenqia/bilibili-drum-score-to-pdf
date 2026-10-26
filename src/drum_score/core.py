@@ -274,8 +274,22 @@ def _process(source, output, metadata, emit, budget, options):
             return path, record
         finally:
             image.close()
+    def native_window(begin, finish, maximum):
+        additions = []
+        def consume_window(index, image):
+            nonlocal supplemental
+            budget.check()
+            path = frames / f'window-{supplemental:05d}.png'
+            supplemental += 1
+            image.save(path, compress_level=1)
+            additions.append(path)
+            budget.check(force_disk=True)
+        observed = refinement_reader.sample_records(1, consume_window, start=begin, end=finish,
+                                                      native_limit=maximum)
+        return list(zip(additions, observed))
     try:
-        placements, registration = register_refined(paths, region, records, refine, budget.check, invalid=invalid)
+        placements, registration = register_refined(paths, region, records, refine, budget.check,
+            invalid=invalid, native_window=native_window, bounds=(scope_start, scope_end))
         registration.update(invalid_pixels=int(invalid.sum()) if invalid is not None else 0, overlay_comparisons=overlay_comparisons)
     except ConversionError as error:
         interval = getattr(error, 'registration_interval', None)
@@ -315,10 +329,19 @@ def _process(source, output, metadata, emit, budget, options):
                                    for item in registration['transitions']]
     samples = [{**artifact(output, path), **record, 'kind': 'native_frame'}
                for path, record in original_samples]
+    for transition in registration['transitions']:
+        if transition.get('kind') == 'native_page_cut':
+            transition['adjacent_native_samples'] = [next(index for index, sample in enumerate(samples)
+                if sample.get('decode_sequence') == transition['native_sequence']
+                and sample.get('native_ordinal') == ordinal)
+                for ordinal in transition['adjacent_native_ordinals']]
     emit('paginating')
     pdf, pages, strips, staffs = imaging.paginate(longshot, output)
     warnings = [{'code': 'not_musically_proofread', 'message': NOTICE},
                 {'code': 'conversion_scope', 'message': scope_notice}]
+    if registration.get('continuity') == 'unverified':
+        warnings.append({'code': 'page_order_unverified',
+            'message': '按视频中的原生翻页顺序整理；原曲页间连续性待核对。'})
     reasons = {'covered_score_replaced': '被后续同位置无遮挡谱面替代的封面叠图',
                'notation_example': '独立符号说明谱例', 'black': '黑场',
                'non_score': '未见可用五线的过渡或动画画面'}
@@ -328,7 +351,8 @@ def _process(source, output, metadata, emit, budget, options):
             'message': f'未纳入主曲：{begin:g} 至 {finish:g} 秒，' + reasons[excluded['reason']] + '。'})
     return {'conversion': {'options': options, 'effective_range_seconds': [scope_start, scope_end],
                            'is_excerpt': scope['mode'] == 'excerpt', 'scope': scope,
-                           'effective_region': list(region), 'scope_notice': scope_notice},
+                           'effective_region': list(region), 'scope_notice': scope_notice,
+                           'continuity': registration.get('continuity', 'overlap_verified')},
             'warnings': warnings,
             'pdf': artifact(output, pdf), 'pages': [artifact(output, page) for page in pages],
             'longshot': {**artifact(output, longshot), 'kind': 'derived_image'},

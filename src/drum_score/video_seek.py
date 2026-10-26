@@ -159,9 +159,9 @@ class VideoReader:
     def close(self):
         self.scratch.cleanup()
 
-    def sample_records(self, interval, consume, *, verify_motion=False, start=0, end=None):
+    def sample_records(self, interval, consume, *, verify_motion=False, start=0, end=None, native_limit=None):
         """Stream native RGB samples and return actual source PTS, without caching video frames."""
-        if not math.isfinite(interval) or interval <= 0 or self.metadata['duration'] / interval > 4096:
+        if native_limit is None and (not math.isfinite(interval) or interval <= 0 or self.metadata['duration'] / interval > 4096):
             raise ConversionError('invalid_request', '采样间隔无效或采样数量超出资源限制。')
         width, height = self.metadata['width'], self.metadata['height']
         if not 1 <= width * height <= 20_000_000:
@@ -173,6 +173,10 @@ class VideoReader:
         if budget <= 0:
             raise ConversionError('decode_failed', '视频解码期限已耗尽。')
         selection = f"select='isnan(prev_selected_t)+gte(t-prev_selected_t,{interval:.9f})'"
+        if native_limit is not None:
+            if not 1 <= native_limit <= 64 or end is None or not 0 < end - start <= 2:
+                raise ConversionError('discontinuity', '原生翻页窗口超出补帧预算。')
+            selection = 'null'
         bounds = f'trim=start={start:.9f}:end={end:.9f},' if end is not None else ''
         filters = bounds + ('split=2[keep][motion];[motion]'
                    'scale=128:128:force_original_aspect_ratio=decrease,format=yuv444p,'
@@ -180,7 +184,8 @@ class VideoReader:
                    '[keep]' + selection + ',showinfo@sample'
                    if verify_motion else selection + ',showinfo')
         command = ['ffmpeg', '-v', 'info', '-nostdin', '-copyts', '-threads', '2',
-                   '-filter_threads', '1', '-i', str(self.source), '-vf',
+                   '-filter_threads', '1', *(['-ss', str(start)] if native_limit is not None else []),
+                   '-i', str(self.source), '-vf',
                    filters,
                    '-an', *frame_sync_args(), '-threads', '1', '-pix_fmt', 'rgb24',
                    '-f', 'rawvideo', 'pipe:1']
@@ -210,6 +215,8 @@ class VideoReader:
                             data.extend(chunk)
                         if not data:
                             break
+                        if native_limit is not None and count >= native_limit:
+                            raise ConversionError('discontinuity', '原生翻页窗口耗尽补帧预算，覆盖尚未确认。')
                         if len(data) != size or count >= 4097:
                             raise ConversionError('decode_failed', '采样帧不完整或数量过多。')
                         with Image.frombytes('RGB', (width, height), bytes(data)) as image:
@@ -241,8 +248,14 @@ class VideoReader:
                 raise ConversionError('decode_failed', '实际时间戳记录不完整。')
             time_base = [int(base[1]), int(base[2])]
             self.metrics['decoded_reported_frames'] += count
-            return [{'pts': value, 'time_base': time_base,
-                     'timestamp': value * time_base[0] / time_base[1]} for value in pts]
+            records = [{'pts': value, 'time_base': time_base,
+                        'timestamp': value * time_base[0] / time_base[1]} for value in pts]
+            if native_limit is not None:
+                for index, record in enumerate(records):
+                    record.update(decode_sequence=f'window-{self.metrics["seek_count"]}',
+                                  native_ordinal=index,
+                                  previous_native_pts=pts[index - 1] if index else None)
+            return records
         except (subprocess.SubprocessError, OSError):
             raise ConversionError('decode_failed', '连续采样解码失败或超时；未发布长截图。') from None
         finally:

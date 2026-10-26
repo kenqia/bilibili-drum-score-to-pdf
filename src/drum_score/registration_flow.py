@@ -8,13 +8,14 @@ MAX_REFINEMENT_INTERVALS = 12
 MAX_REFINEMENT_SPAN = 2.0
 
 
-def register_refined(paths, region, records, refine, check, *, invalid=None):
+def register_refined(paths, region, records, refine, check, *, invalid=None, native_window=None, bounds=None):
     from .imaging import register
     attempted = {}
     narrow = []
     requests = 0
     evidence = []
     resume = None
+    native_attempted = set()
     # A native excursion larger than the endpoint difference can hide a short
     # page. Inspect its actual peak-change frame before allowing that page to
     # disappear between them. These seeks share the existing request budget.
@@ -56,7 +57,9 @@ def register_refined(paths, region, records, refine, check, *, invalid=None):
                 allow_narrow=lambda left, right: any(
                     begin <= records[left]['timestamp'] <= records[right]['timestamp'] <= end
                     for begin, end in narrow))
-            return placements, {'refinement_requests': requests, 'intervals': evidence,
+            return placements, {'continuity': ('unverified' if any(
+                    item.get('transition', {}).get('kind') == 'native_page_cut' for item in placements)
+                    else 'overlap_verified'), 'refinement_requests': requests, 'intervals': evidence,
                 'transitions': [{'sample': item['sample'], **item['transition']}
                                 for item in placements if 'transition' in item]}
         except ConversionError as error:
@@ -73,7 +76,34 @@ def register_refined(paths, region, records, refine, check, *, invalid=None):
             stage = attempted.get(key, 0)
             if stage >= 2:
                 if key in narrow:
-                    raise
+                    if native_window is None or key in native_attempted or requests >= MAX_REFINEMENT_REQUESTS:
+                        raise
+                    native_attempted.add(key)
+                    # Include two native observations on either side even for
+                    # low-rate video; never exceed the existing two-second span.
+                    margin = min(.5, max(.1, (end - begin) * 2))
+                    lower = max(bounds[0], begin - margin)
+                    upper = min(bounds[1], end + margin)
+                    if upper - lower > MAX_REFINEMENT_SPAN:
+                        raise
+                    additions = native_window(lower, upper, MAX_REFINEMENT_REQUESTS - requests)
+                    requests += len(additions)
+                    from .page_transitions import prove_cut
+                    proof = prove_cut([path for path, _ in additions],
+                        [record for _, record in additions], region, paths[left], paths[right],
+                        [paths[item['sample']] for item in resume['placements']], check, invalid)
+                    if proof is None:
+                        raise
+                    boundary, transition = proof
+                    additions[boundary][1]['page_transition'] = transition
+                    lo = next(index for index, record in enumerate(records) if record['timestamp'] >= lower)
+                    hi = next((index for index, record in enumerate(records) if record['timestamp'] >= upper), len(records))
+                    paths[lo:hi] = [path for path, _ in additions]
+                    records[lo:hi] = [record for _, record in additions]
+                    evidence.append({'start_seconds': lower, 'end_seconds': upper,
+                        'reason': 'native_page_cut', 'requested': len(additions), 'added': len(additions)})
+                    resume = None
+                    continue
                 narrow.append(key)
                 continue
             if key not in attempted and len(attempted) >= MAX_REFINEMENT_INTERVALS:

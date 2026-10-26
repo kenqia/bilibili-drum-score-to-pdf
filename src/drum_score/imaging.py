@@ -219,6 +219,16 @@ def register(paths, region, *, observations=None,
             # Black intros and blank outros stay in provenance, not notation.
             continue
         transition = None
+        page_transition = observations[index].get('page_transition') if observations is not None else None
+        if previous is not None and page_transition is not None:
+            # Only register_refined can attach this after observing a bounded
+            # native sequence. Unknown page continuity is explicit provenance.
+            position += len(gray)
+            placements.append({'sample': index, 'offset': position, 'transition': page_transition})
+            previous, previous_pixels, previous_index = profile, pixels, index
+            motion_since_previous = 0.0
+            skipped_since_previous = 0
+            continue
         if previous is not None:
             height = len(gray)
             minimum = max(16, int(.25 * height))
