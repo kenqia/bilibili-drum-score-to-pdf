@@ -11,13 +11,16 @@ def add_storage_arguments(parser):
     parser.add_argument('--max-temp-mib', type=float, default=1024, help='单次暂存上限与准入预留MiB，默认1024')
     parser.add_argument('--cache-mib', type=float, default=1024, help='媒体缓存含在途额度MiB，最大及默认1024')
     parser.add_argument('--cache-retention-seconds', type=float, default=86400, help='缓存发布后保留秒数，命中不续期')
+    parser.add_argument('--record-mib', type=float, default=256, help='整理记录内容和未完成预留额度MiB，默认256')
+    parser.add_argument('--record-retention-seconds', type=float, default=604800, help='操作结束后的记录保留秒数，默认604800')
 
 
 def storage_options(args):
     return dict(retention_seconds=args.retention_seconds, diagnostic_seconds=args.diagnostic_seconds,
         diagnostic_bytes=args.diagnostic_mib * 1024**2, min_free_bytes=args.min_free_mib * 1024**2,
-        retained_bytes=args.retained_mib * 1024**2, job_temp_bytes=args.max_temp_mib * 1024**2, cache_bytes=args.cache_mib * 1024**2,
-        cache_retention_seconds=args.cache_retention_seconds)
+        retained_bytes=args.retained_mib * 1024**2, job_temp_bytes=args.max_temp_mib * 1024**2,
+        cache_bytes=args.cache_mib * 1024**2, cache_retention_seconds=args.cache_retention_seconds,
+        record_bytes=args.record_mib * 1024**2, record_retention_seconds=args.record_retention_seconds)
 
 
 def add_conversion_arguments(parser):

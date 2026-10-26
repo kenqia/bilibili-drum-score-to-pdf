@@ -150,6 +150,12 @@ class ScriptPublicContracts(unittest.TestCase):
             self.assertEqual(before['result']['source']['cache']['status'], 'hit')
             self.assertEqual(before['result']['source']['cache']['expires_at'], cached['result']['source']['cache']['expires_at'])
             self.assertEqual(before['result']['conversion']['options'], options)
+            from drum_score.jobs import Jobs
+            records = Jobs(fixture.data).records.query(task=second['id'])
+            self.assertEqual(len(records), 2)
+            self.assertTrue(all(record['settings']['options'] == options for record in records))
+            complete_record = next(record for record in records if record['status'] == 'complete')
+            self.assertEqual(complete_record['output']['conversion']['options'], options)
             self.assertTrue(before['result']['conversion']['is_excerpt'])
             self.assertFalse(before['result']['reliable'])
             self.assertEqual((fixture.network / 'fetches').read_text().splitlines(), ['fetch'])
@@ -410,6 +416,13 @@ class ScriptPublicContracts(unittest.TestCase):
                 self.assertEqual(len(result['pages']), count)
                 self.assertTrue(base64.b64decode(result['pdf']).startswith(b'%PDF'))
                 self.assertTrue(all(base64.b64decode(page).startswith(b'\x89PNG') for page in result['pages']))
+                from drum_score.jobs import Jobs
+                record = next(record for record in Jobs(fixture.data).records.query(task=task)
+                              if record['operation'] == 'layout')
+                self.assertEqual(record['status'], 'complete')
+                self.assertEqual(record['settings'], {'paper': paper, 'rows': rows})
+                self.assertEqual(record['output']['pdf']['sha256'], hashlib.sha256(base64.b64decode(result['pdf'])).hexdigest())
+                self.assertEqual(record['output']['page_count'], count)
             self.assertEqual(fixture.state(task, headers), before)
             self.assertEqual(hashlib.sha256(original).hexdigest(), before['result']['pdf']['sha256'])
             self.assertEqual(fixture.client.get('/api/tasks/' + task + '/pdf', headers=headers).content, original)
@@ -418,6 +431,66 @@ class ScriptPublicContracts(unittest.TestCase):
                 self.assertEqual(fixture.client.post('/api/tasks/' + task + '/layout', headers=headers, json=settings).status_code, 422)
             with patch('drum_score.jobs.time.time', return_value=before['expires_at'] + 1):
                 self.assertEqual(fixture.client.post('/api/tasks/' + task + '/layout', headers=headers, json={}).status_code, 410)
+        finally:
+            fixture.tearDown()
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Real website worker and isolated metadata process')
+    def test_description_rule_is_website_only_and_keeps_private_failure_record(self):
+        import test_web_worker as web_fixture
+        from bbdown_fixture import fixture_config
+        from drum_score.jobs import Jobs
+        fixture = web_fixture.WebsiteWorker(methodName='runTest')
+        fixture.setUp()
+        try:
+            config = fixture_config()
+            config['view'].update(bvid='BV1rH4y1R7Rk', desc='SYNTHETIC_DESCRIPTION ♥')
+            (fixture.network / 'sitecustomize.py').write_text(
+                'from pathlib import Path\nimport os,io\n'
+                'from bbdown_fixture import configured_fake\n'
+                'base=Path(os.environ["SYNTHETIC_NETWORK_ROOT"])\n'
+                'def media(*args,**kwargs):\n'
+                ' if args[0].full_url.startswith("https://b23.tv/"):\n'
+                '  from urllib.error import HTTPError\n'
+                '  raise HTTPError(args[0].full_url,302,"synthetic redirect",{"Location":"https://www.bilibili.com/video/BV1rH4y1R7Rk?p=2"},None)\n'
+                ' (base/"media-requested").touch()\n'
+                ' return io.BytesIO((base/"input.mp4").read_bytes())\n'
+                f'config={config!r}\n'
+                'if (base/"allow-description").exists(): config["view"]["desc"]="synthetic ordinary description"\n'
+                'fixture=configured_fake(base,config,response=media)\n'
+                'fixture.__enter__()\n')
+            fixture.env['PYTHONPATH'] += __import__('os').pathsep + str(Path(__file__).parent)
+            task, auth = fixture.submit()
+            self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
+            state = fixture.state(task, auth)
+            self.assertEqual(state['state'], 'failed', state)
+            self.assertEqual(state['error']['message'], '该视频暂不支持整理。')
+            self.assertFalse((fixture.network / 'media-requested').exists())
+            record = Jobs(fixture.data).records.query(task=task)[0]
+            self.assertEqual(record['error']['code'], 'description_policy_rejected')
+            self.assertEqual(record['description_policy']['codepoints'], ['U+2665'])
+            self.assertNotIn('SYNTHETIC_DESCRIPTION', json.dumps(record))
+            # The same actual downloader in CLI has no website policy enabled.
+            output = fixture.root / 'cli-result'
+            cli = subprocess.run([sys.executable, '-m', 'drum_score',
+                'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=2', '--output', str(output)],
+                env=fixture.env, capture_output=True, text=True, timeout=30)
+            self.assertEqual(cli.returncode, 0, cli.stdout + cli.stderr)
+            self.assertTrue((fixture.network / 'media-requested').exists())
+            # A later conversion failure must retain facts acquired through a
+            # real synthetic short-link redirect and successful media download.
+            (fixture.network / 'allow-description').touch()
+            tools = fixture.network / 'failed-preview'
+            tools.mkdir()
+            (tools / 'pdftoppm').write_text('#!/bin/sh\nexit 2\n')
+            (tools / 'pdftoppm').chmod(0o755)
+            fixture.env['PATH'] = str(tools) + __import__('os').pathsep + fixture.env['PATH']
+            created = fixture.client.post('/api/tasks', json={'url': 'https://b23.tv/Synthetic'}).json()
+            self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
+            record = Jobs(fixture.data).records.query(task=created['id'])[0]
+            self.assertEqual(record['status'], 'failed')
+            self.assertEqual(record['input']['resolved_url'], 'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=2')
+            self.assertTrue(record['description_policy']['valid_description'])
+            self.assertFalse(record['description_policy']['matched'])
         finally:
             fixture.tearDown()
 
@@ -1093,7 +1166,7 @@ class MaintenancePublicContracts(unittest.TestCase):
         from drum_score.jobs import Jobs
         from drum_score.maintenance import backup
         from drum_score.schema import V1_STATEMENTS, SCHEMA_VERSION
-        for source_version in (1, 2):
+        for source_version in (1, 2, 3, 4):
             with self.subTest(source_version=source_version):
                 with tempfile.TemporaryDirectory() as temporary:
                     root = Path(temporary)
@@ -1122,11 +1195,14 @@ class MaintenancePublicContracts(unittest.TestCase):
                     saved = root / 'snapshot'
                     backup(jobs.root, saved, services_stopped=True, min_free_bytes=1)
                     with sqlite3.connect(saved / 'tasks.sqlite3') as db:
-                        db.execute('ALTER TABLE tasks DROP COLUMN options')
-                        db.execute('DROP TABLE video_cache')
-                        db.execute('DROP TABLE submission_events')
-                        db.execute('DROP TABLE submission_control')
-                        db.execute('DROP INDEX task_expiry')
+                        db.execute('DROP TABLE processing_records')
+                        if source_version < 4:
+                            db.execute('ALTER TABLE tasks DROP COLUMN options')
+                            db.execute('DROP TABLE video_cache')
+                        if source_version < 3:
+                            db.execute('DROP TABLE submission_events')
+                            db.execute('DROP TABLE submission_control')
+                            db.execute('DROP INDEX task_expiry')
                         if source_version == 1:
                             db.execute(V1_STATEMENTS[-1])
                         db.execute(f'PRAGMA user_version={source_version}')

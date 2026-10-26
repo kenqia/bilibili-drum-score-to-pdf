@@ -106,6 +106,12 @@ class VideoCache(unittest.TestCase):
         self.assertEqual(list((self.data/'cache').rglob('*.mp4')),[])
 
     def test_explicit_backup_restore_keeps_cache_expiry_and_registers_new_file_identity(self):
+        self._cache_snapshot_roundtrip()
+
+    def test_explicit_v4_upgrade_keeps_cache_usable_and_original_deadline(self):
+        self._cache_snapshot_roundtrip(legacy=True)
+
+    def _cache_snapshot_roundtrip(self, legacy=False):
         import subprocess
         from fastapi.testclient import TestClient
         from drum_score.web import create_app
@@ -117,6 +123,21 @@ class VideoCache(unittest.TestCase):
         for operation,args in [('backup',['--data-root',str(self.data),'--output',str(snapshot),'--services-stopped']),
             ('verify',['--backup-root',str(snapshot)]),('restore',['--backup-root',str(snapshot),'--output',str(restored)])]:
             result=subprocess.run([sys.executable,'-m','drum_score.maintenance',operation,*args,'--min-free-mib','1'],env=self.env,capture_output=True,text=True,timeout=15)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        if legacy:
+            import hashlib
+            import sqlite3
+            with sqlite3.connect(snapshot/'tasks.sqlite3') as db:
+                db.execute('DROP TABLE processing_records')
+                db.execute('PRAGMA user_version=4')
+            manifest=json.loads((snapshot/'snapshot.json').read_text())
+            manifest['schema']=4
+            entry=next(e for e in manifest['files'] if e['path']=='tasks.sqlite3')
+            payload=(snapshot/'tasks.sqlite3').read_bytes()
+            entry.update(bytes=len(payload),sha256=hashlib.sha256(payload).hexdigest())
+            (snapshot/'snapshot.json').write_text(json.dumps(manifest))
+            restored=self.root/'upgraded'
+            result=subprocess.run([sys.executable,'-m','drum_score.maintenance','upgrade-v4','--backup-root',str(snapshot),'--output',str(restored),'--min-free-mib','1'],env=self.env,capture_output=True,text=True,timeout=15)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
         original=next((self.data/'cache').rglob('video.mp4'));copy=next((restored/'cache').rglob('video.mp4'))
         self.assertNotEqual(original.stat().st_ino,copy.stat().st_ino)

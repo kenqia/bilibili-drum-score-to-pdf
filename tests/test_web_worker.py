@@ -280,6 +280,11 @@ sqlite3.connect = connect
             self.assertIn('sha256', frame)
             self.assertIn('pts', frame)
         self.assertEqual(self.state(task, auth)['result']['retention'], result['retention'])
+        from drum_score.jobs import Jobs
+        record = Jobs(self.data).records.query(task=task)[0]
+        self.assertEqual(record['status'], 'complete')
+        self.assertEqual(record['output'], result)
+        self.assertEqual(record['settings']['limits'], result['resources']['limits'])
 
     def test_running_disk_exhaustion_stops_real_tree_and_keeps_other_files(self):
         with (self.network / 'sitecustomize.py').open('a') as startup:

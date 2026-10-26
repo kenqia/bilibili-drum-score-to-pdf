@@ -235,6 +235,9 @@ class VideoCache:
                 else:
                     time.sleep(.02)
             result = dict(result)
+            policy = inspection['backend_details'].get('description_policy')
+            if policy is not None:
+                result['origin'] = {**result['origin'], 'description_policy': policy}
             if coalesced:
                 result['origin'] = {**result['origin'], 'cache': {**result['origin']['cache'], 'status': 'coalesced'}}
             result['origin'] = {**result['origin'], 'cache': {**result['origin']['cache'], 'wait_seconds': time.monotonic()-started}}

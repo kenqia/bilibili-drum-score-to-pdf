@@ -54,6 +54,7 @@ def inspect_source(origin, staging):
             'http_headers': {'Referer': origin['url'], 'Origin': 'https://www.bilibili.com',
                              'User-Agent': 'Mozilla/5.0'}}
     return dict(origin=origin, info=info, backend_details={'backend': 'BBDownNext', 'backend_version': '2.3.0',
+            **({'description_policy': details['description_policy']} if 'description_policy' in details else {}),
             'backend_build': details['backend_build'], 'backend_sha256': details['backend_sha256'],
             'acquisition_route': 'bbdown_direct', 'cid': details['cid'], 'aid': details['aid']},
         )

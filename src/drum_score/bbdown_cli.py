@@ -132,7 +132,10 @@ def _metadata(output, work, origin):
     if (play.get('is_preview') or play.get('is_upower_exclusive') or play.get('is_upower_play')
             or not _positive(milliseconds) or abs(milliseconds / 1000 - page['duration']) > 1):
         raise _invalid('incomplete_video')
-    return {'play': play, 'cid': page['cid'], 'aid': data['aid'], 'duration': milliseconds / 1000}
+    from .description_policy import check
+    policy = check(data.get('desc'), origin)
+    return {'play': play, 'cid': page['cid'], 'aid': data['aid'], 'duration': milliseconds / 1000,
+            **({'description_policy': policy} if policy is not None else {})}
 
 
 def _run(binary, args, env):

@@ -35,8 +35,13 @@ class Heartbeat(BaseModel):
 
 class BodyLimit:
     """Bound bytes before JSON parsing, including chunked requests."""
-    def __init__(self, app):
+    def __init__(self, app, jobs=None):
         self.app = app
+        self.jobs = jobs
+
+    async def reject(self, scope, code):
+        if self.jobs and recordable(scope):
+            await asyncio.to_thread(self.jobs.records.reject, code)
 
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http' or scope['method'] != 'POST':
@@ -55,11 +60,13 @@ class BodyLimit:
                     return
                 chunk = event.get('body', b'')
                 if len(body) + len(chunk) > 8192:
+                    await self.reject(scope, 'request_too_large')
                     return await JSONResponse({'error': {'code': 'request_too_large', 'message': '请求超过8KiB限制。'}}, status_code=413)(scope, receive, send)
                 body.extend(chunk)
                 if not event.get('more_body', False):
                     break
         except TimeoutError:
+            await self.reject(scope, 'request_timeout')
             return await JSONResponse({'error': {'code': 'request_timeout', 'message': '请求接收超时。'}}, status_code=408)(scope, receive, send)
         sent = False
         async def bounded_receive():
@@ -85,13 +92,19 @@ class ArtifactResources:
                 stream.close()
 
 
+def recordable(scope):
+    path = scope.get('path', '')
+    return scope.get('method') == 'POST' and (path == '/api/tasks' or
+        bool(re.fullmatch(r'/api/tasks/[A-Za-z0-9_-]+/(retry|layout)', path)))
+
+
 def create_app(data_root, *, trusted_proxies=(), retention_seconds=86400, **storage):
     jobs = Jobs(data_root, retention_seconds=retention_seconds, **storage)
     from .presence import Presence
     presence = Presence()
     proxies = frozenset(ipaddress.ip_address(value) for value in trusted_proxies)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-    app.add_middleware(BodyLimit)
+    app.add_middleware(BodyLimit, jobs=jobs)
     app.add_middleware(ArtifactResources)
 
     @app.middleware('http')
@@ -104,6 +117,8 @@ def create_app(data_root, *, trusted_proxies=(), retention_seconds=86400, **stor
 
     @app.exception_handler(JobError)
     async def job_error(request, error):
+        if recordable(request.scope) and not getattr(error, 'recorded', False) and error.code not in ('records_full', 'records_unavailable', 'database_unavailable'):
+            await asyncio.to_thread(jobs.records.reject, error.code)
         body = {'code': error.code, 'message': error.message}
         headers = {}
         if error.retry_after_seconds is not None:
@@ -113,6 +128,8 @@ def create_app(data_root, *, trusted_proxies=(), retention_seconds=86400, **stor
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request, error):
+        if recordable(request.scope):
+            await asyncio.to_thread(jobs.records.reject, 'invalid_request')
         return JSONResponse({'error': {'code': 'invalid_request', 'message': '请求参数无效，请检查链接或排版设置。'}}, status_code=422)
 
     def peer(request):

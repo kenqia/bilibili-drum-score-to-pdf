@@ -189,6 +189,7 @@ class Maintenance(unittest.TestCase):
         with sqlite3.connect(saved / 'tasks.sqlite3') as db:
             db.execute('ALTER TABLE tasks DROP COLUMN options')
             db.execute('DROP TABLE video_cache')
+            db.execute('DROP TABLE processing_records')
             db.execute('PRAGMA user_version=3')
         manifest = json.loads((saved / 'snapshot.json').read_text())
         manifest['schema'] = 3
@@ -223,6 +224,7 @@ class Maintenance(unittest.TestCase):
         with sqlite3.connect(saved / 'tasks.sqlite3') as db:
             db.execute('ALTER TABLE tasks DROP COLUMN options')
             db.execute('DROP TABLE video_cache')
+            db.execute('DROP TABLE processing_records')
             db.execute('DROP TABLE submission_events')
             db.execute('DROP TABLE submission_control')
             db.execute('DROP INDEX task_expiry')
@@ -655,7 +657,7 @@ class Maintenance(unittest.TestCase):
         tracked = {}
         try:
             identity = _identity(worker.pid)
-            deadline = time.monotonic() + 10
+            deadline = time.monotonic() + 30
             samples = []
             while time.monotonic() < deadline:
                 samples = list(

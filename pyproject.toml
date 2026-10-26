@@ -21,6 +21,7 @@ drum-score = "drum_score.cli:main"
 drum-score-web = "drum_score.web:main"
 drum-score-worker = "drum_score.worker:main"
 drum-score-maintenance = "drum_score.maintenance:main"
+drum-score-records = "drum_score.processing_records:main"
 
 [tool.setuptools]
 packages = ["drum_score"]

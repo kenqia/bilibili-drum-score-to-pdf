@@ -109,6 +109,7 @@ def recover(jobs):
                 pass
         jobs.discard(row)
         jobs.settle(row, 'interrupted', 'interrupted', '处理进程已中断，可显式重试。')
+    jobs.records.recover()
 
 
 def execute_attempt(jobs, row, stopping, descriptor, limits, cache=None):
@@ -117,6 +118,10 @@ def execute_attempt(jobs, row, stopping, descriptor, limits, cache=None):
     with guardian_lease(descriptor):
         try:
             attempt = jobs.register_attempt(row)
+            from .core import ResourceBudget
+            with jobs.transaction() as db:
+                jobs.write_record(db, jobs.records.conversion(db, row['id']),
+                    attempt=row['attempt'], settings={'options': json.loads(row['options']), 'limits': ResourceBudget({**(limits or {}), 'temp_bytes': jobs.job_temp_bytes}).limits})
             next_capacity = 0
             def cancelled():
                 nonlocal next_capacity
@@ -162,7 +167,8 @@ def execute_attempt(jobs, row, stopping, descriptor, limits, cache=None):
                 stopping.set()
             else:
                 message = str(error).replace('请提供清晰的本地视频。', '请检查公开视频是否可匿名访问，或更换清晰、完整的纵向滚谱。')
-                jobs.settle(row, 'failed', error.code, message)
+                jobs.settle(row, 'failed', 'unsupported_source' if error.code == 'description_policy_rejected' else error.code,
+                    message, details=getattr(error, 'source_details', None), private_code=error.code)
         except Exception:
             # Never expose paths, network output, database or OS exception text.
             # A lost commit acknowledgement may already have made finishing durable.

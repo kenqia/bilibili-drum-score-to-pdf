@@ -12,6 +12,7 @@ import re
 import stat
 import math
 import threading
+from .processing_records import Records, DEFAULT_BYTES, RETENTION_SECONDS, MAX_RECORD_BYTES
 
 from .public_video import InputError, video_origin
 from .conversion_options import normalize_options
@@ -45,9 +46,11 @@ class Jobs:
     def __init__(self, root, *, retention_seconds=86400, diagnostic_seconds=3600,
                  diagnostic_bytes=8 * 1024**2, min_free_bytes=512 * 1024**2,
                  retained_bytes=4 * 1024**3, job_temp_bytes=1024**3,
-                 cache_bytes=1024**3, cache_retention_seconds=86400):
+                 cache_bytes=1024**3, cache_retention_seconds=86400,
+                 record_bytes=DEFAULT_BYTES, record_retention_seconds=RETENTION_SECONDS):
         values = (retention_seconds, diagnostic_seconds, diagnostic_bytes,
-                  min_free_bytes, retained_bytes, job_temp_bytes, cache_bytes, cache_retention_seconds)
+                  min_free_bytes, retained_bytes, job_temp_bytes, cache_bytes, cache_retention_seconds,
+                  record_bytes, record_retention_seconds)
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or
                not math.isfinite(v) or v <= 0 for v in values) or job_temp_bytes > retained_bytes or cache_bytes > 1024**3:
             raise ValueError('无效的服务资源参数。')
@@ -65,6 +68,9 @@ class Jobs:
         self.job_temp_bytes = int(job_temp_bytes)
         self.cache_bytes = int(cache_bytes)
         self.cache_retention_seconds = cache_retention_seconds
+        self.record_bytes = int(record_bytes)
+        self.record_retention_seconds = record_retention_seconds
+        self.records = Records(self)
         self.database = self.root / 'tasks.sqlite3'
         if self.database.is_symlink():
             raise ValueError('任务数据库不能是符号链接。')
@@ -80,6 +86,7 @@ class Jobs:
                 db.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
             else:
                 validate_schema(db)
+        os.chmod(self.database, 0o600)
 
     @contextmanager
     def transaction(self, *, write=True):
@@ -87,6 +94,7 @@ class Jobs:
             db = sqlite3.connect(self.database, timeout=1, isolation_level=None)
             db.row_factory = sqlite3.Row
             try:
+                db.execute('PRAGMA secure_delete=ON')
                 db.execute('BEGIN IMMEDIATE' if write else 'BEGIN')
                 yield db
                 db.commit()
@@ -134,7 +142,8 @@ class Jobs:
             raise JobError('ip_busy', '此网络已有一个未完成任务，请等待或取消后重试。', 429)
         if db.execute("SELECT COUNT(*) FROM tasks WHERE state='queued'").fetchone()[0] >= 10:
             raise JobError('queue_full', '等待队列已满，请稍后重试。', 429)
-        self.capacity(reserve=True, db=db)
+        self.capacity(reserve=True, db=db, log_reserve=MAX_RECORD_BYTES)
+        self.records.admit(db)
 
     def enqueue(self, url, ip, *, options=None):
         from .video_seek import ConversionError
@@ -155,6 +164,7 @@ class Jobs:
                 (task, sha256(capability.encode()).hexdigest(), json.dumps(source), ip_key, 'queued', 'queued', now, now, json.dumps(options)))
             db.execute('DELETE FROM submission_events WHERE admitted_at<=?', (now - 86400,))
             db.execute('INSERT INTO submission_events VALUES(?,?)', (ip_key, now))
+            self.records.start(db, 'submit', task=task, source=source['url'], settings={'options': options})
         return {'id': task, 'capability': capability, 'link': f'/task/{task}#{capability}'}
 
     def view(self, task, capability):
@@ -177,6 +187,11 @@ class Jobs:
             state = {'queued': 'cancelled', 'running': 'cancelling'}.get(row['state'], row['state'])
             db.execute("UPDATE tasks SET state=?,stage=?,expires_at=CASE WHEN ?='cancelled' THEN COALESCE(expires_at,?) ELSE expires_at END WHERE id=?",
                 (state, state if state in ('cancelled', 'cancelling') else row['stage'], state, time.time() + self.diagnostic_seconds, task))
+            record = self.records.conversion(db, task)
+            if state == 'cancelled':
+                self.finish_record(db, record, state, code='cancelled')
+            elif state == 'cancelling':
+                self.write_record(db, record, status=state)
         return self.view(task, capability)
 
     def retry(self, task, capability, ip):
@@ -194,6 +209,7 @@ class Jobs:
                 (ip_key, now, task))
             db.execute('DELETE FROM submission_events WHERE admitted_at<=?', (now - 86400,))
             db.execute('INSERT INTO submission_events VALUES(?,?)', (ip_key, now))
+            self.records.start(db, 'retry', task=task, source=json.loads(row['source'])['url'], settings={'options': json.loads(row['options'])})
         return self.view(task, capability)
 
     def attempt_root(self, task, attempt):
@@ -205,7 +221,10 @@ class Jobs:
                 raise ValueError('任务目录不能是符号链接。')
         return path
 
-    def capacity(self, *, reserve=False, db=None):
+    def capacity(self, *, reserve=False, db=None, log_reserve=0):
+        if db is None:
+            with self.transaction(write=reserve) as connection:
+                return self.capacity(reserve=reserve, db=connection, log_reserve=log_reserve)
         # Count even unrecognized files, never delete live results to admit work.
         total = 0
         if (self.root / 'attempts').is_symlink():
@@ -232,14 +251,12 @@ class Jobs:
             shared = db.execute('SELECT COALESCE(SUM(reservation_bytes+media_bytes),0) FROM video_cache').fetchone()[0]
         reservation = shared
         if reserve:
-            if db is None:
-                with self.transaction() as connection:
-                    return self.capacity(reserve=True, db=connection)
             active = db.execute("SELECT COUNT(*) FROM tasks WHERE state IN ('running','cancelling','finishing')").fetchone()[0]
             # Conservatively reserve the whole budget, including bytes already
             # materialized, for every active attempt and the proposed next one.
             reservation += (active + 1) * self.job_temp_bytes
-        if total + reservation > self.retained_bytes or available < self.min_free_bytes + reservation:
+        logs = self.records.disk_reservation(db, log_reserve)
+        if total + reservation > self.retained_bytes or available < self.min_free_bytes + reservation + logs:
             raise JobError('storage_full', '服务存储空间不足，请稍后重试。', 503)
         return total
 
@@ -522,6 +539,7 @@ class Jobs:
         # Expiry/auth/open share SQLite serialization. Existing FDs survive unlink.
         now = time.time()
         with self.transaction() as db:
+            self.records.cleanup(db, now)
             db.execute('DELETE FROM submission_events WHERE admitted_at<=?', (now - 86400,))
             db.execute("""UPDATE tasks SET state='expired',stage='expired',summary=NULL,
                 error_code=NULL,error_message=NULL,source='{}',options='{}',ip_key=''
@@ -556,6 +574,15 @@ class Jobs:
             row = db.execute("SELECT * FROM tasks WHERE state='queued' ORDER BY queued_at,id LIMIT 1").fetchone()
             if row is None:
                 return None
+            if self.records.conversion(db, row['id']) is None:
+                # Legacy queued work gets history when first executed after
+                # explicit upgrade; completed legacy history cannot be invented.
+                try:
+                    self.records.start(db, 'submit', task=row['id'], source=json.loads(row['source']).get('url'), settings={'options': json.loads(row['options'])})
+                except JobError as error:
+                    if error.code in ('records_full', 'records_unavailable'):
+                        return None
+                    raise
             try:
                 self.capacity(reserve=True, db=db)
             except JobError as error:
@@ -563,15 +590,20 @@ class Jobs:
                     return None  # Retain FIFO waiting while active reservations consume space.
                 db.execute("UPDATE tasks SET state='failed',stage='failed',error_code=?,error_message=?,expires_at=? WHERE id=?",
                     (error.code, error.message, time.time() + self.diagnostic_seconds, row['id']))
+                self.finish_record(db, self.records.conversion(db, row['id']), 'failed', code=error.code)
                 return None
             attempt = secrets.token_urlsafe(24)
             db.execute("UPDATE tasks SET state='running',stage='starting',attempt=? WHERE id=?", (attempt, row['id']))
+            self.write_record(db, self.records.conversion(db, row['id']), status='running', stage='starting', attempt=attempt)
             return dict(db.execute('SELECT * FROM tasks WHERE id=?', (row['id'],)).fetchone())
 
     def stage(self, row, stage):
         with self.transaction() as db:
             db.execute("UPDATE tasks SET stage=? WHERE id=? AND attempt=? AND state='running'",
                 (stage, row['id'], row['attempt']))
+            current = db.execute('SELECT attempt,state FROM tasks WHERE id=?', (row['id'],)).fetchone()
+            if current and current['attempt'] == row['attempt'] and current['state'] == 'running':
+                self.write_record(db, self.records.conversion(db, row['id']), stage=stage, attempt=row['attempt'])
 
     def cancelled(self, row):
         with self.transaction(write=False) as db:
@@ -583,16 +615,72 @@ class Jobs:
             current = db.execute('SELECT state,attempt FROM tasks WHERE id=?', (row['id'],)).fetchone()
             return current is not None and current['attempt'] == row['attempt'] and current['state'] in ('finishing', 'complete')
 
-    def settle(self, row, state, code=None, message=None):
+    def settle(self, row, state, code=None, message=None, *, details=None, private_code=None):
         with self.transaction() as db:
-            db.execute("UPDATE tasks SET state=?,stage=?,error_code=?,error_message=?,expires_at=COALESCE(expires_at,?) WHERE id=? AND attempt=? AND state IN ('running','cancelling','finishing')",
-                (state, state, code, message, time.time() + self.diagnostic_seconds, row['id'], row['attempt']))
+            changed = db.execute("UPDATE tasks SET state=?,stage=?,error_code=?,error_message=?,expires_at=COALESCE(expires_at,?) WHERE id=? AND attempt=? AND state IN ('running','cancelling','finishing')",
+                (state, state, code, message, time.time() + self.diagnostic_seconds, row['id'], row['attempt'])).rowcount
+            if changed:
+                self.finish_record(db, self.records.conversion(db, row['id']), state,
+                                   code=private_code or code or ('cancelled' if state == 'cancelled' else None), details=details)
+
+    def finish_record(self, db, record, state, **values):
+        self.write_record(db, record, state, **values)
+
+    def read_manifest(self, db, row):
+        managed = db.execute('SELECT * FROM managed_attempts WHERE task=? AND attempt=?',
+                             (row['task'] if 'task' in row.keys() else row['id'], row['attempt'])).fetchone()
+        if managed is None:
+            raise ValueError('Unmanaged manifest')
+        descriptor = self._attempt_descriptor(managed)
+        result = None
+        try:
+            result = os.open('result', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
+            fd = os.open('manifest.json', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=result)
+            with os.fdopen(fd, 'rb') as stream:
+                info = os.fstat(stream.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_size > 16 * 1024**2:
+                    raise ValueError('Invalid manifest')
+                payload = stream.read(16 * 1024**2 + 1)
+                if len(payload) > 16 * 1024**2:
+                    raise ValueError('Invalid manifest')
+                return json.loads(payload)
+        finally:
+            if result is not None:
+                os.close(result)
+            os.close(descriptor)
+
+    def write_record(self, db, record, state=None, **values):
+        # A logging failure must not turn a decided result into a conversion
+        # failure. Keep a visible gap and refuse admissions until recovery.
+        db.execute('SAVEPOINT finish_record')
+        try:
+            if state is None or state == 'finishing':
+                if state == 'finishing' and record is not None:
+                    values['output'] = self.read_manifest(db, {'task': record['task'],
+                        'attempt': values.get('attempt', record['attempt'])})
+                self.records.update(db, record, **({'status': 'finishing', 'stage': 'finishing'} if state else {}), **values)
+            else:
+                if (state == 'complete' and record is not None and record['operation'] in ('submit', 'retry')
+                        and values.get('output') is None and json.loads(record['content'])['output'] is None):
+                    values['output'] = self.read_manifest(db, record)
+                self.records.finish(db, record, state, **values)
+        except (sqlite3.Error, ValueError, OSError):
+            db.execute('ROLLBACK TO finish_record')
+            if record is not None:
+                now = time.time() if state in ('complete', 'failed', 'cancelled', 'interrupted') else None
+                db.execute("UPDATE processing_records SET status='record_failed',finished_at=COALESCE(finished_at,?),expires_at=COALESCE(expires_at,?) WHERE id=?",
+                           (now, now + self.record_retention_seconds if now is not None else None, record['id']))
+        finally:
+            db.execute('RELEASE finish_record')
 
     def finishing(self, row, summary):
         with self.transaction() as db:
             now = time.time()
             changed = db.execute("UPDATE tasks SET state='finishing',stage='finishing',summary=?,completed_at=?,expires_at=? WHERE id=? AND attempt=? AND state='running'",
                 (json.dumps(summary, ensure_ascii=False), now, now + self.retention_seconds, row['id'], row['attempt'])).rowcount
+            if changed:
+                # Preserve the actual web-delivery manifest before result expiry.
+                self.finish_record(db, self.records.conversion(db, row['id']), 'finishing', attempt=row['attempt'])
             return bool(changed)
 
     def open_artifact(self, task, capability, page=None):

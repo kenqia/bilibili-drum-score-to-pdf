@@ -16,11 +16,11 @@ import time
 
 from .arguments import PublicParser
 from .public_video import video_origin
-from .schema import SCHEMA_VERSION, ABUSE_STATEMENTS, OPTIONS_COLUMN, CACHE_STATEMENTS, validate_schema
+from .schema import SCHEMA_VERSION, ABUSE_STATEMENTS, OPTIONS_COLUMN, CACHE_STATEMENTS, RECORD_STATEMENTS, validate_schema
 from .owned_tree import remove_owned_tree
 
 FORMAT = 1
-DB_LIMIT = 64 * 1024**2
+DB_LIMIT = 512 * 1024**2
 JSON_LIMIT = 16 * 1024**2
 
 
@@ -264,6 +264,12 @@ def validate(db, budget, *, schema_version=SCHEMA_VERSION):
                 or not isinstance(event['admitted_at'], (int, float))
                 or not math.isfinite(event['admitted_at'])):
                 raise MaintenanceError('invalid_snapshot')
+    if schema_version >= 5:
+        from .processing_records import validate_records
+        try:
+            validate_records(db, budget.check)
+        except (ValueError, TypeError, KeyError):
+            raise MaintenanceError('invalid_snapshot') from None
     rows = [
         dict(row)
         for row in db.execute("SELECT * FROM tasks LIMIT ?", (budget.max_files + 1,))
@@ -889,14 +895,15 @@ def restore(
     upgrade_from_v1=False,
     upgrade_from_v2=False,
     upgrade_from_v3=False,
+    upgrade_from_v4=False,
     timeout=60,
     max_bytes=4096 * 1024**2,
     max_files=8192,
     min_free_bytes=2048 * 1024**2,
 ):
-    if sum((bool(upgrade_from_v1), bool(upgrade_from_v2), bool(upgrade_from_v3))) > 1:
+    if sum((bool(upgrade_from_v1), bool(upgrade_from_v2), bool(upgrade_from_v3), bool(upgrade_from_v4))) > 1:
         raise MaintenanceError('invalid_request')
-    source_version = 1 if upgrade_from_v1 else 2 if upgrade_from_v2 else 3 if upgrade_from_v3 else SCHEMA_VERSION
+    source_version = 1 if upgrade_from_v1 else 2 if upgrade_from_v2 else 3 if upgrade_from_v3 else 4 if upgrade_from_v4 else SCHEMA_VERSION
     budget = Budget(timeout, max_bytes, max_files, min_free_bytes)
     if Path(backup_root).name.startswith(".drum-maintenance-"):
         raise MaintenanceError("incomplete_snapshot")
@@ -921,8 +928,11 @@ def restore(
                             for statement in ABUSE_STATEMENTS:
                                 db.execute(statement)
                             db.execute('INSERT INTO submission_control VALUES(1,0)')
-                        db.execute('ALTER TABLE tasks ADD COLUMN ' + OPTIONS_COLUMN)
-                        for statement in CACHE_STATEMENTS:
+                        if source_version < 4:
+                            db.execute('ALTER TABLE tasks ADD COLUMN ' + OPTIONS_COLUMN)
+                            for statement in CACHE_STATEMENTS:
+                                db.execute(statement)
+                        for statement in RECORD_STATEMENTS:
                             db.execute(statement)
                         db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
                         validate_schema(db)
@@ -976,7 +986,7 @@ def main(argv=None):
     for name in ("pause-submissions", "resume-submissions"):
         child = commands.add_parser(name)
         child.add_argument('--data-root', required=True)
-    for name in ("backup", "verify", "restore", "upgrade-v1", "upgrade-v2", "upgrade-v3"):
+    for name in ("backup", "verify", "restore", "upgrade-v1", "upgrade-v2", "upgrade-v3", "upgrade-v4"):
         child = commands.add_parser(name)
         child.add_argument("--timeout", type=float, default=60)
         child.add_argument("--max-mib", type=float, default=4096)
@@ -1011,7 +1021,8 @@ def main(argv=None):
         else:
             result = restore(args.backup_root, args.output, upgrade_from_v1=args.operation == "upgrade-v1",
                              upgrade_from_v2=args.operation == "upgrade-v2",
-                             upgrade_from_v3=args.operation == "upgrade-v3", **options)
+                             upgrade_from_v3=args.operation == "upgrade-v3",
+                             upgrade_from_v4=args.operation == "upgrade-v4", **options)
     except Exception as error:
         code = (
             error.code if isinstance(error, MaintenanceError) else "maintenance_failed"

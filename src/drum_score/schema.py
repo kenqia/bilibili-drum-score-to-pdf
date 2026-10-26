@@ -2,7 +2,7 @@
 
 import re
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 V1_STATEMENTS = (
     "CREATE TABLE tasks (\n                  id TEXT PRIMARY KEY, capability_hash TEXT NOT NULL, source TEXT NOT NULL,\n                  ip_key TEXT NOT NULL, state TEXT NOT NULL, stage TEXT NOT NULL,\n                  created_at REAL NOT NULL, queued_at REAL NOT NULL,\n                  attempt TEXT, completed_at REAL, expires_at REAL,\n                  summary TEXT, error_code TEXT, error_message TEXT\n                )",
     "CREATE TABLE managed_attempts (\n                  task TEXT NOT NULL, attempt TEXT NOT NULL, device INTEGER NOT NULL,\n                  inode INTEGER NOT NULL, files TEXT NOT NULL DEFAULT '[]',\n                  PRIMARY KEY(task,attempt))",
@@ -25,7 +25,14 @@ SCHEMA_STATEMENTS = (V3_STATEMENTS[0][:-1] + ', ' + OPTIONS_COLUMN + ')', *V3_ST
 CACHE_STATEMENTS = (
     "CREATE TABLE video_cache (key TEXT PRIMARY KEY, source TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('filling','ready','unavailable')), reservation_bytes INTEGER NOT NULL CHECK(reservation_bytes>=0), media_bytes INTEGER NOT NULL DEFAULT 0 CHECK(media_bytes>=0), sha256 TEXT, full_duration REAL, width INTEGER, height INTEGER, published_at REAL, expires_at REAL, root_name TEXT NOT NULL UNIQUE, storage TEXT NOT NULL DEFAULT 'cache' CHECK(storage IN ('cache','attempts')), device INTEGER NOT NULL, inode INTEGER NOT NULL, files TEXT NOT NULL DEFAULT '[]')",
 )
-SCHEMA_STATEMENTS = (*SCHEMA_STATEMENTS, *CACHE_STATEMENTS)
+V4_STATEMENTS = (*SCHEMA_STATEMENTS, *CACHE_STATEMENTS)
+RECORD_STATEMENTS = (
+    "CREATE TABLE processing_records (id TEXT PRIMARY KEY, task TEXT, attempt TEXT, operation TEXT NOT NULL, status TEXT NOT NULL, stage TEXT NOT NULL, created_at REAL NOT NULL, started_at REAL, finished_at REAL, expires_at REAL, reserved INTEGER NOT NULL, bytes INTEGER NOT NULL, content TEXT NOT NULL)",
+    "CREATE INDEX record_task ON processing_records(task,created_at)",
+    "CREATE INDEX record_expiry ON processing_records(expires_at)",
+    "CREATE UNIQUE INDEX record_conversion ON processing_records(task) WHERE operation IN ('submit','retry') AND finished_at IS NULL",
+)
+SCHEMA_STATEMENTS = (*V4_STATEMENTS, *RECORD_STATEMENTS)
 
 
 def normalized_sql(sql):
@@ -41,7 +48,7 @@ def normalized_sql(sql):
 def validate_schema(db, *, version=SCHEMA_VERSION):
     if db.execute("PRAGMA user_version").fetchone()[0] != version:
         raise ValueError("Unsupported service schema")
-    statements = {1: V1_STATEMENTS, 2: V2_STATEMENTS, 3: V3_STATEMENTS, 4: SCHEMA_STATEMENTS}.get(version)
+    statements = {1: V1_STATEMENTS, 2: V2_STATEMENTS, 3: V3_STATEMENTS, 4: V4_STATEMENTS, 5: SCHEMA_STATEMENTS}.get(version)
     if statements is None:
         raise ValueError("Unsupported service schema")
     expected = {normalized_sql(sql) for sql in statements}

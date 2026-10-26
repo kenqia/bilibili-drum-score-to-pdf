@@ -39,7 +39,7 @@ def guardian_lease(descriptor):
         _guardian_lock.reset(token)
 
 
-def _worker(source, output, limits, connection, temporary, parent_pid, ready, options=None, prepared=None, operation="convert", inspection=None, register=None):
+def _worker(source, output, limits, connection, temporary, parent_pid, ready, options=None, prepared=None, operation="convert", inspection=None, register=None, website=False):
     if hasattr(os, 'setsid'):
         os.setsid()
     signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -54,6 +54,9 @@ def _worker(source, output, limits, connection, temporary, parent_pid, ready, op
     tempfile.tempdir = temporary
     source_descriptor = None
     try:
+        from .description_policy import enabled, last_details
+        enabled.set(website)
+        last_details.set({'url': prepared['origin']['url'], 'description_policy': prepared['origin'].get('description_policy')} if prepared and 'origin' in prepared else None)
         ready.wait()
         if prepared is not None and '_fd' in prepared:
             source_descriptor = prepared['_fd'].detach()
@@ -68,7 +71,7 @@ def _worker(source, output, limits, connection, temporary, parent_pid, ready, op
                               connection.send(('stage', stage)) if stage != 'complete' else None)
         connection.send(('result', result))
     except ConversionError as error:
-        connection.send(('error', (error.code, str(error))))
+        connection.send(('error', (error.code, str(error), last_details.get())))
     except BaseException:
         connection.send(('error', ('conversion_failed', '转换进程异常退出，未发布结果。')))
     finally:
@@ -257,7 +260,7 @@ def _run(source, output, *, options=None, progress=None, limits=None, cancel=Non
             from multiprocessing.reduction import DupFd
             prepared = dict(prepared)
             prepared['_fd'] = DupFd(prepared.pop('_descriptor'))
-        process = context.Process(target=_worker, args=(source, root / 'complete', budget.limits, child, temporary, os.getpid(), ready, options, prepared, operation, inspection))
+        process = context.Process(target=_worker, args=(source, root / 'complete', budget.limits, child, temporary, os.getpid(), ready, options, prepared, operation, inspection), kwargs={'website': owner is not None})
         guardian = None
         guardian_write = None
         previous_term = None
@@ -312,7 +315,9 @@ def _run(source, output, *, options=None, progress=None, limits=None, cancel=Non
                         if progress:
                             progress(payload)
                     elif kind == 'error':
-                        raise ConversionError(*payload)
+                        error = ConversionError(*payload[:2])
+                        error.source_details = payload[2] if len(payload) > 2 else None
+                        raise error
                     elif kind == 'result':
                         result = payload
                         break
