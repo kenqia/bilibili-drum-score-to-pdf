@@ -442,3 +442,8 @@ env -u PYTHONPATH /home/kenqia/issue73-installed-venv/bin/python /home/kenqia/is
 配准的细黑边回归 `test_proven_thin_video_borders_do_not_join_all_printable_systems` 将至少两页的旧分页假设迁为 PDF 至少包含两个独立行组图片；紧凑排版可以一页容纳这些行组。原始谱区、长图逐像素和边缘彩色记号保留断言不变。
 
 #90保留背景闪烁反例的原生变化大于1和零位移断言。实际seek补帧没有常规采样间隔运动摘要，最大值断言仅读取具有该摘要的采样，避免把新增真实补证帧当作常规采样。
+
+
+## Issue #92 真实观测恢复
+
+`test_gray_and_scrolling_watermarks_and_playback_effects_keep_source_pixels` 更名为 `test_proven_screen_overlays_restore_and_source_bound_marks_keep_pixels`。固定屏幕灰水印和移动窄竖光标的原像素恒等断言迁为同位置真实无遮挡原图恒等及非零恢复数，随谱水印、无覆盖物对照、最终位移、固定掩码和 `reliable=false` 断言保留。`test_observed_restoration` 另核验含真实音符的独立原图、每块精确来源像素与PTS/time_base，以及同色真实长竖记号不被擦除。没有删除测试。

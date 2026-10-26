@@ -257,6 +257,10 @@ class ScriptPublicContracts(unittest.TestCase):
                         self.assertGreater(result['metrics']['retained_rgb_bytes'], 0)
                         self.assertTrue(all(.5 <= frame['timestamp'] < 1.5
                             for frame in result['preflight']['observations']))
+                    self.assertEqual(result['restoration']['method'], 'registered_exposed_source_pixels')
+                    self.assertEqual(result['restoration']['restored_pixels'], 0)
+                    self.assertEqual(result['restoration']['blocks'], [])
+                    self.assertIn('unconfirmed_overlays_retained', {item['code'] for item in result['warnings']})
                     self.assertEqual(result['conversion']['options'], options)
                     self.assertEqual(result['conversion']['effective_range_seconds'], [.5, 1.5])
                     self.assertTrue(result['conversion']['is_excerpt'])

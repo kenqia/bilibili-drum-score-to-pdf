@@ -289,7 +289,7 @@ def _process(source, output, metadata, emit, budget, options):
                            'is_excerpt': start > 0 or end < metadata['duration']},
             'restoration': restoration,
             'warnings': [{'code': 'not_musically_proofread', 'message': NOTICE},
-                {'code': 'unconfirmed_overlays_retained', 'message': '仅用同位置真实无遮挡画面恢复已确认覆盖物；无法确认的水印、彩色记号和遮挡保留，未经音乐校对。'}],
+                {'code': 'unconfirmed_overlays_retained', 'message': f"已从同位置真实观测恢复 {restoration['restored_pixels']} 个像素，已确认覆盖物中仍有 {restoration['unrecovered_masked_pixels']} 个像素未恢复。未确认的水印、彩色记号和遮挡保留，未经音乐校对。"}],
             'pdf': artifact(output, pdf), 'pages': [artifact(output, page) for page in pages],
             'longshot': {**artifact(output, longshot), 'kind': 'derived_image'},
             'samples': samples, 'placements': placements, 'region': list(region),

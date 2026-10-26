@@ -548,7 +548,7 @@ Path.read_text = read
             self.assertEqual(caught.exception.code, 'discontinuity')
             self.assertFalse((root / 'result').exists())
 
-    def test_gray_and_scrolling_watermarks_and_playback_effects_keep_source_pixels(self):
+    def test_proven_screen_overlays_restore_and_source_bound_marks_keep_pixels(self):
         from score_fixtures import scrolling_video
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -573,7 +573,12 @@ Path.read_text = read
                     self.assertFalse(result['reliable'])
                     self.assertEqual(result['placements'][-1]['offset'], 450)
                     with Image.open(root / mode / result['longshot']['path']) as actual, Image.open(root / f'{mode}-000.png') as first:
-                        self.assertIsNone(ImageChops.difference(actual.crop((0, 0, 640, 520)), first).getbbox())
+                        if mode in ('scrolling_gray', 'control'):
+                            self.assertIsNone(ImageChops.difference(actual.crop((0, 0, 640, 520)), first).getbbox())
+                        else:
+                            self.assertGreater(result['restoration']['restored_pixels'], 1000)
+                            self.assertIsNone(ImageChops.difference(actual.crop((170, 170, 300, 380)),
+                                sheet.crop((170, 170, 300, 380))).getbbox())
                     if mode == 'fixed_gray':
                         self.assertGreater(result['registration']['invalid_pixels'], 10000)
                     elif mode in ('scrolling_gray', 'control'):

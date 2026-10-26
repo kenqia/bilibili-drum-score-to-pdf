@@ -58,3 +58,22 @@ class ObservedRestoration(unittest.TestCase):
                                                       np.array(source.crop(block['source_box'])))
             self.assertTrue(result['pages'])
             self.assertTrue((root / 'result' / result['pdf']['path']).is_file())
+
+    def test_moving_screen_cursor_restores_notes_and_keeps_real_colored_notation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, sheet = fixture(root)
+            original = sheet.crop((0, 0, 640, 520))
+            # A colored source annotation is never a license to erase its pixels.
+            ImageDraw.Draw(original).rectangle((80, 10, 95, 510), fill=(70, 120, 255))
+            for index, x in enumerate((150, 300, 450)):
+                frame = original.copy()
+                ImageDraw.Draw(frame).rectangle((x, 10, x + 15, 510), fill=(70, 120, 255))
+                frame.save(root / f'cursor-{index:02d}.png')
+            video = root / 'cursor.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '2', '-i', str(root / 'cursor-%02d.png'),
+                            '-c:v', 'ffv1', str(video)], check=True)
+            result = convert(video, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+            self.assertGreater(result['restoration']['restored_pixels'], 5000)
+            with Image.open(root / 'result' / result['longshot']['path']) as actual:
+                np.testing.assert_array_equal(np.array(actual), np.array(original))
