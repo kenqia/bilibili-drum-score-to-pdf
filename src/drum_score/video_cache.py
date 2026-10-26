@@ -247,6 +247,13 @@ class VideoCache:
             with open_media(self.jobs.root, Path(result['path']).parent.parent, row) as stream:
                 result['_descriptor'] = stream.fileno()
                 yield result
+        except ConversionError as error:
+            # Shared acquisition runs outside this task's ContextVars. Keep the
+            # fresh inspection facts when its failure crosses back to the task.
+            error.source_details = {**(getattr(error, 'source_details', None) or {}),
+                'url': inspection['origin']['url'],
+                'description_policy': inspection['backend_details'].get('description_policy')}
+            raise
         finally:
             pending = None
             with self.lock:

@@ -53,6 +53,38 @@ class VideoCache(unittest.TestCase):
         (self.network/'sitecustomize.py').write_text(NETWORK)
         (self.network/'duration').write_text('2.0')
 
+    def test_fresh_description_rejects_existing_cache_without_new_media_fetch(self):
+        self.prepare()
+        with (self.network/'sitecustomize.py').open('a') as script:
+            script.write("\noriginal_inspect=inspect\ndef checked_inspect(origin,staging):\n    from drum_score.description_policy import check\n    policy=check('synthetic ♥' if (root/'reject-heart').exists() else 'ordinary',origin)\n    result=original_inspect(origin,staging)\n    result['description_policy']=policy\n    return result\nbbdown_cli.inspect=checked_inspect\n")
+        first, auth = self.submit()
+        self.assertEqual(self.worker(once=True).wait(timeout=30), 0)
+        self.assertEqual(self.state(first, auth)['state'], 'complete')
+        (self.network/'reject-heart').touch()
+        second, auth = self.submit()
+        self.assertEqual(self.worker(once=True).wait(timeout=30), 0)
+        state = self.state(second, auth)
+        self.assertEqual(state['state'], 'failed', state)
+        self.assertEqual(state['error']['code'], 'unsupported_source')
+        self.assertEqual((self.network/'fetches').read_text().splitlines(), ['fetch'])
+        from drum_score.jobs import Jobs
+        record = Jobs(self.data).records.query(task=second)[0]
+        self.assertEqual(record['error']['code'], 'description_policy_rejected')
+        self.assertEqual(record['description_policy']['codepoints'], ['U+2665'])
+
+    def test_cache_fetch_failure_preserves_verified_description_and_source(self):
+        self.prepare()
+        with (self.network/'sitecustomize.py').open('a') as script:
+            script.write("\noriginal_inspect=inspect\ndef checked_inspect(origin,staging):\n    from drum_score.description_policy import check\n    result=original_inspect(origin,staging)\n    result['description_policy']=check('ordinary',origin)\n    return result\nbbdown_cli.inspect=checked_inspect\noriginal_open=Transport.open\ndef fail_media(self,url,headers=None,data=None):\n    if not (headers and headers.get('Range')):\n        from drum_score.public_video import InputError\n        raise InputError('incomplete_video','synthetic incomplete media')\n    return original_open(self,url,headers,data)\nTransport.open=fail_media\n")
+        task, auth = self.submit()
+        self.assertEqual(self.worker(once=True).wait(timeout=30), 0)
+        self.assertEqual(self.state(task, auth)['error']['code'], 'incomplete_video')
+        from drum_score.jobs import Jobs
+        record = Jobs(self.data).records.query(task=task)[0]
+        self.assertEqual(record['input']['resolved_url'], 'https://www.bilibili.com/video/BV1rH4y1R7Rk?p=2')
+        self.assertTrue(record['description_policy']['valid_description'])
+        self.assertFalse(record['description_policy']['matched'])
+
     def test_second_submission_reuses_verified_media_and_keeps_original_deadline(self):
         self.prepare()
         first, auth = self.submit()

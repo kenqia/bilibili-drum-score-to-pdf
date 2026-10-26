@@ -184,7 +184,7 @@ python -m unittest discover -s tests -v
 
 `POST /api/tasks` 接受 `{"url":"https://www.bilibili.com/video/BV…","options":{"start_seconds":15,"end_seconds":75,"region_percent":[5,10,95,90],"ignore_fixed_overlays":true}}`。省略 `options` 保持默认提交兼容。基础输入无效返回422；取得媒体后发现区间或像素区域无效则任务明确失败。队列、worker及显式重试保留参数，状态响应的 `options` 可核对原提交。完成结果的 `conversion` 记录选段和手动区域，页面明确标记选段秒数。
 
-服务使用显式schema v4，拒绝直接打开v3数据库。停服后使用旧程序生成并验证v3快照，再通过新程序的 `upgrade-v3 --backup-root /absolute/path/v3-snapshot --output /absolute/path/new-v4-root` 升级到新目录。源快照、原数据根和原完成/到期时间不变。回滚使用旧程序及保留的原v3目录或快照；不把新v4数据交给旧程序。升级与维护保护见[维护指南](maintenance.md)。
+服务使用显式 schema v5；线上选项和缓存 v4 必须经旧发行停服备份、核验，再由新发行 upgrade-v4 恢复到不存在的新根。v1 至 v3 使用对应升级入口。保留旧发行、原数据和原期限，不让旧程序读取 v5；具体步骤见[维护指南](maintenance.md)。
 
 ## 在线人数与临时打印设置
 
@@ -210,6 +210,6 @@ worker持有一个共享获取协调器。相同已验证来源的并发请求�
 
 清理先回收未持有的到期项，预算不足时可回收未持有旧项。缓存和PDF使用不同期限与所有权。无法释放容量则把独立共享获取暂存计入任务空间预留，完成后清理，不突破缓存额度，也不删除有效PDF。清理只删除登记且device/inode/ctime仍匹配的文件。符号链接、替换物、未知文件和历史实验保持原样，但其观察到的用量仍计入准入。
 
-缓存登记属于显式schema v4。崩溃恢复取得排他worker租约后，先证明旧写入者已停止，再处理未完成获取。发布前持久登记目标文件身份，半份发布不会命中。未知残留无法安全清理时保留，并可能阻止对应缓存重用或维护快照；运营者需核查，不能自动接管。
+当前 v5 保留 v4 引入的缓存登记结构。崩溃恢复取得排他worker租约后，先证明旧写入者已停止，再处理未完成获取。发布前持久登记目标文件身份，半份发布不会命中。未知残留无法安全清理时保留，并可能阻止对应缓存重用或维护快照；运营者需核查，不能自动接管。
 
 完成摘要的`source.cache`标记`fill`、`hit`、`coalesced`、`bypass_version`、`bypass_capacity`或`bypass_transfer`，并记录固定缓存期限。`resources.source_preparation`记录元数据预检、等待、原始总时限与实际获取资源；命中没有当次下载资源，未知成本为null。`resources.limits.wall_seconds`是准备后剩余的转换额度，端到端`elapsed_seconds`包含本次准备；排队仍不计入处理时间。
