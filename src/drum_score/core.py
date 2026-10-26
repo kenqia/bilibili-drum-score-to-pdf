@@ -311,12 +311,12 @@ def _process(source, output, metadata, emit, budget, options):
         region = trim_score_borders([paths[item['sample']] for item in placements], region, budget.check)
     emit('composing')
     longshot = output / 'longshot.png'
-    imaging.compose(paths, region, placements, longshot)
     from .observed_restoration import restore
-    restoration = restore(longshot, paths, region, placements, records, invalid,
-        match_region=registration['match_region'], check=budget.check)
     from PIL import Image
     try:
+        imaging.compose(paths, region, placements, longshot)
+        restoration = restore(longshot, paths, region, placements, records, invalid,
+            match_region=registration['match_region'], check=budget.check)
         with Image.open(longshot) as image:
             imaging.verify_edges(image)
     except ConversionError as error:
@@ -336,7 +336,6 @@ def _process(source, output, metadata, emit, budget, options):
                for path, record in original_samples]
     for transition in registration['transitions']:
         if transition.get('kind') == 'native_page_cut':
-            if 'edge_replacement' in transition:
             transition['adjacent_native_samples'] = [next(index for index, sample in enumerate(samples)
                 if sample.get('decode_sequence') == transition['native_sequence']
                 and sample.get('native_ordinal') == ordinal)

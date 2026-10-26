@@ -94,9 +94,14 @@ def register_refined(paths, region, records, refine, check, *, invalid=None, nat
                     additions = native_window(lower, upper, MAX_REFINEMENT_REQUESTS - requests)
                     requests += len(additions)
                     from .page_transitions import prove_cut
-                    proof = prove_cut([path for path, _ in additions],
-                        [record for _, record in additions], region, paths[left], paths[right],
-                        [paths[item['sample']] for item in resume['placements']], check, invalid)
+                    try:
+                        proof = prove_cut([path for path, _ in additions],
+                            [record for _, record in additions], region, paths[left], paths[right],
+                            [{'path': paths[item['sample']], 'offset': item['offset']}
+                             for item in resume['placements']], check, invalid)
+                    except ConversionError as edge_error:
+                        edge_error.registration_interval = (left, right)
+                        raise
                     if proof is None:
                         raise
                     boundary, transition = proof

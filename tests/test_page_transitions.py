@@ -106,7 +106,10 @@ class PageTransitions(unittest.TestCase):
         animation = Image.new('RGB', (640, 520), '#b0b0b0')
         cut = pages[0].copy()
         ImageDraw.Draw(cut).line((180, 500, 180, 519), fill='black', width=3)
+        almost_same = pages[0].copy()
+        ImageDraw.Draw(almost_same).rectangle((180, 220, 190, 230), fill='black')
         scenarios = {
+            'small_unique_mark': [pages[0]] * 8 + [almost_same] + [pages[1]] * 8,
             'return_to_old_page': [pages[0]] * 8 + [pages[1]] * 8 + [pages[0]] * 8,
             'short_unique_page': [pages[0]] * 8 + [pages[2]] + [pages[1]] * 8,
             'transition_without_coverage': [pages[0]] * 8 + [animation] + [pages[1]] * 8,
@@ -125,6 +128,64 @@ class PageTransitions(unittest.TestCase):
                         'region_percent': [0, 0, 100, 100], 'end_seconds': len(frames) / 4})
                 self.assertIn(caught.exception.code, ('discontinuity', 'incomplete_score'))
                 self.assertFalse((root / 'result').exists())
+
+
+    def test_fragment_replacement_refuses_unique_pale_notation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pages = []
+            for page, tops in enumerate(((130, 340), (40, 300))):
+                image = Image.new('RGB', (640, 520), 'white')
+                draw = ImageDraw.Draw(image)
+                for row, top in enumerate(tops):
+                    for line in range(5):
+                        draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+                    for note in range(5):
+                        x = 60 + page * 250 + note * 37
+                        draw.ellipse((x, top + 12, x + 10, top + 20), fill='black')
+                        draw.line((x + 10, top - 28 - row * 3, x + 10, top + 17), fill='black', width=2)
+                if page:
+                    draw.line((250, 8, 250, 32), fill='black', width=2)
+                    draw.line((250, 8, 460, 8), fill='black', width=2)
+                    draw.text((258, 13), '1.', fill='black')
+                pages.append(image)
+            pages[0].paste(pages[1].crop((0, 0, 640, 20)), (0, 500))
+            ImageDraw.Draw(pages[0]).text((100, 508), 'p', fill=(195, 195, 195))
+            for page, image in enumerate(pages):
+                for frame in range(page * 8, (page + 1) * 8):
+                    image.save(root / f'pale-{frame:03d}.png')
+            source = root / 'pale.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '4', '-i',
+                str(root / 'pale-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
+            with self.assertRaises(drum_score.ConversionError) as caught:
+                drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+            self.assertIn(caught.exception.code, ('discontinuity', 'incomplete_score'))
+            self.assertFalse((root / 'result').exists())
+
+
+    def test_native_page_window_cannot_exceed_shared_rgb_refinement_budget(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for page in range(2):
+                image = Image.new('RGB', (640, 520), 'white')
+                draw = ImageDraw.Draw(image)
+                for row, top in enumerate((130, 340)):
+                    for line in range(5):
+                        draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+                    for note in range(5):
+                        x = 60 + page * 250 + note * 37
+                        draw.ellipse((x, top + 12, x + 10, top + 20), fill='black')
+                        draw.line((x + 10, top - 28 - row * 3, x + 10, top + 17), fill='black', width=2)
+                image.save(root / f'page-{page}.png')
+            source = root / 'high-rate.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-loop', '1', '-t', '1', '-i', str(root / 'page-0.png'),
+                '-loop', '1', '-t', '1', '-i', str(root / 'page-1.png'), '-filter_complex',
+                '[0:v][1:v]concat=n=2:v=1:a=0,fps=256', '-c:v', 'ffv1', str(source)], check=True)
+            with self.assertRaises(drum_score.ConversionError) as caught:
+                drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+            self.assertEqual(caught.exception.code, 'discontinuity')
+            self.assertIn('预算', str(caught.exception))
+            self.assertFalse((root / 'result').exists())
 
 
 if __name__ == '__main__':

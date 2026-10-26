@@ -12,6 +12,59 @@ MAINTENANCE_ENTRIES = ('backup', 'verify', 'restore')
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'linux', 'Real decoder and worker')
+    def test_native_page_order_and_continuity_agree_across_entries(self):
+        import hashlib
+        from PIL import Image, ImageDraw
+        import test_web_worker as web_fixture
+        fixture = web_fixture.WebsiteWorker(methodName='runTest')
+        fixture.setUp()
+        try:
+            for page in range(2):
+                image = Image.new('RGB', (640, 520), 'white')
+                draw = ImageDraw.Draw(image)
+                for row, top in enumerate((130, 340)):
+                    for line in range(5):
+                        draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+                    for note in range(5):
+                        x = 60 + page * 250 + note * 37
+                        draw.ellipse((x, top + 12, x + 10, top + 20), fill='black')
+                        draw.line((x + 10, top - 28 - row * 3, x + 10, top + 17), fill='black', width=2)
+                for index in range(page * 8, (page + 1) * 8):
+                    image.save(fixture.network / f'page-{index:03d}.png')
+            video = fixture.network / 'input.mp4'
+            subprocess.run(['ffmpeg', '-v', 'error', '-y', '-framerate', '8', '-i',
+                str(fixture.network / 'page-%03d.png'), '-c:v', 'ffv1', '-f', 'matroska', str(video)], check=True)
+            source_hash = hashlib.sha256(video.read_bytes()).hexdigest()
+            runner = fixture.network / 'page-core.py'
+            runner.write_text("import sys,json\nfrom drum_score import convert\n"
+                "if __name__ == '__main__': print(json.dumps(convert(sys.argv[1],sys.argv[2])))\n")
+            for entry in REMOTE_SCRIPT_ENTRIES:
+                with self.subTest(entry=entry):
+                    if entry == 'script_http':
+                        task, auth = fixture.submit()
+                        self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
+                        state = fixture.state(task, auth)
+                        self.assertEqual(state['state'], 'complete', state)
+                        result = state['result']
+                        self.assertEqual(fixture.client.get(f'/api/tasks/{task}/pdf', headers=auth).status_code, 200)
+                    else:
+                        output = fixture.root / entry
+                        args = ([sys.executable, str(runner), str(video), str(output)] if entry == 'script_core'
+                            else [sys.executable, '-m', 'drum_score', str(video), '--output', str(output)])
+                        process = subprocess.run(args, env=fixture.env, capture_output=True, text=True, timeout=30)
+                        self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+                        result = json.loads(process.stdout)
+                        self.assertEqual(result['staff_count'], 4)
+                        self.assertEqual(result['registration']['continuity'], 'unverified')
+                    self.assertFalse(result['reliable'])
+                    self.assertEqual(result['conversion']['continuity'], 'unverified')
+                    self.assertIn('page_order_unverified', [warning['code'] for warning in result['warnings']])
+                    self.assertEqual(result['source']['sha256'], source_hash)
+                    self.assertTrue(result['pages'])
+        finally:
+            fixture.tearDown()
+
     def test_gray_edge_band_with_attached_marks_cannot_be_dropped_as_chrome(self):
         import tempfile
         from PIL import Image, ImageDraw

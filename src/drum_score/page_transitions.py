@@ -15,6 +15,10 @@ def _same(a, b, invalid):
     from .imaging import _ink_overlap, _matching_invalid
     valid = ~(_matching_invalid(a, invalid) | _matching_invalid(b, invalid))
     score, ink = _ink_overlap(a, b, 0, invalid)
+    first, second = a.min(axis=2), b.min(axis=2)
+    unexplained = ((first < 110) & (second > 210) | (second < 110) & (first > 210)) & valid
+    if unexplained.any():
+        return False
     return (ink >= 128 and score >= .98 and valid.mean() > .5
             and np.abs(a.astype(np.int16) - b)[valid].mean() < 2)
 
@@ -61,6 +65,13 @@ def _replace_bottom_fragment(old, new, invalid):
     if not len(matches) or matches[-1] - matches[0] > 2:
         return None
     y = int(matches[np.argmin(cost[matches])])
+    original, candidate = old[top:], new[y:y + len(template)]
+    # Dark ink locates a candidate, but cannot license dropping pale dynamics,
+    # colored text or other marks in the removed strip. Require agreement of
+    # every observed RGB pixel, including pixels unknown during registration.
+    difference = np.abs(original.astype(np.int16) - candidate.astype(np.int16))
+    if np.any(difference > 8):
+        return None
     return {'source_region': [0, top, old.shape[1], len(old)],
             'target_region': [0, y, new.shape[1], y + len(template)],
             'independent_ink_pixels': independent, 'pixel_cost': float(cost[y]),
@@ -81,9 +92,9 @@ def prove_cut(paths, records, region, old_path, new_path, history, check, invali
     a, b = _pixels(old_path, region), _pixels(new_path, region)
     if _possible_overlap(a, b, invalid):
         return None
-    for path in history:
+    for owner in history:
         check()
-        if _same(_pixels(path, region), b, invalid):
+        if _same(_pixels(owner['path'], region), b, invalid):
             return None
     sides = []
     for path in paths:
@@ -102,6 +113,9 @@ def prove_cut(paths, records, region, old_path, new_path, history, check, invali
         return None
     if sides != [0] * boundary + [1] * (len(sides) - boundary):
         return None
+    # Edge replacement must use the actual adjacent native samples recorded
+    # below, including their RGB playback marks, rather than another stable view.
+    a, b = _pixels(paths[boundary - 1], region), _pixels(paths[boundary], region)
     replacement = None
     with Image.fromarray(b) as image:
         system_groups(image)
@@ -114,6 +128,20 @@ def prove_cut(paths, records, region, old_path, new_path, history, check, invali
             replacement = _replace_bottom_fragment(a, b, invalid)
             if replacement is None:
                 raise
+            # Compose can have retained an earlier RGB observation of this
+            # position. Every possible owner of the removed strip must agree.
+            fragment_top = replacement['source_region'][1]
+            final_offset = history[-1]['offset']
+            for owner in history:
+                check()
+                top = max(fragment_top + final_offset, owner['offset'])
+                bottom = min(len(a) + final_offset, owner['offset'] + len(a))
+                if bottom <= top:
+                    continue
+                observed = _pixels(owner['path'], region)[top - owner['offset']:bottom - owner['offset']]
+                expected = a[top - final_offset:bottom - final_offset]
+                if np.any(np.abs(observed.astype(np.int16) - expected.astype(np.int16)) > 8):
+                    return None
     transition = {'kind': 'native_page_cut', 'continuity': 'unverified',
         'native_sequence': records[boundary]['decode_sequence'],
         'adjacent_native_ordinals': [boundary - 1, boundary],

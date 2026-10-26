@@ -181,6 +181,30 @@ def _narrow_shift(previous, profile, old_pixels, pixels, paths, index, region, i
     return supported[0], {'candidate_deltas': proven, 'following_delta': next_delta}
 
 
+
+def _unique_pixel_shift(candidates, before, after, invalid):
+    # A profile can tie on repeated systems while a small measure number
+    # uniquely identifies actual pixels. A temporal preference cannot do this.
+    proven = []
+    for cost, shift, local in candidates:
+        if cost > .17 or local > LOCAL_GOOD:
+            continue
+        delta = max(0, int(round(shift)))
+        old, new = before[delta:], after[:len(after) - delta]
+        valid = ~_matching_invalid(before, invalid)[delta:] & ~_matching_invalid(after, invalid)[:len(new)]
+        if not valid.size or valid.mean() < .5:
+            continue
+        ink = (old.min(axis=2) < 180) | (new.min(axis=2) < 180)
+        if np.count_nonzero(ink & valid) < 128:
+            continue
+        if np.any(np.abs(old.astype(np.int16) - new.astype(np.int16))[valid] > 8):
+            continue
+        proven.append(delta)
+    if not proven or any(abs(delta - proven[0]) > 2 for delta in proven[1:]):
+        return None
+    return proven[0]
+
+
 def register(paths, region, *, observations=None,
              budget_check=lambda: None, allow_narrow=True, invalid=None, resume=None):
     placements = [] if resume is None else list(resume['placements'])
@@ -238,6 +262,8 @@ def register(paths, region, *, observations=None,
             candidates = shift_candidates(previous, profile, -2, height - minimum, minimum)
             delta, cost = pick(candidates, .17, prefer=0, strict=False,
                                reject_ambiguity=sparse_motion)
+            if delta is None:
+                delta = _unique_pixel_shift(candidates, previous_pixels, pixels, invalid)
             if delta is None and (allow_narrow(previous_index, index) if callable(allow_narrow) else allow_narrow):
                 content_path = _narrow_shift(previous, profile, previous_pixels, pixels, paths, index, region, invalid)
                 if content_path is not None:
