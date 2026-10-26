@@ -456,3 +456,12 @@ env -u PYTHONPATH /home/kenqia/issue73-installed-venv/bin/python /home/kenqia/is
 2026-10-26，#91 保留旧 `test_detected_page_flip_does_not_silently_publish_only_first_page` 的拒绝与不完整发布断言。该1fps案例缺少窗口内每侧两个稳定原生画面的页序证据，不能代表全部无重叠翻页必须拒绝。新增 `test_page_transitions` 经公开convert验证稳定硬切页序、20px残片的唯一完整观测替换、浅灰独有记号拒绝、回跳、短驻留页、微小独有黑记号、过渡动画及共享RGB预算耗尽。既有窄重叠、周期采样别名、原位置重复音乐与小节号细节反例继续运行，未删除测试。`test_native_page_order_and_continuity_agree_across_entries` 共同核对Python、CLI与真实HTTP worker结果语义。
 
 #91 联合验证发现整合前置 `bcaa973` 的 `test_repeated_music_with_small_measure_numbers_retains_fast_scroll_positions` 已因 #90 新增原生变化峰帧而失败。保留7行和独立原图逐像素覆盖断言，将恰好六个placement的固定列表迁移为原六个常规位置全保留、首尾与顺序不变，允许必要原生见证带来额外正确位置。新增的独立RGB唯一候选核验使用真实局部小节号像素消歧，不执行OCR、猜测数字增量或运动先验；重复候选仍拒绝。
+
+#93 保留 `test_preflight_keeps_uncertain_intro_and_checks_distributed_native_frames` 的分散观测、实际 PTS/time_base 和 continue 判定断言，将滚动末位移135改为90。旧夹具在画面底部截到下一行符干，按新增完整性保护应拒绝；改后的夹具用完整末行验证预检职责，未补全边缘的拒绝另由公开黑色及浅灰符干反例保护。
+
+#93 审阅补充固定灰水印恢复夹具：原37像素步长的末尾853包含840/845/850三条残线，按完整行规则应拒绝。改为30像素步长，保留十个独立非零滚动视口、170至380行独立原图逐像素、恢复块RGB/PTS/time_base/hash、同色真实记号及全部产物断言，并增加至少三个成功覆盖物比较的断言。未删除测试。新的上下边缘各2/3/4条白边残组反例继续保护这类拒绝。
+
+
+#93 最终并发回归保留原 `test_external_writer_does_not_abort_parallel_tasks_when_scheduler_poll_is_busy` 的两任务完成和worker退出断言，新增 `test_external_writer_during_stage_update_does_not_fail_running_tasks`，以真实SQLite外部写事务和阶段握手稳定触发一秒busy超时。未知阶段、完成和领取commit确认仍有独立真实worker反例，不把任意数据库错误归为可忽略进度。
+
+父亡清理新增确定性公开CLI反例和guardian握手前失败反例，旧调用方强杀、PID复用、取消、期限与临时根清理断言保留。测试夹具先原子登记已知进程身份，外层确认后才允许暂停guardian；最终decoder marker缺失时也按原身份恢复和收尾。另在fork后、最终marker前注入故障，预期测试失败而清理断言通过，仅证明夹具异常收尾，不计产品通过。没有删除旧测试或放宽失败后的活动进程检查。

@@ -223,6 +223,87 @@ sqlite3.connect = connect
         worker.terminate()
         self.assertEqual(worker.wait(timeout=15), 0)
 
+    def test_external_writer_during_stage_update_does_not_fail_running_tasks(self):
+        import sqlite3
+        with (self.network / 'sitecustomize.py').open('a') as startup:
+            startup.write("""
+from drum_score.jobs import Jobs
+from pathlib import Path
+import os, time
+original_stage = Jobs.stage
+def stage(self, row, value):
+    if value == 'downloading':
+        fixture = Path(os.environ['SYNTHETIC_NETWORK_ROOT'])
+        (fixture / ('stage-ready-' + row['id'])).touch()
+        while not (fixture / 'allow-stage').exists():
+            time.sleep(.01)
+        (fixture / ('stage-entered-' + row['id'])).touch()
+        try:
+            return original_stage(self, row, value)
+        finally:
+            (fixture / ('stage-returned-' + row['id'])).touch()
+    return original_stage(self, row, value)
+Jobs.stage = stage
+""")
+        # Hold the actual public worker's progress write at a deterministic
+        # boundary, then let SQLite itself produce the competing-writer BUSY.
+        (self.network / 'mode').write_text('wait')
+        tasks = []
+        for index in range(2):
+            with TestClient(create_app(self.data), client=(f'198.51.100.{index + 1}', 2000)) as other:
+                tasks.append(self.submit(other))
+        worker = self.worker(concurrency=2)
+        self.until(lambda: len(list(self.network.glob('stage-ready-*'))) == 2)
+        writer = sqlite3.connect(self.data / 'tasks.sqlite3', isolation_level=None)
+        try:
+            writer.execute('BEGIN IMMEDIATE')
+            (self.network / 'allow-stage').touch()
+            self.until(lambda: len(list(self.network.glob('stage-entered-*'))) == 2)
+            self.until(lambda: list(self.network.glob('stage-returned-*')), timeout=10)
+        finally:
+            writer.rollback()
+            writer.close()
+            (self.network / 'release').touch()
+        def settled():
+            states = [self.state(task, auth) for task, auth in tasks]
+            self.assertFalse(any(state['state'] in ('failed', 'interrupted') for state in states), states)
+            return all(state['state'] == 'complete' for state in states)
+        self.until(settled, timeout=40)
+        worker.terminate()
+        self.assertEqual(worker.wait(timeout=15), 0)
+
+    def test_unknown_stage_commit_acknowledgement_is_not_treated_as_busy(self):
+        with (self.network / 'sitecustomize.py').open('a') as startup:
+            startup.write("""
+import sqlite3, os
+from pathlib import Path
+original_connect = sqlite3.connect
+class StageCommitFault(sqlite3.Connection):
+    def execute(self, sql, parameters=()):
+        if sql.startswith('UPDATE tasks SET stage=') and parameters[0] == 'downloading':
+            self.stage_written = True
+        return super().execute(sql, parameters)
+    def commit(self):
+        super().commit()
+        if getattr(self, 'stage_written', False):
+            (Path(os.environ['SYNTHETIC_NETWORK_ROOT']) / 'stage-commit-lost').touch()
+            raise sqlite3.OperationalError('synthetic unknown stage commit acknowledgement')
+def connect(database, *args, **kwargs):
+    if str(database).endswith('tasks.sqlite3'):
+        kwargs.setdefault('factory', StageCommitFault)
+    return original_connect(database, *args, **kwargs)
+sqlite3.connect = connect
+""")
+        task, auth = self.submit()
+        self.assertEqual(self.worker(once=True).wait(timeout=20), 0)
+        state = self.state(task, auth)
+        self.assertTrue((self.network / 'stage-commit-lost').exists())
+        self.assertEqual(state['state'], 'failed', state)
+        self.assertEqual(state['error']['code'], 'conversion_failed')
+        self.assertIsNone(state['result'])
+        self.assertEqual(list(self.data.rglob('score.pdf')), [])
+        self.assertEqual(list(self.data.rglob('.drum-score-job-*')), [])
+
     def test_parallel_sigterm_stops_all_trees_without_claiming_next_task(self):
         (self.network / 'mode').write_text('wait')
         tasks = []

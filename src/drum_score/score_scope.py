@@ -32,9 +32,17 @@ def _observe(path, region):
             if .04 < w * h / gray.size < .6 and h > image.height * .35:
                 covers = [[x, y, w, h]]
         if not staffs:
+            paper_region = np.ones(gray.shape, bool)
+            for x, y, w, h in covers:
+                paper_region[y:y + h, x:x + w] = False
+            white_paper = ((gray > 190) & (chroma < 15))[paper_region]
+            # On a black outro card, the background itself looks like long
+            # dark horizontal ink. Fragment evidence needs actual white paper
+            # outside the possible overlay, as required by the score viewport.
+            has_paper = bool(white_paper.size and white_paper.mean() > .5)
             horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN,
                 np.ones((1, max(20, image.width // 8)), np.uint8))
-            staff_fragments = np.count_nonzero(horizontal.sum(axis=1) > image.width * .15) >= 5
+            staff_fragments = has_paper and np.count_nonzero(horizontal.sum(axis=1) > image.width * .15) >= 5
             edge_fragment = False
             if (gray > 190).mean() > .5 and not covers:
                 try:
@@ -101,11 +109,21 @@ def select(paths, records, region, start, end, *, explicit, check):
             a = np.asarray(old.convert('RGB').crop(region))
             b = np.asarray(new.convert('RGB').crop(region))
         valid = np.ones(a.shape[:2], bool)
-        for x, y, w, h in item['cover_boxes']:
-            valid[max(0, y - 8):y + h + 8, max(0, x - 8):x + w + 8] = False
+        colorful = ((a.max(axis=2).astype(np.int16) - a.min(axis=2)) > 35).astype(np.uint8)
+        count, labels, components, _ = cv2.connectedComponentsWithStats(colorful)
+        # A bounding box contains visible paper and notation too. Only actual
+        # pixels of its corresponding color component are possible occlusion;
+        # disconnected text inside or outside the box remains protected.
+        for label in range(1, count):
+            if list(map(int, components[label, :4])) in item['cover_boxes']:
+                valid[labels == label] = False
         ai, bi = (a.min(axis=2) < 140) & valid, (b.min(axis=2) < 140) & valid
         union = np.count_nonzero(ai | bi)
-        if union < 128 or np.count_nonzero(ai & bi) / union < .8:
+        # Global ink agreement cannot license losing even one unique visible
+        # annotation. The same RGB tolerance protects replaced page fragments.
+        visible = (a.min(axis=2) < 245) & valid
+        lost = visible & np.any(np.abs(a.astype(np.int16) - b.astype(np.int16)) > 8, axis=2)
+        if lost.any() or union < 128 or np.count_nonzero(ai & bi) / union < .8:
             raise ConversionError('ambiguous_scope',
                 f'约 {item["timestamp"]:.3f} 秒存在无法确认被主曲覆盖的独有谱面，请指定时间范围后重试。')
         item['kind'] = 'covered_score_replaced'

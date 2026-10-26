@@ -65,6 +65,150 @@ class ScriptPublicContracts(unittest.TestCase):
         finally:
             fixture.tearDown()
 
+    def test_partial_staff_near_edge_requires_completion_even_with_white_border(self):
+        import tempfile
+        from PIL import Image, ImageDraw
+        from score_fixtures import video_from_image
+        import drum_score
+        for side, count in ((side, count) for side in ('top', 'bottom') for count in (2, 3, 4)):
+            with self.subTest(side=side, visible_staff_lines=count), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                frame = Image.new('RGB', (640, 520), 'white')
+                draw = ImageDraw.Draw(frame)
+                for top in (100, 320):
+                    for line in range(5):
+                        draw.line((25, top + 8 * line, 615, top + 8 * line), fill='black')
+                    draw.ellipse((150, top + 10, 160, top + 20), fill='black')
+                top = 516 - (count - 1) * 8 if side == 'bottom' else 3
+                for line in range(count):
+                    draw.line((25, top + 8 * line, 615, top + 8 * line), fill='black')
+                draw.ellipse((170, top + 2, 180, top + 6), fill='black')
+                source = video_from_image(frame, root)
+                with self.assertRaises(drum_score.ConversionError) as caught:
+                    drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+                self.assertEqual(caught.exception.code, 'incomplete_score')
+                self.assertFalse((root / 'result').exists())
+
+    def test_black_outro_card_with_color_avatar_and_text_is_not_obstructed_score(self):
+        import tempfile
+        from PIL import Image, ImageDraw, ImageChops
+        import drum_score
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            score = Image.new('RGB', (640, 520), 'white')
+            draw = ImageDraw.Draw(score)
+            for top in (130, 340):
+                for line in range(5):
+                    draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+                for note in range(5):
+                    x = 60 + note * 70
+                    draw.ellipse((x, top + 10, x + 10, top + 20), fill='black')
+            card = Image.new('RGB', score.size, 'black')
+            end = ImageDraw.Draw(card)
+            end.ellipse((220, 50, 420, 270), fill='blue')
+            for y in (330, 336, 349, 370, 375, 389):
+                end.line((220, y, 420, y), fill='white')
+            for index, frame in enumerate([score] * 6 + [card] * 2):
+                frame.save(root / f'frame-{index:02d}.png')
+            source = root / 'source.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '2', '-i',
+                str(root / 'frame-%02d.png'), '-c:v', 'ffv1', str(source)], check=True)
+            result = drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+            self.assertEqual(result['staff_count'], 2)
+            self.assertEqual(result['conversion']['scope']['effective_range_seconds'], [0, 3])
+            with Image.open(root / 'result' / result['longshot']['path']) as actual:
+                self.assertIsNone(ImageChops.difference(actual, score).getbbox())
+
+    def test_cover_box_does_not_hide_visible_annotations_inside_hollow_overlay(self):
+        import tempfile
+        from PIL import Image, ImageDraw
+        import drum_score
+        for color in ('black', (195, 195, 195), 'red'):
+            with self.subTest(color=color), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                score = Image.new('RGB', (640, 520), 'white')
+                draw = ImageDraw.Draw(score)
+                for top in (130, 340):
+                    for line in range(5):
+                        draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+                    for note in range(5):
+                        x = 60 + note * 60
+                        draw.ellipse((x, top + 10, x + 10, top + 20), fill='black')
+                covered = score.copy()
+                overlay = ImageDraw.Draw(covered)
+                overlay.rectangle((390, 30, 600, 470), outline='blue', width=24)
+                overlay.text((440, 220), 'UNIQUE fff', fill=color)
+                for index, frame in enumerate((covered, covered, score, score, score, score)):
+                    frame.save(root / f'frame-{index:02d}.png')
+                source = root / 'source.mkv'
+                subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '2', '-i',
+                    str(root / 'frame-%02d.png'), '-c:v', 'ffv1', str(source)], check=True)
+                with self.assertRaises(drum_score.ConversionError) as caught:
+                    drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+                self.assertEqual(caught.exception.code, 'ambiguous_scope')
+                self.assertFalse((root / 'result').exists())
+
+    def test_cover_replacement_cannot_discard_unique_uncovered_annotations(self):
+        import tempfile
+        from PIL import Image, ImageDraw
+        import drum_score
+        for color in (None, 'black', (195, 195, 195), 'red'):
+            with self.subTest(color=color), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                score = Image.new('RGB', (640, 520), 'white')
+                draw = ImageDraw.Draw(score)
+                for top in (130, 340):
+                    for line in range(5):
+                        draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+                    for note in range(5):
+                        x = 60 + note * 70
+                        draw.ellipse((x, top + 10, x + 10, top + 20), fill='black')
+                        draw.line((x + 10, top - 25, x + 10, top + 15), fill='black', width=2)
+                covered = score.copy()
+                overlay = ImageDraw.Draw(covered)
+                overlay.rectangle((280, 30, 560, 490), fill='blue')
+                if color is not None:
+                    overlay.text((35, 65), 'UNIQUE fff', fill=color)
+                for index, frame in enumerate((covered, covered, score, score, score, score)):
+                    frame.save(root / f'frame-{index:02d}.png')
+                source = root / 'source.mkv'
+                subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '2', '-i',
+                    str(root / 'frame-%02d.png'), '-c:v', 'ffv1', str(source)], check=True)
+                if color is None:
+                    from PIL import ImageChops
+                    result = drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+                    self.assertEqual(result['staff_count'], 2)
+                    with Image.open(root / 'result' / result['longshot']['path']) as actual:
+                        self.assertIsNone(ImageChops.difference(actual, score).getbbox())
+                    self.assertIn('covered_score_replaced', [item['reason'] for item in result['conversion']['scope']['excluded_intervals']])
+                    continue
+                with self.assertRaises(drum_score.ConversionError) as caught:
+                    drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+                self.assertEqual(caught.exception.code, 'ambiguous_scope')
+                self.assertFalse((root / 'result').exists())
+
+    def test_pale_edge_stems_cannot_be_published_as_complete_score(self):
+        import tempfile
+        from PIL import Image, ImageDraw
+        from score_fixtures import video_from_image
+        import drum_score
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            frame = Image.new('RGB', (640, 800), 'white')
+            draw = ImageDraw.Draw(frame)
+            for top in (120, 340, 560):
+                for line in range(5):
+                    draw.line((25, top + 8 * line, 615, top + 8 * line), fill='black')
+                draw.ellipse((150, top + 10, 160, top + 20), fill='black')
+            # A visible pale symbol from the next row is cut by the video edge.
+            for x in (250, 420):
+                draw.line((x, 770, x, 799), fill=(195, 195, 195), width=3)
+            source = video_from_image(frame, root)
+            with self.assertRaises(drum_score.ConversionError) as caught:
+                drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+            self.assertEqual(caught.exception.code, 'incomplete_score')
+            self.assertFalse((root / 'result').exists())
+
     def test_gray_edge_band_with_attached_marks_cannot_be_dropped_as_chrome(self):
         import tempfile
         from PIL import Image, ImageDraw

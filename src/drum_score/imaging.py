@@ -336,12 +336,22 @@ def compose(paths, region, placements, output):
 def verify_edges(image, *, sides=('top', 'bottom')):
     """Refuse unresolved ink cut by the outer boundary of the assembled score."""
     width, height = image.size
+    try:
+        _, staffs = system_groups(image, detailed=True)
+    except ConversionError as error:
+        if error.code != 'unsupported_layout':
+            raise
+        staffs = []
+    complete_lines = [y + line * spacing for y, spacing in staffs for line in range(5)]
     for side, top, bottom in (('top', 0, min(96, height)),
                               ('bottom', max(0, height - 96), height)):
         if side not in sides:
             continue
         with image.crop((0, top, width, bottom)) as part:
-            ink = (np.asarray(part.convert('L')) < 150).astype(np.uint8)
+            # Delivery preserves pale and colored marks too; the registration
+            # threshold must not hide a visible boundary fragment.
+            values = np.min(np.asarray(part.convert('RGB')), axis=2)
+            ink = (values < 245).astype(np.uint8)
         count, labels, stats, _ = cv2.connectedComponentsWithStats(ink)
         boundary = labels[0 if side == 'top' else -1]
         for identity in set(boundary.tolist()) - {0}:
@@ -352,6 +362,33 @@ def verify_edges(image, *, sides=('top', 'bottom')):
                 raise ConversionError('incomplete_score',
                     '拼接谱面' + ('顶部' if side == 'top' else '底部') +
                     '存在未补全的边缘记号，无法确认完整谱行；请检查来源或指定完整范围。')
+        # A cut can leave a few white rows after the last visible staff line.
+        # Detect leftover parallel lines too, instead of requiring physical
+        # boundary contact. Full five-line groups establish the local spacing.
+        # A gray screen watermark can merge two staff lines into a thick
+        # horizontal band in the light mask. Complete dark line remnants on
+        # either side still prove those lines were present, unlike a crop.
+        dark_horizontal = cv2.morphologyEx((values < 140).astype(np.uint8), cv2.MORPH_OPEN,
+            np.ones((1, max(20, width // 12)), np.uint8))
+        dark_rows = np.flatnonzero(dark_horizontal.sum(axis=1) > width * .3)
+        dark_runs = np.split(dark_rows, np.flatnonzero(np.diff(dark_rows) > 1) + 1) if len(dark_rows) else []
+        dark_lines = [top + float(run.mean()) for run in dark_runs if 0 < len(run) <= 6]
+        for index in range(len(dark_lines) - 4):
+            candidate = dark_lines[index:index + 5]
+            if any(np.max(abs(np.diff(candidate) - spacing)) <= max(1, spacing * .2)
+                   for _, spacing in staffs):
+                complete_lines.extend(candidate)
+        horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN,
+            np.ones((1, max(20, width // 12)), np.uint8))
+        rows = np.flatnonzero(horizontal.sum(axis=1) > width * .3)
+        runs = np.split(rows, np.flatnonzero(np.diff(rows) > 1) + 1) if len(rows) else []
+        leftover = [top + float(run.mean()) for run in runs if 0 < len(run) <= 6
+                    and not any(abs(top + float(run.mean()) - known) <= 2 for known in complete_lines)]
+        for first, second in zip(leftover, leftover[1:]):
+            if any(abs(second - first - spacing) <= max(1, spacing * .2) for _, spacing in staffs):
+                raise ConversionError('incomplete_score',
+                    '拼接谱面边缘附近存在未补全的五线组，无法确认完整谱行；请检查来源或指定完整范围。')
+
 
 
 def system_groups(image, *, detailed=False):
