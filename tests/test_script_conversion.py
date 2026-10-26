@@ -563,7 +563,7 @@ Path.read_text = read
                     elif mode == 'scrolling_gray':
                         draw.rectangle((200, 480 - index * 45, 400, 500 - index * 45), fill=(155, 155, 155))
                     elif mode == 'playback':
-                        draw.rectangle((150 + index * 20, 0, 165 + index * 20, 519), fill=(60, 120, 255))
+                        draw.rectangle((150 + index * 20, 5, 165 + index * 20, 514), fill=(60, 120, 255))
                     frame.save(root / f'{mode}-{index:03d}.png')
                 source = root / f'{mode}.mkv'
                 subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '1', '-i',
