@@ -12,7 +12,7 @@ Python 3.12.12 下首轮完整程序回归实际运行290项，714.048秒，3项
 
 ## 验收边界
 
-后续新鲜完整回归、离线重放、同候选九源、双独立安装及实际网站/Chromium尚待执行。实际页面审查由父任务单独记录，不能把生成预览、hash核验或脚本截图等同于已看图。全部成功状态仍为 `reliable=false`，不声称音乐校对。PDF 与谱面预览不添加程序说明文字；范围、连续性与恢复局限在网站、manifest和整理记录中保留。
+各冻结候选的实际结果分别记录在下文，不能跨版本沿用通过结论。实际页面审查由父任务单独记录，不能把生成预览、hash核验或脚本截图等同于已看图。全部成功状态仍为 `reliable=false`，不声称音乐校对。PDF 与谱面预览不添加程序说明文字；范围、连续性与恢复局限在网站、manifest和整理记录中保留。
 
 ## 两轴预审后的集中修复
 
@@ -33,3 +33,35 @@ Spec 预审的封面问题通过公开转换复现：封面外独有黑色、195
 Spec delta复核进一步发现：蓝色空心框的整个包围框仍被当作遮挡，框内实际可见白底黑字会被丢弃。已中断 `bf8fb8e` 的最终完整回归并保留 `full-regression-final.log`，退出130，不计通过。公开转换三色框内文字反例3.947秒均复现错误complete。
 
 封面未知区现仅包含对应候选的实际彩色连通组件像素，不再使用整块包围框。框内白底、黑灰文字及独立彩色文字继续按真实RGB核验，也不会豁免框外彩色记号。无法从实际组件证明的照片范围保守返回 `ambiguous_scope`。框内三色、框外三色与默认主曲/选段三项10.504秒通过，保留红绿日志 `hollow-cover-red.log` 与 `hollow-cover-green.log`。
+
+## 冻结候选 7dd9f8c 的实际验收
+
+候选 `7dd9f8c7ea5ecf53c592b696bf1aba6a90758e83` 的程序完整回归294项、698.004秒全部通过，无跳过。日志为 `full-regression-final-v2.log`。离线重放 `offline-final/summary.json` 通过，三行一页、重复转换PDF一致，输出不覆盖与输入额度拒绝通过。语法编译与diff检查通过。两轴delta复核无新增发现。
+
+`install-final/summary.json` 记录准确提交的源码归档、wheel与sdist。45个包文件在源码、wheel、sdist及基础/web两份独立安装间逐字节一致，两环境依赖检查通过，基础环境没有FastAPI/Uvicorn。程序源码SHA-256为 `e6ef6c6c061addfe8575de9ad7b8dd9fefcbadb3869129636a384752334d3505`；wheel为 `1c030dbe8bc22fb88dbe635b4a1627cadcc6878c4be2a7e582b9dbbdf4ba04c1`，sdist为 `fbcd6dcf6c84f4c2b536e1f75da87179d862a8a91f157b87e82d79aa726594a6`。这些只证明该候选构建安装与身份，不代表安装版转换或浏览器已验收。
+
+默认九源全部实际运行，均受控失败、没有发布result，原视频前后hash均不变。失败转换不公开采样与资源摘要，相关成本为 `null`。结果见 `real-final/summary.json` 及各来源 `execution.json`。
+
+| 来源 | 结果与位置 | 处理秒数 |
+| --- | --- | ---: |
+| BV1hgnb6DELn | ambiguous_scope，开头0秒 | 31.215 |
+| BV1FtnP6AEfA | ambiguous_scope，尾部226.500秒 | 28.305 |
+| BV1M216BVEE1 | discontinuity，108.960至109.080秒 | 54.796 |
+| BV1Xp4y157oo | discontinuity，48.236至48.427秒 | 30.277 |
+| BV1JU4y1y7Zy | unsupported_layout，自动谱区边界有未能区分的墨迹 | 11.211 |
+| BV1r9MyzYETL | discontinuity，17.867至17.967秒 | 38.892 |
+| BV1g6XrYGEy1 | discontinuity，14.000至14.100秒 | 40.844 |
+| BV1zV411W7Hj | ambiguous_scope，103.480秒主曲边界 | 23.657 |
+| BV15R4y1n7Ch | ambiguous_scope，详来源诊断 | 22.612 |
+
+同版另按既有边界运行两个显式选段。hgn的3至218.5000625秒在79.546秒生成19行、两页；439个产物hash、实际PTS与空PDF文字层检查通过，没有恢复块。父任务实际查看两份PDF渲染及两份预览，确认首尾、末69行双线与无程序说明，记录为 `excerpts-final/hgn-3-2185000625/root-visual-review.json`。这是选段正例，不是默认整曲成功。
+
+Ftn的31至33秒在4.193秒返回discontinuity，位置32.000至32.100秒，没有发布result，来源未变。#91旧候选同选段曾成功，当前候选增加灰色独有记号保护后已失效。对旧留存15个同次原生窗口与两份页面参考逐像素比较，14个原可判同页的画面被当前检查拒绝。差异包括低饱和蓝色光标与H264谱符附近灰色振铃，RGB差不止8级，不能只加8级容差修复。诊断为 `Ftn-native-same-diagnosis.json`。未膨胀未知区、放宽IoU或删除灰色短驻留反例，暂保留这一保守失败。
+
+## 黑底结束卡误判修复
+
+Ftn尾部另有独立分类错误。225.9至227.8秒57个实际原生帧保留在 `Ftn-tail-native-final/`，记录源hash、实际PTS/time_base及每帧hash。子代理与父任务实际查看选定帧，225.9与226.233秒是完整第5页，226.5秒起是没有谱面的黑底熊头像结束卡。原分类把黑背景本身当作长横线，又把彩色头像当cover，错误认成遮挡谱面。这不属于末页替代见证缺失。
+
+公开 `convert` 的黑底头像和文字结束卡合成反例1.157秒复现ambiguous_scope。无完整五线时，片段证据现在同时要求可能覆盖框外存在多数中性浅色纸白，符合固定白底谱区边界。该条件只参与分类，不扩大实际未知像素，也不放宽RGB保留。黑底片尾卡、实心封面正例及框内外黑/灰/红独有文字三项9.658秒通过。红绿证据为 `outro-card-red.log` 与 `outro-card-green.log`。真实选定帧分类检查确认完整末页保持score，原误判结束卡变为black，见 `outro-classification-fix.json`。
+
+本修复之后的完整回归、同版真实来源与选段、准确构建安装、实际HTTP/worker及Chromium仍需新鲜执行。上文保留7dd9f8c的失败与成功，不将它们改记为后续候选结果。

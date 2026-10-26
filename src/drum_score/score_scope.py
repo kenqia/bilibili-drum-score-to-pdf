@@ -32,9 +32,17 @@ def _observe(path, region):
             if .04 < w * h / gray.size < .6 and h > image.height * .35:
                 covers = [[x, y, w, h]]
         if not staffs:
+            paper_region = np.ones(gray.shape, bool)
+            for x, y, w, h in covers:
+                paper_region[y:y + h, x:x + w] = False
+            white_paper = ((gray > 190) & (chroma < 15))[paper_region]
+            # On a black outro card, the background itself looks like long
+            # dark horizontal ink. Fragment evidence needs actual white paper
+            # outside the possible overlay, as required by the score viewport.
+            has_paper = bool(white_paper.size and white_paper.mean() > .5)
             horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN,
                 np.ones((1, max(20, image.width // 8)), np.uint8))
-            staff_fragments = np.count_nonzero(horizontal.sum(axis=1) > image.width * .15) >= 5
+            staff_fragments = has_paper and np.count_nonzero(horizontal.sum(axis=1) > image.width * .15) >= 5
             edge_fragment = False
             if (gray > 190).mean() > .5 and not covers:
                 try:

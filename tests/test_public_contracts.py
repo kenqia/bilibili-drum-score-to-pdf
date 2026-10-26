@@ -89,6 +89,36 @@ class ScriptPublicContracts(unittest.TestCase):
                 self.assertEqual(caught.exception.code, 'incomplete_score')
                 self.assertFalse((root / 'result').exists())
 
+    def test_black_outro_card_with_color_avatar_and_text_is_not_obstructed_score(self):
+        import tempfile
+        from PIL import Image, ImageDraw, ImageChops
+        import drum_score
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            score = Image.new('RGB', (640, 520), 'white')
+            draw = ImageDraw.Draw(score)
+            for top in (130, 340):
+                for line in range(5):
+                    draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+                for note in range(5):
+                    x = 60 + note * 70
+                    draw.ellipse((x, top + 10, x + 10, top + 20), fill='black')
+            card = Image.new('RGB', score.size, 'black')
+            end = ImageDraw.Draw(card)
+            end.ellipse((220, 50, 420, 270), fill='blue')
+            for y in (330, 336, 349, 370, 375, 389):
+                end.line((220, y, 420, y), fill='white')
+            for index, frame in enumerate([score] * 6 + [card] * 2):
+                frame.save(root / f'frame-{index:02d}.png')
+            source = root / 'source.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '2', '-i',
+                str(root / 'frame-%02d.png'), '-c:v', 'ffv1', str(source)], check=True)
+            result = drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+            self.assertEqual(result['staff_count'], 2)
+            self.assertEqual(result['conversion']['scope']['effective_range_seconds'], [0, 3])
+            with Image.open(root / 'result' / result['longshot']['path']) as actual:
+                self.assertIsNone(ImageChops.difference(actual, score).getbbox())
+
     def test_cover_box_does_not_hide_visible_annotations_inside_hollow_overlay(self):
         import tempfile
         from PIL import Image, ImageDraw
