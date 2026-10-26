@@ -52,5 +52,43 @@ class PageTransitions(unittest.TestCase):
             self.assertLessEqual(result['registration']['refinement_requests'], 64)
 
 
+    def test_edge_fragment_is_replaced_only_by_a_unique_complete_observation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pages = []
+            for page, tops in enumerate(((130, 340), (40, 300))):
+                image = Image.new('RGB', (640, 520), 'white')
+                draw = ImageDraw.Draw(image)
+                for row, top in enumerate(tops):
+                    for line in range(5):
+                        draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+                    for note in range(5):
+                        x = 60 + page * 250 + note * 37
+                        draw.ellipse((x, top + 12, x + 10, top + 20), fill='black')
+                        draw.line((x + 10, top - 28 - row * 3, x + 10, top + 17), fill='black', width=2)
+                if page:
+                    draw.line((250, 8, 250, 32), fill='black', width=2)
+                    draw.line((250, 8, 460, 8), fill='black', width=2)
+                    draw.text((258, 13), '1.', fill='black')
+                pages.append(image)
+            pages[0].paste(pages[1].crop((0, 0, 640, 20)), (0, 500))
+            for page, image in enumerate(pages):
+                for frame in range(page * 8, (page + 1) * 8):
+                    image.save(root / f'edge-{frame:03d}.png')
+            source = root / 'edge.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '4', '-i',
+                str(root / 'edge-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
+            result = drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+            self.assertEqual(result['staff_count'], 4)
+            transition = result['registration']['transitions'][0]
+            self.assertEqual(transition['edge_replacement']['target_sample'], transition['sample'])
+            self.assertGreater(transition['edge_replacement']['independent_ink_pixels'], 64)
+            with Image.open(root / 'result' / result['longshot']['path']) as actual:
+                self.assertIsNone(ImageChops.difference(actual.crop((0, 0, 640, 430)),
+                    pages[0].crop((0, 0, 640, 430))).getbbox())
+                self.assertIsNone(ImageChops.difference(actual.crop((0, actual.height - 520, 640, actual.height)),
+                    pages[1]).getbbox())
+
+
 if __name__ == '__main__':
     unittest.main()

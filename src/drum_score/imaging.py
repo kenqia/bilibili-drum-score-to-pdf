@@ -223,7 +223,7 @@ def register(paths, region, *, observations=None,
         if previous is not None and page_transition is not None:
             # Only register_refined can attach this after observing a bounded
             # native sequence. Unknown page continuity is explicit provenance.
-            position += len(gray)
+            position += len(gray) - page_transition.get('edge_replacement', {}).get('trim_bottom_rows', 0)
             placements.append({'sample': index, 'offset': position, 'transition': page_transition})
             previous, previous_pixels, previous_index = profile, pixels, index
             motion_since_previous = 0.0
@@ -281,8 +281,16 @@ def compose(paths, region, placements, output):
     # Keep source RGB. No chroma mask, whitening or inferred hidden symbols.
     result = Image.new('RGB', (width, total), 'white')
     end = 0
+    segment_start = 0
     for placement in placements:
         offset = placement['offset']
+        if placement.get('transition', {}).get('kind') == 'native_page_cut':
+            # Validate each continuous segment before another page can hide its
+            # bottom edge. A proven replacement removes only its exact fragment.
+            end = offset
+            with result.crop((0, segment_start, width, end)) as segment:
+                verify_edges(segment)
+            segment_start = offset
         with Image.open(paths[placement['sample']]) as image:
             crop = image.convert('RGB').crop(region)
             if end == 0:
@@ -293,15 +301,19 @@ def compose(paths, region, placements, output):
                 fresh = max(0, end - offset)
                 result.paste(crop.crop((0, fresh, width, height)), (0, end))
         end = max(end, offset + height)
+    with result.crop((0, segment_start, width, end)) as segment:
+        verify_edges(segment)
     result.save(output)
     result.close()
 
 
-def verify_edges(image):
+def verify_edges(image, *, sides=('top', 'bottom')):
     """Refuse unresolved ink cut by the outer boundary of the assembled score."""
     width, height = image.size
     for side, top, bottom in (('top', 0, min(96, height)),
                               ('bottom', max(0, height - 96), height)):
+        if side not in sides:
+            continue
         with image.crop((0, top, width, bottom)) as part:
             ink = (np.asarray(part.convert('L')) < 150).astype(np.uint8)
         count, labels, stats, _ = cv2.connectedComponentsWithStats(ink)

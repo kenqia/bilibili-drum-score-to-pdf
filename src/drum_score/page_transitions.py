@@ -23,7 +23,7 @@ def _notation(pixels, invalid):
     from .imaging import _matching_invalid
     ink = (pixels.min(axis=2) < 150).astype(np.uint8)
     horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN,
-        np.ones((1, max(20, pixels.shape[1] // 12)), np.uint8))
+        np.ones((1, max(20, int(pixels.shape[1] * .6))), np.uint8))
     return (ink & ~horizontal).astype(bool) & ~_matching_invalid(pixels, invalid)
 
 
@@ -39,6 +39,32 @@ def _possible_overlap(a, b, invalid):
         if union >= 64 and np.count_nonzero(x & y) / union > .65:
             return True
     return False
+
+
+def _replace_bottom_fragment(old, new, invalid):
+    # Only a detached, boundary-touching fragment may be removed. Every visible
+    # pixel must match one unique location inside a complete later observation.
+    ink = old.min(axis=2) < 180
+    blank = np.flatnonzero(~ink.any(axis=1))
+    if not len(blank):
+        return None
+    top = int(blank[-1]) + 1
+    if not 0 < len(old) - top <= len(old) // 3:
+        return None
+    template = ink[top:].astype(np.float32)
+    independent = int(np.count_nonzero(_notation(old, invalid)[top:]))
+    if independent < 32:
+        return None
+    target = (new.min(axis=2) < 180).astype(np.float32)
+    cost = cv2.matchTemplate(target, template, cv2.TM_SQDIFF_NORMED).ravel()
+    matches = np.flatnonzero(cost < .08)
+    if not len(matches) or matches[-1] - matches[0] > 2:
+        return None
+    y = int(matches[np.argmin(cost[matches])])
+    return {'source_region': [0, top, old.shape[1], len(old)],
+            'target_region': [0, y, new.shape[1], y + len(template)],
+            'independent_ink_pixels': independent, 'pixel_cost': float(cost[y]),
+            'trim_bottom_rows': len(old) - top}
 
 
 def prove_cut(paths, records, region, old_path, new_path, history, check, invalid=None):
@@ -76,12 +102,23 @@ def prove_cut(paths, records, region, old_path, new_path, history, check, invali
         return None
     if sides != [0] * boundary + [1] * (len(sides) - boundary):
         return None
-    for pixels in (a, b):
-        with Image.fromarray(pixels) as image:
-            system_groups(image)
-            verify_edges(image)
-    return boundary, {'kind': 'native_page_cut', 'continuity': 'unverified',
+    replacement = None
+    with Image.fromarray(b) as image:
+        system_groups(image)
+        verify_edges(image)
+    with Image.fromarray(a) as image:
+        system_groups(image)
+        try:
+            verify_edges(image, sides=('bottom',))
+        except ConversionError:
+            replacement = _replace_bottom_fragment(a, b, invalid)
+            if replacement is None:
+                raise
+    transition = {'kind': 'native_page_cut', 'continuity': 'unverified',
         'native_sequence': records[boundary]['decode_sequence'],
         'adjacent_native_ordinals': [boundary - 1, boundary],
         'cut_range_seconds': [records[boundary - 1]['timestamp'], records[boundary]['timestamp']],
         'stable_native_frames': [boundary, len(paths) - boundary]}
+    if replacement is not None:
+        transition['edge_replacement'] = replacement
+    return boundary, transition

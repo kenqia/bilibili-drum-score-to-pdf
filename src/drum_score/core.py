@@ -331,6 +331,8 @@ def _process(source, output, metadata, emit, budget, options):
                for path, record in original_samples]
     for transition in registration['transitions']:
         if transition.get('kind') == 'native_page_cut':
+            if 'edge_replacement' in transition:
+                transition['edge_replacement']['target_sample'] = transition['sample']
             transition['adjacent_native_samples'] = [next(index for index, sample in enumerate(samples)
                 if sample.get('decode_sequence') == transition['native_sequence']
                 and sample.get('native_ordinal') == ordinal)
