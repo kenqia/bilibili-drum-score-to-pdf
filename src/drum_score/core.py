@@ -296,6 +296,9 @@ def _process(source, output, metadata, emit, budget, options):
     emit('composing')
     longshot = output / 'longshot.png'
     imaging.compose(paths, region, placements, longshot)
+    from .observed_restoration import restore
+    restoration = restore(longshot, paths, region, placements, records, invalid,
+        match_region=registration['match_region'], check=budget.check)
     from PIL import Image
     try:
         with Image.open(longshot) as image:
@@ -315,10 +318,16 @@ def _process(source, output, metadata, emit, budget, options):
                                    for item in registration['transitions']]
     samples = [{**artifact(output, path), **record, 'kind': 'native_frame'}
                for path, record in original_samples]
+    for block in restoration['blocks']:
+        for field in ('source_sample', 'original_sample'):
+            block[field] = sample_indices[paths[block[field]]]
+        block['source_sha256'] = samples[block['source_sample']]['sha256']
     emit('paginating')
     pdf, pages, strips, staffs = imaging.paginate(longshot, output)
     warnings = [{'code': 'not_musically_proofread', 'message': NOTICE},
                 {'code': 'conversion_scope', 'message': scope_notice}]
+    warnings.append({'code': 'unconfirmed_overlays_retained',
+        'message': f"已从同位置真实观测恢复 {restoration['restored_pixels']} 个像素，已确认覆盖物中仍有 {restoration['unrecovered_masked_pixels']} 个像素未恢复。未确认的水印、彩色记号和遮挡保留，未经音乐校对。"})
     reasons = {'covered_score_replaced': '被后续同位置无遮挡谱面替代的封面叠图',
                'notation_example': '独立符号说明谱例', 'black': '黑场',
                'non_score': '未见可用五线的过渡或动画画面'}
@@ -329,7 +338,7 @@ def _process(source, output, metadata, emit, budget, options):
     return {'conversion': {'options': options, 'effective_range_seconds': [scope_start, scope_end],
                            'is_excerpt': scope['mode'] == 'excerpt', 'scope': scope,
                            'effective_region': list(region), 'scope_notice': scope_notice},
-            'warnings': warnings,
+            'restoration': restoration, 'warnings': warnings,
             'pdf': artifact(output, pdf), 'pages': [artifact(output, page) for page in pages],
             'longshot': {**artifact(output, longshot), 'kind': 'derived_image'},
             'samples': samples, 'placements': placements, 'region': list(region),

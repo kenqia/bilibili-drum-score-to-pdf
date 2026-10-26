@@ -40,6 +40,8 @@ def validate_result(jobs, row):
         'pdf': result['pdf'], 'pages': result['pages'], 'source': result['source'],
         'program': result['program'], 'resources': result['resources'],
         'retention': result.get('retention')}
+    if 'restoration' in result:
+        summary['restoration'] = result['restoration']
     if 'conversion' in result:
         summary['conversion'] = result['conversion']
     return summary
