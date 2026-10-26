@@ -90,5 +90,42 @@ class PageTransitions(unittest.TestCase):
                     pages[1]).getbbox())
 
 
+    def test_native_page_order_does_not_excuse_returning_pages_or_hidden_short_pages(self):
+        pages = []
+        for page in range(3):
+            image = Image.new('RGB', (640, 520), 'white')
+            draw = ImageDraw.Draw(image)
+            for row, top in enumerate((130, 340)):
+                for line in range(5):
+                    draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+                for note in range(5):
+                    x = 45 + page * 180 + note * 30
+                    draw.ellipse((x, top + 12, x + 10, top + 20), fill='black')
+                    draw.line((x + 10, top - 28 - row * 3, x + 10, top + 17), fill='black', width=2)
+            pages.append(image)
+        animation = Image.new('RGB', (640, 520), '#b0b0b0')
+        cut = pages[0].copy()
+        ImageDraw.Draw(cut).line((180, 500, 180, 519), fill='black', width=3)
+        scenarios = {
+            'return_to_old_page': [pages[0]] * 8 + [pages[1]] * 8 + [pages[0]] * 8,
+            'short_unique_page': [pages[0]] * 8 + [pages[2]] + [pages[1]] * 8,
+            'transition_without_coverage': [pages[0]] * 8 + [animation] + [pages[1]] * 8,
+            'unmatched_cut_stem': [cut] * 8 + [pages[1]] * 8,
+        }
+        for name, frames in scenarios.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                for index, image in enumerate(frames):
+                    image.save(root / f'unsafe-{index:03d}.png')
+                source = root / 'unsafe.mkv'
+                subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '4', '-i',
+                    str(root / 'unsafe-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
+                with self.assertRaises(drum_score.ConversionError) as caught:
+                    drum_score.convert(source, root / 'result', options={
+                        'region_percent': [0, 0, 100, 100], 'end_seconds': len(frames) / 4})
+                self.assertIn(caught.exception.code, ('discontinuity', 'incomplete_score'))
+                self.assertFalse((root / 'result').exists())
+
+
 if __name__ == '__main__':
     unittest.main()

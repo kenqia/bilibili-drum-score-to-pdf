@@ -276,6 +276,7 @@ def _process(source, output, metadata, emit, budget, options):
             image.close()
     def native_window(begin, finish, maximum):
         additions = []
+        metrics['native_window_calls'] = metrics.get('native_window_calls', 0) + 1
         def consume_window(index, image):
             nonlocal supplemental
             budget.check()
@@ -283,6 +284,7 @@ def _process(source, output, metadata, emit, budget, options):
             supplemental += 1
             image.save(path, compress_level=1)
             additions.append(path)
+            metrics['native_window_rgb_frames'] = metrics.get('native_window_rgb_frames', 0) + 1
             budget.check(force_disk=True)
         observed = refinement_reader.sample_records(1, consume_window, start=begin, end=finish,
                                                       native_limit=maximum)
@@ -335,11 +337,20 @@ def _process(source, output, metadata, emit, budget, options):
     for transition in registration['transitions']:
         if transition.get('kind') == 'native_page_cut':
             if 'edge_replacement' in transition:
-                transition['edge_replacement']['target_sample'] = transition['sample']
             transition['adjacent_native_samples'] = [next(index for index, sample in enumerate(samples)
                 if sample.get('decode_sequence') == transition['native_sequence']
                 and sample.get('native_ordinal') == ordinal)
                 for ordinal in transition['adjacent_native_ordinals']]
+            if 'edge_replacement' in transition:
+                replacement = transition['edge_replacement']
+                before, after = transition['adjacent_native_samples']
+                replacement.update(original_sample=before, source_sample=after, target_sample=after,
+                    source_sha256=samples[after]['sha256'])
+                for original, absolute in (('source_region', 'original_box'), ('target_region', 'source_box')):
+                    box = replacement[original]
+                    replacement[absolute] = [box[0] + registration['match_region'][0],
+                        box[1] + registration['match_region'][1], box[2] + registration['match_region'][0],
+                        box[3] + registration['match_region'][1]]
     for block in restoration['blocks']:
         for field in ('source_sample', 'original_sample'):
             block[field] = sample_indices[paths[block[field]]]

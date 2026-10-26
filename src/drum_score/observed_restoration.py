@@ -34,7 +34,8 @@ def _cursor_boxes(paths, region, placements, check):
             covered = np.zeros(h, dtype=bool)
             for other in placements:
                 check()
-                if other['sample'] == owner['sample']:
+                if (other['sample'] == owner['sample']
+                        or other.get('segment', 0) != owner.get('segment', 0)):
                     continue
                 top = max(y + owner['offset'], other['offset'])
                 bottom = min(y + h + owner['offset'], other['offset'] + height)
@@ -102,11 +103,16 @@ def restore(output, paths, region, placements, records, invalid, *, match_region
         return mask
     with Image.open(output) as image:
         result = np.array(image.convert('RGB'))
+    segment_ends = {}
+    for item in placements:
+        if item.get('transition', {}).get('kind') == 'native_page_cut':
+            segment_ends[item['segment'] - 1] = item['offset']
     end = 0
     for owner in placements:
         check()
         offset = owner['offset']
-        begin, finish = end, offset + height
+        begin = end
+        finish = min(offset + height, segment_ends.get(owner.get('segment', 0), len(result)))
         if finish <= begin:
             continue
         end = finish
@@ -118,7 +124,8 @@ def restore(output, paths, region, placements, records, invalid, *, match_region
             for candidate in placements:
                 if not pending.any():
                     break
-                if candidate['sample'] == owner['sample']:
+                if (candidate['sample'] == owner['sample']
+                        or candidate.get('segment', 0) != owner.get('segment', 0)):
                     continue
                 other = candidate['offset']
                 a, b = max(top, other), min(bottom, other + height)

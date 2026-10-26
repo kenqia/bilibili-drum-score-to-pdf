@@ -57,6 +57,11 @@ def register_refined(paths, region, records, refine, check, *, invalid=None, nat
                 allow_narrow=lambda left, right: any(
                     begin <= records[left]['timestamp'] <= records[right]['timestamp'] <= end
                     for begin, end in narrow))
+            segment = 0
+            for placement in placements:
+                if placement.get('transition', {}).get('kind') == 'native_page_cut':
+                    segment += 1
+                placement['segment'] = segment
             return placements, {'continuity': ('unverified' if any(
                     item.get('transition', {}).get('kind') == 'native_page_cut' for item in placements)
                     else 'overlap_verified'), 'refinement_requests': requests, 'intervals': evidence,
