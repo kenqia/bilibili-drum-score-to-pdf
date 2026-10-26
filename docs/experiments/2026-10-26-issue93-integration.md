@@ -81,3 +81,15 @@ Ftn尾部另有独立分类错误。225.9至227.8秒57个实际原生帧保留�
 确定性清理、原调用方强杀、异常转换进程/独立会话、PID复用、服务守护租约和并行SIGTERM六项3.561秒全部通过，日志 `guardian-anchor-green.log`。另通过公开CLI模拟guardian在R握手前退出，确认从未启动解码器、没有发布、来源未变与临时根清理；与确定性清理两项0.483秒通过，日志 `guardian-startup-and-anchor-green.log`。握手前后切换与守护不可用边界未改为无条件后台运行。新候选完整回归、构建安装、HTTP/Chromium和真实来源验收另行记录。
 
 后代PID复用、总期限和取消清理三项2.080秒通过，日志 `guardian-identity-budget-green.log`；语法编译与diff检查通过。
+
+## 外部写事务与进度更新竞态
+
+父亡清理候选 `41f01b035923e7feada6f08f3eb7d48d1680116f` 的完整回归实际运行297项、776.746秒，一项失败。外部写事务释放之后，两任务未在40秒内全部完成；原日志为 `full-regression-final-v4.log`。带任务终态、整理记录和worker输出的独立重演6.479秒通过，保存在 `sqlite-busy-diagnosis/`，不能据此抹去全套失败。
+
+原测试在下载标记出现后申请写锁，下载进程发送的进度可能尚未由监督线程写入SQLite。仅调度器轮询处理了service_busy，任务自己的进度写入超时会中断转换。新公开HTTP/worker反例先等两任务抵达downloading写入边界，再持有真实 `BEGIN IMMEDIATE` 写事务直到至少一次阶段调用返回，触发SQLite自身的一秒busy超时。`sqlite-stage-red-v3.log` 在2.171秒复现一任务failed/conversion_failed、另一任务仍running/downloading。初版夹具缺少import导致超时、第二版固定等待1.3秒未触发任务写超时，两份原日志保留，不计有效红例。
+
+修复只在 `Jobs.stage` 跳过真实SQLite BUSY/LOCKED映射的service_busy。页面与整理记录可能暂时显示上一阶段，下一阶段继续更新；完成决定、产物发布、终态事务和未知提交确认错误不跳过。没有重试转换、扩大SQL等待期限或放宽完成断言。确定性反例与原外部writer测试两项13.291秒通过，见 `sqlite-stage-green.log`。未知阶段commit确认、未知完成commit确认、未知领取commit确认，以及guardian握手失败和确定性父亡清理共五项6.276秒通过，见 `sqlite-ack-and-fixture-green.log`。
+
+Standards发现的测试异常收尾也已修复：夹具先原子登记guardian/worker/probe身份，外层收到后再允许暂停guardian；即使fork之后最终decoder marker写入失败，finally仍恢复guardian并按原身份清理。最终marker正常路径已通过上述五项验证。故障注入验证、同版完整回归、离线重放与最终安装/真实来源结果继续另行记录。
+
+夹具故障注入已实际执行：在guardian暂停并fork之后、最终decoder marker之前强制异常，测试按预期因缺marker失败；finally中的进程和临时根清理断言通过，额外追踪的未登记合成child已消失。`guardian-marker-failure-verification/summary.json` 明确标记 `fixture_failure_teardown_only`，不能算作产品回归通过。

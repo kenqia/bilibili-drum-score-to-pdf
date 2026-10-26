@@ -598,12 +598,19 @@ class Jobs:
             return dict(db.execute('SELECT * FROM tasks WHERE id=?', (row['id'],)).fetchone())
 
     def stage(self, row, stage):
-        with self.transaction() as db:
-            db.execute("UPDATE tasks SET stage=? WHERE id=? AND attempt=? AND state='running'",
-                (stage, row['id'], row['attempt']))
-            current = db.execute('SELECT attempt,state FROM tasks WHERE id=?', (row['id'],)).fetchone()
-            if current and current['attempt'] == row['attempt'] and current['state'] == 'running':
-                self.write_record(db, self.records.conversion(db, row['id']), stage=stage, attempt=row['attempt'])
+        try:
+            with self.transaction() as db:
+                db.execute("UPDATE tasks SET stage=? WHERE id=? AND attempt=? AND state='running'",
+                    (stage, row['id'], row['attempt']))
+                current = db.execute('SELECT attempt,state FROM tasks WHERE id=?', (row['id'],)).fetchone()
+                if current and current['attempt'] == row['attempt'] and current['state'] == 'running':
+                    self.write_record(db, self.records.conversion(db, row['id']), stage=stage, attempt=row['attempt'])
+        except JobError as error:
+            # Progress is observational. A real SQLite writer conflict may
+            # leave the preceding stage visible until the next notification.
+            # Unknown commit acknowledgements still require recovery.
+            if error.code != 'service_busy':
+                raise
 
     def cancelled(self, row):
         with self.transaction(write=False) as db:

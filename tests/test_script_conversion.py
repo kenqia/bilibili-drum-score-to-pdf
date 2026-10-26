@@ -309,6 +309,12 @@ def state(pid):
 worker=state(os.getppid())
 children=(Path('/proc')/str(worker['parent'])/'task'/str(worker['parent'])/'children').read_text().split()
 guardian=next(state(int(pid)) for pid in children if int(pid)!=worker['pid'] and state(int(pid))['session']==int(pid))
+registered=Path(''' + repr(str(root / 'registered.json')) + ''')
+temporary=registered.with_suffix('.tmp')
+temporary.write_text(json.dumps({'probe':state(os.getpid()),'worker':worker,'guardian':guardian}))
+temporary.replace(registered)
+while not registered.with_name('allow-pause').exists():
+    time.sleep(.005)
 os.kill(guardian['pid'],signal.SIGSTOP)
 while state(guardian['pid'])['state']!='T':
     time.sleep(.005)
@@ -336,10 +342,15 @@ os._exit(0)
                     return None
             try:
                 deadline = time.monotonic() + 10
+                while not (root / 'registered.json').exists() and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertTrue((root / 'registered.json').exists())
+                identities = json.loads((root / 'registered.json').read_text())
+                (root / 'allow-pause').touch()
                 while not (root / 'decoder.json').exists() and time.monotonic() < deadline:
                     time.sleep(.02)
                 self.assertTrue((root / 'decoder.json').exists())
-                identities = json.loads((root / 'decoder.json').read_text())
+                identities.update(json.loads((root / 'decoder.json').read_text()))
                 deadline = time.monotonic() + 3
                 while state(identities['probe']) not in (None, 'Z') and time.monotonic() < deadline:
                     time.sleep(.02)
@@ -359,17 +370,35 @@ os._exit(0)
                 self.assertFalse((root / 'result').exists())
                 self.assertEqual(source.read_bytes(), b'paused guardian fixture')
             finally:
-                if process.poll() is None:
-                    process.kill()
-                    process.wait(timeout=5)
                 if identities:
                     if state(identities['guardian']) == 'T':
                         os.kill(identities['guardian']['pid'], signal.SIGCONT)
+                    worker = identities['worker']
+                    if state(worker) not in (None, 'Z') and worker['group'] == worker['pid']:
+                        try:
+                            os.killpg(worker['pid'], signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
                     for name in ('decoder', 'probe', 'worker'):
-                        if state(identities[name]) not in (None, 'Z'):
-                            os.kill(identities[name]['pid'], signal.SIGKILL)
+                        if name in identities and state(identities[name]) not in (None, 'Z'):
+                            try:
+                                os.kill(identities[name]['pid'], signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    live = identities and any(state(item) not in (None, 'Z') for item in identities.values())
+                    if not live and not list(root.glob('.drum-score-*')):
+                        break
+                    time.sleep(.02)
                 process.stdout.close()
                 process.stderr.close()
+                if identities:
+                    self.assertTrue(all(state(item) in (None, 'Z') for item in identities.values()), identities)
+                self.assertEqual(list(root.glob('.drum-score-*')), [])
 
     def test_cancelled_conversion_does_not_publish_or_leave_staging(self):
         with tempfile.TemporaryDirectory() as temporary:
