@@ -19,7 +19,7 @@ Skill 默认长截图、可安全执行的局部去水印、完整谱行分页�
 
 | 模块 | 职责 |
 | --- | --- |
-| `core.py`、`imaging.py`、`registration_flow.py`、`fixed_overlays.py`、`visual_preflight.py`、`score_borders.py` | 输入预算、来源 hash、分散画面预检、原生采样、有界补帧、覆盖物未知区域、内容配准、边界核验、保守合成与完整行组分页。 |
+| `core.py`、`imaging.py`、`registration_flow.py`、`fixed_overlays.py`、`visual_preflight.py`、`score_borders.py`、`score_scope.py` | 输入预算、来源 hash、分散画面预检、原生采样、有界补帧、覆盖物未知区域、内容配准、边界核验、保守合成与完整行组分页。 |
 | `supervision.py`、`guardian.py` | 独立转换进程、采样资源监督、取消与异常树清理。初始 PID/start-time 固定，后续观察不替换已有身份。 |
 | `public_video.py`、`short_links.py`、`anonymous_backend.py`、`bbdown_cli.py`、`bbdown_network.py`、`anonymous_network.py` | 固定 BBDownNext 2.3.0 匿名解析与直连获取，公共 DNS/TLS、重定向与同流备份、完整曲长和实测媒体校验。 |
 | `video_seek.py` | 有限时 FFmpeg 解码、实际 PTS/time_base、原生运动摘要和临时帧清理。 |
@@ -78,3 +78,6 @@ HTTP 服务使用有界内存心跳统计近似访客，浏览器随机 ID 与�
 整理记录与任务状态共用 SQLite 短事务，以独立操作身份保留每次提交、重试和临时排版。结束后保留 168 小时，成功记录保存完整网站 manifest，不延长 PDF、预览或视频期限。每个操作预留日志预算，容量不足或日志故障拒绝新操作，既有任务继续收尾；整个数据库不可写时终态落盘仍可能失败。运营者通过本地只读命令导出 JSON，无公开管理接口。
 
 网站在监督进程边界显式传递简介策略，再向匿名获取进程传递，不使用环境变量开关或全局宿主配置。元信息完整验证后、媒体下载前按明确字符表拒绝心形符号。简介无效时放行，Python、CLI 和独立 Skill 不启用网站策略。具体契约见[网站运行](script-product/website.md)。
+
+
+默认转换由 `score_scope.py` 在既有采样结果上选择连续主曲，并保留请求范围、采用范围、排除依据及全部采样来源。显式时间范围优先并标记选段。结构上无法区分主曲和独有谱例时拒绝自动选择；最终长图外边缘有未补全记号时拒绝发布。范围提示仅保留在网站、manifest 和整理记录，PDF 与谱面预览不嵌入程序说明。Python、CLI、HTTP 及整理记录共用同一范围和失败语义，不新增持久化 schema 或生产依赖。

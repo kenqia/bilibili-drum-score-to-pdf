@@ -243,6 +243,19 @@ def _process(source, output, metadata, emit, budget, options):
     emit('registering')
     region = manual_region if manual_region is not None else imaging.detect_region(
         paths[::max(1, len(paths) // 60)], budget_check=budget.check)
+    original_samples = list(zip(paths, records))
+    from .score_scope import select as select_scope
+    try:
+        paths, records, scope = select_scope(paths, records, region, start, end,
+            explicit=start > 0 or options['end_seconds'] is not None, check=budget.check)
+    except ConversionError as error:
+        if error.code == 'ambiguous_scope':
+            error.conversion_details = {'code': error.code, 'range_seconds': [start, end],
+                                        'message': str(error)}
+        raise
+    scope_start, scope_end = scope['effective_range_seconds']
+    scope_notice = (f'选段 {scope_start:g} 至 {scope_end:g} 秒' if scope['mode'] == 'excerpt' else
+                    f'自动主曲 {scope_start:g} 至 {scope_end:g} 秒') + '；未经音乐校对。'
     from .registration_flow import register_refined
     from .fixed_overlays import detect as detect_fixed_overlays
     invalid, overlay_comparisons = (detect_fixed_overlays(paths, region, budget.check)
@@ -264,13 +277,18 @@ def _process(source, output, metadata, emit, budget, options):
     try:
         placements, registration = register_refined(paths, region, records, refine, budget.check, invalid=invalid)
         registration.update(invalid_pixels=int(invalid.sum()) if invalid is not None else 0, overlay_comparisons=overlay_comparisons)
+    except ConversionError as error:
+        interval = getattr(error, 'registration_interval', None)
+        if interval is not None:
+            times = [records[index]['timestamp'] for index in interval]
+            error.args = (f'约 {times[0]:.3f} 至 {times[1]:.3f} 秒：' + str(error),)
+            error.conversion_details = {'code': error.code, 'range_seconds': times,
+                                        'message': str(error)}
+        raise
     finally:
         refinement_reader.close()
     metrics['refinement_rgb_frames'] = supplemental
-    metrics['retained_rgb_frames'] = len(paths)
-    metrics['retained_rgb_bytes'] = sum(path.stat().st_size for path in paths)
-    samples = [{**artifact(output, path), **record, 'kind': 'native_frame'}
-               for path, record in zip(paths, records)]
+
     registration['match_region'] = list(region)
     if manual_region is None:
         from .score_borders import trim as trim_score_borders
@@ -281,15 +299,46 @@ def _process(source, output, metadata, emit, budget, options):
     from .observed_restoration import restore
     restoration = restore(longshot, paths, region, placements, records, invalid,
         match_region=registration['match_region'], check=budget.check)
+    from PIL import Image
+    try:
+        with Image.open(longshot) as image:
+            imaging.verify_edges(image)
+    except ConversionError as error:
+        times = [scope_start, scope_end]
+        error.args = (f'范围 {times[0]:.3f} 至 {times[1]:.3f} 秒：' + str(error),)
+        error.conversion_details = {'code': error.code, 'range_seconds': times, 'message': str(error)}
+        raise
+    known_paths = {path for path, _ in original_samples}
+    original_samples.extend((path, record) for path, record in zip(paths, records) if path not in known_paths)
+    metrics['retained_rgb_frames'] = len(original_samples)
+    metrics['retained_rgb_bytes'] = sum(path.stat().st_size for path, _ in original_samples)
+    sample_indices = {path: index for index, (path, _) in enumerate(original_samples)}
+    placements = [{**item, 'sample': sample_indices[paths[item['sample']]]} for item in placements]
+    registration['transitions'] = [{**item, 'sample': sample_indices[paths[item['sample']]]}
+                                   for item in registration['transitions']]
+    samples = [{**artifact(output, path), **record, 'kind': 'native_frame'}
+               for path, record in original_samples]
     for block in restoration['blocks']:
+        for field in ('source_sample', 'original_sample'):
+            block[field] = sample_indices[paths[block[field]]]
         block['source_sha256'] = samples[block['source_sample']]['sha256']
     emit('paginating')
     pdf, pages, strips, staffs = imaging.paginate(longshot, output)
-    return {'conversion': {'options': options, 'effective_range_seconds': [start, end],
-                           'is_excerpt': start > 0 or end < metadata['duration']},
-            'restoration': restoration,
-            'warnings': [{'code': 'not_musically_proofread', 'message': NOTICE},
-                {'code': 'unconfirmed_overlays_retained', 'message': f"已从同位置真实观测恢复 {restoration['restored_pixels']} 个像素，已确认覆盖物中仍有 {restoration['unrecovered_masked_pixels']} 个像素未恢复。未确认的水印、彩色记号和遮挡保留，未经音乐校对。"}],
+    warnings = [{'code': 'not_musically_proofread', 'message': NOTICE},
+                {'code': 'conversion_scope', 'message': scope_notice}]
+    warnings.append({'code': 'unconfirmed_overlays_retained',
+        'message': f"已从同位置真实观测恢复 {restoration['restored_pixels']} 个像素，已确认覆盖物中仍有 {restoration['unrecovered_masked_pixels']} 个像素未恢复。未确认的水印、彩色记号和遮挡保留，未经音乐校对。"})
+    reasons = {'covered_score_replaced': '被后续同位置无遮挡谱面替代的封面叠图',
+               'notation_example': '独立符号说明谱例', 'black': '黑场',
+               'non_score': '未见可用五线的过渡或动画画面'}
+    for excluded in scope['excluded_intervals']:
+        begin, finish = excluded['range_seconds']
+        warnings.append({'code': 'excluded_interval',
+            'message': f'未纳入主曲：{begin:g} 至 {finish:g} 秒，' + reasons[excluded['reason']] + '。'})
+    return {'conversion': {'options': options, 'effective_range_seconds': [scope_start, scope_end],
+                           'is_excerpt': scope['mode'] == 'excerpt', 'scope': scope,
+                           'effective_region': list(region), 'scope_notice': scope_notice},
+            'restoration': restoration, 'warnings': warnings,
             'pdf': artifact(output, pdf), 'pages': [artifact(output, page) for page in pages],
             'longshot': {**artifact(output, longshot), 'kind': 'derived_image'},
             'samples': samples, 'placements': placements, 'region': list(region),

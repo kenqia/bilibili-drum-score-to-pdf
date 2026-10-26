@@ -173,8 +173,10 @@ async function refresh() {
     if (state.state === "complete") {
       description = `一共 ${state.result.page_count} 页 A4。先翻一遍预览，没问题就下载。`;
       const selected = state.result.conversion;
-      if (selected?.is_excerpt) description = `选段 ${selected.effective_range_seconds[0]} 至 ${selected.effective_range_seconds[1]} 秒。` + description;
+      if (selected?.scope_notice) description = selected.scope_notice + description;
+      else if (selected?.is_excerpt) description = `选段 ${selected.effective_range_seconds[0]} 至 ${selected.effective_range_seconds[1]} 秒。` + description;
       if (selected?.options.region_percent) description += ` 手动谱区：${selected.options.region_percent.join("、")}%。`;
+      if (selected?.effective_region) description += ` 实际谱区：${selected.effective_region.join("、")} 像素。`;
     }
     if (state.state === "cancelled") description = "已经停止，临时文件也清理了。需要的话可以重新整理。";
     if (state.state === "interrupted") description = "服务器重启打断了处理。点「重新整理」继续。";

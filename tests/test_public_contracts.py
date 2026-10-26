@@ -12,6 +12,202 @@ MAINTENANCE_ENTRIES = ('backup', 'verify', 'restore')
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    def test_gray_edge_band_with_attached_marks_cannot_be_dropped_as_chrome(self):
+        import tempfile
+        from PIL import Image, ImageDraw
+        from score_fixtures import video_from_image
+        import drum_score
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = Image.new('RGB', (640, 800), 'white')
+            draw = ImageDraw.Draw(image)
+            for y in (100, 300, 520):
+                for line in range(5):
+                    draw.line((25, y + 8 * line, 615, y + 8 * line), fill='black')
+            draw.rectangle((0, 620, 639, 799), fill='#dddddd')
+            draw.text((80, 650), 'fff  IMPORTANT SCORE ANNOTATION', fill='black')
+            source = video_from_image(image, root)
+            with self.assertRaises(drum_score.ConversionError) as caught:
+                drum_score.convert(source, root / 'result')
+            self.assertEqual(caught.exception.code, 'unsupported_layout')
+            self.assertFalse((root / 'result').exists())
+
+    def test_later_complete_observation_fills_an_edge_fragment_once(self):
+        import tempfile
+        from PIL import Image, ImageDraw, ImageChops
+        import drum_score
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sheet = Image.new('RGB', (640, 900), 'white')
+            draw = ImageDraw.Draw(sheet)
+            for row, y in enumerate((120, 400, 680)):
+                for line in range(5):
+                    draw.line((25, y + 8 * line, 615, y + 8 * line), fill='black')
+                for note in range(row + 3):
+                    x = 100 + note * 60
+                    draw.ellipse((x, y + 10, x + 10, y + 20), fill='black')
+                    draw.line((x + 10, y - 30, x + 10, y + 18), fill='black', width=2)
+            # The first observation ends inside this attached ending bracket.
+            draw.line((400, 475, 550, 475), fill='blue', width=2)
+            draw.line((550, 475, 550, 515), fill='blue', width=2)
+            for index, shift in enumerate((0, 0, 200, 200, 400, 400)):
+                sheet.crop((0, shift, 640, shift + 500)).save(root / f'frame-{index:02d}.png')
+            source = root / 'source.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '2', '-i',
+                str(root / 'frame-%02d.png'), '-c:v', 'ffv1', str(source)], check=True)
+            result = drum_score.convert(source, root / 'result')
+            self.assertEqual(result['staff_count'], 3)
+            with Image.open(root / 'result' / result['longshot']['path']) as actual:
+                self.assertEqual(actual.size, sheet.size)
+                self.assertIsNone(ImageChops.difference(actual, sheet).getbbox())
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Real decoder and worker')
+    def test_ambiguous_music_and_unresolved_edges_fail_at_every_entry(self):
+        import test_web_worker as web_fixture
+        from PIL import Image, ImageDraw
+        from score_fixtures import score_frame, video_from_image
+        from drum_score.jobs import Jobs
+        fixture = web_fixture.WebsiteWorker(methodName='runTest')
+        fixture.setUp()
+        try:
+            runner = fixture.network / 'scope-core.py'
+            runner.write_text("import sys,json\nfrom drum_score import convert,ConversionError\n"
+                "if __name__=='__main__':\n try: print(json.dumps(convert(sys.argv[1],sys.argv[2])))\n"
+                " except ConversionError as e: print(json.dumps({'error':{'code':e.code,'message':str(e)}}));sys.exit(2)\n")
+            for case, expected in (('similar_example', 'ambiguous_scope'),
+                                   ('lyric_music', 'ambiguous_scope'), ('edge', 'incomplete_score')):
+                if case != 'edge':
+                    score = score_frame()
+                    example = score_frame(row_count=2 if case == 'lyric_music' else 1)
+                    if case == 'lyric_music':
+                        draw = ImageDraw.Draw(example)
+                        for top in (220, 440):
+                            draw.line((228, top - 32, 610, top - 32), fill='black', width=3)
+                            for x in range(250, 1100, 32):
+                                draw.text((x, top + 75), 'x', fill='black')
+                    for index, image in enumerate((example, Image.new('RGB', score.size, 'black'), score, score)):
+                        image.save(fixture.network / f'scope-{index:02d}.png')
+                    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-framerate', '2', '-i',
+                        str(fixture.network / 'scope-%02d.png'), '-c:v', 'ffv1', '-f', 'matroska',
+                        str(fixture.network / 'input.mp4')], check=True)
+                else:
+                    image = score_frame()
+                    draw = ImageDraw.Draw(image)
+                    draw.rectangle((0, 910, 1279, 959), fill='white')
+                    for x in (250, 420, 590):
+                        draw.line((x, 940, x, 959), fill='black', width=3)
+                    video_from_image(image, fixture.network)
+                for entry in REMOTE_SCRIPT_ENTRIES:
+                    with self.subTest(case=case, entry=entry):
+                        if entry == 'script_http':
+                            task, auth = fixture.submit()
+                            self.assertEqual(fixture.worker(once=True).wait(timeout=30), 0)
+                            state = fixture.state(task, auth)
+                            self.assertEqual(state['state'], 'failed', state)
+                            self.assertEqual(state['error']['code'], expected)
+                            records = Jobs(fixture.data).records.query(task=task)
+                            record = next(value for value in records if value['status'] == 'failed')
+                            self.assertEqual(record['error']['conversion_failure']['code'], expected)
+                            self.assertIn('range_seconds', record['error']['conversion_failure'])
+                            self.assertNotEqual(fixture.client.get('/api/tasks/' + task + '/pdf', headers=auth).status_code, 200)
+                        else:
+                            output = fixture.root / f'{case}-{entry}'
+                            args = ([sys.executable, str(runner), str(fixture.network / 'input.mp4'), str(output)]
+                                if entry == 'script_core' else [sys.executable, '-m', 'drum_score',
+                                str(fixture.network / 'input.mp4'), '--output', str(output)])
+                            process = subprocess.run(args, env=fixture.env, capture_output=True, text=True, timeout=30)
+                            self.assertEqual(process.returncode, 2, process.stdout + process.stderr)
+                            self.assertEqual(json.loads(process.stdout)['error']['code'], expected)
+                            self.assertFalse(output.exists())
+        finally:
+            fixture.tearDown()
+
+    def test_unobserved_final_line_fragment_is_not_published_as_complete(self):
+        import tempfile
+        from PIL import ImageDraw
+        from score_fixtures import score_frame, video_from_image
+        import drum_score
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            frame = score_frame()
+            draw = ImageDraw.Draw(frame)
+            draw.rectangle((0, 910, 1279, 959), fill='white')
+            for x in (250, 420, 590):
+                draw.line((x, 940, x, 959), fill='black', width=3)
+            source = video_from_image(frame, root)
+            with self.assertRaises(drum_score.ConversionError) as caught:
+                drum_score.convert(source, root / 'result')
+            self.assertEqual(caught.exception.code, 'incomplete_score')
+            self.assertFalse((root / 'result').exists())
+
+    def test_default_main_song_and_explicit_excerpt_keep_distinct_scope(self):
+        import tempfile
+        from PIL import Image, ImageDraw
+        from score_fixtures import score_frame
+        import drum_score
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            score = score_frame()
+            legend = Image.new('RGB', score.size, 'white')
+            draw = ImageDraw.Draw(legend)
+            for top in (250, 600):
+                for line in range(5):
+                    draw.line((80, top + line * 10, 1200, top + line * 10), fill='black')
+                draw.line((600, top, 600, top + 40), fill='black')
+                for x in range(100, 1100, 40):
+                    draw.text((x, top + 65), 'x', fill='black')
+            for index, frame in enumerate((Image.new('RGB', score.size, 'blue'), legend,
+                    Image.new('RGB', score.size, 'black'), score, score,
+                    Image.new('RGB', score.size, '#dddddd'))):
+                frame.save(root / f'frame-{index:02d}.png')
+            source = root / 'source.mkv'
+            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '1', '-i',
+                str(root / 'frame-%02d.png'), '-c:v', 'ffv1', str(source)], check=True)
+            result = drum_score.convert(source, root / 'default')
+            self.assertEqual(result['conversion']['scope']['mode'], 'main_song')
+            self.assertEqual(result['conversion']['effective_range_seconds'], [3, 5])
+            self.assertFalse(result['conversion']['is_excerpt'])
+            self.assertEqual(len(result['conversion']['scope']['excluded_intervals']), 4)
+            excerpt = drum_score.convert(source, root / 'excerpt', options={'start_seconds': 3, 'end_seconds': 5})
+            self.assertEqual(excerpt['conversion']['scope']['mode'], 'excerpt')
+            self.assertEqual(excerpt['conversion']['scope']['excluded_intervals'], [])
+            self.assertTrue(excerpt['conversion']['is_excerpt'])
+
+    def test_software_canvas_excludes_light_toolbar_and_sidebar(self):
+        import tempfile
+        from PIL import Image, ImageDraw
+        import drum_score
+        from score_fixtures import video_from_image
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            frame = Image.new('RGB', (1000, 600), '#e8e8ed')
+            draw = ImageDraw.Draw(frame)
+            draw.rectangle((180, 70, 980, 560), fill='white')
+            # A narrow white control connects the paper to a separate footer.
+            # Paper connectivity alone must not incorporate software chrome.
+            draw.rectangle((960, 555, 975, 599), fill='white')
+            draw.rectangle((0, 590, 999, 599), fill='white')
+            draw.text((10, 10), 'SOFTWARE TOOLBAR', fill='red')
+            draw.text((10, 180), 'SIDEBAR', fill='red')
+            draw.text((190, 80), 'TITLE / ENDING', fill='blue')
+            for y in (180, 320, 460):
+                for line in range(5):
+                    draw.line((200, y + line * 8, 960, y + line * 8), fill='black')
+                draw.ellipse((250, y + 10, 265, y + 18), fill='black')
+                draw.line((265, y - 40, 265, y + 14), fill='black', width=2)
+                draw.text((210, y + 45), 'ff', fill='blue')
+            source = video_from_image(frame, root)
+            result = drum_score.convert(source, root / 'result')
+            left, top, right, bottom = result['region']
+            self.assertGreater(left, 170)
+            self.assertGreater(top, 60)
+            self.assertLess(bottom, 570)
+            self.assertEqual(result['staff_count'], 3)
+            with Image.open(root / 'result' / result['longshot']['path']) as image:
+                self.assertLess(image.width, 820)
+            for page in result['pages']:
+                self.assertTrue((root / 'result' / page['path']).is_file())
+
     def test_automatic_region_selects_staff_panel_and_preserves_its_edges(self):
         import tempfile
         from PIL import Image, ImageDraw, ImageChops
@@ -105,17 +301,18 @@ class ScriptPublicContracts(unittest.TestCase):
             source = root / 'source.mkv'
             subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '10', '-i',
                 str(root / 'frame-%02d.png'), '-c:v', 'ffv1', str(source)], check=True)
-            # The existing registration stage cannot join this abrupt blank/
-            # score/blank sequence. Automatic selection must reach the same
-            # conservative discontinuity as manual selection, rather than
-            # wrongly rejecting a short score absent at the seven probes.
+            # Default scope now retains the short observed score while recording
+            # the blank intervals. Automatic and manual viewports must both
+            # reach it, even when the seven probes did not see a staff.
             for name, options in (('auto', None), ('manual',
                     {'region_percent': [64.7, 7.833333333333333, 95.3, 92.16666666666667]})):
                 with self.subTest(entry=name):
-                    with self.assertRaises(drum_score.ConversionError) as caught:
-                        drum_score.convert(source, root / name, options=options)
-                    self.assertEqual(caught.exception.code, 'discontinuity')
-                    self.assertFalse((root / name).exists())
+                    result = drum_score.convert(source, root / name, options=options)
+                    self.assertEqual(result['staff_count'], 4)
+                    self.assertEqual(result['conversion']['scope']['mode'], 'main_song')
+                    self.assertEqual(result['conversion']['effective_range_seconds'][0], 3.5)
+                    self.assertEqual(len(result['conversion']['scope']['excluded_intervals']), 2)
+                    self.assertFalse(result['reliable'])
 
     @unittest.skipUnless(sys.platform == 'linux', 'Real cached worker and disposable print process')
     def test_cached_selected_result_keeps_presence_print_and_retry_contracts(self):
@@ -264,6 +461,8 @@ class ScriptPublicContracts(unittest.TestCase):
                     self.assertEqual(result['conversion']['options'], options)
                     self.assertEqual(result['conversion']['effective_range_seconds'], [.5, 1.5])
                     self.assertTrue(result['conversion']['is_excerpt'])
+                    self.assertEqual(result['conversion']['scope']['mode'], 'excerpt')
+                    self.assertEqual(result['conversion']['effective_region'], [64, 38, 1216, 912])
                     self.assertFalse(result['reliable'])
                     self.assertEqual(result['source']['sha256'], hashlib.sha256(video.read_bytes()).hexdigest())
                     self.assertEqual(result['source']['metadata']['duration'], 2)

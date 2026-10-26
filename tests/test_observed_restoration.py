@@ -24,12 +24,13 @@ def fixture(root, *, scrolling=True):
             draw.line((int(x) + 7, y - 20, int(x) + 7, y), fill='black', width=2)
     if not scrolling:
         ImageDraw.Draw(sheet).rectangle((150, 55, 490, 83), fill=(155, 155, 155))
+    Image.new('RGB', (640, 520), 'black').save(root / 'frame-00.png')
     for index in range(10):
         frame = sheet.crop((0, index * 37, 640, index * 37 + 520))
         if scrolling:
             for y in (55, 165, 275, 385):
                 ImageDraw.Draw(frame).rectangle((150, y, 490, y + 28), fill=(155, 155, 155))
-        frame.save(root / f'frame-{index:02d}.png')
+        frame.save(root / f'frame-{index + 1:02d}.png')
     video = root / 'source.mkv'
     subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '2', '-i', str(root / 'frame-%02d.png'),
                     '-c:v', 'ffv1', str(video)], check=True)
@@ -44,6 +45,7 @@ class ObservedRestoration(unittest.TestCase):
             result = convert(video, root / 'result', options={'region_percent': [0, 0, 100, 100]})
             recovery = result['restoration']
             self.assertGreater(recovery['restored_pixels'], 1000)
+            self.assertGreater(result['placements'][0]['sample'], 0)
             self.assertFalse(result['reliable'])
             with Image.open(root / 'result' / result['longshot']['path']) as restored:
                 # Independent unoccluded original: this strip contains real dark notes.
@@ -53,6 +55,7 @@ class ObservedRestoration(unittest.TestCase):
                     sample = result['samples'][block['source_sample']]
                     self.assertEqual(block['source_pts'], sample['pts'])
                     self.assertEqual(block['source_time_base'], sample['time_base'])
+                    self.assertEqual(block['source_sha256'], sample['sha256'])
                     with Image.open(root / 'result' / sample['path']) as source:
                         np.testing.assert_array_equal(np.array(restored.crop(block['target_box'])),
                                                       np.array(source.crop(block['source_box'])))
@@ -63,7 +66,7 @@ class ObservedRestoration(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             _, sheet = fixture(root)
-            original = sheet.crop((0, 0, 640, 520))
+            original = sheet.crop((0, 0, 640, 560))
             # A colored source annotation is never a license to erase its pixels.
             ImageDraw.Draw(original).rectangle((80, 10, 95, 510), fill=(70, 120, 255))
             for index, x in enumerate((150, 300, 450)):
