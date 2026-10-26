@@ -16,7 +16,7 @@ def _same(a, b, invalid):
     valid = ~(_matching_invalid(a, invalid) | _matching_invalid(b, invalid))
     score, ink = _ink_overlap(a, b, 0, invalid)
     first, second = a.min(axis=2), b.min(axis=2)
-    unexplained = ((first < 110) & (second > 210) | (second < 110) & (first > 210)) & valid
+    unexplained = ((first < 245) & (second > 250) | (second < 245) & (first > 250)) & valid
     if unexplained.any():
         return False
     return (ink >= 128 and score >= .98 and valid.mean() > .5

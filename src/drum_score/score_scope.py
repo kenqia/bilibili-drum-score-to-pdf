@@ -102,10 +102,14 @@ def select(paths, records, region, start, end, *, explicit, check):
             b = np.asarray(new.convert('RGB').crop(region))
         valid = np.ones(a.shape[:2], bool)
         for x, y, w, h in item['cover_boxes']:
-            valid[max(0, y - 8):y + h + 8, max(0, x - 8):x + w + 8] = False
+            valid[y:y + h, x:x + w] = False
         ai, bi = (a.min(axis=2) < 140) & valid, (b.min(axis=2) < 140) & valid
         union = np.count_nonzero(ai | bi)
-        if union < 128 or np.count_nonzero(ai & bi) / union < .8:
+        # Global ink agreement cannot license losing even one unique visible
+        # annotation. The same RGB tolerance protects replaced page fragments.
+        visible = (a.min(axis=2) < 245) & valid
+        lost = visible & np.any(np.abs(a.astype(np.int16) - b.astype(np.int16)) > 8, axis=2)
+        if lost.any() or union < 128 or np.count_nonzero(ai & bi) / union < .8:
             raise ConversionError('ambiguous_scope',
                 f'约 {item["timestamp"]:.3f} 秒存在无法确认被主曲覆盖的独有谱面，请指定时间范围后重试。')
         item['kind'] = 'covered_score_replaced'

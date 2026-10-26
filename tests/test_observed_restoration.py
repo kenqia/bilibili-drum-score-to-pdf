@@ -26,7 +26,7 @@ def fixture(root, *, scrolling=True):
         ImageDraw.Draw(sheet).rectangle((150, 55, 490, 83), fill=(155, 155, 155))
     Image.new('RGB', (640, 520), 'black').save(root / 'frame-00.png')
     for index in range(10):
-        frame = sheet.crop((0, index * 37, 640, index * 37 + 520))
+        frame = sheet.crop((0, index * 30, 640, index * 30 + 520))
         if scrolling:
             for y in (55, 165, 275, 385):
                 ImageDraw.Draw(frame).rectangle((150, y, 490, y + 28), fill=(155, 155, 155))
@@ -45,6 +45,7 @@ class ObservedRestoration(unittest.TestCase):
             result = convert(video, root / 'result', options={'region_percent': [0, 0, 100, 100]})
             recovery = result['restoration']
             self.assertGreater(recovery['restored_pixels'], 1000)
+            self.assertGreaterEqual(result['registration']['overlay_comparisons'], 3)
             self.assertGreater(result['placements'][0]['sample'], 0)
             self.assertFalse(result['reliable'])
             with Image.open(root / 'result' / result['longshot']['path']) as restored:

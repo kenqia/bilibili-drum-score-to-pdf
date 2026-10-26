@@ -458,3 +458,5 @@ env -u PYTHONPATH /home/kenqia/issue73-installed-venv/bin/python /home/kenqia/is
 #91 联合验证发现整合前置 `bcaa973` 的 `test_repeated_music_with_small_measure_numbers_retains_fast_scroll_positions` 已因 #90 新增原生变化峰帧而失败。保留7行和独立原图逐像素覆盖断言，将恰好六个placement的固定列表迁移为原六个常规位置全保留、首尾与顺序不变，允许必要原生见证带来额外正确位置。新增的独立RGB唯一候选核验使用真实局部小节号像素消歧，不执行OCR、猜测数字增量或运动先验；重复候选仍拒绝。
 
 #93 保留 `test_preflight_keeps_uncertain_intro_and_checks_distributed_native_frames` 的分散观测、实际 PTS/time_base 和 continue 判定断言，将滚动末位移135改为90。旧夹具在画面底部截到下一行符干，按新增完整性保护应拒绝；改后的夹具用完整末行验证预检职责，未补全边缘的拒绝另由公开黑色及浅灰符干反例保护。
+
+#93 审阅补充固定灰水印恢复夹具：原37像素步长的末尾853包含840/845/850三条残线，按完整行规则应拒绝。改为30像素步长，保留十个独立非零滚动视口、170至380行独立原图逐像素、恢复块RGB/PTS/time_base/hash、同色真实记号及全部产物断言，并增加至少三个成功覆盖物比较的断言。未删除测试。新的上下边缘各2/3/4条白边残组反例继续保护这类拒绝。

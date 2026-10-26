@@ -108,7 +108,10 @@ class PageTransitions(unittest.TestCase):
         ImageDraw.Draw(cut).line((180, 500, 180, 519), fill='black', width=3)
         almost_same = pages[0].copy()
         ImageDraw.Draw(almost_same).rectangle((180, 220, 190, 230), fill='black')
+        pale_almost_same = pages[0].copy()
+        ImageDraw.Draw(pale_almost_same).rectangle((180, 220, 190, 230), fill=(195, 195, 195))
         scenarios = {
+            'pale_small_unique_mark': [pages[0]] * 8 + [pale_almost_same] + [pages[1]] * 8,
             'small_unique_mark': [pages[0]] * 8 + [almost_same] + [pages[1]] * 8,
             'return_to_old_page': [pages[0]] * 8 + [pages[1]] * 8 + [pages[0]] * 8,
             'short_unique_page': [pages[0]] * 8 + [pages[2]] + [pages[1]] * 8,
