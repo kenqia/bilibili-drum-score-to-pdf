@@ -101,8 +101,14 @@ def select(paths, records, region, start, end, *, explicit, check):
             a = np.asarray(old.convert('RGB').crop(region))
             b = np.asarray(new.convert('RGB').crop(region))
         valid = np.ones(a.shape[:2], bool)
-        for x, y, w, h in item['cover_boxes']:
-            valid[y:y + h, x:x + w] = False
+        colorful = ((a.max(axis=2).astype(np.int16) - a.min(axis=2)) > 35).astype(np.uint8)
+        count, labels, components, _ = cv2.connectedComponentsWithStats(colorful)
+        # A bounding box contains visible paper and notation too. Only actual
+        # pixels of its corresponding color component are possible occlusion;
+        # disconnected text inside or outside the box remains protected.
+        for label in range(1, count):
+            if list(map(int, components[label, :4])) in item['cover_boxes']:
+                valid[labels == label] = False
         ai, bi = (a.min(axis=2) < 140) & valid, (b.min(axis=2) < 140) & valid
         union = np.count_nonzero(ai | bi)
         # Global ink agreement cannot license losing even one unique visible

@@ -89,11 +89,40 @@ class ScriptPublicContracts(unittest.TestCase):
                 self.assertEqual(caught.exception.code, 'incomplete_score')
                 self.assertFalse((root / 'result').exists())
 
-    def test_cover_replacement_cannot_discard_unique_uncovered_annotations(self):
+    def test_cover_box_does_not_hide_visible_annotations_inside_hollow_overlay(self):
         import tempfile
         from PIL import Image, ImageDraw
         import drum_score
         for color in ('black', (195, 195, 195), 'red'):
+            with self.subTest(color=color), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                score = Image.new('RGB', (640, 520), 'white')
+                draw = ImageDraw.Draw(score)
+                for top in (130, 340):
+                    for line in range(5):
+                        draw.line((25, top + line * 8, 615, top + line * 8), fill='black')
+                    for note in range(5):
+                        x = 60 + note * 60
+                        draw.ellipse((x, top + 10, x + 10, top + 20), fill='black')
+                covered = score.copy()
+                overlay = ImageDraw.Draw(covered)
+                overlay.rectangle((390, 30, 600, 470), outline='blue', width=24)
+                overlay.text((440, 220), 'UNIQUE fff', fill=color)
+                for index, frame in enumerate((covered, covered, score, score, score, score)):
+                    frame.save(root / f'frame-{index:02d}.png')
+                source = root / 'source.mkv'
+                subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '2', '-i',
+                    str(root / 'frame-%02d.png'), '-c:v', 'ffv1', str(source)], check=True)
+                with self.assertRaises(drum_score.ConversionError) as caught:
+                    drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+                self.assertEqual(caught.exception.code, 'ambiguous_scope')
+                self.assertFalse((root / 'result').exists())
+
+    def test_cover_replacement_cannot_discard_unique_uncovered_annotations(self):
+        import tempfile
+        from PIL import Image, ImageDraw
+        import drum_score
+        for color in (None, 'black', (195, 195, 195), 'red'):
             with self.subTest(color=color), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 score = Image.new('RGB', (640, 520), 'white')
@@ -108,12 +137,21 @@ class ScriptPublicContracts(unittest.TestCase):
                 covered = score.copy()
                 overlay = ImageDraw.Draw(covered)
                 overlay.rectangle((280, 30, 560, 490), fill='blue')
-                overlay.text((35, 65), 'UNIQUE fff', fill=color)
+                if color is not None:
+                    overlay.text((35, 65), 'UNIQUE fff', fill=color)
                 for index, frame in enumerate((covered, covered, score, score, score, score)):
                     frame.save(root / f'frame-{index:02d}.png')
                 source = root / 'source.mkv'
                 subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '2', '-i',
                     str(root / 'frame-%02d.png'), '-c:v', 'ffv1', str(source)], check=True)
+                if color is None:
+                    from PIL import ImageChops
+                    result = drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+                    self.assertEqual(result['staff_count'], 2)
+                    with Image.open(root / 'result' / result['longshot']['path']) as actual:
+                        self.assertIsNone(ImageChops.difference(actual, score).getbbox())
+                    self.assertIn('covered_score_replaced', [item['reason'] for item in result['conversion']['scope']['excluded_intervals']])
+                    continue
                 with self.assertRaises(drum_score.ConversionError) as caught:
                     drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
                 self.assertEqual(caught.exception.code, 'ambiguous_scope')
