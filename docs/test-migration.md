@@ -440,3 +440,5 @@ env -u PYTHONPATH /home/kenqia/issue73-installed-venv/bin/python /home/kenqia/is
 新增`test_video_cache`在HTTP提交、真实worker、真实文件及维护CLI验证缓存。`NETWORK`只替换匿名元数据/HTTP边界，实际版本解析、传输大小/完整性核验、ffprobe、转换、schema与清理照常执行。覆盖强/弱ETag、命中/并发/取消、固定期限、在途预留、路径替换、半发布崩溃及新身份恢复；不把这些合成结果记作真实音乐校对。
 
 配准的细黑边回归 `test_proven_thin_video_borders_do_not_join_all_printable_systems` 将至少两页的旧分页假设迁为 PDF 至少包含两个独立行组图片；紧凑排版可以一页容纳这些行组。原始谱区、长图逐像素和边缘彩色记号保留断言不变。
+
+#90保留背景闪烁反例的原生变化大于1和零位移断言。实际seek补帧没有常规采样间隔运动摘要，最大值断言仅读取具有该摘要的采样，避免把新增真实补证帧当作常规采样。
