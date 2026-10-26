@@ -71,7 +71,10 @@ def _worker(source, output, limits, connection, temporary, parent_pid, ready, op
                               connection.send(('stage', stage)) if stage != 'complete' else None)
         connection.send(('result', result))
     except ConversionError as error:
-        connection.send(('error', (error.code, str(error), last_details.get())))
+        details = dict(last_details.get() or {})
+        if getattr(error, 'conversion_details', None):
+            details['conversion_failure'] = error.conversion_details
+        connection.send(('error', (error.code, str(error), details or None)))
     except BaseException:
         connection.send(('error', ('conversion_failed', '转换进程异常退出，未发布结果。')))
     finally:

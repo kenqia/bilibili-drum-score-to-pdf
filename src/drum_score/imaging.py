@@ -12,6 +12,8 @@ from .registration import profile_of, shift_candidates, pick, LOCAL_GOOD
 def detect_region(paths, *, budget_check=lambda: None):
     """Aggregate paper frequency without retaining a stack of native images."""
     frequency = None
+    chrome_frequency = None
+    paper_frames = 0
     for path in paths:
         budget_check()
         with Image.open(path) as image:
@@ -20,29 +22,41 @@ def detect_region(paths, *, budget_check=lambda: None):
             rgb = np.asarray(image.convert('RGB'))
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         chroma = rgb.max(axis=2).astype(int) - rgb.min(axis=2)
-        paper = (gray > 190) & (chroma < 40)
+        # Light software chrome is not paper. Keep native RGB for delivery;
+        # this stricter background test only finds viewport boundaries.
+        light = np.bincount(gray[chroma < 15].ravel(), minlength=256)
+        background = 191 + int(np.argmax(light[191:]))
+        threshold = background - 3 if light[background] >= gray.size * .03 else 242
+        paper = (gray >= threshold) & (chroma < 15)
         if frequency is None:
             frequency = np.zeros(paper.shape, np.float32)
-        frequency += paper
-    mask = (frequency / len(paths) > .5).astype(np.uint8)
-    # Mostly white full-frame sources retain their margins and title exactly.
-    if mask.mean() > .8:
-        return (0, 0, width, height)
+            chrome_frequency = np.zeros(len(paper), np.float32)
+        if paper.mean() > .05:
+            frequency += paper
+            chrome_frequency += (((gray > 190) & (gray < background - 4) &
+                                  (chroma < 15)).mean(axis=1) > .65)
+            paper_frames += 1
+    mask = (frequency / max(1, paper_frames) > .5).astype(np.uint8)
     size = max(9, (min(mask.shape) // 24) | 1)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((size, size), np.uint8))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((15, size), np.uint8))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, size), np.uint8))
     count, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
     if count < 2:
         raise ConversionError('unsupported_layout', '未找到固定白底谱区。')
     sx, sy = width / mask.shape[1], height / mask.shape[0]
+    chrome = np.flatnonzero(chrome_frequency / max(1, paper_frames) > .8)
+    upper = chrome[chrome < mask.shape[0] * .1]
+    lower = chrome[chrome > mask.shape[0] * .9]
+    viewport_top = math.ceil((int(upper[-1]) + 1) * sy) if len(upper) and upper[0] == 0 else 0
+    viewport_bottom = math.floor(int(lower[0]) * sy) if len(lower) and lower[-1] == mask.shape[0] - 1 else height
     candidates = []
     for x, y, w, h, area in stats[1:]:
         if area < mask.size * .05:
             continue
-        candidates.append((max(0, math.floor(x * sx) - 3),
-            max(0, math.floor(y * sy) - 3),
-            min(width, math.ceil((x + w) * sx) + 3),
-            min(height, math.ceil((y + h) * sy) + 3)))
+        candidates.append((max(0, math.floor(x * sx) - 4),
+            max(viewport_top, math.floor(y * sy) - 4),
+            min(width, math.ceil((x + w) * sx) + 4),
+            min(viewport_bottom, math.ceil((y + h) * sy) + 4)))
     # Paper connectivity establishes the entire viewport, including titles and
     # marginal marks. Staff structure validates that viewport, never crops it.
     # Distributed native frames distinguish a stable score from a transient
@@ -80,7 +94,23 @@ def detect_region(paths, *, budget_check=lambda: None):
                  if count >= minimum]
     if len(supported) != 1:
         raise ConversionError('unsupported_layout', '无法从多帧五线结构唯一确认固定白底谱区。')
-    return supported[0]
+    region = supported[0]
+    # A gray band may contain notation or an attached label too. If paper-like
+    # pixels next to the proposed viewport contain unique ink, refuse the crop
+    # instead of interpreting the text as software controls.
+    for index in observations:
+        budget_check()
+        with Image.open(paths[index]) as image:
+            for begin, finish in ((max(0, region[1] - 96), region[1]),
+                                  (region[3], min(height, region[3] + 96))):
+                if finish <= begin:
+                    continue
+                with image.crop((region[0], begin, region[2], finish)) as strip:
+                    gray = np.asarray(strip.convert('L'))
+                    if (gray > 190).mean() > .5 and np.count_nonzero(gray < 110) > 8:
+                        raise ConversionError('unsupported_layout',
+                            '谱区边界外有无法区分为软件控件或谱面附属记号的墨迹，请指定完整手动谱区。')
+    return region
 
 
 
@@ -255,6 +285,25 @@ def compose(paths, region, placements, output):
         end = max(end, offset + height)
     result.save(output)
     result.close()
+
+
+def verify_edges(image):
+    """Refuse unresolved ink cut by the outer boundary of the assembled score."""
+    width, height = image.size
+    for side, top, bottom in (('top', 0, min(96, height)),
+                              ('bottom', max(0, height - 96), height)):
+        with image.crop((0, top, width, bottom)) as part:
+            ink = (np.asarray(part.convert('L')) < 150).astype(np.uint8)
+        count, labels, stats, _ = cv2.connectedComponentsWithStats(ink)
+        boundary = labels[0 if side == 'top' else -1]
+        for identity in set(boundary.tolist()) - {0}:
+            x, y, w, h, area = map(int, stats[identity])
+            # A full-width dark video border is not notation. Marginal logos
+            # are retained; interior cut stems, notes or lines need evidence.
+            if h >= 5 and area >= 8 and w < width * .95 and x + w > width * .08 and x < width * .92:
+                raise ConversionError('incomplete_score',
+                    '拼接谱面' + ('顶部' if side == 'top' else '底部') +
+                    '存在未补全的边缘记号，无法确认完整谱行；请检查来源或指定完整范围。')
 
 
 def system_groups(image, *, detailed=False):
