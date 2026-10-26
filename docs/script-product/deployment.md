@@ -199,4 +199,9 @@ runuser -u drum-score -- /srv/drum-score/current/venv/bin/drum-score-maintenance
 
 默认 unit 保留一路和原资源预算。2026-10-23 的显式并行配置位于 `deploy/systemd/profiles/`，对应当时 v2 数据根和发行；当时已获授权的上线结果见[正式切换记录](../experiments/2026-10-23-parallel-deployment.md)。配置保留总 CPU、Swap、磁盘和任务期限保护，不能只把 `--concurrency` 改为 8。
 
-当前防滥用源码要求 v3，不能直接打开 profile 中的旧 v2 数据根，也不能仅替换 wheel。2026-10-24 用户明确授权后，已完成停服快照、显式 `upgrade-v2` 到新根和匹配的 unit 路径变更，保留原发行、数据根、配置和核验快照。额度、暂停、原期限及两路真实转换在私有端口验收后恢复公网；本轮结果与回滚材料见[防滥用部署记录](../experiments/2026-10-24-abuse-deployment.md)。后续生产变更仍按实际范围授权，不能将本轮授权无限扩张。
+防滥用阶段的源码要求 v3，不能直接打开 profile 中的旧 v2 数据根，也不能仅替换 wheel。2026-10-24 用户明确授权后，已完成停服快照、显式 `upgrade-v2` 到新根和匹配的 unit 路径变更，保留原发行、数据根、配置和核验快照。额度、暂停、原期限及两路真实转换在私有端口验收后恢复公网；本轮结果与回滚材料见[防滥用部署记录](../experiments/2026-10-24-abuse-deployment.md)。后续生产变更仍按实际范围授权，不能将本轮授权无限扩张。
+
+
+## 整理记录版本的部署边界
+
+当前源码要求 schema v4，增加一周私有整理记录和网站简介规则。现有 v3 生产根不能直接由新发行打开。部署前须另行确认停服范围，按[显式升级流程](maintenance.md)用旧发行保存并核验 v3 快照，再用新发行 `upgrade-v3` 恢复到新根。web 与 worker 应显式使用相同的 `--record-mib 256 --record-retention-seconds 604800`。保留原发行、数据根和配置以便回滚；备份数据库上限已调整为 512 MiB。该文档更新不代表生产已切版。

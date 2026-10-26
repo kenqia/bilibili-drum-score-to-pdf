@@ -39,7 +39,7 @@ def guardian_lease(descriptor):
         _guardian_lock.reset(token)
 
 
-def _worker(source, output, limits, connection, temporary, parent_pid, ready):
+def _worker(source, output, limits, connection, temporary, parent_pid, ready, website=False):
     if hasattr(os, 'setsid'):
         os.setsid()
     signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -53,6 +53,9 @@ def _worker(source, output, limits, connection, temporary, parent_pid, ready):
                       MKL_NUM_THREADS='1', NUMEXPR_NUM_THREADS='1')
     tempfile.tempdir = temporary
     try:
+        from .description_policy import enabled, last_details
+        enabled.set(website)
+        last_details.set(None)
         ready.wait()
         import cv2
         cv2.setNumThreads(1)
@@ -60,7 +63,7 @@ def _worker(source, output, limits, connection, temporary, parent_pid, ready):
                           connection.send(('stage', stage)) if stage != 'complete' else None)
         connection.send(('result', result))
     except ConversionError as error:
-        connection.send(('error', (error.code, str(error))))
+        connection.send(('error', (error.code, str(error), last_details.get())))
     except BaseException:
         connection.send(('error', ('conversion_failed', '转换进程异常退出，未发布结果。')))
     finally:
@@ -243,7 +246,7 @@ def _run(source, output, *, progress=None, limits=None, cancel=None):
         budget.root = root
         parent, child = context.Pipe(duplex=False)
         ready = context.Event()
-        process = context.Process(target=_worker, args=(source, root / 'complete', budget.limits, child, temporary, os.getpid(), ready))
+        process = context.Process(target=_worker, args=(source, root / 'complete', budget.limits, child, temporary, os.getpid(), ready, owner is not None))
         guardian = None
         guardian_write = None
         previous_term = None
@@ -298,7 +301,9 @@ def _run(source, output, *, progress=None, limits=None, cancel=None):
                         if progress:
                             progress(payload)
                     elif kind == 'error':
-                        raise ConversionError(*payload)
+                        error = ConversionError(*payload[:2])
+                        error.source_details = payload[2] if len(payload) > 2 else None
+                        raise error
                     elif kind == 'result':
                         result = payload
                         break

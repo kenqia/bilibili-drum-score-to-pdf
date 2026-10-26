@@ -16,11 +16,11 @@ import time
 
 from .arguments import PublicParser
 from .public_video import video_origin
-from .schema import SCHEMA_VERSION, ABUSE_STATEMENTS, validate_schema
+from .schema import SCHEMA_VERSION, ABUSE_STATEMENTS, RECORD_STATEMENTS, validate_schema
 from .owned_tree import remove_owned_tree
 
 FORMAT = 1
-DB_LIMIT = 64 * 1024**2
+DB_LIMIT = 512 * 1024**2
 JSON_LIMIT = 16 * 1024**2
 
 
@@ -256,7 +256,7 @@ def validate(db, budget, *, schema_version=SCHEMA_VERSION):
         raise MaintenanceError("maintenance_limit")
     if db.execute("PRAGMA integrity_check(1)").fetchall()[0][0] != "ok":
         raise MaintenanceError("invalid_snapshot")
-    if schema_version == 3:
+    if schema_version >= 3:
         for event in db.execute('SELECT ip_key,admitted_at FROM submission_events'):
             budget.check()
             if (not isinstance(event['ip_key'], str)
@@ -264,6 +264,12 @@ def validate(db, budget, *, schema_version=SCHEMA_VERSION):
                 or not isinstance(event['admitted_at'], (int, float))
                 or not math.isfinite(event['admitted_at'])):
                 raise MaintenanceError('invalid_snapshot')
+    if schema_version >= 4:
+        from .processing_records import validate_records
+        try:
+            validate_records(db, budget.check)
+        except (ValueError, TypeError, KeyError):
+            raise MaintenanceError('invalid_snapshot') from None
     rows = [
         dict(row)
         for row in db.execute("SELECT * FROM tasks LIMIT ?", (budget.max_files + 1,))
@@ -802,14 +808,15 @@ def restore(
     *,
     upgrade_from_v1=False,
     upgrade_from_v2=False,
+    upgrade_from_v3=False,
     timeout=60,
     max_bytes=4096 * 1024**2,
     max_files=8192,
     min_free_bytes=2048 * 1024**2,
 ):
-    if upgrade_from_v1 and upgrade_from_v2:
+    if sum((bool(upgrade_from_v1), bool(upgrade_from_v2), bool(upgrade_from_v3))) > 1:
         raise MaintenanceError('invalid_request')
-    source_version = 1 if upgrade_from_v1 else 2 if upgrade_from_v2 else SCHEMA_VERSION
+    source_version = 1 if upgrade_from_v1 else 2 if upgrade_from_v2 else 3 if upgrade_from_v3 else SCHEMA_VERSION
     budget = Budget(timeout, max_bytes, max_files, min_free_bytes)
     if Path(backup_root).name.startswith(".drum-maintenance-"):
         raise MaintenanceError("incomplete_snapshot")
@@ -830,9 +837,12 @@ def restore(
                         validate_schema(db, version=source_version)
                         if source_version == 1:
                             db.execute("DROP INDEX single_active")
-                        for statement in ABUSE_STATEMENTS:
+                        for statement in (ABUSE_STATEMENTS if source_version < 3 else ()):
                             db.execute(statement)
-                        db.execute('INSERT INTO submission_control VALUES(1,0)')
+                        if source_version < 3:
+                            db.execute('INSERT INTO submission_control VALUES(1,0)')
+                        for statement in RECORD_STATEMENTS:
+                            db.execute(statement)
                         db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
                         validate_schema(db)
                         db.commit()
@@ -885,7 +895,7 @@ def main(argv=None):
     for name in ("pause-submissions", "resume-submissions"):
         child = commands.add_parser(name)
         child.add_argument('--data-root', required=True)
-    for name in ("backup", "verify", "restore", "upgrade-v1", "upgrade-v2"):
+    for name in ("backup", "verify", "restore", "upgrade-v1", "upgrade-v2", "upgrade-v3"):
         child = commands.add_parser(name)
         child.add_argument("--timeout", type=float, default=60)
         child.add_argument("--max-mib", type=float, default=4096)
@@ -919,7 +929,7 @@ def main(argv=None):
             result = verify(args.backup_root, **options)
         else:
             result = restore(args.backup_root, args.output, upgrade_from_v1=args.operation == "upgrade-v1",
-                             upgrade_from_v2=args.operation == "upgrade-v2", **options)
+                             upgrade_from_v2=args.operation == "upgrade-v2", upgrade_from_v3=args.operation == "upgrade-v3", **options)
     except Exception as error:
         code = (
             error.code if isinstance(error, MaintenanceError) else "maintenance_failed"

@@ -182,6 +182,7 @@ class Maintenance(unittest.TestCase):
         self.assertEqual(self.invoke('backup', '--data-root', self.data, '--output', saved,
                                     '--services-stopped').returncode, 0)
         with sqlite3.connect(saved / 'tasks.sqlite3') as db:
+            db.execute('DROP TABLE processing_records')
             db.execute('DROP TABLE submission_events')
             db.execute('DROP TABLE submission_control')
             db.execute('DROP INDEX task_expiry')

@@ -7,6 +7,7 @@
 - [安装](install.md)
 - [转换契约](script-product/conversion.md)
 - [网站运行与存储规则](script-product/website.md)
+- [整理记录与简介拒绝规则](script-product/processing-records-design.md)
 - [部署与回滚](script-product/deployment.md)
 - [停服备份与恢复](script-product/maintenance.md)
 - [BBDownNext 构建](bbdown-build.md)

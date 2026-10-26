@@ -60,7 +60,7 @@ ACQUISITION_SECONDS = 1800
 MAX_BYTES = 2 * 1024**3
 
 
-def _worker(url, staging, publication, connection, parent_pid, max_bytes=MAX_BYTES):
+def _worker(url, staging, publication, connection, parent_pid, max_bytes=MAX_BYTES, website=False):
     # Third-party exceptions and output can contain signed addresses. Never forward them.
     if hasattr(os, 'setsid'):
         os.setsid()
@@ -80,7 +80,11 @@ def _worker(url, staging, publication, connection, parent_pid, max_bytes=MAX_BYT
         os.dup2(sink.fileno(), 2)
     sys.stdout = open(os.devnull, 'w')
     sys.stderr = open(os.devnull, 'w')
+    origin = video_origin(url)
     try:
+        from .description_policy import enabled, last_details
+        enabled.set(website)
+        last_details.set(None)
         from . import anonymous_backend
         # A caller may tighten the backend's existing ceiling, never relax it.
         anonymous_backend.MAX_BYTES = min(anonymous_backend.MAX_BYTES, max_bytes)
@@ -96,14 +100,23 @@ def _worker(url, staging, publication, connection, parent_pid, max_bytes=MAX_BYT
             os.fsync(destination.fileno())
         connection.send({'ok': True, 'origin': {**origin, **details}})
     except InputError as error:
-        result = {'ok': False, 'code': error.code, 'message': str(error), 'origin': error.origin or video_origin(url)}
+        result = {'ok': False, 'code': error.code, 'message': str(error), 'origin': error.origin or origin}
+        from .description_policy import last_details
+        if website and last_details.get():
+            result['origin'] = {**result['origin'], **last_details.get()}
         if hasattr(error, 'diagnostics'):
             result['diagnostics'] = error.diagnostics
         if hasattr(error, 'http_status'):
             result['http_status'] = error.http_status
         connection.send(result)
     except BaseException:
-        connection.send({'ok': False, 'code': 'public_api_unavailable', 'message': '匿名获取失败，接口受限或格式不可用。请提供清晰的本地视频。'})
+        from .description_policy import last_details
+        known = {key: origin[key] for key in ('url',) if key in origin}
+        if website and last_details.get():
+            known.update(last_details.get())
+        connection.send({'ok': False, 'code': 'public_api_unavailable',
+                         'message': '匿名获取失败，接口受限或格式不可用。请提供清晰的本地视频。',
+                         'origin': {**origin, **known}})
     finally:
         connection.close()
 
@@ -121,7 +134,8 @@ def acquire(url, output, timeout=ACQUISITION_SECONDS, *, max_bytes=MAX_BYTES):
     context = multiprocessing.get_context('fork' if 'fork' in multiprocessing.get_all_start_methods() else 'spawn')
     with tempfile.TemporaryDirectory(prefix='anonymous-video-') as staging, tempfile.TemporaryDirectory(prefix='.anonymous-publish-', dir=output.parent) as publication:
         parent, child = context.Pipe(duplex=False)
-        process = context.Process(target=_worker, args=(origin['url'], staging, publication, child, os.getpid(), max_bytes))
+        from .description_policy import enabled, last_details
+        process = context.Process(target=_worker, args=(origin['url'], staging, publication, child, os.getpid(), max_bytes, enabled.get()))
         previous_term = None
         if threading.current_thread() is threading.main_thread():
             previous_term = signal.signal(signal.SIGTERM, lambda *args: (_ for _ in ()).throw(KeyboardInterrupt()))
@@ -144,6 +158,9 @@ def acquire(url, output, timeout=ACQUISITION_SECONDS, *, max_bytes=MAX_BYTES):
             if process.exitcode != 0:
                 raise InputError('public_api_unavailable', '匿名获取进程未完成。请提供清晰的本地视频。', origin)
             if not result['ok']:
+                if enabled.get():
+                    details = result.get('origin') or origin
+                    last_details.set({key: details[key] for key in ('url', 'description_policy') if key in details})
                 error = InputError(result['code'], result['message'], result.get('origin') or origin)
                 if 'diagnostics' in result:
                     error.diagnostics = result['diagnostics']
@@ -151,6 +168,8 @@ def acquire(url, output, timeout=ACQUISITION_SECONDS, *, max_bytes=MAX_BYTES):
                     error.http_status = result['http_status']
                 raise error
             origin = result['origin']
+            if enabled.get():
+                last_details.set({key: origin[key] for key in ('url', 'description_policy') if key in origin})
             output.mkdir(parents=True, exist_ok=True)
             source = output / f"{origin['bvid']}-p{origin['page']}.mp4"
             if source.exists():

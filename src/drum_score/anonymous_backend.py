@@ -93,6 +93,7 @@ def download(origin, staging):
                 if stream['width'] < (fmt.get('width') or 0) or stream['height'] < (fmt.get('height') or 0):
                     raise InputError('media_resolution_mismatch', '视频实测分辨率低于公开格式标记。请提供清晰的本地视频。', {**origin, 'backend': 'BBDownNext', 'backend_version': '2.3.0', 'anonymous': True, 'actual_video': stream})
                 return {'backend': 'BBDownNext', 'backend_version': '2.3.0', 'anonymous': True,
+                        **({'description_policy': details['description_policy']} if 'description_policy' in details else {}),
                         'backend_build': details['backend_build'], 'backend_sha256': details['backend_sha256'],
                         'acquisition_route': 'bbdown_direct', 'cid': details['cid'], 'aid': details['aid'],
                         'full_duration': info['duration'], 'single_file_fallback': not bool(independent), 'actual_video': stream,

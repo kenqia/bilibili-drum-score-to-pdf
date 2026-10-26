@@ -26,7 +26,7 @@ Skill 默认长截图、可安全执行的局部去水印、完整谱行分页�
 | `cli.py`、`arguments.py` | JSON 与参数适配；非法输入不反射载荷、路径或原始异常。 |
 | `web.py`、`static/` | 同源网页、能力认证、真实阶段及 FD 分块下载。 |
 | `schema.py`、`maintenance.py`、`owned_tree.py` | 共享已知 schema、停服快照、完整性核验、新身份恢复及有界私有根清理。 |
-| `jobs.py`、`worker.py`、`service_limits.py` | SQLite 队列、排他 worker、发布决定、存储准入、保留期和受管清理。 |
+| `jobs.py`、`worker.py`、`service_limits.py`、`processing_records.py` | SQLite 队列、排他 worker、发布决定、存储准入、独立整理记录、保留期和受管清理。 |
 
 程序与网站模块位于同一 Python 包；wheel 不包含 Skill、实验视频或机器认证。基础依赖与网站可选依赖由 `pyproject.toml` 定义。
 
@@ -48,7 +48,7 @@ HTTP 接受公开 HTTPS BV 链接或 b23.tv 短链接，只做本地格式校验
 
 服务暂存根在启动子进程前登记 ownership marker 与根 device/inode，整服务树终止后只恢复清理身份匹配的确切私有根。未知根、attempt 外文件和替换 marker 保留。备份/恢复在排他发布前 fsync 所有嵌套目录，核验拒绝未知 schema、额外文件、链接与特殊文件。具体命令见[维护指南](script-product/maintenance.md)。
 
-服务 schema 显式使用 SQLite `user_version=3`，拒绝自动打开旧库及未知版本。v1、v2 快照分别通过显式 `upgrade-v1`、`upgrade-v2` 核验后升级到新目录，见[维护指南](script-product/maintenance.md)。`managed_attempts` 记录 task/attempt、受管根 device/inode，以及生成文件的相对路径、device/inode/ctime。清理从数据根经 no-follow 目录 FD 遍历，只 unlink 身份仍匹配的文件，未知文件和替换物保留。目录只在空时移除。恢复到新目录必须先核验备份清单/hash，再登记工具自己新建的文件身份；数据库旧 inode/ctime 不可直接当作新副本所有权。
+服务 schema 显式使用 SQLite `user_version=4`，拒绝自动打开旧库及未知版本。v1、v2、v3 快照分别通过显式 `upgrade-v1`、`upgrade-v2`、`upgrade-v3` 核验后升级到新目录，见[维护指南](script-product/maintenance.md)。`managed_attempts` 记录 task/attempt、受管根 device/inode，以及生成文件的相对路径、device/inode/ctime。清理从数据根经 no-follow 目录 FD 遍历，只 unlink 身份仍匹配的文件，未知文件和替换物保留。目录只在空时移除。恢复到新目录必须先核验备份清单/hash，再登记工具自己新建的文件身份；数据库旧 inode/ctime 不可直接当作新副本所有权。
 
 `submission_events` 保存成功入队的 IP 摘要和时间，提交、重试、额度检查在同一短写事务中完成。最近十分钟限十次，最近二十四小时限一百次，取消不退次数，不设置全站每日额度。过期计数在成功入队及 worker 清理时删除；重启和同版本备份恢复保留计数。`submission_control` 保存运营者暂停接收新任务的状态，暂停不影响领取既有队列和访问结果。任务身份在原到期时刻后再保留三十天，正常受管清理后删除身份及其受管登记，未知残留文件保持原样。具体契约见[防滥用方案](script-product/abuse-prevention.md)。
 
@@ -65,3 +65,9 @@ HTTP 接受公开 HTTPS BV 链接或 b23.tv 短链接，只做本地格式校验
 ## 在线人数与临时打印排版
 
 HTTP 服务使用有界内存心跳统计近似访客，浏览器随机 ID 与任务能力凭据分离。默认 PDF 按完整行组紧凑排列。结果页重新排版从已经核验且合法打开的默认 PDF 提取嵌入图片，不调用媒体获取或转换队列；独立受限进程和 guardian 处理临时材料，结果与全部预览一次返回，服务端不持久化排版版本。任务数据库、原结果和原期限保持不变。参数及限制见[排版设计](script-product/print-layout-design.md)。
+
+## 私有整理记录与网站简介规则
+
+整理记录与任务状态共用 SQLite 短事务，以独立操作身份保留每次提交、重试和临时排版。结束后保留 168 小时，成功记录保存完整网站 manifest，不延长 PDF、预览或视频期限。每个操作预留日志预算，容量不足或日志故障拒绝新操作，既有任务继续收尾；整个数据库不可写时终态落盘仍可能失败。运营者通过本地只读命令导出 JSON，无公开管理接口。
+
+网站在监督进程边界显式传递简介策略，再向匿名获取进程传递，不使用环境变量开关或全局宿主配置。元信息完整验证后、媒体下载前按明确字符表拒绝心形符号。简介无效时放行，Python、CLI 和独立 Skill 不启用网站策略。具体契约见[网站运行](script-product/website.md)。
