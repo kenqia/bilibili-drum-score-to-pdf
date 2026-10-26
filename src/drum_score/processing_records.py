@@ -165,6 +165,8 @@ class Records:
         if status != 'complete' or output is not None:
             content['output'] = output
         if details:
+            if details.get('conversion_failure'):
+                content['error']['conversion_failure'] = details['conversion_failure']
             content['description_policy'] = details.get('description_policy')
             if details.get('url'):
                 from .public_video import video_origin

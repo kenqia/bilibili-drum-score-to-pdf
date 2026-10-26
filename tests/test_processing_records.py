@@ -11,6 +11,23 @@ URL = 'https://www.bilibili.com/video/BV1rH4y1R7Rk'
 
 
 class ProcessingRecords(unittest.TestCase):
+    def test_conversion_location_survives_verified_backup_and_restore(self):
+        from drum_score.maintenance import backup, restore
+        task = self.jobs.enqueue(URL, '192.0.2.1')
+        row = self.jobs.claim()
+        self.jobs.stage(row, 'registering')
+        details = {'code': 'incomplete_score', 'range_seconds': [1, 2],
+                   'message': '合成谱面边缘未补全。'}
+        self.jobs.settle(row, 'failed', 'incomplete_score', '未发布结果。',
+                         details={'conversion_failure': details})
+        original = self.jobs.records.query(task=task['id'])
+        self.assertEqual(original[0]['error']['conversion_failure'], details)
+        snapshot = Path(self.temporary.name) / 'scope-snapshot'
+        backup(self.jobs.root, snapshot, services_stopped=True, min_free_bytes=1)
+        target = Path(self.temporary.name) / 'scope-restored'
+        restore(snapshot, target, min_free_bytes=1)
+        self.assertEqual(Jobs(target).records.query(task=task['id']), original)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

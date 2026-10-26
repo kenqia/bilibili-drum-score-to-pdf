@@ -213,3 +213,6 @@ worker持有一个共享获取协调器。相同已验证来源的并发请求�
 当前 v5 保留 v4 引入的缓存登记结构。崩溃恢复取得排他worker租约后，先证明旧写入者已停止，再处理未完成获取。发布前持久登记目标文件身份，半份发布不会命中。未知残留无法安全清理时保留，并可能阻止对应缓存重用或维护快照；运营者需核查，不能自动接管。
 
 完成摘要的`source.cache`标记`fill`、`hit`、`coalesced`、`bypass_version`、`bypass_capacity`或`bypass_transfer`，并记录固定缓存期限。`resources.source_preparation`记录元数据预检、等待、原始总时限与实际获取资源；命中没有当次下载资源，未知成本为null。`resources.limits.wall_seconds`是准备后剩余的转换额度，端到端`elapsed_seconds`包含本次准备；排队仍不计入处理时间。
+
+
+主曲范围、排除区间和实际像素谱区沿用[转换契约](conversion.md#自动主曲范围)。任务摘要与整理记录均保留 `conversion.scope`、`effective_region` 和 `scope_notice`。结果页显示主曲或选段及实际秒数；PDF 与谱面预览不嵌程序说明，原谱文字保持原样。`ambiguous_scope`、`incomplete_score` 及带定位的 `discontinuity` 均表示未发布完整结果；整理记录的 `error.conversion_failure` 保存类别、时间范围与脱敏说明，不把边缘覆盖不足误称已确认来源缺失。
