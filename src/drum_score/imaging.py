@@ -341,7 +341,9 @@ def verify_edges(image, *, sides=('top', 'bottom')):
         if side not in sides:
             continue
         with image.crop((0, top, width, bottom)) as part:
-            ink = (np.asarray(part.convert('L')) < 150).astype(np.uint8)
+            # Delivery preserves pale and colored marks too; the registration
+            # threshold must not hide a visible boundary fragment.
+            ink = (np.min(np.asarray(part.convert('RGB')), axis=2) < 245).astype(np.uint8)
         count, labels, stats, _ = cv2.connectedComponentsWithStats(ink)
         boundary = labels[0 if side == 'top' else -1]
         for identity in set(boundary.tolist()) - {0}:

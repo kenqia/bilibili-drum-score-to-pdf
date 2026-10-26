@@ -521,7 +521,7 @@ Path.read_text = read
         from score_fixtures import scrolling_video
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            source, _ = scrolling_video(root, offsets=[None, None, 0, 45, 90, 135])
+            source, _ = scrolling_video(root, offsets=[None, None, 0, 30, 60, 90])
             result = drum_score.convert(source, root / 'result')
             self.assertEqual(result['preflight']['decision'], 'continue')
             observations = result['preflight']['observations']

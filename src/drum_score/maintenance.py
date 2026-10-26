@@ -452,6 +452,8 @@ def result_files(tree, db, budget, *, owned=False, schema_version=SCHEMA_VERSION
         )
         if 'conversion' in manifest:
             expected['conversion'] = manifest['conversion']
+        if 'restoration' in manifest:
+            expected['restoration'] = manifest['restoration']
         if json.loads(row["summary"]) != expected:
             raise MaintenanceError("invalid_snapshot")
         names = ["score.pdf"]

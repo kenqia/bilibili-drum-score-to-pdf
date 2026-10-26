@@ -65,6 +65,28 @@ class ScriptPublicContracts(unittest.TestCase):
         finally:
             fixture.tearDown()
 
+    def test_pale_edge_stems_cannot_be_published_as_complete_score(self):
+        import tempfile
+        from PIL import Image, ImageDraw
+        from score_fixtures import video_from_image
+        import drum_score
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            frame = Image.new('RGB', (640, 800), 'white')
+            draw = ImageDraw.Draw(frame)
+            for top in (120, 340, 560):
+                for line in range(5):
+                    draw.line((25, top + 8 * line, 615, top + 8 * line), fill='black')
+                draw.ellipse((150, top + 10, 160, top + 20), fill='black')
+            # A visible pale symbol from the next row is cut by the video edge.
+            for x in (250, 420):
+                draw.line((x, 770, x, 799), fill=(195, 195, 195), width=3)
+            source = video_from_image(frame, root)
+            with self.assertRaises(drum_score.ConversionError) as caught:
+                drum_score.convert(source, root / 'result', options={'region_percent': [0, 0, 100, 100]})
+            self.assertEqual(caught.exception.code, 'incomplete_score')
+            self.assertFalse((root / 'result').exists())
+
     def test_gray_edge_band_with_attached_marks_cannot_be_dropped_as_chrome(self):
         import tempfile
         from PIL import Image, ImageDraw
