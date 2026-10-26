@@ -205,3 +205,5 @@ runuser -u drum-score -- /srv/drum-score/current/venv/bin/drum-score-maintenance
 ## 整理记录版本的部署边界
 
 当前源码要求 schema v5，整合线上 v4 的选项和缓存、一周私有整理记录及网站简介规则。不能直接打开现有生产根。用匹配旧发行停服备份并核验 v4 快照，再用新发行 upgrade-v4 恢复到不存在的新根。web 与 worker 显式配置相同的 --record-mib 256 --record-retention-seconds 604800，并保留现有缓存、资源与网络参数。保留旧发行、数据根和配置以便回滚；备份数据库上限为 512 MiB。正式结果另见部署实验记录。
+
+2026-10-26 用户明确授权后，已完成整合发行的 v4→v5 新根迁移与正式上线。旧发行、原根、核验快照和 profile 均保留；上线后的实际验证与适用回滚路径见[部署记录](../experiments/2026-10-26-records-deployment.md)。
