@@ -578,6 +578,7 @@ class ScriptPublicContracts(unittest.TestCase):
 
     def test_advanced_options_reject_invalid_types_and_ranges_at_public_entries(self):
         import tempfile
+        from contextlib import nullcontext
         from fastapi.testclient import TestClient
         from drum_score import convert, ConversionError
         from drum_score.web import create_app
@@ -588,7 +589,9 @@ class ScriptPublicContracts(unittest.TestCase):
                    {'unknown': 1})
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            with TestClient(create_app(root / 'service')) as client:
+            # HTTP service storage is Linux-only; retain Python/CLI checks on Windows.
+            http = TestClient(create_app(root / 'service')) if sys.platform == 'linux' else nullcontext()
+            with http as client:
                 for options in invalid:
                     with self.subTest(options=options):
                         with self.assertRaises(ConversionError) as raised:
@@ -596,8 +599,9 @@ class ScriptPublicContracts(unittest.TestCase):
                         self.assertEqual(raised.exception.code, 'invalid_request')
                         if options.get('start_seconds') != options.get('start_seconds'):
                             continue  # JSON has no non-finite number representation.
-                        reply = client.post('/api/tasks', json={'url': 'https://www.bilibili.com/video/BV1rH4y1R7Rk', 'options': options})
-                        self.assertEqual(reply.status_code, 422)
+                        if client is not None:
+                            reply = client.post('/api/tasks', json={'url': 'https://www.bilibili.com/video/BV1rH4y1R7Rk', 'options': options})
+                            self.assertEqual(reply.status_code, 422)
                 process = subprocess.run([sys.executable, '-m', 'drum_score', str(root / 'missing.mp4'),
                     '--output', str(root / 'result'), '--start-seconds', '-1'],
                     capture_output=True, text=True, timeout=10)
@@ -756,6 +760,7 @@ class ScriptPublicContracts(unittest.TestCase):
 
     def test_withdrawn_youtube_urls_are_rejected_before_acquisition(self):
         import tempfile
+        from contextlib import nullcontext
         from pathlib import Path
         from unittest.mock import patch
         from fastapi.testclient import TestClient
@@ -766,7 +771,9 @@ class ScriptPublicContracts(unittest.TestCase):
                 'https://www.youtube.com/shorts/dQw4w9WgXcQ')
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            with TestClient(create_app(root / 'service'), client=('192.0.2.10', 12345)) as client:
+            http = (TestClient(create_app(root / 'service'), client=('192.0.2.10', 12345))
+                    if sys.platform == 'linux' else nullcontext())
+            with http as client:
                 for index, url in enumerate(urls):
                     with self.subTest(url=url):
                         output = root / ('result-' + str(index))
@@ -781,9 +788,10 @@ class ScriptPublicContracts(unittest.TestCase):
                         self.assertNotEqual(process.returncode, 0)
                         self.assertEqual(json.loads(process.stdout)['error']['code'], 'invalid_bilibili_url')
                         self.assertFalse(output.exists())
-                        response = client.post('/api/tasks', json={'url': url})
-                        self.assertEqual(response.status_code, 422)
-                        self.assertEqual(response.json()['error']['code'], 'invalid_bilibili_url')
+                        if client is not None:
+                            response = client.post('/api/tasks', json={'url': url})
+                            self.assertEqual(response.status_code, 422)
+                            self.assertEqual(response.json()['error']['code'], 'invalid_bilibili_url')
 
     def test_http_temporary_layout_is_independent_complete_and_does_not_extend_expiry(self):
         import base64
