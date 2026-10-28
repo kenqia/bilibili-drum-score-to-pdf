@@ -793,6 +793,7 @@ class ScriptPublicContracts(unittest.TestCase):
                             self.assertEqual(response.status_code, 422)
                             self.assertEqual(response.json()['error']['code'], 'invalid_bilibili_url')
 
+    @unittest.skipUnless(sys.platform == 'linux', 'Real website worker and disposable print process')
     def test_http_temporary_layout_is_independent_complete_and_does_not_extend_expiry(self):
         import base64
         import hashlib
