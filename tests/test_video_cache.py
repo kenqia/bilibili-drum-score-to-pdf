@@ -176,6 +176,36 @@ class VideoCache(unittest.TestCase):
         self.assertEqual((self.network/'fetches').read_text().splitlines(),['fetch','fetch'])
         self.assertEqual(list((self.data/'cache').rglob('*.mp4')),[])
 
+    def test_unsafe_preferred_address_uses_checked_backup_without_cache(self):
+        self.prepare()
+        with (self.network/'sitecustomize.py').open('a') as script:
+            script.write('''
+original_inspect=inspect
+def backup_inspect(origin,staging):
+    result=original_inspect(origin,staging)
+    stream=result['play']['dash']['video'][0]
+    stream['backupUrl']=[stream['baseUrl']]
+    stream['baseUrl']='https://synthetic.invalid/media'
+    return result
+bbdown_cli.inspect=backup_inspect
+original_open=Transport.open
+def checked_open(self,url,headers=None,data=None):
+    if 'synthetic.invalid' in url:
+        (root/'unsafe-transport').touch()
+        raise AssertionError('unsafe address reached transport')
+    return original_open(self,url,headers,data)
+Transport.open=checked_open
+''')
+        task,auth=self.submit()
+        self.assertEqual(self.worker(once=True).wait(timeout=30),0)
+        result=self.state(task,auth)
+        self.assertEqual(result['state'],'complete',result)
+        self.assertEqual(result['result']['source']['cache']['status'],'bypass_version')
+        self.assertTrue(result['result']['source']['backup_used'])
+        self.assertFalse((self.network/'unsafe-transport').exists())
+        self.assertEqual((self.network/'fetches').read_text().splitlines(),['fetch'])
+        self.assertEqual(list((self.data/'cache').rglob('*.mp4')),[])
+
     def test_explicit_backup_restore_keeps_cache_expiry_and_registers_new_file_identity(self):
         self._cache_snapshot_roundtrip()
 

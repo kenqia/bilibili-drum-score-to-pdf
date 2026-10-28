@@ -31,9 +31,9 @@ def prepare(operation, source, output, limits, inspection=None):
             if formats:
                 fmt = formats[0]
                 address = fmt['url']
-                checked_media_url(address)
                 # Validator failure only disables cache reuse, not ordinary acquisition.
                 try:
+                    checked_media_url(address)
                     with anonymous_backend.PublicTransport(direct=True).open(address, {**inspection['info'].get('http_headers', {}), 'Range': 'bytes=0-0'}) as response:
                         etag = response.headers.get('ETag', '')
                         match = re.fullmatch(r'bytes 0-0/([1-9][0-9]*)', response.headers.get('Content-Range', ''))
