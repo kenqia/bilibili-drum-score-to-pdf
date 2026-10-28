@@ -8,47 +8,13 @@ MAX_REFINEMENT_INTERVALS = 12
 MAX_REFINEMENT_SPAN = 2.0
 
 
-def register_refined(paths, region, records, refine, check, *, invalid=None, native_window=None, bounds=None):
+def register_refined(paths, region, records, refine, check, *, invalid=None):
     from .imaging import register
     attempted = {}
     narrow = []
     requests = 0
     evidence = []
     resume = None
-    native_attempted = set()
-    # A native excursion larger than the endpoint difference can hide a short
-    # page. Inspect its actual peak-change frame before allowing that page to
-    # disappear between them. These seeks share the existing request budget.
-    from PIL import Image
-    import numpy as np
-    index = 1
-    while index < len(records):
-        check()
-        left, right = records[index - 1], records[index]
-        witness = right.get('native_motion_peak_change_timestamp')
-        if (witness is not None and left['timestamp'] < witness < right['timestamp']
-                and right.get('native_intermediate_frames', 0) > 0):
-            with Image.open(paths[index - 1]) as before, Image.open(paths[index]) as after:
-                a, b = before.convert('L'), after.convert('L')
-                a.thumbnail((128, 128))
-                b.thumbnail((128, 128))
-                difference = float(np.abs(np.asarray(a).astype(np.int16) - np.asarray(b)).mean())
-            if right.get('native_motion_max_luma_difference', 0) > max(1, difference * 2):
-                if (requests >= MAX_REFINEMENT_REQUESTS
-                        or len(attempted) >= MAX_REFINEMENT_INTERVALS):
-                    raise ConversionError('discontinuity', '补帧预算耗尽，短暂画面覆盖未能确认。')
-                attempted[(left['timestamp'], right['timestamp'])] = 0
-                requests += 1
-                path, record = refine(witness)
-                if not left['timestamp'] < record['timestamp'] < right['timestamp']:
-                    raise ConversionError('discontinuity', '未能取得采样间的原生变化画面。')
-                paths.insert(index, path)
-                records.insert(index, {**record, 'requires_unique_registration': True,
-                    'native_change_coverage_witness': True})
-                evidence.append({'start_seconds': left['timestamp'], 'end_seconds': right['timestamp'],
-                    'reason': 'native_change_excursion', 'requested': 1, 'added': 1})
-                index += 1
-        index += 1
     while True:
         check()
         try:
@@ -57,14 +23,7 @@ def register_refined(paths, region, records, refine, check, *, invalid=None, nat
                 allow_narrow=lambda left, right: any(
                     begin <= records[left]['timestamp'] <= records[right]['timestamp'] <= end
                     for begin, end in narrow))
-            segment = 0
-            for placement in placements:
-                if placement.get('transition', {}).get('kind') == 'native_page_cut':
-                    segment += 1
-                placement['segment'] = segment
-            return placements, {'continuity': ('unverified' if any(
-                    item.get('transition', {}).get('kind') == 'native_page_cut' for item in placements)
-                    else 'overlap_verified'), 'refinement_requests': requests, 'intervals': evidence,
+            return placements, {'refinement_requests': requests, 'intervals': evidence,
                 'transitions': [{'sample': item['sample'], **item['transition']}
                                 for item in placements if 'transition' in item]}
         except ConversionError as error:
@@ -81,39 +40,7 @@ def register_refined(paths, region, records, refine, check, *, invalid=None, nat
             stage = attempted.get(key, 0)
             if stage >= 2:
                 if key in narrow:
-                    if native_window is None or key in native_attempted or requests >= MAX_REFINEMENT_REQUESTS:
-                        raise
-                    native_attempted.add(key)
-                    # Include two native observations on either side even for
-                    # low-rate video; never exceed the existing two-second span.
-                    margin = min(.5, max(.1, (end - begin) * 2))
-                    lower = max(bounds[0], begin - margin)
-                    upper = min(bounds[1], end + margin)
-                    if upper - lower > MAX_REFINEMENT_SPAN:
-                        raise
-                    additions = native_window(lower, upper, MAX_REFINEMENT_REQUESTS - requests)
-                    requests += len(additions)
-                    from .page_transitions import prove_cut
-                    try:
-                        proof = prove_cut([path for path, _ in additions],
-                            [record for _, record in additions], region, paths[left], paths[right],
-                            [{'path': paths[item['sample']], 'offset': item['offset']}
-                             for item in resume['placements']], check, invalid)
-                    except ConversionError as edge_error:
-                        edge_error.registration_interval = (left, right)
-                        raise
-                    if proof is None:
-                        raise
-                    boundary, transition = proof
-                    additions[boundary][1]['page_transition'] = transition
-                    lo = next(index for index, record in enumerate(records) if record['timestamp'] >= lower)
-                    hi = next((index for index, record in enumerate(records) if record['timestamp'] >= upper), len(records))
-                    paths[lo:hi] = [path for path, _ in additions]
-                    records[lo:hi] = [record for _, record in additions]
-                    evidence.append({'start_seconds': lower, 'end_seconds': upper,
-                        'reason': 'native_page_cut', 'requested': len(additions), 'added': len(additions)})
-                    resume = None
-                    continue
+                    raise
                 narrow.append(key)
                 continue
             if key not in attempted and len(attempted) >= MAX_REFINEMENT_INTERVALS:

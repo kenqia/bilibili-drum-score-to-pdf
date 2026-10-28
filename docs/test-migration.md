@@ -1,3 +1,9 @@
+# 本轮转换算法回退的测试保留
+
+2026-10-28，正式转换恢复到已部署 `2e1ce36`。`test_public_contracts.py` 和 `test_script_conversion.py` 中原基线的全部转换断言恢复，最近的 Windows 平台限定、HTTP 输入覆盖及两项 guardian 清理测试继续保留。日志、缓存、维护、队列容错、发行工具测试不回退。
+
+撤回能力专属的三个测试模块及两个混合模块的完整回退前副本保存在 `experiments/issue88-withdrawn/tests/`，没有删除实验断言。原源码也留存于相邻 `src/`，准确实验版本为 `f4ccc81`。这些副本不参与正式 unittest 发现，不得据此宣称当前线上仍支持主曲选择、原生翻页或遮挡恢复。历史测试应在该版本的独立 checkout 执行。
+
 # 旧测试到脚本产品的迁移记录
 
 2026-10-25 撤回 YouTube 功能时，随其移除的 `test_youtube_input.py`、`youtube_fixture.py` 和公开入口成功发布测试只针对撤回的能力。B站获取、来源完整性、网络边界、受限进程和排版测试继续保留；新公开入口测试验证 watch/youtu.be/Shorts 在 Python、CLI、HTTP 均先于获取被拒绝且不创建输出。既有 `score_fixtures.py` 的 B站原生时长断言恢复，未删除仍适用的 B站保护要求。

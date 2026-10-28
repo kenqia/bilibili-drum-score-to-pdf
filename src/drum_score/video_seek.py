@@ -63,7 +63,6 @@ class _MotionDiagnostics:
         self.native_count = 0
         self.values_count = 0
         self.maximum = 0.0
-        self.peak_change_pts = None
         self.last_sample_native_count = 0
         self.pending = None
         self.invalid = False
@@ -75,10 +74,9 @@ class _MotionDiagnostics:
             self.invalid = True
             return
         skipped = max(0, self.native_count - self.last_sample_native_count - 1)
-        self.samples.append((pts, self.maximum, skipped, self.peak_change_pts))
+        self.samples.append((pts, self.maximum, skipped))
         self.last_sample_native_count = self.native_count
         self.maximum = 0.0
-        self.peak_change_pts = None
         self.pending = None
 
     def drain(self, stream):
@@ -105,8 +103,6 @@ class _MotionDiagnostics:
                             continue
                         self.native = (self.native[0], difference)
                         self.values_count += 1
-                        if difference > self.maximum:
-                            self.peak_change_pts = self.native[0]
                         self.maximum = max(self.maximum, difference)
                         if self.pending is not None:
                             self._finish_sample(self.pending)
@@ -138,13 +134,9 @@ class _MotionDiagnostics:
         records = [{'pts': pts, 'time_base': self.time_base,
                     'timestamp': pts * numerator / denominator,
                     'native_motion_max_luma_difference': difference,
-                    'native_intermediate_frames': skipped,
-                    'native_motion_peak_change_timestamp': (None if peak_change is None else
-                        peak_change * numerator / denominator)}
-                   for pts, difference, skipped, peak_change in self.samples]
+                    'native_intermediate_frames': skipped}
+                   for pts, difference, skipped in self.samples]
         records[-1]['native_trailing_motion_max_luma_difference'] = self.maximum
-        records[-1]['native_trailing_peak_change_timestamp'] = (None if self.peak_change_pts is None else
-            self.peak_change_pts * numerator / denominator)
         records[-1]['native_trailing_frames'] = self.native_count - self.last_sample_native_count
         return records
 
@@ -159,9 +151,9 @@ class VideoReader:
     def close(self):
         self.scratch.cleanup()
 
-    def sample_records(self, interval, consume, *, verify_motion=False, start=0, end=None, native_limit=None):
+    def sample_records(self, interval, consume, *, verify_motion=False, start=0, end=None):
         """Stream native RGB samples and return actual source PTS, without caching video frames."""
-        if native_limit is None and (not math.isfinite(interval) or interval <= 0 or self.metadata['duration'] / interval > 4096):
+        if not math.isfinite(interval) or interval <= 0 or self.metadata['duration'] / interval > 4096:
             raise ConversionError('invalid_request', '采样间隔无效或采样数量超出资源限制。')
         width, height = self.metadata['width'], self.metadata['height']
         if not 1 <= width * height <= 20_000_000:
@@ -173,10 +165,6 @@ class VideoReader:
         if budget <= 0:
             raise ConversionError('decode_failed', '视频解码期限已耗尽。')
         selection = f"select='isnan(prev_selected_t)+gte(t-prev_selected_t,{interval:.9f})'"
-        if native_limit is not None:
-            if not 1 <= native_limit <= 64 or end is None or not 0 < end - start <= 2:
-                raise ConversionError('discontinuity', '原生翻页窗口超出补帧预算。')
-            selection = 'null'
         bounds = f'trim=start={start:.9f}:end={end:.9f},' if end is not None else ''
         filters = bounds + ('split=2[keep][motion];[motion]'
                    'scale=128:128:force_original_aspect_ratio=decrease,format=yuv444p,'
@@ -184,8 +172,7 @@ class VideoReader:
                    '[keep]' + selection + ',showinfo@sample'
                    if verify_motion else selection + ',showinfo')
         command = ['ffmpeg', '-v', 'info', '-nostdin', '-copyts', '-threads', '2',
-                   '-filter_threads', '1', *(['-ss', str(start)] if native_limit is not None else []),
-                   '-i', str(self.source), '-vf',
+                   '-filter_threads', '1', '-i', str(self.source), '-vf',
                    filters,
                    '-an', *frame_sync_args(), '-threads', '1', '-pix_fmt', 'rgb24',
                    '-f', 'rawvideo', 'pipe:1']
@@ -215,8 +202,6 @@ class VideoReader:
                             data.extend(chunk)
                         if not data:
                             break
-                        if native_limit is not None and count >= native_limit:
-                            raise ConversionError('discontinuity', '原生翻页窗口耗尽补帧预算，覆盖尚未确认。')
                         if len(data) != size or count >= 4097:
                             raise ConversionError('decode_failed', '采样帧不完整或数量过多。')
                         with Image.frombytes('RGB', (width, height), bytes(data)) as image:
@@ -248,14 +233,8 @@ class VideoReader:
                 raise ConversionError('decode_failed', '实际时间戳记录不完整。')
             time_base = [int(base[1]), int(base[2])]
             self.metrics['decoded_reported_frames'] += count
-            records = [{'pts': value, 'time_base': time_base,
-                        'timestamp': value * time_base[0] / time_base[1]} for value in pts]
-            if native_limit is not None:
-                for index, record in enumerate(records):
-                    record.update(decode_sequence=f'window-{self.metrics["seek_count"]}',
-                                  native_ordinal=index,
-                                  previous_native_pts=pts[index - 1] if index else None)
-            return records
+            return [{'pts': value, 'time_base': time_base,
+                     'timestamp': value * time_base[0] / time_base[1]} for value in pts]
         except (subprocess.SubprocessError, OSError):
             raise ConversionError('decode_failed', '连续采样解码失败或超时；未发布长截图。') from None
         finally:

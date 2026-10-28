@@ -70,6 +70,7 @@ Path.read_text = read
                 sentinel.terminate()
                 sentinel.wait(timeout=5)
 
+
     @unittest.skipUnless(Path('/proc').is_dir(), 'Linux process identity contract')
     def test_supervisor_does_not_rebind_reused_descendant_pid(self):
         # Only /proc observations are synthetic. Both supervised work and the
@@ -148,6 +149,7 @@ Path.read_text = read
                 sentinel.terminate()
                 sentinel.wait(timeout=5)
 
+
     def test_page_balancing_moves_whole_groups_to_sparse_final_page(self):
         from drum_score.imaging import _page_strips
         groups = [(0, 600), (600, 1200), (1200, 1800), (1800, 2400), (2400, 2700)]
@@ -155,6 +157,7 @@ Path.read_text = read
         self.assertEqual(strips, [(0, 1200), (1200, 2700)])
         self.assertEqual(_page_strips([(0, 2200)], 2200), [(0, 2200)])
         self.assertEqual(_page_strips(groups, 3000), [(0, 2700)])
+
 
     def test_source_size_limit_is_checked_before_probe(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -165,6 +168,7 @@ Path.read_text = read
                 drum_score.convert(source, root / 'result', limits={'input_bytes': 4})
             self.assertEqual(caught.exception.code, 'resource_limit')
             self.assertFalse((root / 'result').exists())
+
 
     def test_memory_and_temporary_disk_budgets_fail_without_partial_publication(self):
         from score_fixtures import score_frame, video_from_image
@@ -180,6 +184,7 @@ Path.read_text = read
                     self.assertFalse((root / limit).exists())
                     self.assertEqual(source.read_bytes(), before)
                     self.assertEqual(list(root.glob('.drum-score-*')), [])
+
 
     def test_total_deadline_stops_child_decoder_and_cleans_owned_temporary_root(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -204,6 +209,7 @@ Path.read_text = read
                 state = Path('/proc') / str(pid) / 'stat'
                 self.assertTrue(not state.exists() or state.read_text().split(') ')[1].startswith('Z'))
 
+
     @unittest.skipUnless(Path('/proc').is_dir(), 'Linux process recovery contract')
     def test_abnormal_conversion_worker_stops_its_independent_session_descendant(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -225,6 +231,7 @@ Path.read_text = read
             pid = int((root / 'decoder-pid').read_text())
             state = Path('/proc') / str(pid) / 'stat'
             self.assertTrue(not state.exists() or state.read_text().split(') ')[1].startswith('Z'))
+
 
     @unittest.skipUnless(Path('/proc').is_dir(), 'Linux process recovery contract')
     def test_killed_caller_leaves_no_active_decoder_or_task_temporary_root(self):
@@ -263,6 +270,7 @@ Path.read_text = read
                     process.wait(timeout=5)
                 process.stdout.close()
                 process.stderr.close()
+
 
     @unittest.skipUnless(Path('/proc').is_dir(), 'Linux process recovery contract')
     def test_guardian_startup_failure_never_starts_decoder(self):
@@ -423,6 +431,7 @@ os._exit(0)
             self.assertFalse((root / 'result').exists())
             self.assertEqual(list(root.glob('.drum-score-*')), [])
 
+
     def test_invalid_input_never_publishes_or_overwrites(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -442,6 +451,7 @@ os._exit(0)
             self.assertEqual(caught.exception.code, 'output_exists')
             self.assertEqual(marker.read_bytes(), b'existing')
 
+
     def test_cli_errors_are_json_without_private_path_or_partial_output(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -455,6 +465,7 @@ os._exit(0)
             self.assertNotIn('private-name', result.stdout + result.stderr)
             self.assertFalse((root / 'result').exists())
 
+
     def test_public_link_validation_retains_partition_and_rejects_nonpublic_input(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -465,6 +476,7 @@ os._exit(0)
                     drum_score.convert(address, root / 'result')
                 self.assertEqual(caught.exception.code, 'invalid_bilibili_url')
                 self.assertFalse((root / 'result').exists())
+
 
     def test_static_video_produces_complete_a4_pages_and_actual_source_records(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -522,6 +534,7 @@ os._exit(0)
             manifest = json.loads((output / 'manifest.json').read_text())
             self.assertEqual(manifest, result)
 
+
     def test_scrolling_preserves_every_position_and_full_endpoints(self):
         from score_fixtures import scrolling_video
         with tempfile.TemporaryDirectory() as temporary:
@@ -539,6 +552,7 @@ os._exit(0)
             self.assertEqual(result['page_regions'][-1][1], 1420)
             sheet.close()
 
+
     def test_blank_outro_preserves_last_music_system_and_actual_source_tail(self):
         from score_fixtures import scrolling_video
         with tempfile.TemporaryDirectory() as temporary:
@@ -552,6 +566,7 @@ os._exit(0)
                 for row in range(7):
                     self.assertLess(min(actual.getpixel((50, 197 + row * 180))), 80)
             sheet.close()
+
 
     def test_continuous_pages_preserve_gray_spacing_detached_marks_and_pale_short_ending(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -600,6 +615,7 @@ os._exit(0)
             self.assertEqual(y, image.height)
             self.assertIsNone(ImageChops.difference(restored, image).getbbox())
 
+
     def test_changed_source_is_rejected_without_publishing_or_touching_other_results(self):
         from score_fixtures import score_frame, video_from_image
         with tempfile.TemporaryDirectory() as temporary:
@@ -616,6 +632,7 @@ os._exit(0)
             self.assertEqual(caught.exception.code, 'source_changed')
             self.assertFalse((root / 'result').exists())
             self.assertEqual(previous.read_bytes(), b'existing result')
+
 
     def test_proven_thin_video_borders_do_not_join_all_printable_systems(self):
         from score_fixtures import scrolling_video
@@ -653,11 +670,12 @@ os._exit(0)
             with Image.open(root / 'retained' / retained['longshot']['path']) as image:
                 self.assertEqual(image.getpixel((0, 200)), (0, 0, 255))
 
+
     def test_preflight_keeps_uncertain_intro_and_checks_distributed_native_frames(self):
         from score_fixtures import scrolling_video
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            source, _ = scrolling_video(root, offsets=[None, None, 0, 30, 60, 90])
+            source, _ = scrolling_video(root, offsets=[None, None, 0, 45, 90, 135])
             result = drum_score.convert(source, root / 'result')
             self.assertEqual(result['preflight']['decision'], 'continue')
             observations = result['preflight']['observations']
@@ -667,58 +685,8 @@ os._exit(0)
             self.assertTrue(all('pts' in observation and 'time_base' in observation
                                 for observation in observations))
 
-    def test_short_unrelated_page_between_equal_samples_is_not_silently_dropped(self):
-        from score_fixtures import score_frame
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            regular = score_frame()
-            transient = score_frame()
-            ImageDraw.Draw(transient).rectangle((150, 180, 1100, 800), fill='white')
-            for index in range(11):
-                (transient if index == 2 else regular).save(root / f'short-{index:03d}.png')
-            source = root / 'short.mkv'
-            subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '10', '-i',
-                str(root / 'short-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
-            with self.assertRaises(drum_score.ConversionError) as caught:
-                drum_score.convert(source, root / 'result')
-            self.assertEqual(caught.exception.code, 'discontinuity')
-            self.assertFalse((root / 'result').exists())
 
-    def test_proven_screen_overlays_restore_and_source_bound_marks_keep_pixels(self):
-        from score_fixtures import scrolling_video
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            _, sheet = scrolling_video(root, offsets=list(range(0, 451, 45)))
-            for mode in ('fixed_gray', 'scrolling_gray', 'playback', 'control'):
-                for index in range(11):
-                    frame = sheet.crop((0, index * 45, 640, index * 45 + 520))
-                    draw = ImageDraw.Draw(frame)
-                    if mode == 'fixed_gray':
-                        for y in (55, 165, 275, 385):
-                            draw.rectangle((150, y, 490, y + 28), fill=(155, 155, 155))
-                    elif mode == 'scrolling_gray':
-                        draw.rectangle((200, 480 - index * 45, 400, 500 - index * 45), fill=(155, 155, 155))
-                    elif mode == 'playback':
-                        draw.rectangle((150 + index * 20, 5, 165 + index * 20, 514), fill=(60, 120, 255))
-                    frame.save(root / f'{mode}-{index:03d}.png')
-                source = root / f'{mode}.mkv'
-                subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '1', '-i',
-                    str(root / f'{mode}-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
-                with self.subTest(mode=mode):
-                    result = drum_score.convert(source, root / mode)
-                    self.assertFalse(result['reliable'])
-                    self.assertEqual(result['placements'][-1]['offset'], 450)
-                    with Image.open(root / mode / result['longshot']['path']) as actual, Image.open(root / f'{mode}-000.png') as first:
-                        if mode in ('scrolling_gray', 'control'):
-                            self.assertIsNone(ImageChops.difference(actual.crop((0, 0, 640, 520)), first).getbbox())
-                        else:
-                            self.assertGreater(result['restoration']['restored_pixels'], 1000)
-                            self.assertIsNone(ImageChops.difference(actual.crop((170, 170, 300, 380)),
-                                sheet.crop((170, 170, 300, 380))).getbbox())
-                    if mode == 'fixed_gray':
-                        self.assertGreater(result['registration']['invalid_pixels'], 10000)
-                    elif mode in ('scrolling_gray', 'control'):
-                        self.assertEqual(result['registration']['invalid_pixels'], 0)
+
 
     def test_fixed_overlay_is_unknown_for_matching_but_kept_in_source_rgb(self):
         from score_fixtures import scrolling_video
@@ -738,6 +706,7 @@ os._exit(0)
                 # Distinctive notation away from the fixed overlay is retained.
                 self.assertIsNone(ImageChops.difference(actual.crop((0, 100, 570, 1420)),
                     sheet.crop((0, 100, 570, 1420))).getbbox())
+
 
     def test_unique_narrow_viewport_overlap_keeps_complete_source_pixels(self):
         # Real failure BV1fbFczHE1r jumps between stationary viewports with
@@ -769,6 +738,7 @@ os._exit(0)
                 self.assertEqual(actual.size, sheet.size)
                 self.assertIsNone(ImageChops.difference(actual.convert('RGB'), sheet).getbbox())
 
+
     def test_detected_page_flip_does_not_silently_publish_only_first_page(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -790,6 +760,7 @@ os._exit(0)
                 drum_score.convert(source, root / 'result')
             self.assertEqual(caught.exception.code, 'discontinuity')
             self.assertFalse((root / 'result').exists())
+
 
     def test_identical_music_at_later_scroll_positions_is_retained(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -813,6 +784,7 @@ os._exit(0)
             with Image.open(root / 'result' / result['longshot']['path']) as actual:
                 self.assertEqual(actual.size, (640, 1420))
                 self.assertIsNone(ImageChops.difference(actual.convert('RGB'), sheet).getbbox())
+
 
     def test_native_motion_between_identical_samples_never_publishes_shortened_score(self):
         # Seven unnumbered identical systems move by one system per 0.5s.
@@ -858,6 +830,7 @@ os._exit(0)
                     self.assertEqual(video.read_bytes(), before)
             sheet.close()
 
+
     def test_static_lossy_video_does_not_invent_scroll_from_compression_changes(self):
         from score_fixtures import score_frame
         with tempfile.TemporaryDirectory() as temporary:
@@ -876,6 +849,7 @@ os._exit(0)
                 self.assertLessEqual(longshot.height, image.height)
             image.close()
 
+
     def test_changing_background_keeps_unambiguous_stationary_score(self):
         from score_fixtures import score_frame
         with tempfile.TemporaryDirectory() as temporary:
@@ -891,8 +865,9 @@ os._exit(0)
             result = drum_score.convert(source, root / 'result')
             self.assertEqual(result['staff_count'], 3)
             self.assertTrue(all(placement['offset'] == 0 for placement in result['placements']))
-            self.assertGreater(max(sample.get('native_motion_max_luma_difference', 0)
+            self.assertGreater(max(sample['native_motion_max_luma_difference']
                                    for sample in result['samples']), 1.0)
+
 
     def test_native_tail_pts_regression_keeps_decoder_order_and_real_timestamps(self):
         import struct
@@ -939,6 +914,7 @@ os._exit(0)
             self.assertEqual(result['samples'][-1]['pts'], native[-1])
             self.assertEqual(source.read_bytes(), bytes(data))
 
+
     def test_repeated_music_with_small_measure_numbers_retains_fast_scroll_positions(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -962,15 +938,13 @@ os._exit(0)
                             '-i', str(root / 'fast-repeat-%03d.png'), '-c:v', 'ffv1', str(source)], check=True)
             result = drum_score.convert(source, root / 'result')
             self.assertEqual(result['staff_count'], 7)
-            offsets = [placement['offset'] for placement in result['placements']]
-            self.assertTrue({0, 180, 360, 540, 720, 900}.issubset(offsets))
-            self.assertEqual(offsets[0], 0)
-            self.assertEqual(offsets[-1], 900)
-            self.assertEqual(offsets, sorted(offsets))
+            self.assertEqual([placement['offset'] for placement in result['placements']],
+                             [0, 180, 360, 540, 720, 900])
             with Image.open(root / 'result' / result['longshot']['path']) as actual:
                 self.assertEqual(actual.size, sheet.size)
                 self.assertIsNone(ImageChops.difference(actual.convert('RGB'), sheet).getbbox())
             self.assertEqual(result['page_regions'][-1][1], 1420)
+
 
     def test_no_safe_gap_preserves_tall_group_without_hard_cut(self):
         with tempfile.TemporaryDirectory() as temporary:

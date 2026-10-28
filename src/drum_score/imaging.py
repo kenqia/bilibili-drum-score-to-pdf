@@ -12,8 +12,6 @@ from .registration import profile_of, shift_candidates, pick, LOCAL_GOOD
 def detect_region(paths, *, budget_check=lambda: None):
     """Aggregate paper frequency without retaining a stack of native images."""
     frequency = None
-    chrome_frequency = None
-    paper_frames = 0
     for path in paths:
         budget_check()
         with Image.open(path) as image:
@@ -22,41 +20,29 @@ def detect_region(paths, *, budget_check=lambda: None):
             rgb = np.asarray(image.convert('RGB'))
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         chroma = rgb.max(axis=2).astype(int) - rgb.min(axis=2)
-        # Light software chrome is not paper. Keep native RGB for delivery;
-        # this stricter background test only finds viewport boundaries.
-        light = np.bincount(gray[chroma < 15].ravel(), minlength=256)
-        background = 191 + int(np.argmax(light[191:]))
-        threshold = background - 3 if light[background] >= gray.size * .03 else 242
-        paper = (gray >= threshold) & (chroma < 15)
+        paper = (gray > 190) & (chroma < 40)
         if frequency is None:
             frequency = np.zeros(paper.shape, np.float32)
-            chrome_frequency = np.zeros(len(paper), np.float32)
-        if paper.mean() > .05:
-            frequency += paper
-            chrome_frequency += (((gray > 190) & (gray < background - 4) &
-                                  (chroma < 15)).mean(axis=1) > .65)
-            paper_frames += 1
-    mask = (frequency / max(1, paper_frames) > .5).astype(np.uint8)
+        frequency += paper
+    mask = (frequency / len(paths) > .5).astype(np.uint8)
+    # Mostly white full-frame sources retain their margins and title exactly.
+    if mask.mean() > .8:
+        return (0, 0, width, height)
     size = max(9, (min(mask.shape) // 24) | 1)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((15, size), np.uint8))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, size), np.uint8))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((size, size), np.uint8))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
     count, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
     if count < 2:
         raise ConversionError('unsupported_layout', '未找到固定白底谱区。')
     sx, sy = width / mask.shape[1], height / mask.shape[0]
-    chrome = np.flatnonzero(chrome_frequency / max(1, paper_frames) > .8)
-    upper = chrome[chrome < mask.shape[0] * .1]
-    lower = chrome[chrome > mask.shape[0] * .9]
-    viewport_top = math.ceil((int(upper[-1]) + 1) * sy) if len(upper) and upper[0] == 0 else 0
-    viewport_bottom = math.floor(int(lower[0]) * sy) if len(lower) and lower[-1] == mask.shape[0] - 1 else height
     candidates = []
     for x, y, w, h, area in stats[1:]:
         if area < mask.size * .05:
             continue
-        candidates.append((max(0, math.floor(x * sx) - 4),
-            max(viewport_top, math.floor(y * sy) - 4),
-            min(width, math.ceil((x + w) * sx) + 4),
-            min(viewport_bottom, math.ceil((y + h) * sy) + 4)))
+        candidates.append((max(0, math.floor(x * sx) - 3),
+            max(0, math.floor(y * sy) - 3),
+            min(width, math.ceil((x + w) * sx) + 3),
+            min(height, math.ceil((y + h) * sy) + 3)))
     # Paper connectivity establishes the entire viewport, including titles and
     # marginal marks. Staff structure validates that viewport, never crops it.
     # Distributed native frames distinguish a stable score from a transient
@@ -94,46 +80,21 @@ def detect_region(paths, *, budget_check=lambda: None):
                  if count >= minimum]
     if len(supported) != 1:
         raise ConversionError('unsupported_layout', '无法从多帧五线结构唯一确认固定白底谱区。')
-    region = supported[0]
-    # A gray band may contain notation or an attached label too. If paper-like
-    # pixels next to the proposed viewport contain unique ink, refuse the crop
-    # instead of interpreting the text as software controls.
-    for index in observations:
-        budget_check()
-        with Image.open(paths[index]) as image:
-            for begin, finish in ((max(0, region[1] - 96), region[1]),
-                                  (region[3], min(height, region[3] + 96))):
-                if finish <= begin:
-                    continue
-                with image.crop((region[0], begin, region[2], finish)) as strip:
-                    gray = np.asarray(strip.convert('L'))
-                    if (gray > 190).mean() > .5 and np.count_nonzero(gray < 110) > 8:
-                        raise ConversionError('unsupported_layout',
-                            '谱区边界外有无法区分为软件控件或谱面附属记号的墨迹，请指定完整手动谱区。')
-    return region
+    return supported[0]
 
-
-
-def _matching_invalid(rgb, invalid=None):
-    # Saturated playback effects are unknown for matching. Their original RGB
-    # remains in compose, including any real colored musical annotation.
-    chroma = rgb.max(axis=2).astype(np.int16) - rgb.min(axis=2)
-    colored = chroma > 40
-    return colored if invalid is None else colored | invalid
 
 
 def _profile(image, invalid=None):
     rgb = np.asarray(image)
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    return gray, profile_of(gray, _matching_invalid(rgb, invalid))
+    return gray, profile_of(gray, np.zeros(gray.shape, dtype=bool) if invalid is None else invalid)
 
 
 def _ink_overlap(old, new, delta, invalid=None):
     """Compare real aligned ink, excluding unknown pixels in either frame."""
-    old_invalid = _matching_invalid(old, invalid)
-    new_invalid = _matching_invalid(new, invalid)
     old, new = old[delta:], new[:len(new) - delta]
-    valid = ~old_invalid[delta:] & ~new_invalid[:len(new)]
+    valid = np.ones(old.shape[:2], dtype=bool) if invalid is None else (
+        ~invalid[delta:] & ~invalid[:len(invalid) - delta])
     if valid.size == 0 or valid.mean() < .5:
         return 0.0, 0
     a = (np.min(old, axis=2) < 180) & valid
@@ -181,30 +142,6 @@ def _narrow_shift(previous, profile, old_pixels, pixels, paths, index, region, i
     return supported[0], {'candidate_deltas': proven, 'following_delta': next_delta}
 
 
-
-def _unique_pixel_shift(candidates, before, after, invalid):
-    # A profile can tie on repeated systems while a small measure number
-    # uniquely identifies actual pixels. A temporal preference cannot do this.
-    proven = []
-    for cost, shift, local in candidates:
-        if cost > .17 or local > LOCAL_GOOD:
-            continue
-        delta = max(0, int(round(shift)))
-        old, new = before[delta:], after[:len(after) - delta]
-        valid = ~_matching_invalid(before, invalid)[delta:] & ~_matching_invalid(after, invalid)[:len(new)]
-        if not valid.size or valid.mean() < .5:
-            continue
-        ink = (old.min(axis=2) < 180) | (new.min(axis=2) < 180)
-        if np.count_nonzero(ink & valid) < 128:
-            continue
-        if np.any(np.abs(old.astype(np.int16) - new.astype(np.int16))[valid] > 8):
-            continue
-        proven.append(delta)
-    if not proven or any(abs(delta - proven[0]) > 2 for delta in proven[1:]):
-        return None
-    return proven[0]
-
-
 def register(paths, region, *, observations=None,
              budget_check=lambda: None, allow_narrow=True, invalid=None, resume=None):
     placements = [] if resume is None else list(resume['placements'])
@@ -238,21 +175,9 @@ def register(paths, region, *, observations=None,
         paper = (gray > 190).mean()
         ink = (gray < 110).mean()
         if paper < .5 or ink < .002:
-            if observations is not None and observations[index].get('native_change_coverage_witness'):
-                raise ConversionError('discontinuity', '采样间出现未能确认的短暂画面，未发布可能缺页的曲谱。')
             # Black intros and blank outros stay in provenance, not notation.
             continue
         transition = None
-        page_transition = observations[index].get('page_transition') if observations is not None else None
-        if previous is not None and page_transition is not None:
-            # Only register_refined can attach this after observing a bounded
-            # native sequence. Unknown page continuity is explicit provenance.
-            position += len(gray) - page_transition.get('edge_replacement', {}).get('trim_bottom_rows', 0)
-            placements.append({'sample': index, 'offset': position, 'transition': page_transition})
-            previous, previous_pixels, previous_index = profile, pixels, index
-            motion_since_previous = 0.0
-            skipped_since_previous = 0
-            continue
         if previous is not None:
             height = len(gray)
             minimum = max(16, int(.25 * height))
@@ -262,8 +187,6 @@ def register(paths, region, *, observations=None,
             candidates = shift_candidates(previous, profile, -2, height - minimum, minimum)
             delta, cost = pick(candidates, .17, prefer=0, strict=False,
                                reject_ambiguity=sparse_motion)
-            if delta is None:
-                delta = _unique_pixel_shift(candidates, previous_pixels, pixels, invalid)
             if delta is None and (allow_narrow(previous_index, index) if callable(allow_narrow) else allow_narrow):
                 content_path = _narrow_shift(previous, profile, previous_pixels, pixels, paths, index, region, invalid)
                 if content_path is not None:
@@ -307,16 +230,8 @@ def compose(paths, region, placements, output):
     # Keep source RGB. No chroma mask, whitening or inferred hidden symbols.
     result = Image.new('RGB', (width, total), 'white')
     end = 0
-    segment_start = 0
     for placement in placements:
         offset = placement['offset']
-        if placement.get('transition', {}).get('kind') == 'native_page_cut':
-            # Validate each continuous segment before another page can hide its
-            # bottom edge. A proven replacement removes only its exact fragment.
-            end = offset
-            with result.crop((0, segment_start, width, end)) as segment:
-                verify_edges(segment)
-            segment_start = offset
         with Image.open(paths[placement['sample']]) as image:
             crop = image.convert('RGB').crop(region)
             if end == 0:
@@ -327,68 +242,8 @@ def compose(paths, region, placements, output):
                 fresh = max(0, end - offset)
                 result.paste(crop.crop((0, fresh, width, height)), (0, end))
         end = max(end, offset + height)
-    with result.crop((0, segment_start, width, end)) as segment:
-        verify_edges(segment)
     result.save(output)
     result.close()
-
-
-def verify_edges(image, *, sides=('top', 'bottom')):
-    """Refuse unresolved ink cut by the outer boundary of the assembled score."""
-    width, height = image.size
-    try:
-        _, staffs = system_groups(image, detailed=True)
-    except ConversionError as error:
-        if error.code != 'unsupported_layout':
-            raise
-        staffs = []
-    complete_lines = [y + line * spacing for y, spacing in staffs for line in range(5)]
-    for side, top, bottom in (('top', 0, min(96, height)),
-                              ('bottom', max(0, height - 96), height)):
-        if side not in sides:
-            continue
-        with image.crop((0, top, width, bottom)) as part:
-            # Delivery preserves pale and colored marks too; the registration
-            # threshold must not hide a visible boundary fragment.
-            values = np.min(np.asarray(part.convert('RGB')), axis=2)
-            ink = (values < 245).astype(np.uint8)
-        count, labels, stats, _ = cv2.connectedComponentsWithStats(ink)
-        boundary = labels[0 if side == 'top' else -1]
-        for identity in set(boundary.tolist()) - {0}:
-            x, y, w, h, area = map(int, stats[identity])
-            # A full-width dark video border is not notation. Marginal logos
-            # are retained; interior cut stems, notes or lines need evidence.
-            if h >= 5 and area >= 8 and w < width * .95 and x + w > width * .08 and x < width * .92:
-                raise ConversionError('incomplete_score',
-                    '拼接谱面' + ('顶部' if side == 'top' else '底部') +
-                    '存在未补全的边缘记号，无法确认完整谱行；请检查来源或指定完整范围。')
-        # A cut can leave a few white rows after the last visible staff line.
-        # Detect leftover parallel lines too, instead of requiring physical
-        # boundary contact. Full five-line groups establish the local spacing.
-        # A gray screen watermark can merge two staff lines into a thick
-        # horizontal band in the light mask. Complete dark line remnants on
-        # either side still prove those lines were present, unlike a crop.
-        dark_horizontal = cv2.morphologyEx((values < 140).astype(np.uint8), cv2.MORPH_OPEN,
-            np.ones((1, max(20, width // 12)), np.uint8))
-        dark_rows = np.flatnonzero(dark_horizontal.sum(axis=1) > width * .3)
-        dark_runs = np.split(dark_rows, np.flatnonzero(np.diff(dark_rows) > 1) + 1) if len(dark_rows) else []
-        dark_lines = [top + float(run.mean()) for run in dark_runs if 0 < len(run) <= 6]
-        for index in range(len(dark_lines) - 4):
-            candidate = dark_lines[index:index + 5]
-            if any(np.max(abs(np.diff(candidate) - spacing)) <= max(1, spacing * .2)
-                   for _, spacing in staffs):
-                complete_lines.extend(candidate)
-        horizontal = cv2.morphologyEx(ink, cv2.MORPH_OPEN,
-            np.ones((1, max(20, width // 12)), np.uint8))
-        rows = np.flatnonzero(horizontal.sum(axis=1) > width * .3)
-        runs = np.split(rows, np.flatnonzero(np.diff(rows) > 1) + 1) if len(rows) else []
-        leftover = [top + float(run.mean()) for run in runs if 0 < len(run) <= 6
-                    and not any(abs(top + float(run.mean()) - known) <= 2 for known in complete_lines)]
-        for first, second in zip(leftover, leftover[1:]):
-            if any(abs(second - first - spacing) <= max(1, spacing * .2) for _, spacing in staffs):
-                raise ConversionError('incomplete_score',
-                    '拼接谱面边缘附近存在未补全的五线组，无法确认完整谱行；请检查来源或指定完整范围。')
-
 
 
 def system_groups(image, *, detailed=False):

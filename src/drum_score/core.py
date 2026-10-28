@@ -222,8 +222,6 @@ def _process(source, output, metadata, emit, budget, options):
             image.save(path, compress_level=1)
             paths.append(path)
         records = reader.sample_records(.5, consume, verify_motion=True, start=start, end=end)
-        metrics['routine_rgb_frames'] = len(records)
-        metrics['sampling_interval_seconds'] = .5
         if not records:
             raise ConversionError('invalid_request', '所选区间没有可解码的原生帧。')
         tail_record, tail_image = reader.read_record(end=end)
@@ -232,8 +230,6 @@ def _process(source, output, metadata, emit, budget, options):
                 consume(len(paths), tail_image)
                 tail_record['native_motion_max_luma_difference'] = records[-1].get(
                     'native_trailing_motion_max_luma_difference', 0.0)
-                tail_record['native_motion_peak_change_timestamp'] = records[-1].get(
-                    'native_trailing_peak_change_timestamp')
                 tail_record['native_intermediate_frames'] = max(0, records[-1].get('native_trailing_frames', 0) - 1)
                 records.append(tail_record)
         finally:
@@ -243,19 +239,6 @@ def _process(source, output, metadata, emit, budget, options):
     emit('registering')
     region = manual_region if manual_region is not None else imaging.detect_region(
         paths[::max(1, len(paths) // 60)], budget_check=budget.check)
-    original_samples = list(zip(paths, records))
-    from .score_scope import select as select_scope
-    try:
-        paths, records, scope = select_scope(paths, records, region, start, end,
-            explicit=start > 0 or options['end_seconds'] is not None, check=budget.check)
-    except ConversionError as error:
-        if error.code == 'ambiguous_scope':
-            error.conversion_details = {'code': error.code, 'range_seconds': [start, end],
-                                        'message': str(error)}
-        raise
-    scope_start, scope_end = scope['effective_range_seconds']
-    scope_notice = (f'选段 {scope_start:g} 至 {scope_end:g} 秒' if scope['mode'] == 'excerpt' else
-                    f'自动主曲 {scope_start:g} 至 {scope_end:g} 秒') + '；未经音乐校对。'
     from .registration_flow import register_refined
     from .fixed_overlays import detect as detect_fixed_overlays
     invalid, overlay_comparisons = (detect_fixed_overlays(paths, region, budget.check)
@@ -274,107 +257,25 @@ def _process(source, output, metadata, emit, budget, options):
             return path, record
         finally:
             image.close()
-    def native_window(begin, finish, maximum):
-        additions = []
-        metrics['native_window_calls'] = metrics.get('native_window_calls', 0) + 1
-        def consume_window(index, image):
-            nonlocal supplemental
-            budget.check()
-            path = frames / f'window-{supplemental:05d}.png'
-            supplemental += 1
-            image.save(path, compress_level=1)
-            additions.append(path)
-            metrics['native_window_rgb_frames'] = metrics.get('native_window_rgb_frames', 0) + 1
-            budget.check(force_disk=True)
-        observed = refinement_reader.sample_records(1, consume_window, start=begin, end=finish,
-                                                      native_limit=maximum)
-        return list(zip(additions, observed))
     try:
-        placements, registration = register_refined(paths, region, records, refine, budget.check,
-            invalid=invalid, native_window=native_window, bounds=(scope_start, scope_end))
+        placements, registration = register_refined(paths, region, records, refine, budget.check, invalid=invalid)
         registration.update(invalid_pixels=int(invalid.sum()) if invalid is not None else 0, overlay_comparisons=overlay_comparisons)
-    except ConversionError as error:
-        interval = getattr(error, 'registration_interval', None)
-        if interval is not None:
-            times = [records[index]['timestamp'] for index in interval]
-            error.args = (f'约 {times[0]:.3f} 至 {times[1]:.3f} 秒：' + str(error),)
-            error.conversion_details = {'code': error.code, 'range_seconds': times,
-                                        'message': str(error)}
-        raise
     finally:
         refinement_reader.close()
-    metrics['refinement_rgb_frames'] = supplemental
-
+    samples = [{**artifact(output, path), **record, 'kind': 'native_frame'}
+               for path, record in zip(paths, records)]
     registration['match_region'] = list(region)
     if manual_region is None:
         from .score_borders import trim as trim_score_borders
         region = trim_score_borders([paths[item['sample']] for item in placements], region, budget.check)
     emit('composing')
     longshot = output / 'longshot.png'
-    from .observed_restoration import restore
-    from PIL import Image
-    try:
-        imaging.compose(paths, region, placements, longshot)
-        restoration = restore(longshot, paths, region, placements, records, invalid,
-            match_region=registration['match_region'], check=budget.check)
-        with Image.open(longshot) as image:
-            imaging.verify_edges(image)
-    except ConversionError as error:
-        times = [scope_start, scope_end]
-        error.args = (f'范围 {times[0]:.3f} 至 {times[1]:.3f} 秒：' + str(error),)
-        error.conversion_details = {'code': error.code, 'range_seconds': times, 'message': str(error)}
-        raise
-    known_paths = {path for path, _ in original_samples}
-    original_samples.extend((path, record) for path, record in zip(paths, records) if path not in known_paths)
-    metrics['retained_rgb_frames'] = len(original_samples)
-    metrics['retained_rgb_bytes'] = sum(path.stat().st_size for path, _ in original_samples)
-    sample_indices = {path: index for index, (path, _) in enumerate(original_samples)}
-    placements = [{**item, 'sample': sample_indices[paths[item['sample']]]} for item in placements]
-    registration['transitions'] = [{**item, 'sample': sample_indices[paths[item['sample']]]}
-                                   for item in registration['transitions']]
-    samples = [{**artifact(output, path), **record, 'kind': 'native_frame'}
-               for path, record in original_samples]
-    for transition in registration['transitions']:
-        if transition.get('kind') == 'native_page_cut':
-            transition['adjacent_native_samples'] = [next(index for index, sample in enumerate(samples)
-                if sample.get('decode_sequence') == transition['native_sequence']
-                and sample.get('native_ordinal') == ordinal)
-                for ordinal in transition['adjacent_native_ordinals']]
-            if 'edge_replacement' in transition:
-                replacement = transition['edge_replacement']
-                before, after = transition['adjacent_native_samples']
-                replacement.update(original_sample=before, source_sample=after, target_sample=after,
-                    source_sha256=samples[after]['sha256'])
-                for original, absolute in (('source_region', 'original_box'), ('target_region', 'source_box')):
-                    box = replacement[original]
-                    replacement[absolute] = [box[0] + registration['match_region'][0],
-                        box[1] + registration['match_region'][1], box[2] + registration['match_region'][0],
-                        box[3] + registration['match_region'][1]]
-    for block in restoration['blocks']:
-        for field in ('source_sample', 'original_sample'):
-            block[field] = sample_indices[paths[block[field]]]
-        block['source_sha256'] = samples[block['source_sample']]['sha256']
+    imaging.compose(paths, region, placements, longshot)
     emit('paginating')
     pdf, pages, strips, staffs = imaging.paginate(longshot, output)
-    warnings = [{'code': 'not_musically_proofread', 'message': NOTICE},
-                {'code': 'conversion_scope', 'message': scope_notice}]
-    if registration.get('continuity') == 'unverified':
-        warnings.append({'code': 'page_order_unverified',
-            'message': '按视频中的原生翻页顺序整理；原曲页间连续性待核对。'})
-    warnings.append({'code': 'unconfirmed_overlays_retained',
-        'message': f"已从同位置真实观测恢复 {restoration['restored_pixels']} 个像素，已确认覆盖物中仍有 {restoration['unrecovered_masked_pixels']} 个像素未恢复。未确认的水印、彩色记号和遮挡保留，未经音乐校对。"})
-    reasons = {'covered_score_replaced': '被后续同位置无遮挡谱面替代的封面叠图',
-               'notation_example': '独立符号说明谱例', 'black': '黑场',
-               'non_score': '未见可用五线的过渡或动画画面'}
-    for excluded in scope['excluded_intervals']:
-        begin, finish = excluded['range_seconds']
-        warnings.append({'code': 'excluded_interval',
-            'message': f'未纳入主曲：{begin:g} 至 {finish:g} 秒，' + reasons[excluded['reason']] + '。'})
-    return {'conversion': {'options': options, 'effective_range_seconds': [scope_start, scope_end],
-                           'is_excerpt': scope['mode'] == 'excerpt', 'scope': scope,
-                           'effective_region': list(region), 'scope_notice': scope_notice,
-                           'continuity': registration.get('continuity', 'overlap_verified')},
-            'restoration': restoration, 'warnings': warnings,
+    return {'conversion': {'options': options, 'effective_range_seconds': [start, end],
+                           'is_excerpt': start > 0 or end < metadata['duration']},
+            'warnings': [{'code': 'not_musically_proofread', 'message': NOTICE}],
             'pdf': artifact(output, pdf), 'pages': [artifact(output, page) for page in pages],
             'longshot': {**artifact(output, longshot), 'kind': 'derived_image'},
             'samples': samples, 'placements': placements, 'region': list(region),
