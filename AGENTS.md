@@ -2,6 +2,8 @@
 
 先读 docs/architecture.md 确认支持范围；验证命令及真实证据读 docs/verification.md；术语见 GLOSSARY.md。项目文档使用 google-developer-docs，unslop 润色。修改 AGENTS.md 时使用 writing-for-agents。
 
+修改网站、构建发行或升级部署前，先读 docs/script-product/operations.md 核对线上基线、兼容结构和切换流程。
+
 仓库同时提供独立 Skill 与 drum_score Python/CLI、匿名网站，边界见 docs/adr/0007-independent-skill-and-website.md。Skill 只修改 skills/bilibili-drum-score-to-pdf/ 及专属工具和协议；程序与网站只修改 src/drum_score/ 及其部署文件，分别维护依赖，不互相 import 或共享任务状态。网站与 Skill 安装均不得自动修改另一产品或迁移任务。
 
 Skill 任务先读 skills/bilibili-drum-score-to-pdf/SKILL.md；正常 PDF 使用 stage，阶段指南读 docs/agents/stage-recovery-layout.md，命令读 docs/agents/reconstruction-entry.md。协议变更后运行 tools/sync_skill_references.py 并核验便携 references。程序转换参数读 docs/script-product/conversion.md；网站状态、资源、清理和 schema 读 docs/script-product/website.md。

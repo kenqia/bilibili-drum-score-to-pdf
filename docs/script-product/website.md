@@ -1,5 +1,7 @@
 # 本地运行匿名鼓谱网站
 
+发行基线、兼容关系与升级顺序统一见[运维入口](operations.md)。
+
 2026-10-25 已撤回 YouTube 接入。在线人数与临时打印排版保留，任务数据与原期限不变，见[撤回记录](../experiments/2026-10-25-youtube-withdrawal.md)。
 
 网站接受公开 HTTPS B站 BV 链接和 b23.tv 短链接，将任务交给独立 worker，完成后显示全部 A4 预览并提供 PDF 下载。无需账号或邀请码。网页不支持本地上传，不调用模型。`complete` 表示完整产物已发布，结果仍为 `reliable=false`，未经音乐校对。
@@ -184,7 +186,7 @@ python -m unittest discover -s tests -v
 
 `POST /api/tasks` 接受 `{"url":"https://www.bilibili.com/video/BV…","options":{"start_seconds":15,"end_seconds":75,"region_percent":[5,10,95,90],"ignore_fixed_overlays":true}}`。省略 `options` 保持默认提交兼容。基础输入无效返回422；取得媒体后发现区间或像素区域无效则任务明确失败。队列、worker及显式重试保留参数，状态响应的 `options` 可核对原提交。完成结果的 `conversion` 记录选段和手动区域，页面明确标记选段秒数。
 
-服务使用显式 schema v5；线上选项和缓存 v4 必须经旧发行停服备份、核验，再由新发行 upgrade-v4 恢复到不存在的新根。v1 至 v3 使用对应升级入口。保留旧发行、原数据和原期限，不让旧程序读取 v5；具体步骤见[维护指南](maintenance.md)。
+服务结构和升级兼容关系见[运维入口](operations.md#兼容关系)，具体数据工具见[维护指南](maintenance.md)。
 
 ## 在线人数与临时打印设置
 

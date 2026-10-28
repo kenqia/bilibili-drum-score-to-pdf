@@ -7,6 +7,7 @@ import time
 import unittest
 
 import test_web_worker as web_fixture
+from record_contracts import assert_record
 
 NETWORK = r'''import hashlib, io, json, os, time
 from pathlib import Path
@@ -91,10 +92,12 @@ class VideoCache(unittest.TestCase):
         self.assertEqual(self.worker(once=True).wait(timeout=30), 0)
         before = self.state(first,auth)
         self.assertEqual(before['state'],'complete',before)
+        assert_record(self, first, auth, status='complete', cache='fill')
         second, auth2 = self.submit()
         self.assertEqual(self.worker(once=True).wait(timeout=30),0)
         after=self.state(second,auth2)
         self.assertEqual(after['state'],'complete',after)
+        assert_record(self, second, auth2, status='complete', cache='hit')
         self.assertEqual((self.network/'fetches').read_text().splitlines(),['fetch'])
         source=after['result']['source']
         self.assertEqual(source['cache']['status'],'hit')
@@ -121,7 +124,43 @@ class VideoCache(unittest.TestCase):
         self.until(lambda:self.state(second,auth2)['state']=='complete')
         self.assertEqual((self.network/'fetches').read_text().splitlines(),['fetch'],self.state(second,auth2)['result']['source']['cache'])
         self.assertEqual(self.state(second,auth2)['result']['source']['cache']['status'],'coalesced')
+        assert_record(self, first, auth, status='cancelled')
+        assert_record(self, second, auth2, status='complete', cache='coalesced')
         process.terminate();self.assertEqual(process.wait(timeout=15),0)
+
+    def test_shared_download_failure_and_http_retry_keep_independent_complete_records(self):
+        from fastapi.testclient import TestClient
+        from drum_score.web import create_app
+        self.prepare()
+        (self.network / 'mode').write_text('wait')
+        with (self.network / 'sitecustomize.py').open('a') as script:
+            script.write("\noriginal_open=Transport.open\ndef fail_shared(self,url,headers=None,data=None):\n    result=original_open(self,url,headers,data)\n    if not (headers and headers.get('Range')) and not (root/'retry-ready').exists():\n        from drum_score.public_video import InputError\n        raise InputError('incomplete_video','SYNTHETIC_SIGNED_ADDRESS_AND_PRIVATE_PATH')\n    return result\nTransport.open=fail_shared\n")
+        first, auth = self.submit()
+        process = self.worker(concurrency=2)
+        self.until(lambda: (self.network / 'fetch-started').exists())
+        with TestClient(create_app(self.data), client=('198.51.100.8', 2000)) as other:
+            second, auth2 = self.submit(other)
+        self.until(lambda: self.state(second, auth2)['stage'] == 'source_wait')
+        (self.network / 'release').touch()
+        self.until(lambda: all(self.state(task, a)['state'] == 'failed'
+                              for task, a in ((first, auth), (second, auth2))))
+        failures = [assert_record(self, task, a, status='failed')
+                    for task, a in ((first, auth), (second, auth2))]
+        self.assertNotEqual(failures[0]['id'], failures[1]['id'])
+        self.assertEqual((self.network / 'fetches').read_text().splitlines(), ['fetch'])
+        for failure in failures:
+            self.assertEqual(failure['input']['resolved_url'], failure['input']['url'])
+            self.assertEqual(failure['error']['code'], 'incomplete_video')
+        (self.network / 'retry-ready').touch()
+        self.assertEqual(self.client.post(f'/api/tasks/{first}/retry', headers=auth).status_code, 200)
+        self.until(lambda: self.state(first, auth)['state'] == 'complete')
+        completed = assert_record(self, first, auth, status='complete', operation='retry', cache='fill')
+        self.assertNotEqual(completed['id'], failures[0]['id'])
+        from drum_score.jobs import Jobs
+        self.assertEqual(next(r for r in Jobs(self.data).records.query(task=first)
+                              if r['id'] == failures[0]['id']), failures[0])
+        process.terminate()
+        self.assertEqual(process.wait(timeout=15), 0)
 
     def test_weak_version_keeps_ordinary_conversion_and_never_reuses_media(self):
         self.prepare()

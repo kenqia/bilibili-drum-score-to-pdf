@@ -42,7 +42,7 @@ Windows CI 运行原生工具检查、跨宿主解码、公开入口共同约束
 
 ## 验证安装产物
 
-从准确源码无缓存构建 sdist 和 wheel，逐字节核对所有包文件与三份静态资源。分别创建基础安装和 web extra 环境，从仓库外运行，清除源码 `PYTHONPATH`。基础环境确认未安装 FastAPI/Uvicorn；web 环境实际启动 HTTP CLI 和独立 worker。两者运行依赖冲突检查、合成转换、全部预览、来源 hash 与 PTS 核对。安装报告必须记录解释器、包 hash 和源码身份，源码有变时重新构建。
+使用[运维入口](script-product/operations.md#构建准确发行)的 `tools/build_release.py` 从指定 commit 构建并核验 sdist、wheel 和全部包文件。CI 的 `release` job 执行同一入口。分别创建基础安装和 web extra 环境，从仓库外运行，清除源码 `PYTHONPATH`。基础环境确认未安装 FastAPI/Uvicorn；web 环境实际启动 HTTP CLI 和独立 worker。两者运行依赖冲突检查、合成转换、全部预览、来源 hash 与 PTS 核对。安装报告必须记录解释器、包 hash 和源码身份，源码有变时重新构建。
 
 网站的缩短保留期测试须记录真实参数，实际等待到期，检查状态、PDF、预览统一返回 410，并检查受管文件物理删除。恢复任务不得刷新原完成时间或原期限。备份恢复若重建文件，须在清单/hash 核验后重新登记新 inode/ctime 身份。
 
