@@ -100,7 +100,8 @@ class Switch:
 
     @staticmethod
     def command(args):
-        return subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        output = subprocess.PIPE if args[:2] == ['systemctl', 'show'] else subprocess.DEVNULL
+        return subprocess.run(args, check=True, stdout=output, stderr=subprocess.DEVNULL)
 
     def event(self, name):
         self.events.append(name)

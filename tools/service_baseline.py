@@ -9,8 +9,9 @@ import sqlite3
 import subprocess
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
-from drum_score.schema import validate_schema, normalized_sql, V1_STATEMENTS, V2_STATEMENTS, V3_STATEMENTS, V4_STATEMENTS, SCHEMA_STATEMENTS
+# Load only the standard-library schema module, without importing the media package.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src/drum_score'))
+from schema import validate_schema, normalized_sql, V1_STATEMENTS, V2_STATEMENTS, V3_STATEMENTS, V4_STATEMENTS, SCHEMA_STATEMENTS
 
 
 def digest(data):
