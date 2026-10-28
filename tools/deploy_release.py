@@ -5,6 +5,7 @@ Default is read-only preflight. Backup/upgrade and installed-release acceptance
 must be completed before this transaction; see docs/script-product/operations.md.
 """
 import argparse
+from contextlib import closing
 import hashlib
 import http.client
 import json
@@ -12,6 +13,8 @@ import os
 from pathlib import Path
 import subprocess
 import sqlite3
+import shlex
+import re
 import sys
 import tempfile
 import time
@@ -25,7 +28,14 @@ def fingerprint(path):
     info = path.lstat()
     if not path.is_file() or path.is_symlink():
         raise ValueError('Expected regular configuration file')
-    return info.st_dev, info.st_ino, hashlib.sha256(path.read_bytes()).hexdigest()
+    return info.st_dev, info.st_ino, info.st_ctime_ns, hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def link_identity(path):
+    info = path.lstat()
+    if not path.is_symlink():
+        raise ValueError('Expected release symlink')
+    return info.st_dev, info.st_ino, info.st_ctime_ns, os.readlink(path)
 
 
 def sync_directory(path):
@@ -34,6 +44,35 @@ def sync_directory(path):
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
+
+
+def profile_command(path, role, current, data_root, port=None):
+    section = None
+    commands = []
+    reset = False
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if line.startswith('['):
+            section = line
+        if section == '[Service]' and line.startswith('ExecStart='):
+            value = line.removeprefix('ExecStart=')
+            if not value:
+                reset = True
+            else:
+                commands.append(value)
+    if not reset or len(commands) != 1 or any(c in commands[0] for c in ('\\', '$', '%')):
+        raise ValueError('Expected one literal reset ExecStart command')
+    argv = shlex.split(commands[0])
+    if not argv or argv[0] != str(current) + '/venv/bin/drum-score-' + role:
+        raise ValueError('Unexpected profile executable')
+    def option(name, expected):
+        if argv.count(name) != 1 or argv.index(name) + 1 >= len(argv) or argv[argv.index(name) + 1] != str(expected):
+            raise ValueError('Unexpected profile option')
+    option('--data-root', data_root)
+    if role == 'web':
+        option('--host', '127.0.0.1')
+        option('--port', port)
+    return argv
 
 
 class Switch:
@@ -47,15 +86,29 @@ class Switch:
         self.public = False
         self.stopped = False
         self.events = []
+        self.initial_link = None
+        self.published_link = None
+        self.profile_identities = {}
+        self.commands = {}
+        self.replacements = {}
+        self.report_stream = None
 
     @staticmethod
     def command(args):
-        return subprocess.run(args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
     def event(self, name):
         self.events.append(name)
         # This report contains stage names only. Never capture command/config output.
-        self.report.write_text(json.dumps({'events': self.events, 'public': self.public}) + '\n')
+        info = os.fstat(self.report_stream.fileno())
+        current = self.report.lstat()
+        if self.report.is_symlink() or (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino):
+            raise ValueError('Report changed externally')
+        self.report_stream.seek(0)
+        self.report_stream.truncate()
+        self.report_stream.write(json.dumps({'events': self.events, 'public': self.public}) + '\n')
+        self.report_stream.flush()
+        os.fsync(self.report_stream.fileno())
 
     def atomic(self, path, data, track=True):
         descriptor, temporary = tempfile.mkstemp(prefix='.drum-switch-', dir=path.parent)
@@ -71,17 +124,24 @@ class Switch:
             # Publication is recorded BEFORE parent fsync can fail.
             if track:
                 self.changed[path] = identity
+                self.changed[path] = fingerprint(path)
             sync_directory(path.parent)
         finally:
             temporary.unlink(missing_ok=True)
 
     def flip(self, target):
         current = Path(self.plan['current'])
+        expected = self.published_link if self.link_changed else self.initial_link
+        if link_identity(current) != expected:
+            raise ValueError('Release changed externally; manual recovery required')
         temporary = current.with_name('.drum-current-' + os.urandom(8).hex())
         try:
             temporary.symlink_to(target)
+            published = link_identity(temporary)
             os.replace(temporary, current)
+            self.published_link = published
             self.link_changed = True
+            self.published_link = link_identity(current)
             sync_directory(current.parent)
         finally:
             temporary.unlink(missing_ok=True)
@@ -91,41 +151,55 @@ class Switch:
         old, new = p['old'], p['new']
         if not Path(p['current']).is_symlink() or Path(p['current']).resolve() != Path(old['release']):
             raise ValueError('Current release changed')
+        self.initial_link = link_identity(Path(p['current']))
         if not p.get('private_check') or not all(isinstance(v, str) for v in p['private_check']):
             raise ValueError('A private acceptance command is required')
         if p['private_port'] == p['public_port']:
             raise ValueError('Private acceptance must use a separate port')
         for baseline in (old, new):
-            with sqlite3.connect(Path(baseline['database']).as_uri() + '?mode=ro', uri=True) as db:
+            with closing(sqlite3.connect(Path(baseline['database']).as_uri() + '?mode=ro', uri=True)) as db:
                 if db.execute("SELECT COUNT(*) FROM tasks WHERE state IN ('queued','running','cancelling','finishing')").fetchone()[0]:
                     raise ValueError('Drain all old work before preparing the upgrade')
             check(collect(baseline['release'], baseline['database'], baseline['configs'], fingerprint_data=True), baseline)
         if old['database'] == new['database'] or old['release'] == new['release']:
             raise ValueError('Prepared release and data root must be distinct')
-        if set(old['configs']) != {item['path'] for item in p['profiles']}:
+        if len(p['profiles']) != 2 or {item['role'] for item in p['profiles']} != {'web', 'worker'}:
+            raise ValueError('Exactly one web and worker profile is required')
+        if not {item['path'] for item in p['profiles']} <= set(old['configs']):
             raise ValueError('Every old profile must have a replacement')
         for item in p['profiles']:
             path = Path(item['path'])
-            fingerprint(path)
+            self.profile_identities[path] = fingerprint(path)
             for phase in ('private', 'public'):
                 replacement = Path(item[phase])
                 fingerprint(replacement)
                 data = replacement.read_bytes()
                 if hashlib.sha256(data).hexdigest() != new['configs'].get(str(replacement.absolute())):
                     raise ValueError('Replacement profile changed')
-                if str(Path(new['database']).parent).encode() not in data:
-                    raise ValueError('Profile does not bind the prepared data root')
-                if str(Path(p['current'])).encode() not in data:
-                    raise ValueError('Profile must use the current release link')
+                self.replacements[item['path'], phase] = data
+                self.commands[item['role'], phase] = profile_command(
+                    replacement, item['role'], p['current'], Path(new['database']).parent,
+                    p['private_port'] if phase == 'private' else p['public_port'])
+            if item['role'] == 'worker' and Path(item['private']).read_bytes() != Path(item['public']).read_bytes():
+                raise ValueError('Worker profiles must be identical')
         # Check installed payload, not just the wheel supplied to pip.
         identity = json.loads((Path(new['release']) / 'release-identity.json').read_text())
         site = Path(new['release']) / 'venv/lib/python3.12/site-packages'
         expected = identity['package_files']
+        if any(f.is_symlink() for f in (site / 'drum_score').rglob('*')):
+            raise ValueError('Installed package links are unsupported')
         actual = {str(f.relative_to(site)): hashlib.sha256(f.read_bytes()).hexdigest()
                   for f in (site / 'drum_score').rglob('*')
                   if f.is_file() and '__pycache__' not in f.parts and f.suffix != '.pyc'}
         if actual != expected:
             raise ValueError('Installed package differs from release identity')
+
+    def verify_effective(self, phase):
+        for role, unit in zip(('web', 'worker'), UNITS):
+            result = self.run(['systemctl', 'show', unit, '--property=ExecStart', '--value'])
+            match = re.search(r'argv\[\]=(.*?) ;', result.stdout.decode())
+            if not match or shlex.split(match.group(1)) != self.commands[role, phase]:
+                raise ValueError('Effective systemd command differs from accepted profile')
 
     def health(self, port):
         deadline = time.monotonic() + 30
@@ -157,10 +231,16 @@ class Switch:
             if fingerprint(path) != identity:
                 raise ValueError('Configuration changed externally; manual recovery required')
             self.atomic(path, self.previous[path], track=False)
+        for item in p['profiles']:
+            path = Path(item['path'])
+            if path not in self.changed and fingerprint(path) != self.profile_identities[path]:
+                raise ValueError('Configuration changed externally; manual recovery required')
         if self.link_changed:
             if Path(p['current']).resolve() != Path(p['new']['release']):
                 raise ValueError('Release changed externally; manual recovery required')
             self.flip(p['old']['release'])
+        elif link_identity(Path(p['current'])) != self.initial_link:
+            raise ValueError('Release changed externally; manual recovery required')
         if self.stopped:
             self.run(['systemctl', 'daemon-reload'])
             self.run(['systemctl', 'start', *UNITS])
@@ -169,23 +249,34 @@ class Switch:
     def safe_event(self, name):
         try:
             self.event(name)
-        except OSError:
+        except (OSError, ValueError):
             print('deployment_report_unavailable', file=sys.stderr)
 
     def execute(self):
         self.preflight()
         self.report.parent.mkdir(parents=True, exist_ok=True)
+        descriptor = os.open(self.report, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, 'w') as stream:
+            self.report_stream = stream
+            self.execute_prepared()
+
+    def execute_prepared(self):
         # Save recoverable configuration BEFORE any service mutation.
         backup = self.report.with_suffix('.rollback')
         backup.mkdir(mode=0o700)
         for index, item in enumerate(self.plan['profiles']):
             path = Path(item['path'])
+            if fingerprint(path) != self.profile_identities[path]:
+                raise ValueError('Configuration changed externally')
             self.previous[path] = path.read_bytes()
             with (backup / str(index)).open('xb') as stream:
                 stream.write(self.previous[path])
                 stream.flush()
                 os.fsync(stream.fileno())
-        (backup / 'plan.json').write_text(json.dumps(self.plan, indent=2) + '\n')
+        with (backup / 'plan.json').open('x') as stream:
+            stream.write(json.dumps(self.plan, indent=2) + '\n')
+            stream.flush()
+            os.fsync(stream.fileno())
         sync_directory(backup)
         sync_directory(backup.parent)
         self.event('preflight_complete')
@@ -203,23 +294,27 @@ class Switch:
                     raise ValueError('Prepared snapshot changed; repeat backup/upgrade while stopped')
             for item in self.plan['profiles']:
                 path = Path(item['path'])
-                if path.read_bytes() != self.previous[path]:
+                if fingerprint(path) != self.profile_identities[path]:
                     raise ValueError('Configuration changed externally')
-                self.atomic(path, Path(item['private']).read_bytes())
+                self.atomic(path, self.replacements[item['path'], 'private'])
             self.flip(self.plan['new']['release'])
             self.run(['systemctl', 'daemon-reload'])
+            self.verify_effective('private')
             self.run(['systemctl', 'start', *UNITS])
             self.health(self.plan['private_port'])
             self.run(self.plan['private_check'])
             self.event('private_acceptance_passed')
             # Public boundary must precede ANY configuration exposing the new service.
+            if link_identity(Path(self.plan['current'])) != self.published_link:
+                raise ValueError('Release changed externally')
             self.public = True
             for item in self.plan['profiles']:
                 path = Path(item['path'])
                 if fingerprint(path) != self.changed[path]:
                     raise ValueError('Configuration changed externally')
-                self.atomic(path, Path(item['public']).read_bytes())
+                self.atomic(path, self.replacements[item['path'], 'public'])
             self.run(['systemctl', 'daemon-reload'])
+            self.verify_effective('public')
             self.run(['systemctl', 'restart', UNITS[0]])
             self.health(self.plan['public_port'])
             self.event('complete')
@@ -252,7 +347,7 @@ def main():
         else:
             switch.preflight()
             print('preflight_complete; no services or files changed')
-    except (OSError, ValueError, KeyError, RuntimeError, subprocess.CalledProcessError) as error:
+    except (OSError, ValueError, KeyError, RuntimeError, subprocess.CalledProcessError, sqlite3.Error) as error:
         print('deployment_refused: ' + type(error).__name__, file=sys.stderr)
         return 2
     return 0

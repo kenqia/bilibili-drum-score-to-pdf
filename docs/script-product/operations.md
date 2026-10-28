@@ -17,7 +17,7 @@ python tools/service_baseline.py \
 
 占位路径须替换为现场路径；先建私有证据目录。配置集合应包括两个 unit 及所有影响它们的 drop-in，不包含其他服务或认证。`release-identity.json` 必须随发行保存，记录准确源码 commit。旧发行缺少此文件时，先从已核验部署证据重建身份，不能猜测 commit。
 
-将脱敏清单带回开发机，使用 `--expected /PRIVATE/baseline.json --repository /ABSOLUTE/REPO --candidate COMMIT` 再次检查同一部署文件。代码/schema/配置变化或候选提交未包含线上 commit 时退出 2。任务增加不会改变普通基线。结构指纹使用 `schema.py` 同一规范化规则；即使 `user_version` 相同，异构表或索引也拒绝。
+在服务器用相同参数加 `--expected /PRIVATE/baseline.json` 检查部署漂移。将脱敏清单带回开发机，在候选 checkout 运行 `python tools/service_baseline.py --baseline /PRIVATE/baseline.json --repository /ABSOLUTE/REPO --candidate COMMIT`，检查祖先关系和候选是否识别线上结构。漂移、同号异构或候选未包含线上 commit 时退出 2。任务增加不会改变普通基线。结构指纹使用 `schema.py` 同一规范化规则；即使 `user_version` 相同，异构表或索引也拒绝。
 
 ## 兼容关系
 
@@ -52,9 +52,9 @@ CI 的 `release` job 调用同一命令，应用回归继续使用已有两个�
 
 1. 核对基线与候选祖先关系。用上述入口构建，安装到新发行的独立 `venv`，核验 BBDown、包 hash、`pip check` 及仓库外合成转换。把发行清单放入新发行根。
 2. 停止 HTTP 接收，排空所有未完成任务，再停止 worker。使用匹配旧发行进行停服 `backup` 和 `verify`，再用新发行对应入口恢复到不存在的新根。检查完成/到期时间、选项、计数、暂停与缓存不变。两服务保持停止，源根不再写入。
-3. 关闭所有数据库连接并完成 WAL checkpoint。分别执行基线命令，加 `--stopped-snapshot`，保存 `old.json` 和 `new.json`。旧清单配置集合是即将替换的两个 profile；新清单配置集合是预先准备的四个私有/正式 profile 文件。数据文件 hash 在切换停服屏障后再次比较，拒绝准备后改变的根。
+3. 关闭所有数据库连接并完成 WAL checkpoint。分别执行基线命令，加 `--stopped-snapshot`，保存 `old.json` 和 `new.json`。旧清单配置集合包括两个 unit、所有 drop-in，其中即将替换的两个 profile 在计划中单独登记；新清单配置集合是预先准备的四个私有/正式 profile 文件。数据文件 hash 在切换停服屏障后再次比较，拒绝准备后改变的根。
 4. 准备 `plan.json`，格式见下例。四个新 profile 都使用 `/srv/drum-score/current/venv/bin/` 和同一个新数据根；web 私有 profile 仅监听独立本地端口，worker 两份内容相同。正式 profile 保持授权的存储、期限和 cgroup 资源参数。`private_check` 是已审阅的参数数组，无 shell 展开，失败返回非零。该命令应验证真实来源的全部产物 hash、整理记录与必要的取消/重试，再恢复原暂停状态。
-5. 执行 `python tools/deploy_release.py --plan /PRIVATE/plan.json`。默认只读，成功后才使用 `--execute --report /PRIVATE/deployment.json`。工具持有本服务切换锁，备份原 profile，停服务、切换配置和 current，启动并检查私有 HTTP，运行 `private_check`，再开放正式端口并检查首页。只操作两个 drum-score unit。
+5. 执行 `python tools/deploy_release.py --plan /PRIVATE/plan.json`。默认只读，成功后才使用 `--execute --report /PRIVATE/deployment.json`。工具持有本服务切换锁，以 exclusive/no-follow 创建新报告并保护后续身份，备份原 profile，停服务、切换配置和 current，核对 systemd 实际 ExecStart 与已验收 profile 完全一致，再启动并检查私有 HTTP，运行 `private_check`，再开放正式端口并检查首页。只操作两个 drum-score unit。
 6. 核对公网 TLS、提交/查询/取消及服务资源，保存最终状态。首页检查只是 HTTP 可用性，不代表音乐校对或完整公网验收。更新工程交接，保留旧发行、旧根、快照和 rollback 目录。
 
 用以下 Python 片段组合清单，替换示例路径和验收命令。它只写本地计划：
@@ -67,9 +67,9 @@ plan = {
     'new': json.loads(Path('/PRIVATE/new.json').read_text()),
     'current': '/srv/drum-score/current',
     'profiles': [
-        {'path': '/etc/systemd/system/drum-score-web.service.d/90-parallel-budget.conf',
+        {'role': 'web', 'path': '/etc/systemd/system/drum-score-web.service.d/90-parallel-budget.conf',
          'private': '/PRIVATE/web.private', 'public': '/PRIVATE/web.public'},
-        {'path': '/etc/systemd/system/drum-score-worker.service.d/90-parallel-budget.conf',
+        {'role': 'worker', 'path': '/etc/systemd/system/drum-score-worker.service.d/90-parallel-budget.conf',
          'private': '/PRIVATE/worker.private', 'public': '/PRIVATE/worker.public'},
     ],
     'private_port': 8792,

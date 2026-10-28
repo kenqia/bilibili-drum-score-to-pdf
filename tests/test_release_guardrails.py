@@ -13,9 +13,9 @@ import zipfile
 import io
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from service_baseline import collect, check, schema_identity
+from service_baseline import collect, check, check_candidate, schema_identity
 from build_release import verify_artifacts
-from deploy_release import Switch
+from deploy_release import Switch, profile_command
 from drum_score.schema import SCHEMA_STATEMENTS
 
 
@@ -58,6 +58,24 @@ class BaselineTests(unittest.TestCase):
             with patch('service_baseline.subprocess.run', return_value=subprocess.CompletedProcess([], 1)):
                 with self.assertRaises(ValueError):
                     check(baseline, baseline, root, 'candidate')
+
+    def test_transferred_baseline_checks_local_candidate_without_server_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            db = root / 'data/tasks.sqlite3'
+            database(db)
+            (root / 'release-identity.json').write_text(json.dumps({'commit': 'a'*40}))
+            config = root / 'profile'
+            config.write_text('synthetic')
+            baseline = collect(root, db, [config])
+            repository = Path(__file__).resolve().parents[1]
+            candidate = subprocess.check_output(['git', '-C', str(repository), 'rev-parse', 'HEAD']).decode().strip()
+            baseline['commit'] = candidate
+            check_candidate(baseline, repository, candidate)
+            baseline['schema']['sha256'] = '0'*64
+            with self.assertRaises(ValueError):
+                check_candidate(baseline, repository, candidate)
+
 
 
 class PackagingTests(unittest.TestCase):
@@ -117,8 +135,12 @@ class DeploymentTests(unittest.TestCase):
             path.write_text('old synthetic config')
             private, public = self.root / (name + '.private'), self.root / (name + '.public')
             for p in (private, public):
-                p.write_text(str(current) + ' --data-root ' + str(self.root / 'new-data') + ' ' + p.suffix)
-            self.profiles.append({'path': str(path), 'private': str(private), 'public': str(public)})
+                port = '8792' if p == private else '8791'
+                command = str(current) + '/venv/bin/drum-score-' + name + ' --data-root ' + str(self.root / 'new-data')
+                if name == 'web':
+                    command += ' --host 127.0.0.1 --port ' + port
+                p.write_text('[Service]\nExecStart=\nExecStart=' + command + '\n')
+            self.profiles.append({'role': name, 'path': str(path), 'private': str(private), 'public': str(public)})
         old_db, new_db = self.root / 'old-data/tasks.sqlite3', self.root / 'new-data/tasks.sqlite3'
         database(old_db)
         database(new_db)
@@ -134,6 +156,7 @@ class DeploymentTests(unittest.TestCase):
         self.calls = []
         self.switch = Switch(self.plan, self.root / 'report.json', run=self.calls.append)
         self.switch.health = lambda port: None
+        self.switch.verify_effective = lambda phase: None
 
     def assert_restored(self):
         self.assertEqual(Path(self.plan['current']).resolve(), self.root / 'old')
@@ -143,12 +166,10 @@ class DeploymentTests(unittest.TestCase):
 
     def test_preflight_is_read_only_and_success_keeps_matching_code_config_data(self):
         # baseline metadata includes a digest used only after the stop barrier.
-        with patch('deploy_release.check', side_effect=lambda actual, expected: check(
-                actual, expected)):
-            self.switch.preflight()
-            self.assertEqual(self.calls, [])
-            self.assertFalse(self.switch.report.exists())
-            self.switch.execute()
+        self.switch.preflight()
+        self.assertEqual(self.calls, [])
+        self.assertFalse(self.switch.report.exists())
+        self.switch.execute()
         self.assertEqual(Path(self.plan['current']).resolve(), self.root / 'new')
         for item in self.profiles:
             self.assertEqual(Path(item['path']).read_bytes(), Path(item['public']).read_bytes())
@@ -175,8 +196,7 @@ class DeploymentTests(unittest.TestCase):
                     self.switch.event = broken_event
                     raise RuntimeError('synthetic private failure')
             context = patch.object(self.switch, 'atomic', side_effect=atomic)
-        with patch('deploy_release.check', side_effect=lambda actual, expected: check(
-                actual, expected)), context:
+        with context:
             with self.assertRaises((OSError, RuntimeError)):
                 self.switch.execute()
         self.assert_restored()
@@ -184,6 +204,21 @@ class DeploymentTests(unittest.TestCase):
 
     def test_parent_fsync_after_profile_publication_restores_old_triple(self):
         self.run_fault('fsync')
+
+    def test_parent_fsync_after_link_publication_restores_old_triple(self):
+        from deploy_release import sync_directory
+        failed = False
+        def injected(path):
+            nonlocal failed
+            if self.switch.link_changed and not failed:
+                failed = True
+                raise OSError('synthetic post-link-publication fsync')
+            sync_directory(path)
+        with patch('deploy_release.sync_directory', side_effect=injected):
+            with self.assertRaises(OSError):
+                self.switch.execute()
+        self.assertTrue(failed)
+        self.assert_restored()
 
     def test_report_failure_cannot_prevent_rollback(self):
         self.run_fault('report')
@@ -194,21 +229,112 @@ class DeploymentTests(unittest.TestCase):
             if command == self.plan['private_check']:
                 raise RuntimeError('synthetic acceptance failure')
         self.switch.run = run
-        with patch('deploy_release.check', side_effect=lambda actual, expected: check(
-                actual, expected)):
-            with self.assertRaises(RuntimeError):
-                self.switch.execute()
+        with self.assertRaises(RuntimeError):
+            self.switch.execute()
         self.assert_restored()
+
+    def test_existing_report_and_symlink_are_never_overwritten(self):
+        sentinel = self.root / 'unrelated'
+        sentinel.write_text('SYNTHETIC_KEEP')
+        for symlink in (False, True):
+            if symlink:
+                self.switch.report.symlink_to(sentinel)
+            else:
+                self.switch.report.write_text('SYNTHETIC_KEEP')
+            with self.assertRaises(FileExistsError):
+                self.switch.execute()
+            self.assertEqual(sentinel.read_text(), 'SYNTHETIC_KEEP')
+            self.assertEqual(self.calls, [])
+            self.switch.report.unlink()
+
+    def test_external_release_replacement_is_preserved(self):
+        external = self.root / 'external'
+        external.mkdir()
+        def run(command):
+            self.calls.append(command)
+            if command == ['systemctl', 'stop', 'drum-score-web.service', 'drum-score-worker.service']:
+                current = Path(self.plan['current'])
+                current.unlink()
+                current.symlink_to(external)
+        self.switch.run = run
+        with self.assertRaises(ValueError):
+            self.switch.execute()
+        self.assertEqual(Path(self.plan['current']).resolve(), external)
+        self.assertNotIn(['systemctl', 'start', 'drum-score-web.service', 'drum-score-worker.service'], self.calls)
+        for item in self.profiles:
+            self.assertEqual(Path(item['path']).read_text(), 'old synthetic config')
+
+    def test_external_equal_bytes_profile_replacement_is_preserved(self):
+        path = Path(self.profiles[0]['path'])
+        replacement_identity = None
+        def run(command):
+            nonlocal replacement_identity
+            self.calls.append(command)
+            if replacement_identity is None and command == ['systemctl', 'stop', 'drum-score-web.service', 'drum-score-worker.service']:
+                temporary = path.with_suffix('.external')
+                temporary.write_bytes(path.read_bytes())
+                temporary.replace(path)
+                replacement_identity = path.stat().st_ino
+        self.switch.run = run
+        with self.assertRaises(ValueError):
+            self.switch.execute()
+        self.assertEqual(path.stat().st_ino, replacement_identity)
+        self.assertNotIn(['systemctl', 'start', 'drum-score-web.service', 'drum-score-worker.service'], self.calls)
+        self.assertEqual(Path(self.plan['current']).resolve(), self.root / 'old')
+
+    def test_report_replacement_after_stop_does_not_touch_external_file_or_block_rollback(self):
+        sentinel = self.root / 'unrelated'
+        sentinel.write_text('SYNTHETIC_KEEP')
+        def run(command):
+            self.calls.append(command)
+            if command == self.plan['private_check']:
+                self.switch.report.unlink()
+                self.switch.report.symlink_to(sentinel)
+        self.switch.run = run
+        with self.assertRaises(ValueError):
+            self.switch.execute()
+        self.assert_restored()
+        self.assertEqual(sentinel.read_text(), 'SYNTHETIC_KEEP')
+
+    def test_wrong_private_host_port_root_and_worker_profile_are_refused(self):
+        from service_baseline import collect
+        for old, new in (('--port 8792', '--port 8791'),
+                         ('--host 127.0.0.1', '--host 0.0.0.0'),
+                         ('--data-root ' + str(self.root / 'new-data'), '--data-root /unrelated')):
+            path = Path(self.profiles[0]['private'])
+            original = path.read_text()
+            path.write_text(original.replace(old, new))
+            self.plan['new'] = collect(self.root / 'new', self.root / 'new-data/tasks.sqlite3',
+                [item[k] for item in self.profiles for k in ('private', 'public')], fingerprint_data=True)
+            with self.assertRaises(ValueError):
+                self.switch.preflight()
+            path.write_text(original)
+        path = Path(self.profiles[1]['public'])
+        path.write_text(path.read_text() + '# changed worker budget\n')
+        self.plan['new'] = collect(self.root / 'new', self.root / 'new-data/tasks.sqlite3',
+            [item[k] for item in self.profiles for k in ('private', 'public')], fingerprint_data=True)
+        with self.assertRaises(ValueError):
+            self.switch.preflight()
+        self.assertEqual(self.calls, [])
+
+    def test_effective_systemd_override_is_refused_before_start(self):
+        del self.switch.verify_effective
+        def run(command):
+            self.calls.append(command)
+            return subprocess.CompletedProcess(command, 0, stdout=b'{ argv[]=unexpected ; }')
+        self.switch.run = run
+        with self.assertRaises(ValueError):
+            self.switch.execute()
+        self.assert_restored()
+        self.assertNotIn('private_acceptance_passed', self.switch.events)
 
     def test_public_failure_preserves_new_root_and_stops_admission(self):
         def health(port):
             if port == self.plan['public_port']:
                 raise RuntimeError('synthetic public failure')
         self.switch.health = health
-        with patch('deploy_release.check', side_effect=lambda actual, expected: check(
-                actual, expected)):
-            with self.assertRaises(RuntimeError):
-                self.switch.execute()
+        with self.assertRaises(RuntimeError):
+            self.switch.execute()
         self.assertEqual(Path(self.plan['current']).resolve(), self.root / 'new')
         self.assertEqual(self.calls[-1], ['systemctl', 'stop', 'drum-score-web.service'])
 
