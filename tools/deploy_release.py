@@ -66,6 +66,11 @@ def profile_command(path, role, current, data_root, port=None):
     if not argv or argv[0] != str(current) + '/venv/bin/drum-score-' + role:
         raise ValueError('Unexpected profile executable')
     def option(name, expected):
+        for token in argv[1:]:
+            if token.startswith('--'):
+                option_name = token.split('=', 1)[0]
+                if name.startswith(option_name) and token != name:
+                    raise ValueError('Protected options require complete separate tokens')
         if argv.count(name) != 1 or argv.index(name) + 1 >= len(argv) or argv[argv.index(name) + 1] != str(expected):
             raise ValueError('Unexpected profile option')
     option('--data-root', data_root)
@@ -154,6 +159,8 @@ class Switch:
         self.initial_link = link_identity(Path(p['current']))
         if not p.get('private_check') or not all(isinstance(v, str) for v in p['private_check']):
             raise ValueError('A private acceptance command is required')
+        if any(type(p[key]) is not int or not 1 <= p[key] <= 65535 for key in ('private_port', 'public_port')):
+            raise ValueError('Ports must be integer TCP ports')
         if p['private_port'] == p['public_port']:
             raise ValueError('Private acceptance must use a separate port')
         for baseline in (old, new):

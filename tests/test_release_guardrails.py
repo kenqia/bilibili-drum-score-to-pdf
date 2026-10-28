@@ -317,6 +317,15 @@ class DeploymentTests(unittest.TestCase):
             self.switch.preflight()
         self.assertEqual(self.calls, [])
 
+    def test_equal_sign_and_abbreviated_override_options_are_refused(self):
+        profile = Path(self.profiles[0]['private'])
+        original = profile.read_text()
+        for override in ('--host=0.0.0.0 --port=8791', '--ho 0.0.0.0 --po 8791',
+                         '--data-root=/old', '--data-r /old'):
+            profile.write_text(original.rstrip() + ' ' + override + '\n')
+            with self.assertRaises(ValueError):
+                profile_command(profile, 'web', self.plan['current'], self.root / 'new-data', 8792)
+
     def test_effective_systemd_override_is_refused_before_start(self):
         del self.switch.verify_effective
         def run(command):
