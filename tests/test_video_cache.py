@@ -184,12 +184,38 @@ class VideoCache(unittest.TestCase):
 
     def _cache_snapshot_roundtrip(self, legacy=False):
         import subprocess
+        import sqlite3
         from fastapi.testclient import TestClient
         from drum_score.web import create_app
         self.prepare()
+        # Real website acquisition attaches this policy before cache publication.
+        with (self.network/'sitecustomize.py').open('a') as script:
+            script.write("\noriginal_inspect=inspect\ndef checked_inspect(origin,staging):\n    from drum_score.description_policy import check\n    result=original_inspect(origin,staging)\n    result['description_policy']=check('ordinary',origin)\n    return result\nbbdown_cli.inspect=checked_inspect\n")
+        if legacy:
+            with (self.network/'sitecustomize.py').open('a') as script:
+                script.write("\nfrom drum_score.description_policy import check\ndef checked_inspect(origin,staging):\n    result=original_inspect(origin,staging)\n    result['description_policy']=check(None,origin)\n    return result\nbbdown_cli.inspect=checked_inspect\n")
+        expected_policy = {'rule':'description_hearts_v1', 'valid_description':not legacy,
+                           'matched':False, 'codepoints':[]}
         first,auth=self.submit()
         self.assertEqual(self.worker(once=True).wait(timeout=30),0)
         before=self.state(first,auth)['result']['source']['cache']
+        if not legacy:
+            with sqlite3.connect(self.data/'tasks.sqlite3') as db:
+                original_source = db.execute('SELECT source FROM video_cache').fetchone()[0]
+                for number, changes in enumerate([{'rule':'unknown'}, {'matched':True}, {'matched':0},
+                                                  {'valid_description':1}, {'codepoints':['U+2665']}, {'extra':False}]):
+                    source = json.loads(original_source)
+                    source['description_policy'] = {**expected_policy, **changes}
+                    db.execute('UPDATE video_cache SET source=?', (json.dumps(source),))
+                    db.commit()
+                    refused = self.root/('invalid-policy-'+str(number))
+                    result = subprocess.run([sys.executable,'-m','drum_score.maintenance','backup',
+                        '--data-root',str(self.data),'--output',str(refused),'--services-stopped',
+                        '--min-free-mib','1'],env=self.env,capture_output=True,text=True,timeout=15)
+                    self.assertEqual(json.loads(result.stdout)['error']['code'],'invalid_cache_snapshot')
+                    self.assertFalse(refused.exists())
+                db.execute('UPDATE video_cache SET source=?', (original_source,))
+                db.commit()
         snapshot=self.root/'snapshot';restored=self.root/'restored'
         for operation,args in [('backup',['--data-root',str(self.data),'--output',str(snapshot),'--services-stopped']),
             ('verify',['--backup-root',str(snapshot)]),('restore',['--backup-root',str(snapshot),'--output',str(restored)])]:
@@ -210,6 +236,8 @@ class VideoCache(unittest.TestCase):
             restored=self.root/'upgraded'
             result=subprocess.run([sys.executable,'-m','drum_score.maintenance','upgrade-v4','--backup-root',str(snapshot),'--output',str(restored),'--min-free-mib','1'],env=self.env,capture_output=True,text=True,timeout=15)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        with sqlite3.connect(restored/'tasks.sqlite3') as db:
+            self.assertEqual(json.loads(db.execute('SELECT source FROM video_cache').fetchone()[0])['description_policy'], expected_policy)
         original=next((self.data/'cache').rglob('video.mp4'));copy=next((restored/'cache').rglob('video.mp4'))
         self.assertNotEqual(original.stat().st_ino,copy.stat().st_ino)
         self.client.close();self.data=restored
@@ -217,6 +245,8 @@ class VideoCache(unittest.TestCase):
         task,auth=self.submit();self.assertEqual(self.worker(once=True).wait(timeout=30),0)
         after=self.state(task,auth)
         self.assertEqual(after['state'],'complete',after)
+        self.assertEqual(after['result']['source']['description_policy'],
+                         expected_policy)
         self.assertEqual(after['result']['source']['cache']['status'],'hit')
         self.assertEqual(after['result']['source']['cache']['expires_at'],before['expires_at'])
         self.assertEqual((self.network/'fetches').read_text().splitlines(),['fetch'])

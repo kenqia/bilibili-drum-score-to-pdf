@@ -369,9 +369,17 @@ def cache_files(tree, db, budget, *, owned=False):
         source = json.loads(row['source'], object_pairs_hook=unique_object)
         allowed = {'kind','bvid','page','url','authenticated','cid','aid','version','backend','backend_version',
             'backend_build','backend_sha256','acquisition_route','anonymous','full_duration','single_file_fallback',
-            'actual_video','format_attempts','backup_used','selected_format'}
+            'actual_video','format_attempts','backup_used','selected_format','description_policy'}
         if not isinstance(source,dict) or set(source)-allowed or len(row['source']) > 16384:
             raise MaintenanceError('invalid_cache_snapshot')
+        if 'description_policy' in source:
+            policy = source['description_policy']
+            if (not isinstance(policy, dict)
+                or set(policy) != {'rule', 'valid_description', 'matched', 'codepoints'}
+                or policy['rule'] != 'description_hearts_v1'
+                or type(policy['valid_description']) is not bool
+                or policy['matched'] is not False or policy['codepoints'] != []):
+                raise MaintenanceError('invalid_cache_snapshot')
         canonical = video_origin(source.get('url'))
         if canonical['kind'] != 'bilibili' or any(source.get(k) != v for k,v in canonical.items()):
             raise MaintenanceError('invalid_cache_snapshot')
