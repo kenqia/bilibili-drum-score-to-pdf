@@ -566,6 +566,7 @@ class ScriptPublicContracts(unittest.TestCase):
         finally:
             fixture.tearDown()
 
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux worker process contract')
     def test_worker_rejects_cache_budget_above_one_gib(self):
         import tempfile
         with tempfile.TemporaryDirectory() as temporary:

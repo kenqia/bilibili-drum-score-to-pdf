@@ -22,7 +22,7 @@ python ci/run_unittest_shard.py --index 0 --count 2 --list
 python ci/run_unittest_shard.py --index 1 --count 2 --list
 ```
 
-Windows CI 运行原生工具检查、跨宿主解码、公开入口共同约束和合成转换重放。Linux 服务进程契约不作为 Windows 服务支持声明。本地检查不代表远端 CI 已执行。
+Windows CI 安装 web extra 与 `tests/requirements-web.txt`，运行原生工具检查、跨宿主解码、公开入口共同约束和合成转换重放。worker 进程及资源拒绝属于 Linux 专属契约，Windows 不运行。Linux 服务进程契约不作为 Windows 服务支持声明。本地检查不代表远端 CI 已执行。
 
 ## 核对行为与证据
 

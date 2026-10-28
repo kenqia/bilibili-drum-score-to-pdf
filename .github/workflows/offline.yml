@@ -122,7 +122,7 @@ jobs:
         timeout-minutes: 10
         run: python ci/install_windows_tools.py
       - name: Install pinned Python dependencies
-        run: python -m pip install .
+        run: python -m pip install ".[web]" -r tests/requirements-web.txt
       - name: Verify supported CLI and media contracts
         shell: pwsh
         run: |
