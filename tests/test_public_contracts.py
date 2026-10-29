@@ -12,6 +12,126 @@ MAINTENANCE_ENTRIES = ('backup', 'verify', 'restore')
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'linux', 'Real website worker and PDF tools')
+    def test_website_expert_fallback_publishes_review_warning_and_relayout(self):
+        import hashlib
+        import test_web_worker as web_fixture
+        from test_video_cache import NETWORK
+        from score_fixtures import score_frame, video_from_image
+        fixture = web_fixture.WebsiteWorker(methodName='runTest')
+        fixture.setUp()
+        try:
+            video_from_image(score_frame().crop((70, 40, 1210, 910)), fixture.network)
+            (fixture.network / 'sitecustomize.py').write_text(NETWORK)
+            # Inject a primary capability failure; run the actual kit, PDF
+            # adapter, previews, website publication and temporary print worker.
+            with (fixture.network / 'sitecustomize.py').open('a') as stream:
+                stream.write("\nfrom drum_score import core\n"
+                             "def fail_primary(*args, **kwargs):\n"
+                             "    raise core.ConversionError('discontinuity', 'SYNTHETIC_PRIVATE_PRIMARY')\n"
+                             "core._process = fail_primary\n")
+            task, auth = fixture.submit()
+            self.assertEqual(fixture.worker(once=True).wait(timeout=40), 0)
+            before = fixture.state(task, auth)
+            self.assertEqual(before['state'], 'complete', before)
+            result = before['result']
+            self.assertFalse(result['reliable'])
+            self.assertEqual(result['conversion']['engine'], 'expert_v6')
+            self.assertTrue(result['conversion']['needs_review'])
+            self.assertIn('expert_fallback_needs_review', {warning['code'] for warning in result['warnings']})
+            # Keep the durable summary compatible with the pre-fallback
+            # release. Detailed evidence lives in the manifest/private record.
+            self.assertNotIn('expert', result)
+            self.assertNotIn('SYNTHETIC_PRIVATE_PRIMARY', json.dumps(before))
+            self.assertNotIn(str(fixture.root), json.dumps(before))
+            pdf = fixture.client.get(f'/api/tasks/{task}/pdf', headers=auth)
+            self.assertEqual(hashlib.sha256(pdf.content).hexdigest(), result['pdf']['sha256'])
+            self.assertEqual(result['page_count'], 1)
+            self.assertEqual(fixture.client.get(f'/api/tasks/{task}/pages/1', headers=auth).status_code, 200)
+            response = fixture.client.post(f'/api/tasks/{task}/layout', headers=auth, json={'paper': 'A5', 'rows': 1})
+            self.assertEqual(response.status_code, 200, response.text[:200])
+            self.assertEqual(fixture.state(task, auth), before)
+            second, second_auth = fixture.submit()
+            self.assertEqual(fixture.worker(once=True).wait(timeout=40), 0)
+            cached = fixture.state(second, second_auth)
+            self.assertEqual(cached['state'], 'complete', cached)
+            self.assertEqual(cached['result']['conversion']['engine'], 'expert_v6')
+            self.assertEqual(cached['result']['source']['cache']['status'], 'hit')
+            self.assertEqual(cached['result']['source']['cache']['expires_at'],
+                             result['source']['cache']['expires_at'])
+            self.assertEqual((fixture.network / 'fetches').read_text().splitlines(), ['fetch'])
+            from drum_score.jobs import Jobs
+            jobs = Jobs(fixture.data)
+            record = next(entry for entry in jobs.records.query(task=task)
+                          if entry['status'] == 'complete' and entry['operation'] == 'submit')
+            self.assertEqual(record['output']['expert']['primary_error'], 'discontinuity')
+            self.assertFalse(record['output']['expert']['native_timestamps_recorded'])
+            manifest = next((fixture.data / 'attempts' / task).rglob('manifest.json'))
+            self.assertEqual({path.name for path in manifest.parent.iterdir()},
+                             {'score.pdf', 'page-1.png', 'manifest.json'})
+            from drum_score.maintenance import backup, verify, restore
+            snapshot, restored = fixture.root / 'snapshot', fixture.root / 'restored'
+            backup(fixture.data, snapshot, services_stopped=True, min_free_bytes=1)
+            verify(snapshot, min_free_bytes=1)
+            restore(snapshot, restored, min_free_bytes=1)
+            from fastapi.testclient import TestClient
+            from drum_score.web import create_app
+            with TestClient(create_app(restored)) as client:
+                after = client.get(f'/api/tasks/{task}', headers=auth).json()
+                self.assertEqual(after, before)
+                self.assertEqual(client.get(f'/api/tasks/{task}/pdf', headers=auth).content, pdf.content)
+        finally:
+            fixture.tearDown()
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux cancellation and shared deadline')
+    def test_website_expert_fallback_shares_cancellation_and_total_deadline(self):
+        import os
+        import test_web_worker as web_fixture
+        for mode in ('cancel', 'deadline'):
+            with self.subTest(mode=mode):
+                fixture = web_fixture.WebsiteWorker(methodName='runTest')
+                fixture.setUp()
+                try:
+                    with (fixture.network / 'sitecustomize.py').open('a') as stream:
+                        stream.write("\nfrom drum_score import core\n"
+                            "from drum_score.expert_v6 import drumscore_auto_v6 as kit\n"
+                            "import os, time, subprocess, sys\n"
+                            "from pathlib import Path\n"
+                            "def fail_primary(*args, **kwargs):\n"
+                            "    time.sleep(1)\n"
+                            "    raise core.ConversionError('discontinuity', 'synthetic')\n"
+                            "def blocked_kit(argv):\n"
+                            "    child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(3600)'])\n"
+                            "    root = Path(os.environ['SYNTHETIC_NETWORK_ROOT'])\n"
+                            "    (root / 'expert-entered').write_text(str(os.getpid()) + ',' + str(child.pid))\n"
+                            "    time.sleep(3600)\n"
+                            "core._process = fail_primary\n"
+                            "kit.main = blocked_kit\n")
+                    task, auth = fixture.submit()
+                    args = [sys.executable, '-m', 'drum_score.worker', '--data-root', str(fixture.data),
+                            '--once', '--timeout', '4']
+                    process = subprocess.Popen(args, env=fixture.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    fixture.processes.append(process)
+                    fixture.until(lambda: (fixture.network / 'expert-entered').exists(), timeout=15)
+                    if mode == 'cancel':
+                        fixture.client.post(f'/api/tasks/{task}/cancel', headers=auth)
+                    self.assertEqual(process.wait(timeout=15), 0)
+                    state = fixture.state(task, auth)
+                    self.assertEqual(state['state'], 'cancelled' if mode == 'cancel' else 'failed', state)
+                    if mode == 'deadline':
+                        self.assertEqual(state['error']['code'], 'resource_limit')
+                    self.assertFalse(list((fixture.data / 'attempts' / task).rglob('score.pdf')))
+                    pids = map(int, (fixture.network / 'expert-entered').read_text().split(','))
+                    for pid in pids:
+                        def stopped(pid=pid):
+                            try:
+                                return (Path('/proc') / str(pid) / 'stat').read_text().rsplit(') ', 1)[1].startswith('Z')
+                            except FileNotFoundError:
+                                return True
+                        fixture.until(stopped)
+                finally:
+                    fixture.tearDown()
+
     def test_automatic_region_selects_staff_panel_and_preserves_its_edges(self):
         import tempfile
         from PIL import Image, ImageDraw, ImageChops

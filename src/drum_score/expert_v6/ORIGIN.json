@@ -1,0 +1,39 @@
+{
+  "version": "6.0.0",
+  "archive_sha256": "45774f153955b9c74667b8a9bf4271ac1caf0055bff52ed693bac138131d62e1",
+  "source": "User commissioned generation through ChatGPT web; redistribution confirmed 2026-10-29",
+  "files": {
+    "drumscore_auto_v6.py": {
+      "original_sha256": "ff7f431c1bf8da6e1c2a1c5a98d3077607c081182f118a2009de2bd0e86097d2",
+      "algorithm_ast_sha256": "ba75b2bdb70f16a83bb0ea1534ff486ca866c52935ea41ba6c76c9cf726026ab"
+    },
+    "drumscore_auto_v3.py": {
+      "original_sha256": "0e1468e019195ecb7c99aad2d5945798fe889896ba1b4a742521312090390466",
+      "algorithm_ast_sha256": "0a72076805ac117b52acc73cd11daefa9f200d9a8d35cfc4a4fac345d36509f9"
+    },
+    "drumscore_v2.py": {
+      "original_sha256": "c408403bcb5652d4fdf527d4342d8af734fed72da3c8e2975d6510c6c356ed5f",
+      "algorithm_ast_sha256": "ad4ec937fdfadcb0c2520074533ac19a1846a1065ba7ad2610c60395da6f9b92"
+    },
+    "legacy_extractor.py": {
+      "original_sha256": "54f7cff22823ac7731edd9febbe9acf4614957886deb1935452882431813027a",
+      "algorithm_ast_sha256": "78e8f12bfc09b4c6d34d061ce98c37419e3bc97db4f1b6d7e83deb1c3ff3f9d1"
+    },
+    "bar_ocr.py": {
+      "original_sha256": "8ebdfbae252ec2cb11ace69cb943239094f327d33b7c57bea06a38ffe8ce6eca",
+      "algorithm_ast_sha256": "8d38b2ce773ff6396f7f364be6e656b73bd43a809778719bfb2016d7dd0d778b"
+    },
+    "adaptive_ocr.py": {
+      "original_sha256": "7f7f2f073d5779e119a25668dffc2e889a8798782ec9bccd29e701c153afbfcd",
+      "algorithm_ast_sha256": "8183dac57a19f61bbfd8341bfc35dfe1c5331d1e224b3b2ddbd03459afbd22b7"
+    },
+    "sequence_v5.py": {
+      "original_sha256": "0f954645b66517631fac3b99daf04404b3f4497dd23af0ba64609f80611931a3",
+      "algorithm_ast_sha256": "d6c2c9cb1ca86bd77cb4e5e06cc68201f4c10c6a5963700b4020263116616119"
+    },
+    "staff_integrity.py": {
+      "original_sha256": "cedcaf5b09d506333732b7e4ce9bcc55fc30628e278ec0f203fc2150ad0a6e74",
+      "algorithm_ast_sha256": "1ecc36a6dedee598fddc9ed568d691fc54e7b75e23809ef5eca4a046b623803c"
+    }
+  }
+}

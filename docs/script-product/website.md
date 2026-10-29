@@ -218,3 +218,13 @@ worker持有一个共享获取协调器。相同已验证来源的并发请求�
 
 
 主曲范围、排除区间和实际像素谱区沿用[转换契约](conversion.md#自动主曲范围)。任务摘要与整理记录均保留 `conversion.scope`、`effective_region` 和 `scope_notice`。结果页显示主曲或选段及实际秒数；PDF 与谱面预览不嵌程序说明，原谱文字保持原样。`ambiguous_scope`、`incomplete_score` 及带定位的 `discontinuity` 均表示未发布完整结果；整理记录的 `error.conversion_failure` 保存类别、时间范围与脱敏说明，不把边缘覆盖不足误称已确认来源缺失。
+
+## 默认整理的专家兜底
+
+默认选项下，首选算法返回 `unsupported_layout` 或 `discontinuity` 时，网站在同一受监督转换进程中调用专家 v6，固定关闭 OCR。成功结果包含 PDF、全部页面预览和 `conversion.engine=expert_v6`、`conversion.needs_review=true`。页面显示专家兜底及复核警告；`complete` 仍仅表示产物完整发布，`reliable=false`。
+
+专家程序保留原有灰度增白、颜色融合、行序和裁剪行为。自动审计可能漏报重复或缺行；没有疑点不表示音乐完整。默认 PDF 的灰度值按相同 RGB 通道值写出，现有临时打印排版继续受其页数、图片和像素预算限制。
+
+使用选段、手动谱区或关闭固定覆盖物忽略时，不启用兜底。取消、下载或安全拒绝、输入变化、资源超限、解码错误与笼统转换错误也不触发兜底。首选处理已消耗的总时限和磁盘空间继续计入，不重新申请名额、不刷新缓存或结果期限。
+
+manifest 的 `expert` 留存工具包身份、首选失败码、审计与裁界摘要。`expert.rows[].requested_time_seconds` 是专家请求取帧时间；对应 `pts`、`time_base` 为 `null`，不能冒称原生解码时间。没有可验证的解码计数和解码成本时相应字段为 `null`。私有原包 HTML、内部报告和日志不会进入公开结果目录。细节见[专家兜底设计](expert-fallback-design.md)。

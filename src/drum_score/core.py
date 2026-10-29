@@ -68,8 +68,8 @@ def artifact(root, path):
 def _program_identity():
     package = Path(__file__).resolve().parent
     source_hash = hashlib.sha256()
-    for path in sorted(package.glob('*.py')):
-        source_hash.update(path.name.encode('utf-8'))
+    for path in sorted(package.rglob('*.py')):
+        source_hash.update(path.relative_to(package).as_posix().encode('utf-8'))
         source_hash.update(b'\0')
         with path.open('rb') as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b''):
@@ -88,7 +88,8 @@ def convert(source, output, *, options=None, progress=None, limits=None, cancel=
     return run(source, output, options=options, progress=progress, limits=limits, cancel=cancel)
 
 
-def _convert(source, output, *, options=None, progress=None, limits=None, cancel=None, prepared=None):
+def _convert(source, output, *, options=None, progress=None, limits=None, cancel=None, prepared=None,
+             expert_fallback=False):
     """Publish PDF, all previews and provenance together into a new directory.
 
     ``progress`` receives real stage names. Errors never include raw network
@@ -124,6 +125,7 @@ def _convert(source, output, *, options=None, progress=None, limits=None, cancel
     try:
         with tempfile.TemporaryDirectory(prefix='.drum-score-', dir=output.parent) as temporary:
             work = Path(temporary)
+            budget.root = work
             budget.check()
             result_dir = work / 'result'
             result_dir.mkdir()
@@ -153,7 +155,14 @@ def _convert(source, output, *, options=None, progress=None, limits=None, cancel
                 raise ConversionError('resource_limit', '来源文件超过输入大小限制。')
             source_hash = digest(local)
             metadata = video_seek.probe_video(local)
-            result = _process(local, result_dir, metadata, emit, budget, options)
+            try:
+                result = _process(local, result_dir, metadata, emit, budget, options)
+            except ConversionError as error:
+                from .expert_fallback import eligible, process
+                if not expert_fallback or not eligible(error, options):
+                    raise
+                result_dir = work / 'expert-result'
+                result = process(local, result_dir, work / 'expert-work', metadata, emit, budget, error)
             if digest(local) != source_hash:
                 raise ConversionError('source_changed', '处理期间来源发生变化，未发布结果。')
             phase_seconds[current_phase] = phase_seconds.get(current_phase, 0) + time.monotonic() - phase_started

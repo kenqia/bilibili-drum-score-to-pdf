@@ -24,8 +24,9 @@ drum-score-maintenance = "drum_score.maintenance:main"
 drum-score-records = "drum_score.processing_records:main"
 
 [tool.setuptools]
-packages = ["drum_score"]
+packages = ["drum_score", "drum_score.expert_v6"]
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
 drum_score = ["static/*.html", "static/*.css", "static/*.js", "static/*.svg", "static/*.jpg"]
+"drum_score.expert_v6" = ["ORIGIN.json"]
