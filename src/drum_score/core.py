@@ -281,12 +281,18 @@ def _process(source, output, metadata, emit, budget, options):
     longshot = output / 'longshot.png'
     imaging.compose(paths, region, placements, longshot)
     emit('paginating')
-    pdf, pages, strips, staffs = imaging.paginate(longshot, output)
+    pdf, pages, layout = imaging.paginate(longshot, output)
+    warnings = [{'code': 'not_musically_proofread', 'message': NOTICE}]
+    maximum = layout['boundary_analysis']['max_staffs_per_group']
+    if maximum > 1:
+        warnings.append({'code': 'joined_staff_rows',
+                         'message': f'存在最多 {maximum} 行的连续行组，已整体保留，请检查分行和打印大小。'})
     return {'conversion': {'options': options, 'effective_range_seconds': [start, end],
                            'is_excerpt': start > 0 or end < metadata['duration']},
-            'warnings': [{'code': 'not_musically_proofread', 'message': NOTICE}],
+            'warnings': warnings,
             'pdf': artifact(output, pdf), 'pages': [artifact(output, page) for page in pages],
             'longshot': {**artifact(output, longshot), 'kind': 'derived_image'},
             'samples': samples, 'placements': placements, 'region': list(region),
-            'page_regions': [list(strip) for strip in strips], 'staff_count': staffs,
+            'page_regions': layout['page_regions'], 'staff_count': layout['staff_count'],
+            'pagination': layout['boundary_analysis'],
             'metrics': metrics, 'registration': registration, 'preflight': preflight}
