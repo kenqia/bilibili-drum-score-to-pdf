@@ -318,4 +318,4 @@ def paginate(longshot, output):
     from .print_layout import render
     with Image.open(longshot) as image:
         layout = render(image, output)
-    return output / 'score.pdf', sorted(output.glob('page-*.png')), layout['page_regions'], layout['staff_count']
+    return output / 'score.pdf', sorted(output.glob('page-*.png')), layout

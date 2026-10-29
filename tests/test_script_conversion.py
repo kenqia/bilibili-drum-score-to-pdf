@@ -964,6 +964,8 @@ os._exit(0)
             result = drum_score.convert(source, root / 'result')
             self.assertEqual(result['staff_count'], 2)
             self.assertEqual(result['page_regions'], [[0, 2200]])
+            self.assertIn('joined_staff_rows', {warning['code'] for warning in result['warnings']})
+            self.assertEqual(result['pagination']['max_staffs_per_group'], 2)
             self.assertEqual(len(result['pages']), 1)
             subprocess.run(['pdfimages', '-png', str(root / 'result' / result['pdf']['path']),
                             str(root / 'group-embedded')], check=True, capture_output=True)

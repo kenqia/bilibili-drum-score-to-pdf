@@ -12,6 +12,60 @@ MAINTENANCE_ENTRIES = ('backup', 'verify', 'restore')
 
 
 class ScriptPublicContracts(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'linux', 'Real Python/CLI/HTTP worker and PDF extraction')
+    def test_component_boundaries_reach_python_cli_http_and_temporary_layout(self):
+        import base64
+        import tempfile
+        import test_web_worker as web_fixture
+        from test_staff_boundaries import interleaved_score
+        fixture = web_fixture.WebsiteWorker(methodName='runTest')
+        fixture.setUp()
+        try:
+            image = interleaved_score()
+            png = fixture.root / 'native.png'
+            image.save(png)
+            video = fixture.network / 'input.mp4'
+            video.unlink()
+            # Exact colors survive the local and anonymous fixture transport.
+            subprocess.run(['ffmpeg', '-v', 'error', '-loop', '1', '-i', str(png),
+                            '-t', '2', '-r', '4', '-c:v', 'ffv1', '-f', 'matroska', str(video)], check=True)
+            runner = fixture.root / 'boundary-core.py'
+            runner.write_text("import sys,json\nfrom drum_score import convert\n"
+                              "if __name__=='__main__': print(json.dumps(convert(sys.argv[1],sys.argv[2])))\n")
+            for entry in REMOTE_SCRIPT_ENTRIES:
+                with self.subTest(entry=entry):
+                    if entry == 'script_http':
+                        task, auth = fixture.submit()
+                        self.assertEqual(fixture.worker(once=True).wait(timeout=40), 0)
+                        before = fixture.state(task, auth)
+                        self.assertEqual(before['state'], 'complete', before)
+                        manifest = next((fixture.data / 'attempts' / task).rglob('manifest.json'))
+                        result = json.loads(manifest.read_text())
+                        # New detailed evidence stays out of the durable summary.
+                        self.assertNotIn('pagination', before['result'])
+                        response = fixture.client.post(f'/api/tasks/{task}/layout', headers=auth,
+                                                       json={'paper': 'A4', 'rows': 1})
+                        self.assertEqual(response.status_code, 200)
+                        layout = response.json()
+                        self.assertEqual(layout['page_count'], 2)
+                        self.assertEqual(layout['actual_rows'], 1)
+                        self.assertTrue(base64.b64decode(layout['pdf']).startswith(b'%PDF'))
+                        self.assertEqual(fixture.state(task, auth), before)
+                    else:
+                        output = fixture.root / entry
+                        args = ([sys.executable, str(runner), str(video), str(output)] if entry == 'script_core'
+                                else [sys.executable, '-m', 'drum_score', str(video), '--output', str(output)])
+                        process = subprocess.run(args, env=fixture.env, capture_output=True, text=True, timeout=40)
+                        self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+                        result = json.loads(process.stdout)
+                    self.assertEqual(result['staff_count'], 2)
+                    self.assertEqual(result['pagination']['group_count'], 2)
+                    self.assertEqual(result['pagination']['max_staffs_per_group'], 1)
+                    self.assertFalse(result['reliable'])
+                    self.assertNotIn('joined_staff_rows', {w['code'] for w in result['warnings']})
+        finally:
+            fixture.tearDown()
+
     @unittest.skipUnless(sys.platform == 'linux', 'Real website worker and PDF tools')
     def test_website_expert_fallback_publishes_review_warning_and_relayout(self):
         import hashlib
