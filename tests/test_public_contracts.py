@@ -22,6 +22,9 @@ class ScriptPublicContracts(unittest.TestCase):
         fixture.setUp()
         try:
             image = interleaved_score()
+            from PIL import ImageDraw, ImageFont
+            ImageDraw.Draw(image).text((100, 135), 'mf',
+                                       font=ImageFont.load_default(size=16), fill=(180, 0, 0))
             png = fixture.root / 'native.png'
             image.save(png)
             video = fixture.network / 'input.mp4'

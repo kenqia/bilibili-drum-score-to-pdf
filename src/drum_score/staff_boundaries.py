@@ -36,7 +36,7 @@ def _gray_edges(image):
     return result
 
 
-def _corridor(image, previous, current, edges):
+def _corridor(image, previous, current, edges, evidence=None):
     width, height = image.size
     begin = math.ceil(previous[0] + previous[1] * 5)
     end = math.floor(current[0] - current[1])
@@ -72,28 +72,14 @@ def _corridor(image, previous, current, edges):
         return None, 'component_spans_staffs'
     owners = np.zeros(len(stats), np.uint8)
     owners[upper], owners[lower] = 1, 2
-    # A blank row cannot establish the meaning of a detached annotation.
-    # Multiple gaps around an mf or circle would assign it to opposite staffs.
-    # Keep the group whenever such substantive marks occupy this corridor.
-    for label, (x, y, w, h, area) in enumerate(stats[1:], 1):
-        if owners[label] == 0 and top + y + h > begin and top + y < end:
-            return None, 'detached_mark_ambiguous'
-    blank = np.flatnonzero(~ink[begin - top:end - top].any(axis=1)) + begin
-    separator = None
-    if len(blank):
-        runs = np.split(blank, np.flatnonzero(np.diff(blank) > 1) + 1)
-        for run in sorted(runs, key=len, reverse=True):
-            middle = float(np.median(run))
-            for value in sorted(run.tolist(), key=lambda y: abs(y - middle)):
-                if all(not (top + y < value < top + y + h)
-                       for x, y, w, h, area in stats[1:]):
-                    separator = value
-                    break
-            if separator is not None:
-                break
-    if separator is not None and all(not (top + y < separator < top + y + h)
-                                     for x, y, w, h, area in original_stats[1:]):
-        return np.full(width, separator, np.int32), 'incidental_blank_cut'
+    from .staff_ownership import assign
+    owners, annotations, reason = assign(rgb, labels, stats, owners, top=top,
+                                        begin=begin, end=end,
+                                        spacing=min(previous[1], current[1]))
+    if evidence is not None:
+        evidence.extend(annotations)
+    if owners is None:
+        return None, reason
     ownership = owners[labels]
     yy = np.arange(bottom - top)[:, None] + top
     low = np.maximum(begin, np.where(ownership == 1, yy + 1, begin).max(axis=0))
@@ -106,7 +92,7 @@ def _corridor(image, previous, current, edges):
         start, stop = max(begin, top + y + 1), min(end, top + y + h)
         if start < stop:
             allowed[start - begin:stop - begin, x:x + w] = False
-    middle = separator if separator is not None else (begin + end - 1) / 2
+    middle = (begin + end - 1) / 2
     bias = abs(levels - middle) / max(1, end - begin)
     cost = np.where(allowed[:, 0], bias, np.inf)
     parents = np.zeros(allowed.shape, np.int8)
@@ -129,7 +115,7 @@ def _corridor(image, previous, current, edges):
     below = np.unique(original_labels[~side])
     if np.intersect1d(above[above != 0], below[below != 0]).size:
         return None, 'component_ownership_conflict'
-    return path, 'incidental_corridor_path' if separator is not None else 'component_safe_path'
+    return path, 'vertical_ownership_path' if annotations else 'component_safe_path'
 
 
 def split(image, groups, staffs, *, max_output_pixels=None):
@@ -141,11 +127,12 @@ def split(image, groups, staffs, *, max_output_pixels=None):
     edges = _gray_edges(image) if len(groups) < len(staffs) else []
     probes = total_runs = 0
     for previous, current in zip(staffs, staffs[1:]):
+        annotations = []
         old = next((y for y in existing if previous[0] < y <= current[0]), None)
         if old is not None:
             path, reason = np.full(width, old, np.int32), 'existing_blank_cut'
         elif probes < MAX_PROBES:
-            path, reason = _corridor(image, previous, current, edges)
+            path, reason = _corridor(image, previous, current, edges, annotations)
             probes += 1
         else:
             path, reason = None, 'probe_limit'
@@ -160,7 +147,8 @@ def split(image, groups, staffs, *, max_output_pixels=None):
                 total_runs += len(runs)
         else:
             runs = None
-        records.append({'after_staff_y': previous[0], 'reason': reason, 'path_runs': runs})
+        records.append({'after_staff_y': previous[0], 'reason': reason, 'path_runs': runs,
+                        'annotations': annotations})
     cuts.append(np.full(width, height, np.int32))
     # Shaped crops overlap in bounding-box height. Budget their padding and
     # extract()'s eight-pixel gaps before publishing a PDF that can be relaid out.
@@ -177,7 +165,7 @@ def split(image, groups, staffs, *, max_output_pixels=None):
     medians = np.array([int(np.median(cut)) for cut in cuts])
     positions = np.array([y for y, _ in staffs])
     counts = np.diff(np.searchsorted(positions, medians)).tolist()
-    return cuts, {'algorithm': 'component_corridor_v1', 'gray_edge_columns': edges,
+    return cuts, {'algorithm': 'vertical_ownership_corridor_v2', 'gray_edge_columns': edges,
                   'original_group_count': len(groups), 'group_count': len(cuts) - 1,
                   'max_staffs_per_group': max(counts), 'staffs_per_group': counts,
                   'boundaries': records,

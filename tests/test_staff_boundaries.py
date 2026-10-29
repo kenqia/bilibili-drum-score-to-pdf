@@ -76,7 +76,7 @@ class StaffBoundaries(unittest.TestCase):
             result, parts = self.render_parts(image, Path(temporary))
             self.assertEqual(result['page_count'], 2)
             self.assertEqual(result['boundary_analysis']['boundaries'][0]['reason'],
-                             'incidental_corridor_path')
+                             'component_safe_path')
             islands = [np.argwhere((np.asarray(part) == (241, 241, 241)).all(axis=2))
                        for part in parts]
             self.assertEqual(sorted(map(len, islands)), [0, 5])
@@ -117,18 +117,13 @@ class StaffBoundaries(unittest.TestCase):
                 self.assertFalse((np.asarray(parts[1 - row]) == color).all(axis=2).any())
 
     def test_ambiguous_detached_boxes_text_and_dark_dots_keep_rows_together(self):
-        for mark in ('box', 'text', 'dark_dot', 'near_text', 'upper_dynamic'):
+        for mark in ('box', 'dark_dot', 'near_text'):
             with self.subTest(mark=mark), tempfile.TemporaryDirectory() as temporary:
                 image = interleaved_score()
                 draw = ImageDraw.Draw(image)
                 if mark == 'box':
                     draw.rectangle((65, 150, 102, 180), outline='black', width=2)
                     draw.text((70, 155), 'A1', fill='black')
-                elif mark == 'text':
-                    draw.text((60, 145), 'R R L', fill='black')
-                elif mark == 'upper_dynamic':
-                    from PIL import ImageFont
-                    draw.text((100, 135), 'mf', font=ImageFont.load_default(size=16), fill='red')
                 elif mark == 'near_text':
                     from PIL import ImageFont
                     font = ImageFont.load_default(size=10)

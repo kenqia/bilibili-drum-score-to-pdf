@@ -471,3 +471,8 @@ env -u PYTHONPATH /home/kenqia/issue73-installed-venv/bin/python /home/kenqia/is
 #93 最终并发回归保留原 `test_external_writer_does_not_abort_parallel_tasks_when_scheduler_poll_is_busy` 的两任务完成和worker退出断言，新增 `test_external_writer_during_stage_update_does_not_fail_running_tasks`，以真实SQLite外部写事务和阶段握手稳定触发一秒busy超时。未知阶段、完成和领取commit确认仍有独立真实worker反例，不把任意数据库错误归为可忽略进度。
 
 父亡清理新增确定性公开CLI反例和guardian握手前失败反例，旧调用方强杀、PID复用、取消、期限与临时根清理断言保留。测试夹具先原子登记已知进程身份，外层确认后才允许暂停guardian；最终decoder marker缺失时也按原身份恢复和收尾。另在fork后、最终marker前注入故障，预期测试失败而清理断言通过，仅证明夹具异常收尾，不计产品通过。没有删除旧测试或放宽失败后的活动进程检查。
+
+
+## 同列记号归属实验
+
+2026-10-29，`test_staff_boundaries` 的模糊文字参数断言迁移到 `test_staff_ownership`：上行 mf 改为完整归上行的实际 PDF 断言；R R L 保留列间冲突拒绝，并新增疏排字母整组拒绝。旧模糊框、黑点、近邻文字、开镲圆圈近似等距、浅色组件、跨行连接、预算与像素保护断言继续保留。没有删除旧测试文件。实际 S12 错行说明合成通过仍不足以接受该实验算法，见同列归属实验记录。
