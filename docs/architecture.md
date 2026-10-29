@@ -20,7 +20,7 @@ Skill 默认长截图、可安全执行的局部去水印、完整谱行分页�
 | 模块 | 职责 |
 | --- | --- |
 | `core.py`、`imaging.py`、`registration_flow.py`、`fixed_overlays.py`、`visual_preflight.py`、`score_borders.py` | 输入预算、来源 hash、分散画面预检、原生采样、有界补帧、覆盖物未知区域、内容配准、边界核验、保守合成与完整行组分页。 |
-| `staff_boundaries.py`、`print_layout.py` | 仅细分原有连续行组，保留原 RGB、已确认记号组件和统一比例；记录精确分界路径，归属不明确时保留整组。 |
+| `staff_boundaries.py`、`staff_ownership.py`、`print_layout.py` | 仅细分原有连续行组，保留原 RGB、已确认记号组件和统一比例；记录精确分界路径，归属不明确时保留整组。 |
 | `supervision.py`、`guardian.py` | 独立转换进程、采样资源监督、取消与异常树清理。初始 PID/start-time 固定，后续观察不替换已有身份。 |
 | `public_video.py`、`short_links.py`、`anonymous_backend.py`、`bbdown_cli.py`、`bbdown_network.py`、`anonymous_network.py` | 固定 BBDownNext 2.3.0 匿名解析与直连获取，公共 DNS/TLS、重定向与同流备份、完整曲长和实测媒体校验。 |
 | `video_seek.py` | 有限时 FFmpeg 解码、实际 PTS/time_base、原生运动摘要和临时帧清理。 |
@@ -33,7 +33,7 @@ Skill 默认长截图、可安全执行的局部去水印、完整谱行分页�
 
 ## 转换与发布
 
-网站默认设置增加独立专家兜底。首选算法保持 2026-10-28 回退版本的提取行为，当前开发分支的分页增加有界谱行边界分析；仅 `unsupported_layout` 或 `discontinuity` 触发 `expert_fallback.py`，在同个受监督转换进程内调用随包分发的专家 v6。下载、安全拒绝、取消、资源超限和高级选项任务不兜底。Python/CLI 不启用此路线。专家裁图允许原包灰度和颜色处理，原 RGB 保留约定只适用于首选算法；专家结果始终显式待复核。边界、依赖和证据例外见[专家兜底设计](script-product/expert-fallback-design.md)。
+网站默认设置增加独立专家兜底。首选算法保持 2026-10-28 回退版本的提取行为，本地 main 的分页增加经用户验收的有界谱行边界分析；仅 `unsupported_layout` 或 `discontinuity` 触发 `expert_fallback.py`，在同个受监督转换进程内调用随包分发的专家 v6。下载、安全拒绝、取消、资源超限和高级选项任务不兜底。Python/CLI 不启用此路线。专家裁图允许原包灰度和颜色处理，原 RGB 保留约定只适用于首选算法；专家结果始终显式待复核。边界、依赖和证据例外见[专家兜底设计](script-product/expert-fallback-design.md)。
 
 固定比例纵向滚谱按实际解码顺序采样，记录实际 PTS 和 time_base，不重排尾部回退的 PTS。原生小图运动摘要检查固定周期采样可能漏掉的重复系统；有多个无法区分的位置时，先在失败区间补取实际原生帧；内容证据仍不能排除歧义时返回 `discontinuity`。唯一位置可接续时，背景或播放标记变化不导致整曲误拒。
 
