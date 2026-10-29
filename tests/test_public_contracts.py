@@ -56,6 +56,17 @@ class ScriptPublicContracts(unittest.TestCase):
             manifest = next((fixture.data / 'attempts' / task).rglob('manifest.json'))
             self.assertEqual({path.name for path in manifest.parent.iterdir()},
                              {'score.pdf', 'page-1.png', 'manifest.json'})
+            from drum_score.maintenance import backup, verify, restore
+            snapshot, restored = fixture.root / 'snapshot', fixture.root / 'restored'
+            backup(fixture.data, snapshot, services_stopped=True, min_free_bytes=1)
+            verify(snapshot, min_free_bytes=1)
+            restore(snapshot, restored, min_free_bytes=1)
+            from fastapi.testclient import TestClient
+            from drum_score.web import create_app
+            with TestClient(create_app(restored)) as client:
+                after = client.get(f'/api/tasks/{task}', headers=auth).json()
+                self.assertEqual(after, before)
+                self.assertEqual(client.get(f'/api/tasks/{task}/pdf', headers=auth).content, pdf.content)
         finally:
             fixture.tearDown()
 
