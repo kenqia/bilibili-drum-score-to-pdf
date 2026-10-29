@@ -16,11 +16,13 @@ class ScriptPublicContracts(unittest.TestCase):
     def test_website_expert_fallback_publishes_review_warning_and_relayout(self):
         import hashlib
         import test_web_worker as web_fixture
+        from test_video_cache import NETWORK
         from score_fixtures import score_frame, video_from_image
         fixture = web_fixture.WebsiteWorker(methodName='runTest')
         fixture.setUp()
         try:
             video_from_image(score_frame().crop((70, 40, 1210, 910)), fixture.network)
+            (fixture.network / 'sitecustomize.py').write_text(NETWORK)
             # Inject a primary capability failure; run the actual kit, PDF
             # adapter, previews, website publication and temporary print worker.
             with (fixture.network / 'sitecustomize.py').open('a') as stream:
@@ -37,8 +39,9 @@ class ScriptPublicContracts(unittest.TestCase):
             self.assertEqual(result['conversion']['engine'], 'expert_v6')
             self.assertTrue(result['conversion']['needs_review'])
             self.assertIn('expert_fallback_needs_review', {warning['code'] for warning in result['warnings']})
-            self.assertFalse(result['expert']['native_timestamps_recorded'])
-            self.assertEqual(result['expert']['primary_error'], 'discontinuity')
+            # Keep the durable summary compatible with the pre-fallback
+            # release. Detailed evidence lives in the manifest/private record.
+            self.assertNotIn('expert', result)
             self.assertNotIn('SYNTHETIC_PRIVATE_PRIMARY', json.dumps(before))
             self.assertNotIn(str(fixture.root), json.dumps(before))
             pdf = fixture.client.get(f'/api/tasks/{task}/pdf', headers=auth)
@@ -48,11 +51,21 @@ class ScriptPublicContracts(unittest.TestCase):
             response = fixture.client.post(f'/api/tasks/{task}/layout', headers=auth, json={'paper': 'A5', 'rows': 1})
             self.assertEqual(response.status_code, 200, response.text[:200])
             self.assertEqual(fixture.state(task, auth), before)
+            second, second_auth = fixture.submit()
+            self.assertEqual(fixture.worker(once=True).wait(timeout=40), 0)
+            cached = fixture.state(second, second_auth)
+            self.assertEqual(cached['state'], 'complete', cached)
+            self.assertEqual(cached['result']['conversion']['engine'], 'expert_v6')
+            self.assertEqual(cached['result']['source']['cache']['status'], 'hit')
+            self.assertEqual(cached['result']['source']['cache']['expires_at'],
+                             result['source']['cache']['expires_at'])
+            self.assertEqual((fixture.network / 'fetches').read_text().splitlines(), ['fetch'])
             from drum_score.jobs import Jobs
             jobs = Jobs(fixture.data)
             record = next(entry for entry in jobs.records.query(task=task)
                           if entry['status'] == 'complete' and entry['operation'] == 'submit')
             self.assertEqual(record['output']['expert']['primary_error'], 'discontinuity')
+            self.assertFalse(record['output']['expert']['native_timestamps_recorded'])
             manifest = next((fixture.data / 'attempts' / task).rglob('manifest.json'))
             self.assertEqual({path.name for path in manifest.parent.iterdir()},
                              {'score.pdf', 'page-1.png', 'manifest.json'})

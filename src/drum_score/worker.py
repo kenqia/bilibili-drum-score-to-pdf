@@ -44,8 +44,6 @@ def validate_result(jobs, row):
         summary['restoration'] = result['restoration']
     if 'conversion' in result:
         summary['conversion'] = result['conversion']
-    if 'expert' in result:
-        summary['expert'] = result['expert']
     return summary
 
 
