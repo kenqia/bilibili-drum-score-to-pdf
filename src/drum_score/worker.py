@@ -44,6 +44,8 @@ def validate_result(jobs, row):
         summary['restoration'] = result['restoration']
     if 'conversion' in result:
         summary['conversion'] = result['conversion']
+    if 'expert' in result:
+        summary['expert'] = result['expert']
     return summary
 
 
@@ -63,6 +65,8 @@ def retain_delivery(jobs, row):
     result['retention'] = {'profile': 'web_delivery', 'native_samples_retained': False,
         'longshot_retained': False, 'can_reconstruct_from_retained_sources': False,
         'note': '保留来源指纹、实际 PTS 与处理记录；原生帧和长图已清理，不能仅凭此目录重建。'}
+    if 'expert' in result:
+        result['retention']['note'] = '保留来源指纹和专家处理记录；专家取帧时间不是实际 PTS，不能仅凭此目录重建。'
     (root / 'manifest.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
     jobs.remember_result(row, result)
     return validate_result(jobs, row)

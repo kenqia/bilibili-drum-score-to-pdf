@@ -77,7 +77,8 @@ def _worker(source, output, limits, connection, temporary, parent_pid, ready, op
             from .source_preparation import prepare
             result = prepare(operation, source, output, limits, inspection)
         else:
-            result = _convert(source, output, options=options, limits=limits, prepared=prepared, progress=lambda stage:
+            result = _convert(source, output, options=options, limits=limits, prepared=prepared,
+                              expert_fallback=website, progress=lambda stage:
                               connection.send(('stage', stage)) if stage != 'complete' else None)
         connection.send(('result', result))
     except ConversionError as error:

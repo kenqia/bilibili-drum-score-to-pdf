@@ -288,7 +288,7 @@ def main(argv=None):
         crop_images,crop_info=choose_source_views(args.video,rows,rescan=not args.no_integrity_rescan,overrides=overrides)
         number_pages=emit_images_pdf(crop_images,target,rows_per_page=args.rows_per_page,overview=overview,info=crop_info)
         make_crop_audit(Path(str(base)+'_crop_audit.html'),crop_images,crop_info)
-    
+
     data=write_metadata(rows,stats,report_path)
     data.update({'version':VERSION,'method':'v5 dual-mode OCR sequencing + v6 local-lattice full-staff recrop and crop-audit',
                  'audit':audit,'bar_number_anchors':{str(i):v for i,v in verified.items()},
