@@ -2,9 +2,11 @@
 import json
 from pathlib import Path
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from drum_score.jobs import Jobs, JobError
 
 URL = 'https://www.bilibili.com/video/BV1rH4y1R7Rk'
@@ -150,19 +152,21 @@ class ProcessingRecords(unittest.TestCase):
     def test_local_cli_exports_records_without_creating_missing_data_roots(self):
         import os
         import subprocess
-        import sys
         task = self.jobs.enqueue(URL, '192.0.2.1')
         self.jobs.cancel(task['id'], task['capability'])
         command = [sys.executable, '-m', 'drum_score.processing_records', '--data-root', str(self.jobs.root),
                    '--task', task['id'], '--status', 'cancelled']
-        response = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'PYTHONPATH': 'src'})
+        env = {**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')}
+        response = subprocess.run(command, capture_output=True, text=True, env=env, cwd=self.temporary.name)
         self.assertEqual(response.returncode, 0, response.stderr)
         exported = [json.loads(line) for line in response.stdout.splitlines()]
         self.assertEqual(exported, self.jobs.records.query(task=task['id'], status='cancelled'))
         missing = Path(self.temporary.name) / 'missing'
         command[command.index('--data-root') + 1] = str(missing)
-        response = subprocess.run(command, capture_output=True, text=True)
-        self.assertEqual(response.returncode, 2)
+        response = subprocess.run(command, capture_output=True, text=True, env=env, cwd=self.temporary.name)
+        self.assertEqual(response.returncode, 2, response.stderr)
+        self.assertEqual(response.stdout, '')
+        self.assertEqual(json.loads(response.stderr)['error']['code'], 'records_unavailable')
         self.assertFalse(missing.exists())
 
     def test_backup_and_v3_upgrade_preserve_deadlines_and_refuse_implicit_upgrade(self):
