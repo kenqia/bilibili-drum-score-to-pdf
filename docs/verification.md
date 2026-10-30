@@ -1,5 +1,7 @@
 # 验证
 
+2026-10-30 的当前正式发行已包含专家 v6 失败兜底、谱行边界与分页改进。321 项完整程序回归、两份独立安装、准确制品和 CI 合成重放通过；服务器私有真实首选/专家转换、全部产物、公网提交下载及取消通过。版本、首次准备失败、真实看图范围和回滚位置见[本次部署记录](experiments/2026-10-30-expert-pagination-deployment.md)。放置中的实验范围见[发布状态](script-product/release-status.md)。下文历史结果各自绑定原版本。
+
 本页验证 `drum_score` Python 包、`drum-score` CLI 和可选的匿名网站。安装依赖和运行方式见[安装指南](install.md)。同仓库的 Skill 使用独立依赖和 `tests/skill/` 测试，命令见 [Skill 验证](skill-verification.md)。两套测试需在不同 Python 进程中发现，避免同名 fixture 和模块相互污染。
 
 ## 运行回归
