@@ -18,6 +18,7 @@ The page gives a private task link. Saving it lets the user close the page and r
 - Public videos viewable without login, up to 10 minutes and about 4.2 megapixels per frame (1080p and 1440p are fine; 4K exceeds the limit).
 - Output keeps complete score lines, original line spacing and repeated sections; overlapping lines are de-duplicated; pages use one consistent scale.
 - When it detects missing sections, frame jumps or ambiguous stitching, it fails with an explanation instead of producing a wrong PDF.
+- If the first method cannot handle a video, the site automatically retries with a backup method. Backup results are labelled on the page and are more likely to contain duplicated or missing lines, cropped edges or grayed-out color marks.
 
 ## What does not work
 
@@ -31,7 +32,8 @@ The page gives a private task link. Saving it lets the user close the page and r
 - Free, no registration. One unfinished task per network at a time; at most 10 tasks wait in the queue.
 - Results expire after 24 hours. Source video, frames and intermediate images are deleted when a task ends.
 - The site never uses Bilibili cookies or user credentials.
-- The PDF is not music-proofread and may keep watermarks, blur or playback markers from the video. Users should compare it with the original video and respect the score author's rights.
+- Opt-out for creators: if a video's Bilibili description contains a heart symbol (for example ♥, ♡, ❤️ or other colored hearts), the website refuses to process that video. Uploaders and score transcribers can add ♥ to the description to keep their scores from being organized.
+- The PDF is not guaranteed to be correct and may keep watermarks, blur or playback markers from the video. Users should compare it with the original video and respect the score author's rights.
 
 ## For developers
 

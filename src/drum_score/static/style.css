@@ -96,7 +96,7 @@ button.quiet:hover{box-shadow:inset 0 0 0 1px var(--ink)}
 
 /* Task page */
 .task{background:var(--paper);padding:3rem 0 2rem}
-.task-inner{max-width:60rem}
+.task-inner{max-width:72rem}
 .task-source{display:flex;flex-wrap:wrap;gap:.4rem 1.25rem;margin:0 0 .75rem;font-size:.88rem;color:var(--muted)}
 .task h1{margin:0 0 .5rem;font-size:clamp(1.8rem,4.2vw,2.6rem);font-weight:900;line-height:1.25}
 .task-copy{margin:0 0 1.75rem;font-size:1.05rem;color:var(--muted)}
@@ -109,6 +109,8 @@ button.quiet:hover{box-shadow:inset 0 0 0 1px var(--ink)}
 .actions{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem 1.25rem;margin-bottom:1.5rem}
 #download{font-size:1.1rem;padding-inline:2.25rem;min-height:3.4rem}
 .quiet-link{font-size:.92rem;color:var(--muted)}
+.button-link{display:inline-flex;align-items:center;min-height:3rem;padding:.7rem 1.6rem;border-radius:var(--radius);background:var(--brass);color:var(--brass-ink);font-weight:700;text-decoration:none}
+.button-link:hover{background:#ebc154}
 .keep{margin:0 0 2.5rem;padding:1.25rem 1.5rem;border-radius:var(--radius);background:var(--wash)}
 .keep h2{margin:0 0 .3rem;font-size:1.05rem}
 .keep p{margin:0 0 .9rem;font-size:.9rem;color:var(--muted)}
@@ -182,3 +184,12 @@ button.quiet:hover{box-shadow:inset 0 0 0 1px var(--ink)}
 .print-settings .actions{margin-bottom:.5rem}.print-settings button{min-height:44px}
 #online-count{white-space:nowrap;margin:0;color:rgba(255,255,255,.8)}
 @media(max-width:600px){.bar-inner{flex-wrap:wrap}.row-controls{flex-wrap:wrap}.print-fields{display:block}.row-setting{margin-top:1rem}}
+
+/* Result: pages on the left, print settings beside them on wide screens. */
+.result-body{display:grid;grid-template-columns:minmax(0,1fr) 19rem;gap:2rem;align-items:start}
+.result-body .print-settings{position:sticky;top:1rem;margin:0;order:2}
+.result-body .print-fields{display:block}
+.result-body .row-setting{margin-top:1.25rem}
+.result-body .row-controls input[type=range]{flex:1;min-width:0}
+.result-body .print-settings .actions{flex-direction:column;align-items:stretch}
+@media (max-width:60rem){.result-body{grid-template-columns:1fr}.result-body .print-settings{position:static;order:-1}}

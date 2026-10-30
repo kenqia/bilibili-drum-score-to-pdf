@@ -62,7 +62,7 @@
               </fieldset>
               <label class="option-check" for="ignore-fixed-overlays"><input id="ignore-fixed-overlays" type="checkbox" checked>自动忽略固定覆盖物对拼接的影响</label>
               <p class="hint">仅用于计算位置，PDF保留原画面和署名。</p>
-              <p class="hint">使用选段、手动谱区或更改覆盖物设置后，仅使用首选整理，不启用专家兜底。</p>
+              <p class="hint">改了这里的任何设置后，第一种方法失败时不会再换备用方法重试。</p>
             </details>
             <p id="submit-error" class="alert" role="alert" hidden></p>
           </form>
@@ -101,7 +101,8 @@
           <details><summary>要花钱或者注册吗？</summary><p>都不用。不需要登录 B站，也不会读取你的任何账号信息。</p></details>
           <details><summary>要等多久？</summary><p>看视频长短和排队人数。页面会显示你排在第几位、正在做哪一步。</p></details>
           <details><summary>结果能保存多久？</summary><p>完成后保留 24 小时，过期会自动删除，记得及时下载。已验证的视频可能另行缓存 24 小时，缓存总额不超过 1 GiB，空间不足时可提前回收。重复整理不会延长视频缓存或已有 PDF 的保存期。</p></details>
-          <details><summary>谱子一定准确吗？</summary><p>首选整理使用现有图像拼接。默认设置下，首选整理无法处理的谱面会尝试专家兜底，并在结果中标注。专家结果会经过灰度和颜色处理，可能重复、缺行或裁剪不完整。两种结果都未经音乐校对，打印前请对照原视频复核。</p></details>
+          <details><summary>谱子一定准确吗？</summary><p>不保证完全正确。网站按视频画面拼接，不会重新识别音符。第一种方法处理不了时，会自动换备用方法再试；备用方法整理的谱子会在页面上标出来，更容易出现重复、缺行或边缘被裁掉，彩色记号也可能变成灰色。打印前请对照原视频看一遍。</p></details>
+          <details><summary>为什么提示“作者不希望它被整理”？</summary><p>UP 主或扒谱作者可以在视频简介里放 ♥ 符号（比如 ♥♥♥），表示不希望谱子被整理。网站看到简介里有 ♥ 就不会处理这个视频。实心、空心和各种颜色的爱心都算。</p></details>
           <details><summary>为什么说我还有任务在进行？</summary><p>同一个网络同时只能有一个没完成的任务。学校、公司或家里共用网络时会互相占用，等前一个完成或取消后再试。</p></details>
           <details><summary>能上传手机里的视频吗？</summary><p>暂时只支持 B站公开视频链接。</p></details>
           <details><summary>能转成 MIDI 或重新打谱吗？</summary><p>不能。这里的目标是忠实保留原谱面。</p></details>
@@ -120,7 +121,7 @@
         </ol>
 
         <div id="task-error" class="alert" role="alert" hidden><p id="task-error-text"></p><details id="task-error-detail" hidden><summary>详细信息</summary><p id="task-error-raw"></p></details></div>
-        <div class="actions"><button id="download" type="button" hidden>下载 PDF</button><button id="retry" type="button" hidden>重新整理</button><button id="cancel" type="button" class="quiet" hidden>取消任务</button><a class="quiet-link" href="/" id="new-task">整理另一份鼓谱</a></div>
+        <div class="actions"><button id="download" type="button" hidden>下载 PDF</button><a class="quiet-link" href="/" id="new-task">整理另一份鼓谱</a><button id="retry" type="button" class="quiet" hidden>再试一次</button><button id="cancel" type="button" class="quiet" hidden>取消任务</button></div>
 
         <section class="keep" id="save-link" hidden aria-labelledby="save-title">
           <h2 id="save-title">保存这条链接</h2>
@@ -131,22 +132,26 @@
 
         <section id="result" hidden aria-labelledby="preview-title">
           <div class="result-head"><h2 id="preview-title">全部页面</h2><p id="expiry" class="hint"></p></div>
-          <div class="check"><p>谱面由程序自动拼接，没有人工校对。打印前请对照原视频翻一遍。</p><ul id="warnings"></ul></div>
-          <form id="layout-form" class="print-settings" aria-labelledby="layout-title">
-            <h3 id="layout-title">打印排版</h3>
-            <div class="print-fields">
-              <label for="paper">纸张尺寸<select id="paper"><option>A4</option><option>A3</option><option>A5</option></select></label>
-              <div class="row-setting"><label for="rows-auto"><input id="rows-auto" type="checkbox" checked>自动安排每页行数</label>
-                <label for="row-slider">每页目标行数</label>
-                <div class="row-controls"><input id="row-slider" type="range" min="1" max="16" value="6" disabled><input id="row-number" type="number" min="1" max="16" value="6" aria-label="每页目标行数" disabled></div>
-              </div>
+          <div class="check"><p>谱面由程序自动拼接，不保证完全正确。打印前请对照原视频翻一遍。</p><ul id="warnings"></ul></div>
+          <div class="result-body">
+            <div class="pages">
+            <div id="previews" class="previews"></div>
+            <button id="reload-previews" type="button" class="quiet" hidden>重新加载预览</button>
             </div>
-            <div class="actions"><button id="apply-layout" type="submit">应用设置</button><button id="reset-layout" type="button" class="quiet">恢复自动排版</button></div>
-            <p class="hint">调整只在当前页面生效，保存的链接始终打开默认版本。刷新后恢复默认排版。</p>
-            <p id="layout-status" role="status" aria-live="polite"></p>
-          </form>
-          <div id="previews" class="previews"></div>
-          <button id="reload-previews" type="button" class="quiet" hidden>重新加载预览</button>
+            <form id="layout-form" class="print-settings" aria-labelledby="layout-title">
+              <h3 id="layout-title">打印排版</h3>
+              <div class="print-fields">
+                <label for="paper">纸张尺寸<select id="paper"><option>A4</option><option>A3</option><option>A5</option></select></label>
+                <div class="row-setting"><label for="rows-auto"><input id="rows-auto" type="checkbox" checked>自动安排每页行数</label>
+                  <label for="row-slider">每页目标行数</label>
+                  <div class="row-controls"><input id="row-slider" type="range" min="1" max="16" value="6" disabled><input id="row-number" type="number" min="1" max="16" value="6" aria-label="每页目标行数" disabled></div>
+                </div>
+              </div>
+              <div class="actions"><button id="apply-layout" type="submit">应用设置</button><button id="reset-layout" type="button" class="quiet">恢复自动排版</button></div>
+              <p class="hint">调整只在当前页面生效，保存的链接始终打开默认版本。刷新后恢复默认排版。</p>
+              <p id="layout-status" role="status" aria-live="polite"></p>
+            </form>
+          </div>
         </section>
       </div>
     </section>
@@ -158,7 +163,8 @@
         <p><b>觉得好用？</b>鼓谱整理是免费的开源项目。去 GitHub 点个 Star，能让更多鼓手找到它。</p>
         <a class="star-link" href="https://github.com/kenqia/bilibili-drum-score-to-pdf" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .67.42l1.88 3.8 4.2.61a.75.75 0 0 1 .41 1.28l-3.04 2.96.72 4.18a.75.75 0 0 1-1.09.79L8 12.31l-3.75 1.98a.75.75 0 0 1-1.09-.79l.72-4.18L.84 6.36a.75.75 0 0 1 .41-1.28l4.2-.61L7.33.67A.75.75 0 0 1 8 .25Z"/></svg>在 GitHub 点 Star</a>
       </div>
-      <p>鼓谱是扒谱作者花大量时间做出来的。请只整理你有权使用的内容，不要售卖或冒充原创。喜欢一份谱子，记得去原视频给作者点个赞。</p>
+      <p><strong>鼓谱是扒谱作者花大量时间做出来的。请只整理你有权使用的内容，不要售卖或冒充原创。喜欢一份谱子，记得去原视频给作者点个赞。</strong></p>
+      <p>UP 主和扒谱作者：在视频简介里放上 ♥ 符号，网站就不会整理你的视频。</p>
       <p>同一网络同时可进行一个任务，最多 10 个任务排队。</p>
     </div>
   </footer>

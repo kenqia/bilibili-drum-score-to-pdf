@@ -84,6 +84,6 @@ HTTP 服务使用有界内存心跳统计近似访客，浏览器随机 ID 与�
 
 ## 2026-10-28 转换算法回退
 
-正式转换的 core、imaging、fixed_overlays、registration_flow、video_seek 恢复到上一线上版本 `2e1ce36` 的完整实现。主曲自动选择、原生硬切翻页和真实像素遮挡恢复停止用于正式转换，其代码及专属测试留存在 `experiments/issue88-withdrawn/`。该目录不打包、不参与正式回归，历史实验不代表线上能力。
+正式转换的 core、imaging、fixed_overlays、registration_flow、video_seek 恢复到上一线上版本 `2e1ce36` 的完整实现。主曲自动选择、原生硬切翻页和真实像素遮挡恢复停止用于正式转换，其代码及专属测试留存在提交 `4d75de5` 的 `experiments/issue88-withdrawn/`，历史实验不代表线上能力。
 
 一周期整理记录、网站简介心形规则、视频缓存、临时排版及 schema5 保持。进程树清理和 SQLite 阶段写入容错保留；维护工具与 worker 继续识别回退前已经产生的 restoration 元数据，确保历史结果仍可访问和备份。回退必须从当前数据根停服备份并恢复到新根，不切回旧数据库丢弃新任务。

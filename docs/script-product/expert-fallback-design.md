@@ -1,6 +1,6 @@
 # 专家工具包兜底接入讨论
 
-2026-10-29，用户确认以下接入方案。接入实现与验证结果见[实验记录](../experiments/2026-10-29-expert-v6-fallback.md)；本文件不表示网站已部署。
+2026-10-29，用户确认以下接入方案。接入实现与验证结果见[实验记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-29-expert-v6-fallback.md)；本文件不表示网站已部署。
 
 ## 已确认的行为
 

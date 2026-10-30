@@ -48,7 +48,7 @@
 
 ## 验证状态
 
-验证命令、结果和实际看图限制见[本次实验记录](../experiments/2026-10-25-print-layout.md)。合成完整性与浏览器交互测试不能替代音乐逐符号校对；留存小星星的连续边框限制单独记录。
+验证命令、结果和实际看图限制见[本次实验记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-25-print-layout.md)。合成完整性与浏览器交互测试不能替代音乐逐符号校对；留存小星星的连续边框限制单独记录。
 
 ## 谱行边界细分
 
@@ -63,7 +63,7 @@
 
 新增切口在上行第一根线下方五倍线距至下行第一根线上方一倍线距之间查找。
 基线 `82f4d68` 遇到游离实质记号时保留整组。当前实现冻结已锚定黑色内容，以同 x 上下首命中 owner 和多列证据归属悬空记号，再计算凸凹路径。
-S12 第 103 小节上方 `o+` 留在第 99 小节所在上行块，用户明确接受此例外后授权合入。S12、S14 最大行组分别从 13、35 行降为 7、10 行，仍未全部分开。其余 18 源的页面检查见[后续验证](../experiments/2026-10-29-staff-boundaries-remaining18.md)。同高度带可能合并不同语义对象，当前规则不能保证所有记号归属。具体阈值、分组限制和历史失败证据见[同列归属实验](../experiments/2026-10-29-vertical-staff-ownership.md)。
+S12 第 103 小节上方 `o+` 留在第 99 小节所在上行块，用户明确接受此例外后授权合入。S12、S14 最大行组分别从 13、35 行降为 7、10 行，仍未全部分开。其余 18 源的页面检查见[后续验证](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-29-staff-boundaries-remaining18.md)。同高度带可能合并不同语义对象，当前规则不能保证所有记号归属。具体阈值、分组限制和历史失败证据见[同列归属实验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-29-vertical-staff-ownership.md)。
 上下行存在共享组件时继续保护整组，不靠方向推断连接归属。
 独立后置检查拒绝把原八连通组件分到两行。
 
