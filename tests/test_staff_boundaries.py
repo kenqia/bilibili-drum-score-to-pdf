@@ -157,7 +157,7 @@ class StaffBoundaries(unittest.TestCase):
                 self.assertEqual(result['page_count'], 1)
                 self.assertEqual(result['actual_rows'], 2)
                 self.assertEqual(len(parts), 1)
-                self.assertIn('连续行组', result['message'])
+                self.assertEqual(result['boundary_analysis']['max_staffs_per_group'], 2)
 
     def test_nonuniform_edge_mark_and_analysis_limits_keep_the_group(self):
         from unittest.mock import patch

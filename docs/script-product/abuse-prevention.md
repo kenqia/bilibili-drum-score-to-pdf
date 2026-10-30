@@ -1,6 +1,6 @@
 # 匿名网站防滥用方案
 
-本文记录 2026-10-24 确认的要求和第一批实现范围。用户先通过 implement 技能授权实现、验证、审阅及本地提交，随后明确要求 push 和部署。正式 v3 切换及目标机验收已完成，范围和证据见[部署记录](../experiments/2026-10-24-abuse-deployment.md)。
+本文记录 2026-10-24 确认的要求和第一批实现范围。用户先通过 implement 技能授权实现、验证、审阅及本地提交，随后明确要求 push 和部署。正式 v3 切换及目标机验收已完成，范围和证据见[部署记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-24-abuse-deployment.md)。
 
 ## 已确认的要求
 

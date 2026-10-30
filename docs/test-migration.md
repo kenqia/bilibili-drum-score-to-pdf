@@ -2,7 +2,7 @@
 
 2026-10-28，正式转换恢复到已部署 `2e1ce36`。`test_public_contracts.py` 和 `test_script_conversion.py` 中原基线的全部转换断言恢复，最近的 Windows 平台限定、HTTP 输入覆盖及两项 guardian 清理测试继续保留。日志、缓存、维护、队列容错、发行工具测试不回退。
 
-撤回能力专属的三个测试模块及两个混合模块的完整回退前副本保存在 `experiments/issue88-withdrawn/tests/`，没有删除实验断言。原源码也留存于相邻 `src/`，准确实验版本为 `f4ccc81`。这些副本不参与正式 unittest 发现，不得据此宣称当前线上仍支持主曲选择、原生翻页或遮挡恢复。历史测试应在该版本的独立 checkout 执行。
+撤回能力专属的三个测试模块及两个混合模块的完整回退前副本保存在提交 `4d75de5` 的 `experiments/issue88-withdrawn/tests/`，没有删除实验断言。原源码也留存于相邻 `src/`，准确实验版本为 `f4ccc81`。这些副本不参与正式 unittest 发现，不得据此宣称当前线上仍支持主曲选择、原生翻页或遮挡恢复。历史测试应在该版本的独立 checkout 执行。
 
 # 旧测试到脚本产品的迁移记录
 

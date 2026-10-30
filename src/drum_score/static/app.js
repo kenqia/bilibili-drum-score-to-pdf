@@ -3,7 +3,7 @@ const $ = (id) => document.getElementById(id);
 const active = new Set(["queued", "running", "cancelling", "finishing"]);
 const titles = {queued:"正在排队",running:"正在整理鼓谱",cancelling:"正在停止",finishing:"马上就好",complete:"鼓谱整理好了",failed:"这个视频没能整理出来",cancelled:"任务已取消",interrupted:"处理被中断了"};
 const stages = {preflight:"正在确认来源时长与完整性。",source_wait:"正在获取已确认的来源，请稍候。",cache_hit:"已找到可复用的视频，正在准备读取。",starting:"正在准备。",downloading:"正在获取视频。",probing:"正在检查视频。",sampling:"正在读取视频里的谱面。",registering:"正在对齐前后画面。",composing:"正在把谱行接起来。",paginating:"正在排成 A4 页面。",finishing:"正在保存 PDF 和预览。",cancelling:"正在停止处理并清理临时文件。"};
-stages.expert_fallback = "首选整理无法处理，正在尝试专家兜底。结果需要对照视频复核。";
+stages.expert_fallback = "第一种方法没能整理好，正在换备用方法再试一次。";
 // Progress bar steps, in order; each backend stage maps onto one of them.
 const steps = ["queue", "fetch", "read", "stitch", "layout"];
 const stepOf = {preflight:"fetch",source_wait:"fetch",cache_hit:"fetch",queued:"queue",starting:"fetch",downloading:"fetch",probing:"read",sampling:"read",registering:"stitch",composing:"stitch",paginating:"layout",finishing:"layout"};
@@ -17,20 +17,21 @@ const friendly = {
   queue_full:"现在排队的人太多了，请过几分钟再试。",
   service_busy:"服务器正忙，请稍后再试。",
   storage_full:"服务器空间暂时不够，请稍后再试。",
-  expert_failed:"首选整理和专家兜底都没能生成可用 PDF，请更换来源或检查谱面。",
+  expert_failed:"试了两种整理方法都没成功。这个视频的谱面可能不适合自动整理，可以换一个视频试试。",
+  unsupported_source:"这个视频的作者不希望它被整理（视频简介里有 ♥ 标记），请尊重作者的意愿。",
   unsupported_layout:"视频里没找到白底的鼓谱。这个工具只适合白色背景、从下往上滚动的鼓谱视频。",
   discontinuity:"视频里有一段谱面接不上（可能跳过了、翻页了或被挡住了）。为了不给你一份缺行的谱子，这次没有生成 PDF。",
-  source_changed:"处理期间视频发生了变化，请重新整理。",
+  source_changed:"处理期间视频发生了变化，可以点「再试一次」。",
   resource_limit:"视频太长或画面太大。目前支持 10 分钟以内、4K 以下的视频。",
   download_too_large:"视频文件太大了。目前支持 10 分钟以内、4K 以下的视频。",
   http_unavailable:"拿不到这个视频。它可能需要登录、是会员专享、有地区限制或者已经下架。",
   public_api_unavailable:"拿不到这个视频。它可能需要登录、是会员专享、有地区限制或者已经下架。",
   unsupported_stream:"这个视频的格式暂时处理不了。",
-  undecodable_video:"视频读取失败。可以点「重新整理」再试一次。",
-  decode_failed:"视频读取失败。可以点「重新整理」再试一次。",
-  network_timeout:"获取视频超时了。可以点「重新整理」再试一次。",
-  acquisition_interrupted:"获取视频时被中断了。可以点「重新整理」再试一次。",
-  incomplete_video:"下载到的视频不完整。可以点「重新整理」再试一次。",
+  undecodable_video:"视频读取失败。可以点「再试一次」。",
+  decode_failed:"视频读取失败。可以点「再试一次」。",
+  network_timeout:"获取视频超时了。可以点「再试一次」。",
+  acquisition_interrupted:"获取视频时被中断了。可以点「再试一次」。",
+  incomplete_video:"下载到的视频不完整。可以点「再试一次」。",
   expired:"结果已经过了 24 小时的保存期，被自动删除了。重新提交链接就能再整理一次。",
   not_found:"找不到这个任务。请打开提交时保存的完整链接。"
 };
@@ -181,8 +182,8 @@ async function refresh() {
       if (selected?.options.region_percent) description += ` 手动谱区：${selected.options.region_percent.join("、")}%。`;
       if (selected?.effective_region) description += ` 实际谱区：${selected.effective_region.join("、")} 像素。`;
     }
-    if (state.state === "cancelled") description = "已经停止，临时文件也清理了。需要的话可以重新整理。";
-    if (state.state === "interrupted") description = "服务器重启打断了处理。点「重新整理」继续。";
+    if (state.state === "cancelled") description = "已经停止，临时文件也清理了。";
+    if (state.state === "interrupted") description = "服务器重启打断了处理，可以点「再试一次」。";
     if (state.state === "failed") description = "";
     $("task-description").textContent = description;
     $("task-description").hidden = !description;
@@ -197,7 +198,10 @@ async function refresh() {
     $("save-link").hidden = !active.has(state.state) && state.state !== "complete";
     $("task-link").value = window.location.href;
     $("cancel").hidden = !["queued","running"].includes(state.state);
-    $("retry").hidden = withdrawnSource || !["failed","cancelled","interrupted"].includes(state.state);
+    const ended = ["failed","cancelled","interrupted"].includes(state.state);
+    $("retry").hidden = withdrawnSource || !ended || state.error?.code === "unsupported_source";
+    // A failed source usually fails again; steer people to a different video.
+    $("new-task").className = ended ? "button-link" : "quiet-link";
     $("download").hidden = state.state !== "complete";
     $("result").hidden = state.state !== "complete";
     if (state.state === "complete") {
@@ -205,7 +209,7 @@ async function refresh() {
       $("expiry").textContent = formatExpiry(state.expires_at);
       $("warnings").replaceChildren();
       for (const warning of state.result.warnings) {
-        if (warning.code === "not_musically_proofread") continue;
+        if (warning.code === "not_musically_proofread" || warning.code === "joined_staff_rows") continue;
         const item = document.createElement("li"); item.textContent = warning.message; $("warnings").append(item);
       }
       if (!previewLoaded) await loadPreviews(state.result.page_count);

@@ -1,6 +1,6 @@
 # 验证
 
-2026-10-30 的当前正式发行已包含专家 v6 失败兜底、谱行边界与分页改进。321 项完整程序回归、两份独立安装、准确制品和 CI 合成重放通过；服务器私有真实首选/专家转换、全部产物、公网提交下载及取消通过。版本、首次准备失败、真实看图范围和回滚位置见[本次部署记录](experiments/2026-10-30-expert-pagination-deployment.md)。放置中的实验范围见[发布状态](script-product/release-status.md)。下文历史结果各自绑定原版本。
+2026-10-30 的当前正式发行已包含专家 v6 失败兜底、谱行边界与分页改进。321 项完整程序回归、两份独立安装、准确制品和 CI 合成重放通过；服务器私有真实首选/专家转换、全部产物、公网提交下载及取消通过。版本、首次准备失败、真实看图范围和回滚位置见[本次部署记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-30-expert-pagination-deployment.md)。放置中的实验范围见[发布状态](script-product/release-status.md)。下文历史结果各自绑定原版本。
 
 本页验证 `drum_score` Python 包、`drum-score` CLI 和可选的匿名网站。安装依赖和运行方式见[安装指南](install.md)。同仓库的 Skill 使用独立依赖和 `tests/skill/` 测试，命令见 [Skill 验证](skill-verification.md)。两套测试需在不同 Python 进程中发现，避免同名 fixture 和模块相互污染。
 
@@ -32,7 +32,7 @@ Windows CI 安装 web extra 与 `tests/requirements-web.txt`，运行原生工�
 
 `tests/test_acquisition_lifecycle.py` 和 `tests/test_web_worker.py` 使用真实独立进程与 OS 信号。离线网络只替换外部传输边界；阶段 marker 必须证明测试确实进入待停止阶段。PID 复用测试替换 `/proc` 观测后检查真实 sentinel 进程，不能只断言调用了 mock。
 
-`tests/test_video_cache.py`通过HTTP、真实worker、媒体文件和维护CLI验证缓存版本、实际下载数、并发及取消、期限、容量、持有FD、身份替换和半发布恢复。版本协议观察与本轮red/green证据见[视频缓存实验](experiments/2026-10-25-issue85-video-cache.md)。合成传输测试不代表真实网络下载或音乐校对。
+`tests/test_video_cache.py`通过HTTP、真实worker、媒体文件和维护CLI验证缓存版本、实际下载数、并发及取消、期限、容量、持有FD、身份替换和半发布恢复。版本协议观察与本轮red/green证据见[视频缓存实验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-25-issue85-video-cache.md)。合成传输测试不代表真实网络下载或音乐校对。
 
 `tests/test_product_lifecycle.py` 覆盖 schema 拒绝、期限不刷新、到期文件清理、已打开 FD、容量准入、诊断限额、文件身份与 symlink 边界、同大小产物损坏。worker 的崩溃恢复必须覆盖发布前后，未登记的用户文件保留。
 
@@ -75,23 +75,23 @@ Windows CI 安装 web extra 与 `tests/requirements-web.txt`，运行原生工�
 
 2026-10-23，Python 3.12.12 下程序 198 项回归全部通过，耗时 138.414 秒。离线 CI 重放、构建、29 个包文件核对、基础与 web 独立安装及依赖检查通过。测试实际运行八个转换进程，覆盖取消隔离、信号与 guardian 清理、SQLite 竞争、维护锁、v1 到 v2 升级和原结果期限。
 
-本地离线合成八路实验最慢处理耗时为独占中位数的 3.31×、2.38× 和 2.13×，CPU 拓扑和设置各不相同，不能直接映射为云服务器规格。八路约两倍目标尚未验收，没有执行本轮生产部署、生产压测或新的真实来源音乐验收。方法、命令、安装包 hash、失败过程和完整证据路径见[并行容量实验](experiments/2026-10-23-parallel-capacity.md)。
+本地离线合成八路实验最慢处理耗时为独占中位数的 3.31×、2.38× 和 2.13×，CPU 拓扑和设置各不相同，不能直接映射为云服务器规格。八路约两倍目标尚未验收，没有执行本轮生产部署、生产压测或新的真实来源音乐验收。方法、命令、安装包 hash、失败过程和完整证据路径见[并行容量实验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-23-parallel-capacity.md)。
 
 ## 目标机清理与测量
 
 2026-10-23，用户批准后完成 OpenClaw 停用卸载与数据清理，实增约 4.01 GiB 可用磁盘。候选程序在现有双核目标机、临时 1 GiB/1.5 核预算下完成 81 个合成任务，八路最慢处理时间为独占中位数的 11.11～11.94 倍，约两倍目标未通过。没有 OOM，336 次正式首页健康探针均为 200。另一个真实公开来源单任务在 768 MiB/1.5 核预算下用时 50.304 秒完成，全部 603 个登记产物 hash 匹配，保留实际来源 hash、PTS/time_base；未重新看图或音乐校对。
 
-正式网站未切版、生产库仍为 v1，未修改正式资源参数或购买套餐。临时实验停止后核对正式服务与公网首页。资源限额、测量方法、失败过程、费用建议与证据见[目标机清理与并行测量](experiments/2026-10-23-server-cleanup.md)。
+正式网站未切版、生产库仍为 v1，未修改正式资源参数或购买套餐。临时实验停止后核对正式服务与公网首页。资源限额、测量方法、失败过程、费用建议与证据见[目标机清理与并行测量](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-23-server-cleanup.md)。
 
 ## 放宽速度目标后的稳定并行
 
-2026-10-23，用户取消约两倍耗时硬门槛，改为优先保证稳定并行。目标机两路真实在线转换通过；八路冻结回放先复现了独立 60 秒解码期限导致的受控失败，修复后 8/8 完成。随后八路真实在线获取与转换也 8/8 完成，整批 565.468 秒，1 GiB/1.5 核预算内峰值约 823 MiB，无 OOM，500 次正式首页探针均为 200。累计 600 秒解码预算、外层总期限及资源和来源完整性保护保留。新代码 200 项程序回归 158.928 秒全部通过，离线 CI 重放及两份独立 wheel 安装通过。修复包、失败过程、实际资源与后续在线八路结果见[稳定并行实验](experiments/2026-10-23-stable-parallel.md)。该实验结束时正式部署待确认；随后已单独获准并完成上线，见下节。
+2026-10-23，用户取消约两倍耗时硬门槛，改为优先保证稳定并行。目标机两路真实在线转换通过；八路冻结回放先复现了独立 60 秒解码期限导致的受控失败，修复后 8/8 完成。随后八路真实在线获取与转换也 8/8 完成，整批 565.468 秒，1 GiB/1.5 核预算内峰值约 823 MiB，无 OOM，500 次正式首页探针均为 200。累计 600 秒解码预算、外层总期限及资源和来源完整性保护保留。新代码 200 项程序回归 158.928 秒全部通过，离线 CI 重放及两份独立 wheel 安装通过。修复包、失败过程、实际资源与后续在线八路结果见[稳定并行实验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-23-stable-parallel.md)。该实验结束时正式部署待确认；随后已单独获准并完成上线，见下节。
 
 ## 正式八路配置上线
 
 2026-10-23 20:24 +0800，用户批准具体切换清单后，在现有双核 2 GB 机器完成 schema v1 快照核验、显式升级和八路 profile 上线。旧库 44 条 complete 记录的完成时间和期限在恢复时保持一致。准确 wheel 的 29 个文件、公开解析器 hash、离线依赖安装和 pip check 均通过。
 
-正式 unit 在私有 HTTP 8792 验收：两个不同 IP 的真实在线任务重叠运行约 114.990 秒，均完成；PDF 与全部预览共六个文件的下载 hash 匹配。同 IP 额外提交返回 429，另一任务取消后确认为 cancelled。worker 内存峰值 371572736 字节，无 high/max/OOM 事件。撤销临时端口覆盖并 daemon-reload 后，正式 8791 与公网 HTTPS 恢复，十次上线探针均为 200，最大约 61 毫秒。旧发行、原数据根、v1 快照及精确 profile 撤销材料保留。八路实测与上线两路验收分别记录，不把配置值当作八路再测。见[正式切换记录](experiments/2026-10-23-parallel-deployment.md)。
+正式 unit 在私有 HTTP 8792 验收：两个不同 IP 的真实在线任务重叠运行约 114.990 秒，均完成；PDF 与全部预览共六个文件的下载 hash 匹配。同 IP 额外提交返回 429，另一任务取消后确认为 cancelled。worker 内存峰值 371572736 字节，无 high/max/OOM 事件。撤销临时端口覆盖并 daemon-reload 后，正式 8791 与公网 HTTPS 恢复，十次上线探针均为 200，最大约 61 毫秒。旧发行、原数据根、v1 快照及精确 profile 撤销材料保留。八路实测与上线两路验收分别记录，不把配置值当作八路再测。见[正式切换记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-23-parallel-deployment.md)。
 
 ## 匿名网站防滥用
 
@@ -99,9 +99,9 @@ Windows CI 安装 web extra 与 `tests/requirements-web.txt`，运行原生工�
 
 v1、v2 合成快照分别经显式命令升级到 v3，核对原完成/到期时刻、全部结果、新文件身份清理和源快照不变。大数据库应急暂停及非法提交事件的维护拒绝经过红绿修复和独立双轴复核，无遗留发现。离线 CI 合成重放、Ruff、语法编译及 wheel 二十九个包文件字节核对通过；未配置静态类型检查器，未重新执行两套独立 wheel 安装或 Skill 回归。
 
-命令、失败过程、准确 wheel hash、审阅和本地证据见[防滥用验证记录](experiments/2026-10-24-abuse-prevention.md)。本轮未访问生产或执行部署，不能把本地 schema v3 与合成验证当作线上防护已生效。
+命令、失败过程、准确 wheel hash、审阅和本地证据见[防滥用验证记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-24-abuse-prevention.md)。本轮未访问生产或执行部署，不能把本地 schema v3 与合成验证当作线上防护已生效。
 
-随后用户明确要求 push 并部署，已于同日 17:04 +0800 完成正式 v2 到 v3 切换。目标机隔离预检、正式 unit 私有端口的滚动额度/重试/重启/暂停验收、两路真实在线转换和六份 PDF/预览 hash 核验通过，原二百零二条记录完成与期限保持不变。公网提交/查询/取消通过，三十次服务器 HTTPS 探针及 WSL 独立探针均为 200，无 OOM 和自动重启。旧发行、数据、快照和 profile 副本保留，详见[防滥用部署记录](experiments/2026-10-24-abuse-deployment.md)。
+随后用户明确要求 push 并部署，已于同日 17:04 +0800 完成正式 v2 到 v3 切换。目标机隔离预检、正式 unit 私有端口的滚动额度/重试/重启/暂停验收、两路真实在线转换和六份 PDF/预览 hash 核验通过，原二百零二条记录完成与期限保持不变。公网提交/查询/取消通过，三十次服务器 HTTPS 探针及 WSL 独立探针均为 200，无 OOM 和自动重启。旧发行、数据、快照和 profile 副本保留，详见[防滥用部署记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-24-abuse-deployment.md)。
 
 ## YouTube 本地接入
 
@@ -109,27 +109,27 @@ v1、v2 合成快照分别经显式命令升级到 v3，核对原完成/到期�
 
 离线 CI 重放通过，基础/web 两份 wheel 独立安装的 CLI、实际 HTTP 提交/取消和 worker 启动通过。两份安装均从仓库外完成合成转换，来源与全部 PDF/预览 hash 匹配。wheel 三十个包文件与源码字节一致，依赖冲突检查通过。JavaScript 语法及链接规范化检查通过，未运行真实浏览器视觉验收。未配置静态类型检查器；本轮未修改或重跑独立 Skill。
 
-经本机现有代理，受保护获取 API 成功下载一条完整 4K YouTube 视频。两条真实鼓谱来源仍返回 `youtube_challenge`，没有真实 YouTube 鼓谱 PDF、页面或音乐验收。准确 wheel hash、命令、失败与本地证据见[YouTube 获取试验](experiments/2026-10-24-youtube-acquisition.md)。本轮未推送或部署，正式网站的历史 B站验收不能替代 YouTube 出网验证。
+经本机现有代理，受保护获取 API 成功下载一条完整 4K YouTube 视频。两条真实鼓谱来源仍返回 `youtube_challenge`，没有真实 YouTube 鼓谱 PDF、页面或音乐验收。准确 wheel hash、命令、失败与本地证据见[YouTube 获取试验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-24-youtube-acquisition.md)。本轮未推送或部署，正式网站的历史 B站验收不能替代 YouTube 出网验证。
 
 ## Issue #84 配准实验
 
-2026-10-25，29项转换回归在75.920秒内全部通过，无跳过，公开Python/CLI/HTTP选段与开关矩阵通过。真实来源先复现再恢复记录见[配准与画面预检实验](experiments/2026-10-25-issue84-registration.md)。`BV1fbFczHE1r` 的窄重叠停驻视口跳动已恢复22行、两页，保留实际来源hash、PTS、补帧区间及前后产物。该开发来源未证明通用横移或变焦支持。固定覆盖物、暂停、边框保护、未配准翻页与周期歧义分别以合成来源验证；合成结果不属于音乐验收。全规格的保留集、安装及容量验证见#86后续记录。
+2026-10-25，29项转换回归在75.920秒内全部通过，无跳过，公开Python/CLI/HTTP选段与开关矩阵通过。真实来源先复现再恢复记录见[配准与画面预检实验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-25-issue84-registration.md)。`BV1fbFczHE1r` 的窄重叠停驻视口跳动已恢复22行、两页，保留实际来源hash、PTS、补帧区间及前后产物。该开发来源未证明通用横移或变焦支持。固定覆盖物、暂停、边框保护、未配准翻页与周期歧义分别以合成来源验证；合成结果不属于音乐验收。全规格的保留集、安装及容量验证见#86后续记录。
 
 ## 在线人数与临时打印排版
 
 2026-10-25，Python 3.12.12 下程序全量 230 项通过，耗时 176.907 秒。合成验证覆盖像素保留、完整行组、动态页数、默认结果及期限不变、进程异常清理和共享容量预留。实际 Chromium 验证四页切两页、标签页去重、刷新恢复默认、恢复失败时保留整份临时结果和移动端布局。
 
-离线重放、基础/web 两份仓库外独立安装、33 个包文件字节核对及双轴静态复审通过。查看留存小星星的重新排版页面后确认，连接四行的蓝色边框必须完整保留，因此该短谱仍有页底空白。未新增真实来源获取、音乐校对、Skill 回归、生产压测或部署。命令、失败修复、wheel hash 和证据见[打印排版验证记录](experiments/2026-10-25-print-layout.md)。
+离线重放、基础/web 两份仓库外独立安装、33 个包文件字节核对及双轴静态复审通过。查看留存小星星的重新排版页面后确认，连接四行的蓝色边框必须完整保留，因此该短谱仍有页底空白。未新增真实来源获取、音乐校对、Skill 回归、生产压测或部署。命令、失败修复、wheel hash 和证据见[打印排版验证记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-25-print-layout.md)。
 
-随后用户授权推送与部署。2026-10-25 10:55 +0800，在保留 schema 3、原数据根及原 271 条记录完成/期限的前提下切换新发行。目标机同限额隔离排版通过；公网实际浏览器完成真实 B站转换、默认两页切换临时六页、全部预览、下载及刷新恢复默认。20 次 HTTPS 探针均为 200，无 OOM 或自动重启，web 出现两次 MemoryHigh 事件。YouTube 探测仍为 `public_api_unavailable`，未通过线上获取验收。备份、准确发行和回滚材料见[打印排版部署记录](experiments/2026-10-25-print-deployment.md)。
+随后用户授权推送与部署。2026-10-25 10:55 +0800，在保留 schema 3、原数据根及原 271 条记录完成/期限的前提下切换新发行。目标机同限额隔离排版通过；公网实际浏览器完成真实 B站转换、默认两页切换临时六页、全部预览、下载及刷新恢复默认。20 次 HTTPS 探针均为 200，无 OOM 或自动重启，web 出现两次 MemoryHigh 事件。YouTube 探测仍为 `public_api_unavailable`，未通过线上获取验收。备份、准确发行和回滚材料见[打印排版部署记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-25-print-deployment.md)。
 
 ## 撤回 YouTube 接入
 
-2026-10-25 按用户要求通过新提交撤回 YouTube 功能并推送部署，保留在线人数和打印排版。222 项本地回归通过，历史 YouTube 任务备份/恢复及拒绝重试、公开入口拒绝、目标机同限额排版和离线重放通过。公网实际浏览器确认 YouTube 入口及 API 拒绝，真实 B站转换约 52 秒完成，两页默认结果可临时调整为六页并下载。原 279 条记录期限不变，20 次 HTTPS 探针均为 200。范围、失败修复、审阅、发行摘要和回滚材料见[撤回记录](experiments/2026-10-25-youtube-withdrawal.md)。
+2026-10-25 按用户要求通过新提交撤回 YouTube 功能并推送部署，保留在线人数和打印排版。222 项本地回归通过，历史 YouTube 任务备份/恢复及拒绝重试、公开入口拒绝、目标机同限额排版和离线重放通过。公网实际浏览器确认 YouTube 入口及 API 拒绝，真实 B站转换约 52 秒完成，两页默认结果可临时调整为六页并下载。原 279 条记录期限不变，20 次 HTTPS 探针均为 200。范围、失败修复、审阅、发行摘要和回滚材料见[撤回记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-25-youtube-withdrawal.md)。
 
 ## Issue #82 集成验证
 
-2026-10-25，审查修复后 Python 3.12.12 下最终程序全量 254 项通过，用时 349.703 秒，无跳过；此前 251 项结果单独保留。高级选项、配准和预检、缓存与同期在线人数/临时打印排版的组合验证见 [#86 集成实验](experiments/2026-10-25-issue86-integration.md)。新增公开契约使用真实 worker，覆盖选项保留、取消重试、缓存命中、在线人数与临时排版后的默认结果/期限不变。八波本地离线容量实验为 40 项完成、一项取消、两项受控失败，所有成功项实际执行有界补帧；同源热八路媒体读取为零，仍逐次核验版本且不刷新缓存期限。
+2026-10-25，审查修复后 Python 3.12.12 下最终程序全量 254 项通过，用时 349.703 秒，无跳过；此前 251 项结果单独保留。高级选项、配准和预检、缓存与同期在线人数/临时打印排版的组合验证见 [#86 集成实验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-25-issue86-integration.md)。新增公开契约使用真实 worker，覆盖选项保留、取消重试、缓存命中、在线人数与临时排版后的默认结果/期限不变。八波本地离线容量实验为 40 项完成、一项取消、两项受控失败，所有成功项实际执行有界补帧；同源热八路媒体读取为零，仍逐次核验版本且不刷新缓存期限。
 
 十三个原失败真实来源仅一个开发来源恢复，另外十二个仍受控失败。未调参成功保留集的全部实际 PTS/time_base、采样 hash、长图与位置记录保持。Root 实际查看恢复来源两页与保留来源三页；这属于工程看图，结果保持 `reliable=false`。真实固定覆盖物遮罩尚未验收。高级选项浏览器检查和实际 HTTP/worker 安装检查分别记录，不把未执行的浏览器结果页检查计为通过。本轮不修改独立 Skill，也不代表生产部署或目标机容量验收。最终 wheel/sdist 与 40 个包文件字节核对、基础/web 两份仓库外独立安装、实际 CLI/Python/HTTP worker 和停服维护 backup/verify/restore 通过；准确提交和产物 hash 见实验记录。
 
@@ -137,22 +137,22 @@ v1、v2 合成快照分别经显式命令升级到 v3，核对原完成/到期�
 
 2026-10-25，最终应用254项程序回归349.703秒全部通过，八路8波容量、40文件精确wheel/sdist、基础/web独立安装、实际HTTP/worker及维护恢复通过。最终安装版重放13个旧失败来源仅恢复1个，其余12受控失败；未调参保留来源的原生PTS、hash及长图与冻结基线一致，全部最终五页已实际查看。安装版Chromium完成选段、临时A3三页、全部预览、下载、原hash/期限与刷新恢复检查。
 
-真实多面板自动选区及固定覆盖物改善尚缺验收。最终交付副本完整，原临时证据目录在收尾时已不可用。精确包身份、分轴审查、亲测产物、证据缺口和授权边界见[Issue #82交付记录](experiments/2026-10-25-issue82-delivery.md)。未推送、关闭工单或部署。
+真实多面板自动选区及固定覆盖物改善尚缺验收。最终交付副本完整，原临时证据目录在收尾时已不可用。精确包身份、分轴审查、亲测产物、证据缺口和授权边界见[Issue #82交付记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-25-issue82-delivery.md)。未推送、关闭工单或部署。
 
 ## Issue #82 正式上线
 
-2026-10-25用户明确授权推送、关闭工单和部署。已推送独立集成分支并关闭#82–#86，评论保留真实验收限制。目标机显式v3→v4新目录升级，原302条任务完成/期限不变；真实公网完整转换两页、临时A5十三页、全部预览/下载/默认恢复通过。后续web出现一次cgroup OOM并自动恢复，已保存配置后将web内存上限由128MiB调至256MiB，具体请求根因未知，不能声称上线后无OOM。准确发行、预检旁路、失败过程、调整后验证与回滚见[Issue #82部署记录](experiments/2026-10-25-issue82-deployment.md)。
+2026-10-25用户明确授权推送、关闭工单和部署。已推送独立集成分支并关闭#82–#86，评论保留真实验收限制。目标机显式v3→v4新目录升级，原302条任务完成/期限不变；真实公网完整转换两页、临时A5十三页、全部预览/下载/默认恢复通过。后续web出现一次cgroup OOM并自动恢复，已保存配置后将web内存上限由128MiB调至256MiB，具体请求根因未知，不能声称上线后无OOM。准确发行、预检旁路、失败过程、调整后验证与回滚见[Issue #82部署记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-25-issue82-deployment.md)。
 ## 一周整理记录与网站简介规则
 
 2026-10-26，本地完整工作区回归 247 项、229.733 秒全部通过，无跳过。准确暂存目录另通过 14 项关键测试，涵盖独立历史、期限、容量、日志故障、显式 v3 升级、网站专属心形规则、CLI 不受影响和临时排版摘要。双轴审阅的三项发现全部修复并复核关闭。
 
-准确暂存目录构建的 wheel 34 个包文件逐字节匹配，仓库外安装和 JSON 导出入口 smoke check 通过，依赖复用现有固定环境。未配置静态类型检查器，未运行 Skill、真实来源或生产验收。首次工作区打包发现旧 build 缓存混入撤回模块，产物作废并从新目录重建。完整命令、失败、源码边界和 wheel 身份见[整理记录验证](experiments/2026-10-26-processing-records.md)。
+准确暂存目录构建的 wheel 34 个包文件逐字节匹配，仓库外安装和 JSON 导出入口 smoke check 通过，依赖复用现有固定环境。未配置静态类型检查器，未运行 Skill、真实来源或生产验收。首次工作区打包发现旧 build 缓存混入撤回模块，产物作废并从新目录重建。完整命令、失败、源码边界和 wheel 身份见[整理记录验证](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-26-processing-records.md)。
 
 ## 整理记录正式部署整合
 
-2026-10-26，按用户授权推送并部署。实际线上已含选项/缓存 v4，本轮在独立工作区合并为 v5，以显式 upgrade-v4 迁移到新根，保留原 347 条任务和 24 条缓存的原参数及期限。最终准确代码 270 项、457.612 秒回归通过；42 文件 wheel/sdist、离线重放、目标机安装版测试和迁移演练通过。私有实际两页转换、完整 manifest、全部产物 hash、临时排版日志及公网提交取消通过。原发行、数据和核验快照保留。来源、失败修复、审阅和回滚见[实际部署记录](experiments/2026-10-26-records-deployment.md)。
+2026-10-26，按用户授权推送并部署。实际线上已含选项/缓存 v4，本轮在独立工作区合并为 v5，以显式 upgrade-v4 迁移到新根，保留原 347 条任务和 24 条缓存的原参数及期限。最终准确代码 270 项、457.612 秒回归通过；42 文件 wheel/sdist、离线重放、目标机安装版测试和迁移演练通过。私有实际两页转换、完整 manifest、全部产物 hash、临时排版日志及公网提交取消通过。原发行、数据和核验快照保留。来源、失败修复、审阅和回滚见[实际部署记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-26-records-deployment.md)。
 
-#90的灰水印启动、逐帧光标匹配和短驻留拒绝由`tests/test_overlay_registration.py`与公开`convert`合成案例覆盖。0.5、1、2秒实际采样和完整转换成本对照见[采样与覆盖物实验](experiments/2026-10-26-issue90-overlays-and-sampling.md)。保留0.5秒默认；三档均不能只凭RGB采样证明短驻留覆盖。
+#90的灰水印启动、逐帧光标匹配和短驻留拒绝由`tests/test_overlay_registration.py`与公开`convert`合成案例覆盖。0.5、1、2秒实际采样和完整转换成本对照见[采样与覆盖物实验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-26-issue90-overlays-and-sampling.md)。保留0.5秒默认；三档均不能只凭RGB采样证明短驻留覆盖。
 
 
 ## Issue #88 本地集成验收
@@ -161,23 +161,23 @@ v1、v2 合成快照分别经显式命令升级到 v3，核对原完成/到期�
 
 默认九个真实来源全部受控失败，均未发布整曲结果，源hash不变，未知采样和资源成本为null。显式hgn3至218.5000625秒选段107.949秒生成19行、两页，439个artifact核验及两预览/两PDF光栅实际看图通过；这不代表默认整曲恢复或音乐校对。Ftn结束卡误判已修复，但仍在32.000至32.100秒因连续性证据不足拒绝。
 
-准确提交、wheel/sdist身份、真实失败位置、父亡清理与SQLite竞态的红绿证据，以及首次浏览器夹具CSP失败和最终成功分别见 [Issue #88集成实验](experiments/2026-10-26-issue93-integration.md)。未修改独立Skill、推送、关闭工单或部署，未将历史候选的成功跨版本沿用。
+准确提交、wheel/sdist身份、真实失败位置、父亡清理与SQLite竞态的红绿证据，以及首次浏览器夹具CSP失败和最终成功分别见 [Issue #88集成实验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-26-issue93-integration.md)。未修改独立Skill、推送、关闭工单或部署，未将历史候选的成功跨版本沿用。
 
 
 ## 发行与部署复盘护栏
 
-构建、基线与部署工具统一见[运维入口](script-product/operations.md)。本轮 308 项程序回归、最终 17 项工具专项、准确提交双制品核验及 CI 合成重放证据见[复盘改进验证](experiments/2026-10-28-retro-guardrails.md)。工具故障注入不代表实际服务器切版或断电验收。
+构建、基线与部署工具统一见[运维入口](script-product/operations.md)。本轮 308 项程序回归、最终 17 项工具专项、准确提交双制品核验及 CI 合成重放证据见[复盘改进验证](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-28-retro-guardrails.md)。工具故障注入不代表实际服务器切版或断电验收。
 
 ## 网站专家 v6 兜底
 
 2026-10-29，产品代码 `2a30c2f` 的程序完整回归 302 项、468.244 秒全部通过，无跳过。原包八模块非 import 语法树、PDF 嵌入像素与分页、实际网站 worker、缓存复用、取消和共享总期限、临时排版与备份恢复通过。54 个包文件与准确 wheel/sdist 匹配，仓库外安装、离线重放及桌面/手机浏览器合成检查通过。首选算法成功路径保持，专家结果始终待复核且 `reliable=false`。
 
-本轮仅集成本地 main，未推送或部署；48 源清单已准备但未执行，未运行 Skill、Windows CI 或目标机容量验收。早期回归中断、快照兼容性 P1 及修复、准确制品 hash、证据和回退方式见[专家兜底验证](experiments/2026-10-29-expert-v6-fallback.md)。
+本轮仅集成本地 main，未推送或部署；48 源清单已准备但未执行，未运行 Skill、Windows CI 或目标机容量验收。早期回归中断、快照兼容性 P1 及修复、准确制品 hash、证据和回退方式见[专家兜底验证](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-29-expert-v6-fallback.md)。
 
 ## 谱行边界开发实验
 
-2026-10-29 的[谱行边界试做](experiments/2026-10-29-staff-boundaries.md)保留了候选、错行反例和保守代码限制。
-这是早期试做的历史结论。后续同列归属方案改善了 S12、S14 的部分分行；用户接受 S12 的已知 `o+` 例外，再检查其余 18 源后授权合入本地 main。实际页面检查和输入限制见[20 源验证记录](experiments/2026-10-29-staff-boundaries-remaining18.md)，合并后的验证见[本地合入记录](experiments/2026-10-29-staff-boundaries-main.md)。合成几何测试不作为真实分行通过证据。
+2026-10-29 的[谱行边界试做](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-29-staff-boundaries.md)保留了候选、错行反例和保守代码限制。
+这是早期试做的历史结论。后续同列归属方案改善了 S12、S14 的部分分行；用户接受 S12 的已知 `o+` 例外，再检查其余 18 源后授权合入本地 main。实际页面检查和输入限制见[20 源验证记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-29-staff-boundaries-remaining18.md)，合并后的验证见[本地合入记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-29-staff-boundaries-main.md)。合成几何测试不作为真实分行通过证据。
 
 ## 整理记录 CLI 测试环境修复
 

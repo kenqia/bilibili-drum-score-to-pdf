@@ -1,13 +1,13 @@
 # 发布范围与放置中的实验
 
-2026-10-30，已按用户决定发布和部署专家 v6 失败兜底、谱行边界与分页改进。正式发行 `61b5f24` 使用 `main@c3e2ded` 的程序代码，保留原有匿名 B站获取、schema v5、20 GiB 逻辑额度、结果与记录期限。实际验收及回滚位置见[部署记录](../experiments/2026-10-30-expert-pagination-deployment.md)。
+2026-10-30，已按用户决定发布和部署专家 v6 失败兜底、谱行边界与分页改进。正式发行 `61b5f24` 使用 `main@c3e2ded` 的程序代码，保留原有匿名 B站获取、schema v5、20 GiB 逻辑额度、结果与记录期限。实际验收及回滚位置见[部署记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-30-expert-pagination-deployment.md)。
 
 ## 发布范围
 
 | 功能 | 决定 | 证据 |
 | --- | --- | --- |
-| 专家 v6 失败兜底 | 发布部署；仅默认网站任务的指定失败触发 | [接入验证](../experiments/2026-10-29-expert-v6-fallback.md)；48 源批次已实际完成，46 份 PDF、140 页，另两例失败 |
-| 谱行边界与分页改进 | 发布部署；保留用户接受的 S12 已知例外 | [main 合入记录](../experiments/2026-10-29-staff-boundaries-main.md) |
+| 专家 v6 失败兜底 | 发布部署；仅默认网站任务的指定失败触发 | [接入验证](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-29-expert-v6-fallback.md)；48 源批次已实际完成，46 份 PDF、140 页，另两例失败 |
+| 谱行边界与分页改进 | 发布部署；保留用户接受的 S12 已知例外 | [main 合入记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-29-staff-boundaries-main.md) |
 
 48 源批次由用户查看交付，不宣称逐符号音乐校对。早期接入记录中的“48 源未执行”只描述当时状态。全部程序结果仍为 `reliable=false`。
 

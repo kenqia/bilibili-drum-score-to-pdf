@@ -86,9 +86,6 @@ def render(image, output, *, paper='A4', rows=None):
     if rows is not None and (actual > rows or (len(pages) == 1 and actual < rows)):
         adjusted = True
     message = f'已自动调整为每页最多 {actual} 行。' if adjusted else f'共 {len(pages)} 页 {paper}。'
-    maximum = boundary_analysis['max_staffs_per_group']
-    if maximum > 1:
-        message += f'存在最多 {maximum} 行的连续行组，已整体保留，请检查打印大小。'
     return {'page_count': len(pages), 'paper': paper, 'target_rows': rows, 'actual_rows': actual,
             'adjusted': adjusted, 'staff_count': len(staffs), 'page_regions': regions,
             'boundary_analysis': boundary_analysis,

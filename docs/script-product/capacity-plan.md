@@ -1,6 +1,6 @@
 # 网站并行与服务器清理方案
 
-本文记录 2026-10-23 的容量讨论。需求共识已确认，本地改造与隔离验证已完成。用户随后批准完成 OpenClaw 清理与目标机测量，执行记录见[目标机实验](../experiments/2026-10-23-server-cleanup.md)。随后用户单独批准正式切换，现已完成 schema v2 升级及八路配置上线，见[正式切换记录](../experiments/2026-10-23-parallel-deployment.md)。未购买资源。
+本文记录 2026-10-23 的容量讨论。需求共识已确认，本地改造与隔离验证已完成。用户随后批准完成 OpenClaw 清理与目标机测量，执行记录见[目标机实验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-23-server-cleanup.md)。随后用户单独批准正式切换，现已完成 schema v2 升级及八路配置上线，见[正式切换记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-23-parallel-deployment.md)。未购买资源。
 
 ## 已确认的目标
 
@@ -51,7 +51,7 @@
 
 ## 测量与验收
 
-本地已完成八路离线合成实验，所有任务完成，但八路最慢处理耗时仍超过独占中位数的两倍。实验包含阶段耗时，未使用真实 B站传输，也未在目标云服务器施加硬内存限制。方法、CPU 拓扑、数值和失败过程见[并行容量实验](../experiments/2026-10-23-parallel-capacity.md)。
+本地已完成八路离线合成实验，所有任务完成，但八路最慢处理耗时仍超过独占中位数的两倍。实验包含阶段耗时，未使用真实 B站传输，也未在目标云服务器施加硬内存限制。方法、CPU 拓扑、数值和失败过程见[并行容量实验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-23-parallel-capacity.md)。
 
 后续先选代表性短、中、长视频建立单任务基线，再验证 2、4、8 路转换。记录等待时长、实际处理时长、完成率、CPU、cgroup 内存峰值、磁盘峰值与网络速率。生产负载测试需要单独明确执行范围。
 
@@ -94,7 +94,7 @@ schema v2 移除旧单活动索引；显式 `upgrade-v1` 从完整旧快照恢�
 
 - 扩容购买决定、实际升级补差及目标机测量范围。
 - 保留 OpenClaw 程序与 unit 恢复材料；数据目录已按本轮批准永久删除，不再等待同一操作的重复批准。
-- 本机同源八路在线转换已在硬资源限制下通过，详见[稳定并行实验](../experiments/2026-10-23-stable-parallel.md)。用户随后明确批准，已按[切换清单](parallel-rollout.md)完成正式上线。
+- 本机同源八路在线转换已在硬资源限制下通过，详见[稳定并行实验](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-23-stable-parallel.md)。用户随后明确批准，已按[切换清单](parallel-rollout.md)完成正式上线。
 
 程序、本地测试与文档已修改，正式网站已按单独批准切换。OpenClaw 清理、独立目标机测试和正式上线分别留证。本地合成测试不代表八路真实输入容量或音乐校对通过，最新证据见[验证指南](../verification.md)。
 

@@ -199,13 +199,13 @@ runuser -u drum-score -- /srv/drum-score/current/venv/bin/drum-score-maintenance
 
 ## 可选的预算并行配置
 
-默认 unit 保留一路和原资源预算。2026-10-23 的显式并行配置位于 `deploy/systemd/profiles/`，对应当时 v2 数据根和发行；当时已获授权的上线结果见[正式切换记录](../experiments/2026-10-23-parallel-deployment.md)。配置保留总 CPU、Swap、磁盘和任务期限保护，不能只把 `--concurrency` 改为 8。
+默认 unit 保留一路和原资源预算。2026-10-23 的显式并行配置位于 `deploy/systemd/profiles/`，对应当时 v2 数据根和发行；当时已获授权的上线结果见[正式切换记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-23-parallel-deployment.md)。配置保留总 CPU、Swap、磁盘和任务期限保护，不能只把 `--concurrency` 改为 8。
 
-防滥用阶段的源码要求 v3，不能直接打开 profile 中的旧 v2 数据根，也不能仅替换 wheel。2026-10-24 用户明确授权后，已完成停服快照、显式 `upgrade-v2` 到新根和匹配的 unit 路径变更，保留原发行、数据根、配置和核验快照。额度、暂停、原期限及两路真实转换在私有端口验收后恢复公网；本轮结果与回滚材料见[防滥用部署记录](../experiments/2026-10-24-abuse-deployment.md)。后续生产变更仍按实际范围授权，不能将本轮授权无限扩张。
+防滥用阶段的源码要求 v3，不能直接打开 profile 中的旧 v2 数据根，也不能仅替换 wheel。2026-10-24 用户明确授权后，已完成停服快照、显式 `upgrade-v2` 到新根和匹配的 unit 路径变更，保留原发行、数据根、配置和核验快照。额度、暂停、原期限及两路真实转换在私有端口验收后恢复公网；本轮结果与回滚材料见[防滥用部署记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-24-abuse-deployment.md)。后续生产变更仍按实际范围授权，不能将本轮授权无限扩张。
 
 
 ## 整理记录版本的部署边界
 
 当前源码要求 schema v5，整合线上 v4 的选项和缓存、一周私有整理记录及网站简介规则。不能直接打开现有生产根。用匹配旧发行停服备份并核验 v4 快照，再用新发行 upgrade-v4 恢复到不存在的新根。web 与 worker 显式配置相同的 --record-mib 256 --record-retention-seconds 604800，并保留现有缓存、资源与网络参数。保留旧发行、数据根和配置以便回滚；备份数据库上限为 512 MiB。正式结果另见部署实验记录。
 
-2026-10-26 用户明确授权后，已完成整合发行的 v4→v5 新根迁移与正式上线。旧发行、原根、核验快照和 profile 均保留；上线后的实际验证与适用回滚路径见[部署记录](../experiments/2026-10-26-records-deployment.md)。
+2026-10-26 用户明确授权后，已完成整合发行的 v4→v5 新根迁移与正式上线。旧发行、原根、核验快照和 profile 均保留；上线后的实际验证与适用回滚路径见[部署记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-26-records-deployment.md)。

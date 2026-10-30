@@ -1,6 +1,6 @@
 # 预算优先的八路并行配置
 
-2026-10-23，用户明确批准本清单后，正式网站已切换到以下八路配置。此前已在现有机器完成八路真实在线转换，未购买套餐。代码默认仍为一路，生产通过显式 profile 启用八路。上线验收与保留材料见[正式切换记录](../experiments/2026-10-23-parallel-deployment.md)。
+2026-10-23，用户明确批准本清单后，正式网站已切换到以下八路配置。此前已在现有机器完成八路真实在线转换，未购买套餐。代码默认仍为一路，生产通过显式 profile 启用八路。上线验收与保留材料见[正式切换记录](https://github.com/kenqia/bilibili-drum-score-to-pdf/blob/4d75de5/docs/experiments/2026-10-23-parallel-deployment.md)。
 
 ## 固定产物与资源
 

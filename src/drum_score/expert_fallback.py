@@ -31,11 +31,11 @@ def process(source, output, scratch, metadata, emit, budget, primary_error):
         with (scratch / 'engine.log').open('w') as log, redirect_stdout(log), redirect_stderr(log):
             report = main([str(source), '-o', str(target), '--no-ocr'])
     except (Exception, SystemExit):
-        raise ConversionError('expert_failed', '首选整理和专家兜底均未能生成可用 PDF。') from None
+        raise ConversionError('expert_failed', '两种整理方法都没能生成可用 PDF。') from None
     budget.check(force_disk=True)
     count = report['result']['pages']
     if type(count) is not int or not 1 <= count <= 64:
-        raise ConversionError('resource_limit', '专家兜底结果超过页面限制，未发布结果。')
+        raise ConversionError('resource_limit', '备用方法的结果超过页面限制，未发布结果。')
     pdf = output / 'score.pdf'
     target.rename(pdf)
     emit('paginating')
@@ -45,10 +45,10 @@ def process(source, output, scratch, metadata, emit, budget, primary_error):
                        timeout=max(.001, min(60, budget.deadline - time.monotonic())))
     except (OSError, subprocess.SubprocessError):
         budget.check()
-        raise ConversionError('preview_failed', '无法生成专家结果的全部页面预览。') from None
+        raise ConversionError('preview_failed', '无法生成备用方法结果的全部页面预览。') from None
     pages = sorted(output.glob('page-*.png'))
     if len(pages) != count:
-        raise ConversionError('preview_failed', '专家结果页面预览不完整。')
+        raise ConversionError('preview_failed', '备用方法结果的页面预览不完整。')
     budget.check(force_disk=True)
     origin = json.loads((Path(__file__).parent / 'expert_v6/ORIGIN.json').read_text())
     # Requested OpenCV times are not decoded PTS or native-frame provenance.
@@ -67,7 +67,7 @@ def process(source, output, scratch, metadata, emit, budget, primary_error):
                        'is_excerpt': False, 'engine': 'expert_v6', 'needs_review': True},
         'warnings': [{'code': 'not_musically_proofread', 'message': NOTICE},
                      {'code': 'expert_fallback_needs_review',
-                      'message': '专家兜底生成，请对照视频复核。结果可能重复、缺行或裁剪不完整，并经过灰度和颜色处理。'}],
+                      'message': '这份谱子是用备用方法整理的，更容易出现重复、缺行或边缘被裁掉，彩色记号可能变成灰色。请对照原视频仔细看一遍。'}],
         'pdf': artifact(output, pdf), 'pages': [artifact(output, page) for page in pages],
         'samples': [], 'expert': evidence,
         'staff_count': report['result']['rows'],
