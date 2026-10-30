@@ -136,3 +136,5 @@ If 鼓谱整理 has been useful to you, you can support its continued developmen
 ## 许可
 
 代码与文档使用 [MIT 许可](LICENSE)。示例中的音乐、谱面和视频画面权利归原权利人。
+
+当前发布与实验取舍见[发布范围](docs/script-product/release-status.md)。
